@@ -65,7 +65,7 @@ Build your microservices on top of a `Connector` construct and use its simple AP
 * Client stubs
 * [Live integration tests](./docs/blocks/integration-testing.md)
 * [OpenAPI](./docs/blocks/openapi.md)
-* Graceful shutdown
+* [Graceful shutdown](./docs/blocks/graceful-shutdown.md)
 * [Distributed caching](./docs/blocks/distrib-cache.md)
 * Linked static resources
 * Recurring jobs
@@ -134,6 +134,8 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [Local development](./docs/tech/local-dev.md) - Run an entire solution comprising a multitude of microservices in your local IDE
 * [Structured logging](./docs/blocks/logging.md) - JSON logging to `stderr`
 * [Ack or fail fast](./docs/blocks/ack-or-fail.md) - Acks signal the sender if its request was received
+* [Graceful shutdown](./docs/blocks/graceful-shutdown.md) - Graceful shutdown drains pending operations before termination
+* [Tickers](./docs/blocks/tickers.md) - Tickers are jobs that run on a schedule
 
 ### Design Choices
 
