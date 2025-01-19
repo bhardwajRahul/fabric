@@ -24,11 +24,11 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	glog "github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/mnako/letters"
+	"github.com/phires/go-guerrilla"
+	"github.com/phires/go-guerrilla/backends"
+	glog "github.com/phires/go-guerrilla/log"
+	"github.com/phires/go-guerrilla/mail"
 	"github.com/sirupsen/logrus"
 
 	"github.com/microbus-io/fabric/connector"
@@ -77,7 +77,7 @@ func (svc *Service) configDaemon(_ context.Context) (*guerrilla.AppConfig, error
 		secure = false
 	}
 
-	// See https://github.com/flashmob/go-guerrilla/wiki/API-&-Using-as-a-package
+	// See https://github.com/phires/go-guerrilla/wiki/API-&-Using-as-a-package
 	serverCfg := guerrilla.ServerConfig{
 		ListenInterface: ":" + port,
 		IsEnabled:       svc.Enabled(),
