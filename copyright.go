@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-YYYY Microbus LLC and various contributors
+Copyright (c) 2023-yyyy Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

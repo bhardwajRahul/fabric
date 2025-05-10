@@ -53,7 +53,7 @@ Content-Type: application/json
 
 The REST API style comes from a web-centric perspective. Its philosophy is that everything on the web is a resource that can be identified with a URI and so a web API should reflect that. In REST, the request's path represents the resource and the HTTP method (`GET`, `POST`, `DELETE`, `PUT`) represents the operation done on that resource. This style works best for CRUD APIs but may not translate well when the API has no object that is being worked on. For example, the `Add` example from earlier doesn't translate well to REST.
 
-The following example defines a typical RESTful API for CRUD operations on an `Object`. Notice how it utilizes the [HTTP magic arguments](./httparguments.md) `httpRequestBody`, `httpResponseBody` and `httpStatusCode`.
+The following example defines a typical RESTful API for CRUD operations on an `Object`. Notice how it utilizes the [HTTP magic arguments](../tech/http-arguments.md) `httpRequestBody`, `httpResponseBody` and `httpStatusCode`.
 
 ```yaml
 functions:
@@ -79,7 +79,7 @@ functions:
     path: /objects
 ```
 
-`Create` expects a `POST` request with the object to be created in the body of the request. It returns the assigned `id` along with HTTP status code `201`.
+`Create` expects a `POST` request with the object to be created in the body of the request. It returns the assigned `id` along with HTTP status code `201 Created`.
 
 ```http
 POST /objects HTTP/1.1

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,8 +23,8 @@ import (
 	"github.com/microbus-io/fabric/connector"
 )
 
-// RewriteRootPath returns a middleware that rewrites the root path "/" with one that can be routed to such as "/root".
-func RewriteRootPath(rootPath string) Middleware {
+// RootPath returns a middleware that rewrites the root path "/" with one that can be routed to such as "/root".
+func RootPath(rootPath string) Middleware {
 	if !strings.HasPrefix(rootPath, "/") {
 		rootPath = "/" + rootPath
 	}

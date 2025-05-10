@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -762,7 +762,7 @@ func TestConnector_Multicast(t *testing.T) {
 	}
 	dur := time.Since(t0)
 	testarossa.True(t, dur >= ackTimeout && dur < ackTimeout+time.Second)
-	testarossa.Equal(t, 4, len(responded))
+	testarossa.Len(t, responded, 4)
 	testarossa.True(t, responded["noqueue1"])
 	testarossa.True(t, responded["noqueue2"])
 	testarossa.True(t, responded["named1"] || responded["named2"])
@@ -784,7 +784,7 @@ func TestConnector_Multicast(t *testing.T) {
 	}
 	dur = time.Since(t0)
 	testarossa.True(t, dur < ackTimeout)
-	testarossa.Equal(t, 4, len(responded))
+	testarossa.Len(t, responded, 4)
 	testarossa.True(t, responded["noqueue1"])
 	testarossa.True(t, responded["noqueue2"])
 	testarossa.True(t, responded["named1"] || responded["named2"])
@@ -843,7 +843,7 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 	)
 	dur := time.Since(t0)
 	testarossa.True(t, dur >= 3*delay && dur < 4*delay)
-	testarossa.Equal(t, 3, len(ch))
+	testarossa.Len(t, ch, 3)
 	testarossa.Equal(t, 3, cap(ch))
 	for i := range ch {
 		res, err := i.Get()
@@ -1192,7 +1192,7 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 	)
 	testarossa.True(t, time.Since(t0) > time.Duration(n*100)*time.Millisecond)
 	testarossa.Equal(t, n, int(responses.Load()))
-	testarossa.Equal(t, n, len(ch))
+	testarossa.Len(t, ch, n)
 	testarossa.Equal(t, n, cap(ch))
 
 	// If asking for first response only, it should return immediately when it is produced
@@ -1205,7 +1205,7 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 	)
 	testarossa.True(t, time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond)
 	testarossa.Equal(t, 1, int(responses.Load()))
-	testarossa.Equal(t, 1, len(ch))
+	testarossa.Len(t, ch, 1)
 	testarossa.Equal(t, 1, cap(ch))
 
 	// The remaining handlers are still called and should finish
@@ -1256,29 +1256,60 @@ func TestConnector_Baggage(t *testing.T) {
 	alpha := New("alpha.baggage.connector")
 
 	betaCalled := false
-	betaBaggage := ""
-	betaLanguage := ""
-	betaXFwd := ""
 	beta := New("beta.baggage.connector")
 	beta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		betaCalled = true
-		betaBaggage = frame.Of(r).Baggage("Suitcase")
-		betaLanguage = r.Header.Get("Accept-Language")
-		betaXFwd = r.Header.Get("X-Forwarded-For")
-		beta.GET(r.Context(), "https://gamma.baggage.connector/noop")
+		testarossa.Equal(t, "Clothes", frame.Of(r).Baggage("Suitcase"))
+		testarossa.Equal(t, "en-US", r.Header.Get("Accept-Language"))
+		testarossa.Equal(t, "1.2.3.4", r.Header.Get("X-Forwarded-For"))
+		// Call gamma without making changes
+		beta.Request(r.Context(),
+			pub.GET("https://gamma.baggage.connector/noop"),
+		)
 		return nil
 	})
 
 	gammaCalled := false
-	gammaBaggage := ""
-	gammaLanguage := ""
-	gammaXFwd := ""
 	gamma := New("gamma.baggage.connector")
 	gamma.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		gammaCalled = true
-		gammaBaggage = frame.Of(r).Baggage("Suitcase")
-		gammaLanguage = r.Header.Get("Accept-Language")
-		gammaXFwd = r.Header.Get("X-Forwarded-For")
+		testarossa.Equal(t, "Clothes", frame.Of(r).Baggage("Suitcase"))
+		testarossa.Equal(t, "en-US", r.Header.Get("Accept-Language"))
+		testarossa.Equal(t, "1.2.3.4", r.Header.Get("X-Forwarded-For"))
+		gamma.Request(r.Context(),
+			// Call delta making changes to non-empty values
+			pub.GET("https://delta.baggage.connector/noop"),
+			pub.Baggage("Suitcase", "Books"),
+			pub.Header("Accept-Language", "en-UK"),
+			pub.Header("X-Forwarded-For", "11.22.33.44"),
+		)
+		return nil
+	})
+
+	deltaCalled := false
+	delta := New("delta.baggage.connector")
+	delta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
+		deltaCalled = true
+		testarossa.Equal(t, "Books", frame.Of(r).Baggage("Suitcase"))
+		testarossa.Equal(t, "en-UK", r.Header.Get("Accept-Language"))
+		testarossa.Equal(t, "11.22.33.44", r.Header.Get("X-Forwarded-For"))
+		delta.Request(r.Context(),
+			// Call epsilon making changes to empty values
+			pub.GET("https://epsilon.baggage.connector/noop"),
+			pub.Baggage("Suitcase", ""),
+			pub.Header("Accept-Language", ""),
+			pub.Header("X-Forwarded-For", ""),
+		)
+		return nil
+	})
+
+	epsilonCalled := false
+	epsilon := New("epsilon.baggage.connector")
+	epsilon.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
+		epsilonCalled = true
+		testarossa.Equal(t, "", frame.Of(r).Baggage("Suitcase"))
+		testarossa.Equal(t, "", r.Header.Get("Accept-Language"))
+		testarossa.Equal(t, "", r.Header.Get("X-Forwarded-For"))
 		return nil
 	})
 
@@ -1292,23 +1323,26 @@ func TestConnector_Baggage(t *testing.T) {
 	err = gamma.Startup()
 	testarossa.NoError(t, err)
 	defer gamma.Shutdown()
+	err = delta.Startup()
+	testarossa.NoError(t, err)
+	defer delta.Shutdown()
+	err = epsilon.Startup()
+	testarossa.NoError(t, err)
+	defer epsilon.Shutdown()
 
 	// Send message and validate that it's echoed back
 	_, err = alpha.Request(ctx,
 		pub.GET("https://beta.baggage.connector/noop"),
 		pub.Baggage("Suitcase", "Clothes"),
+		pub.Baggage("Glass", "Full"),
 		pub.Header("Accept-Language", "en-US"),
 		pub.Header("X-Forwarded-For", "1.2.3.4"),
 	)
 	testarossa.NoError(t, err)
 	testarossa.True(t, betaCalled)
 	testarossa.True(t, gammaCalled)
-	testarossa.Equal(t, "Clothes", betaBaggage)
-	testarossa.Equal(t, "Clothes", gammaBaggage)
-	testarossa.Equal(t, "en-US", betaLanguage)
-	testarossa.Equal(t, "en-US", gammaLanguage)
-	testarossa.Equal(t, "1.2.3.4", betaXFwd)
-	testarossa.Equal(t, "1.2.3.4", gammaXFwd)
+	testarossa.True(t, deltaCalled)
+	testarossa.True(t, epsilonCalled)
 }
 
 func TestConnector_MultiValueHeader(t *testing.T) {
@@ -1321,10 +1355,8 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 
 	beta := New("beta.multi.value.header.connector")
 	beta.Subscribe("GET", "receive", func(w http.ResponseWriter, r *http.Request) error {
-		testarossa.SliceLen(t, r.Header["Multi-Value-In"], 3)
-		w.Header().Add("Multi-Value-Out", "1")
-		w.Header().Add("Multi-Value-Out", "2")
-		w.Header().Add("Multi-Value-Out", "3")
+		testarossa.Len(t, r.Header["Multi-Value-In"], 3)
+		w.Header()["Multi-Value-Out"] = []string{"1", "2", "3"}
 		return nil
 	})
 
@@ -1344,5 +1376,5 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 		pub.AddHeader("Multi-Value-In", "3"),
 	)
 	testarossa.NoError(t, err)
-	testarossa.SliceLen(t, response.Header["Multi-Value-Out"], 3)
+	testarossa.Len(t, response.Header["Multi-Value-Out"], 3)
 }

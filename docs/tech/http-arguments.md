@@ -6,7 +6,7 @@ Functional endpoints support three specially named arguments to allow finer cont
 * An output argument `httpResponseBody` is marshaled as the response (JSON)
 * An output argument `httpStatusCode` of type `int` sets the response's status code
 
-These arguments are often required when implementing a [RESTful API](./rpc-vs-rest.md).
+These arguments are often required when implementing a [RESTful API](../tech/rpc-vs-rest.md).
 
 ### `httpRequestBody`
 
@@ -89,7 +89,7 @@ Because the argument `httpResponseBody` takes over the entire response body, no 
 
 ### `httpStatusCode`
 
-`httpStatusCode` controls the HTTP status code returned by the function. For example, we might want the `Create` method discussed earlier to return HTTP status `201` instead of the default `200`.
+`httpStatusCode` controls the HTTP status code returned by the function. For example, we might want the `Create` method discussed earlier to return HTTP status `201 Created` instead of the default `200 OK`.
 
 ```yaml
 functions:

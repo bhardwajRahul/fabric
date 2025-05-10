@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package openapiportal
 
-const Version = 106
-const SourceCodeSHA256 = "7a94674228169bb6d0e5cb0f26b36d48bb8a9be5c64e02529a12734f799649f0"
-const Timestamp = "2024-08-31T21:14:18.984832Z"
+const Version = 115
+const SourceCodeSHA256 = "ae4df7ac62de545b1136d61012601e5bba4e80000dc4789e2ae651cea485b237"
+const Timestamp = "2025-05-08T13:43:44.115893Z"
 
 /* {
-	"ver": 106,
-	"sha256": "7a94674228169bb6d0e5cb0f26b36d48bb8a9be5c64e02529a12734f799649f0",
-	"ts": "2024-08-31T21:14:18.984832Z"
+	"ver": 115,
+	"sha256": "ae4df7ac62de545b1136d61012601e5bba4e80000dc4789e2ae651cea485b237",
+	"ts": "2025-05-08T13:43:44.115893Z"
 } */

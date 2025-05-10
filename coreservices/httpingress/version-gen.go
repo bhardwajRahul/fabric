@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package httpingress
 
-const Version = 266
-const SourceCodeSHA256 = "9d3acb60de26eb82be47063fbfe71e4568f0e2fe597136a832f6487bfa42161a"
-const Timestamp = "2024-09-15T02:36:58.195283Z"
+const Version = 299
+const SourceCodeSHA256 = "23850acb161959088a7f503b5e6c9b57cb6661a8b32eafa7c2bfcaf56c848783"
+const Timestamp = "2025-05-09T04:21:00.365163Z"
 
 /* {
-	"ver": 266,
-	"sha256": "9d3acb60de26eb82be47063fbfe71e4568f0e2fe597136a832f6487bfa42161a",
-	"ts": "2024-09-15T02:36:58.195283Z"
+	"ver": 299,
+	"sha256": "23850acb161959088a7f503b5e6c9b57cb6661a8b32eafa7c2bfcaf56c848783",
+	"ts": "2025-05-09T04:21:00.365163Z"
 } */

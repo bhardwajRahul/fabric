@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package rand
 
 import (
 	"math/rand/v2"
+
+	"github.com/microbus-io/fabric/utils"
 )
 
 // Void is an empty type.
@@ -53,7 +55,7 @@ func AlphaNum64(length int) string {
 		}
 		bytes[i] = letters[x&0x3F]
 	}
-	return string(bytes)
+	return utils.UnsafeBytesToString(bytes)
 }
 
 // AlphaNum32 generates a random string of the specified length.
@@ -70,7 +72,7 @@ func AlphaNum32(length int) string {
 		}
 		bytes[i] = letters[x&0x1F]
 	}
-	return string(bytes)
+	return utils.UnsafeBytesToString(bytes)
 }
 
 // IntN returns, as an int, a pseudo-random number in the half-open interval [0,n)

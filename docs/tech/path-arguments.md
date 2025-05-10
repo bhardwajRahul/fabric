@@ -33,7 +33,7 @@ Host: calculator.example
 
 ### Variable Path
 
-A fixed path is consistent with the [RPC over JSON](./rpc-vs-rest.md) style of API but is insufficient for implementing a [RESTful](./rpc-vs-rest.md) style of API where it is common to expect input arguments in the path of the request. This is where path arguments come into play.
+A fixed path is consistent with the [RPC over JSON](../tech/rpc-vs-rest.md) style of API but is insufficient for implementing a [RESTful](../tech/rpc-vs-rest.md) style of API where it is common to expect input arguments in the path of the request. This is where path arguments come into play.
 
 Consider the following `service.yaml` specification that defines a path argument `{id}` and a corresponding function argument `id int`:
 

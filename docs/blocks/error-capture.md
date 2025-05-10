@@ -6,7 +6,7 @@ The point of view of `Microbus` is that errors will happen, they will be unpredi
 
 ### Web Handler Returns Error
 
-The standard `http.HandlerFunc` signature in Go does not return an `error` but rather leaves it to the developer to set the status code (often to `500`) and output an error message to the body of the response. This results in repetitive "log and throw" error handling pattern that app developers may or may not consistently conform to.
+The standard `http.HandlerFunc` signature in Go does not return an `error` but rather leaves it to the developer to set the status code (often to `500 Internal Server Error`) and output an error message to the body of the response. This results in repetitive "log and throw" error handling pattern that app developers may or may not consistently conform to.
 
 ```go
 func StandardHandler(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +189,7 @@ func FrameworkWrapperOfHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Microbus-Op-Code", "Err") // Mark the response as an error
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(errors.StatusCode(err))
-		json.NewEncoder(w).Encode(err) // Marhsal the error as JSON
+		json.NewEncoder(w).Encode(err) // Marshal the error as JSON
 		logger.ErrorContext(r.Context(), "Handling request", "error", err)
 		metrics.IncrementErrorCount(1)
 		return

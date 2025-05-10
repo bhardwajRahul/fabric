@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -159,7 +159,7 @@ func TestConnector_PathArgumentsInSubscription(t *testing.T) {
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, 1, parentCount)
 
-	testarossa.Equal(t, 6, len(detected))
+	testarossa.Len(t, detected, 6)
 	testarossa.Equal(t, "1234", detected["/obj/1234/alpha"])
 	testarossa.Equal(t, "2345", detected["/obj/2345/alpha"])
 	testarossa.Equal(t, "1111", detected["/obj/1111/beta"])
@@ -861,4 +861,65 @@ func TestConnector_SubscriptionNoLocalityWithID(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestConnector_Actor(t *testing.T) {
+	t.Parallel()
+
+	// Create the microservice
+	entered := 0
+	con := New("actor.connector")
+	con.Subscribe("GET", "student", func(w http.ResponseWriter, r *http.Request) error {
+		entered++
+		return nil
+	}, sub.Actor(`iss=="hogwats.issuer" && (roles=~"student" || roles=~"professor")`))
+	con.Subscribe("GET", "professor", func(w http.ResponseWriter, r *http.Request) error {
+		entered++
+		return nil
+	}, sub.Actor(`iss=="hogwats.issuer" && roles=~"professor"`))
+
+	// Startup the microservice
+	err := con.Startup()
+	testarossa.NoError(t, err)
+	defer con.Shutdown()
+
+	// Without a token
+	mogulCtx := context.Background()
+	_, err = con.GET(mogulCtx, "https://actor.connector/student")
+	testarossa.Error(t, err)
+	testarossa.Equal(t, http.StatusUnauthorized, errors.StatusCode(err))
+	testarossa.Equal(t, 0, entered)
+	_, err = con.GET(mogulCtx, "https://actor.connector/professor")
+	testarossa.Error(t, err)
+	testarossa.Equal(t, http.StatusUnauthorized, errors.StatusCode(err))
+	testarossa.Equal(t, 0, entered)
+
+	// Create token for wizard role
+	wizardCtx := frame.CloneContext(mogulCtx)
+	frame.Of(wizardCtx).SetActor(map[string]any{
+		"iss":   "hogwats.issuer",
+		"sub":   "harry@hogwarts.edu",
+		"roles": "wizard student",
+	})
+	_, err = con.Request(wizardCtx, pub.GET("https://actor.connector/student"))
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 1, entered)
+	_, err = con.Request(wizardCtx, pub.GET("https://actor.connector/professor"))
+	testarossa.Error(t, err)
+	testarossa.Equal(t, http.StatusForbidden, errors.StatusCode(err))
+	testarossa.Equal(t, 1, entered)
+
+	// Create token for professor role
+	professorCtx := frame.CloneContext(mogulCtx)
+	frame.Of(professorCtx).SetActor(map[string]any{
+		"iss":   "hogwats.issuer",
+		"sub":   "dumbledore@hogwarts.edu",
+		"roles": "wizard professor headmaster",
+	})
+	_, err = con.Request(professorCtx, pub.GET("https://actor.connector/student"))
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 2, entered)
+	_, err = con.Request(professorCtx, pub.GET("https://actor.connector/professor"))
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 3, entered)
 }

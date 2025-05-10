@@ -19,10 +19,6 @@ var (
 
 // Initialize starts up the testing app.
 func Initialize() (err error) {	
-	App.Init(func(svc service.Service) {
-		// Initialize all microservices
-	})
-
 	// Add microservices to the testing app
 	err = App.AddAndStartup(
 		// downstream.NewService().Init(func(svc *downstream.Service) {}),

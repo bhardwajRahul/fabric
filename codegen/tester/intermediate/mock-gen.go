@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ type Mock struct {
 	mockPointDistance func(ctx context.Context, p1 testerapi.XYCoord, p2 *testerapi.XYCoord) (d float64, err error)
 	mockShiftPoint func(ctx context.Context, p *testerapi.XYCoord, x float64, y float64) (shifted *testerapi.XYCoord, err error)
 	mockLinesIntersection func(ctx context.Context, l1 testerapi.XYLine, l2 *testerapi.XYLine) (b bool, err error)
+	mockEchoAnything func(ctx context.Context, original any) (echoed any, err error)
 	mockSubArrayRange func(ctx context.Context, httpRequestBody []int, min int, max int) (httpResponseBody []int, httpStatusCode int, err error)
 	mockSumTwoIntegers func(ctx context.Context, x int, y int) (sum int, httpStatusCode int, err error)
 	mockFunctionPathArguments func(ctx context.Context, named string, path2 string, suffix string) (joined string, err error)
@@ -51,6 +52,7 @@ type Mock struct {
 	mockUnnamedFunctionPathArguments func(ctx context.Context, path1 string, path2 string, path3 string) (joined string, err error)
 	mockPathArgumentsPriority func(ctx context.Context, foo string) (echo string, err error)
 	mockWhatTimeIsIt func(ctx context.Context) (t time.Time, err error)
+	mockAuthzRequired func(ctx context.Context) (err error)
 	mockOnDiscoveredSink func(ctx context.Context, p testerapi.XYCoord, n int) (q testerapi.XYCoord, m int, err error)
 	mockEcho func(w http.ResponseWriter, r *http.Request) (err error)
 	mockMultiValueHeaders func(w http.ResponseWriter, r *http.Request) (err error)
@@ -138,6 +140,21 @@ func (svc *Mock) LinesIntersection(ctx context.Context, l1 testerapi.XYLine, l2 
 		return
 	}
 	return svc.mockLinesIntersection(ctx, l1, l2)
+}
+
+// MockEchoAnything sets up a mock handler for the EchoAnything endpoint.
+func (svc *Mock) MockEchoAnything(handler func(ctx context.Context, original any) (echoed any, err error)) *Mock {
+	svc.mockEchoAnything = handler
+	return svc
+}
+
+// EchoAnything runs the mock handler set by MockEchoAnything.
+func (svc *Mock) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
+	if svc.mockEchoAnything == nil {
+		err = errors.New("mocked endpoint 'EchoAnything' not implemented")
+		return
+	}
+	return svc.mockEchoAnything(ctx, original)
 }
 
 // MockSubArrayRange sets up a mock handler for the SubArrayRange endpoint.
@@ -243,6 +260,21 @@ func (svc *Mock) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
 		return
 	}
 	return svc.mockWhatTimeIsIt(ctx)
+}
+
+// MockAuthzRequired sets up a mock handler for the AuthzRequired endpoint.
+func (svc *Mock) MockAuthzRequired(handler func(ctx context.Context) (err error)) *Mock {
+	svc.mockAuthzRequired = handler
+	return svc
+}
+
+// AuthzRequired runs the mock handler set by MockAuthzRequired.
+func (svc *Mock) AuthzRequired(ctx context.Context) (err error) {
+	if svc.mockAuthzRequired == nil {
+		err = errors.New("mocked endpoint 'AuthzRequired' not implemented")
+		return
+	}
+	return svc.mockAuthzRequired(ctx)
 }
 
 // MockOnDiscoveredSink sets up a mock handler for the OnDiscoveredSink endpoint.

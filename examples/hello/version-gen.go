@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package hello
 
-const Version = 260
-const SourceCodeSHA256 = "71f2bc05bef6ec3a332357e7d808ab6b25a4107dfe482e12b540ab555fdaa61a"
-const Timestamp = "2024-08-31T21:14:21.445752Z"
+const Version = 270
+const SourceCodeSHA256 = "597e021ffdff57edb1c5b61b1b38393278451a0fcebabc4781eb5d9943297716"
+const Timestamp = "2025-05-08T13:43:47.566865Z"
 
 /* {
-	"ver": 260,
-	"sha256": "71f2bc05bef6ec3a332357e7d808ab6b25a4107dfe482e12b540ab555fdaa61a",
-	"ts": "2024-08-31T21:14:21.445752Z"
+	"ver": 270,
+	"sha256": "597e021ffdff57edb1c5b61b1b38393278451a0fcebabc4781eb5d9943297716",
+	"ts": "2025-05-08T13:43:47.566865Z"
 } */

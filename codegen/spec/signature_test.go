@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,28 +31,28 @@ func TestSpec_Signature(t *testing.T) {
 	err := yaml.Unmarshal([]byte("Hello(x int, y string) (ok bool)"), &sig)
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, "Hello", sig.Name)
-	testarossa.SliceLen(t, sig.InputArgs, 2)
+	testarossa.Len(t, sig.InputArgs, 2)
 	testarossa.Equal(t, "x", sig.InputArgs[0].Name)
 	testarossa.Equal(t, "int", sig.InputArgs[0].Type)
 	testarossa.Equal(t, "y", sig.InputArgs[1].Name)
 	testarossa.Equal(t, "string", sig.InputArgs[1].Type)
-	testarossa.SliceLen(t, sig.OutputArgs, 1)
+	testarossa.Len(t, sig.OutputArgs, 1)
 	testarossa.Equal(t, "ok", sig.OutputArgs[0].Name)
 	testarossa.Equal(t, "bool", sig.OutputArgs[0].Type)
 
 	err = yaml.Unmarshal([]byte("Hello(x int)"), &sig)
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, "Hello", sig.Name)
-	testarossa.SliceLen(t, sig.InputArgs, 1)
+	testarossa.Len(t, sig.InputArgs, 1)
 	testarossa.Equal(t, "x", sig.InputArgs[0].Name)
 	testarossa.Equal(t, "int", sig.InputArgs[0].Type)
-	testarossa.SliceLen(t, sig.OutputArgs, 0)
+	testarossa.Len(t, sig.OutputArgs, 0)
 
 	err = yaml.Unmarshal([]byte("Hello() (e string, ok bool)"), &sig)
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, "Hello", sig.Name)
-	testarossa.SliceLen(t, sig.InputArgs, 0)
-	testarossa.SliceLen(t, sig.OutputArgs, 2)
+	testarossa.Len(t, sig.InputArgs, 0)
+	testarossa.Len(t, sig.OutputArgs, 2)
 	testarossa.Equal(t, "e", sig.OutputArgs[0].Name)
 	testarossa.Equal(t, "string", sig.OutputArgs[0].Type)
 	testarossa.Equal(t, "ok", sig.OutputArgs[1].Name)
@@ -61,14 +61,14 @@ func TestSpec_Signature(t *testing.T) {
 	err = yaml.Unmarshal([]byte("Hello()"), &sig)
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, "Hello", sig.Name)
-	testarossa.SliceLen(t, sig.InputArgs, 0)
-	testarossa.SliceLen(t, sig.OutputArgs, 0)
+	testarossa.Len(t, sig.InputArgs, 0)
+	testarossa.Len(t, sig.OutputArgs, 0)
 
 	err = yaml.Unmarshal([]byte("Hello"), &sig)
 	testarossa.NoError(t, err)
 	testarossa.Equal(t, "Hello", sig.Name)
-	testarossa.SliceLen(t, sig.InputArgs, 0)
-	testarossa.SliceLen(t, sig.OutputArgs, 0)
+	testarossa.Len(t, sig.InputArgs, 0)
+	testarossa.Len(t, sig.OutputArgs, 0)
 
 	err = yaml.Unmarshal([]byte("MockMe"), &sig)
 	testarossa.Error(t, err)

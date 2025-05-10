@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 func TestLRU_Load(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[string, string]()
+	cache := New[string, string](1024, time.Hour)
 	cache.Store("a", "aaa")
 	cache.Store("b", "bbb")
 	cache.Store("c", "ccc")
@@ -61,7 +61,7 @@ func TestLRU_Load(t *testing.T) {
 func TestLRU_LoadOrStore(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[string, string]()
+	cache := New[string, string](1024, time.Hour)
 	cache.Store("a", "aaa")
 
 	v, found := cache.LoadOrStore("a", "AAA")
@@ -85,8 +85,7 @@ func TestLRU_MaxWeight(t *testing.T) {
 	t.Parallel()
 
 	maxWt := 16
-	cache := NewCache[int, string]()
-	cache.SetMaxWeight(maxWt)
+	cache := New[int, string](maxWt, time.Hour)
 
 	cache.Store(999, "Too Big", Weight(maxWt+1))
 	_, ok := cache.Load(999)
@@ -147,8 +146,7 @@ func TestLRU_ChangeMaxWeight(t *testing.T) {
 	t.Parallel()
 
 	maxWt := 16
-	cache := NewCache[int, string]()
-	cache.SetMaxWeight(maxWt)
+	cache := New[int, string](maxWt, time.Hour)
 
 	for i := 1; i <= maxWt; i++ {
 		cache.Store(i, "1", Weight(1))
@@ -166,7 +164,7 @@ func TestLRU_ChangeMaxWeight(t *testing.T) {
 func TestLRU_Clear(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
+	cache := New[int, string](1024, time.Hour)
 	testarossa.Zero(t, cache.Len())
 	testarossa.Zero(t, cache.Weight())
 
@@ -201,7 +199,7 @@ func TestLRU_Delete(t *testing.T) {
 
 	span := 10
 	sim := map[int]string{}
-	cache := NewCache[int, string]()
+	cache := New[int, string](1024, time.Hour)
 	for i := 0; i < 2048; i++ {
 		n := rand.IntN(span * 2)
 		if n >= span {
@@ -226,7 +224,7 @@ func TestLRU_Delete(t *testing.T) {
 func TestLRU_DeletePredicate(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
+	cache := New[int, string](1024, time.Hour)
 	for i := 1; i <= 10; i++ {
 		cache.Store(i, "X")
 	}
@@ -245,8 +243,7 @@ func TestLRU_DeletePredicate(t *testing.T) {
 func TestLRU_MaxAge(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
-	cache.SetMaxAge(time.Second * 35)
+	cache := New[int, string](1024, time.Second*35)
 
 	cache.Store(0, "X")
 	cache.timeOffset += time.Second * 30 // t=30
@@ -279,8 +276,7 @@ func TestLRU_MaxAge(t *testing.T) {
 func TestLRU_BumpMaxAge(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
-	cache.SetMaxAge(time.Second * 30)
+	cache := New[int, string](1024, time.Second*30)
 
 	cache.Store(0, "X")
 	cache.timeOffset += time.Second * 20
@@ -294,8 +290,7 @@ func TestLRU_BumpMaxAge(t *testing.T) {
 func TestLRU_ReduceMaxAge(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
-	cache.SetMaxAge(time.Minute)
+	cache := New[int, string](1024, time.Minute)
 
 	cache.Store(0, "X")
 	cache.timeOffset += time.Second * 30
@@ -321,8 +316,7 @@ func TestLRU_ReduceMaxAge(t *testing.T) {
 func TestLRU_IncreaseMaxAge(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
-	cache.SetMaxAge(time.Minute)
+	cache := New[int, string](1024, time.Minute)
 
 	cache.Store(0, "X")
 	cache.timeOffset += time.Second * 30
@@ -351,8 +345,7 @@ func TestLRU_IncreaseMaxAge(t *testing.T) {
 func TestLRU_Bump(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
-	cache.SetMaxWeight(8)
+	cache := New[int, string](8, time.Hour)
 
 	// Fill in the cache
 	// head> 8 7 6 5 4 3 2 1 <tail
@@ -397,7 +390,7 @@ func TestLRU_Bump(t *testing.T) {
 func TestLRU_RandomCohesion(t *testing.T) {
 	t.Parallel()
 
-	cache := NewCache[int, string]()
+	cache := New[int, string](1024, time.Hour)
 
 	for step := 0; step < 100000; step++ {
 		key := rand.IntN(8)
@@ -421,8 +414,7 @@ func TestLRU_RandomCohesion(t *testing.T) {
 }
 
 func BenchmarkLRU_Store(b *testing.B) {
-	cache := NewCache[int, int]()
-	cache.SetMaxWeight(b.N * 2)
+	cache := New[int, int](b.N*2, time.Hour)
 	for i := 0; i < b.N; i++ {
 		cache.Store(i, i)
 	}
@@ -432,8 +424,7 @@ func BenchmarkLRU_Store(b *testing.B) {
 }
 
 func BenchmarkLRU_LoadNoBump(b *testing.B) {
-	cache := NewCache[int, int]()
-	cache.SetMaxWeight(b.N * 2)
+	cache := New[int, int](b.N*2, time.Hour)
 	for i := 0; i < b.N; i++ {
 		cache.Store(i, i)
 	}
@@ -447,8 +438,7 @@ func BenchmarkLRU_LoadNoBump(b *testing.B) {
 }
 
 func BenchmarkLRU_LoadBump(b *testing.B) {
-	cache := NewCache[int, int]()
-	cache.SetMaxWeight(b.N * 2)
+	cache := New[int, int](b.N*2, time.Hour)
 	for i := 0; i < b.N; i++ {
 		cache.Store(i, i)
 	}

@@ -62,6 +62,7 @@ func main() {
 		httpegress.NewService(),
 		openapiportal.NewService(),
 		metrics.NewService(),
+		tokenissuer.NewService(),
 	)
 	app.Add(
 		// Add solution microservices here

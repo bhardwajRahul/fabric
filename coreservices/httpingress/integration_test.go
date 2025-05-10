@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,24 +25,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/tokenissuer"
+	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/sub"
 )
 
 // Initialize starts up the testing app.
 func Initialize() (err error) {
 	// Add microservices to the testing app
 	err = App.AddAndStartup(
+		tokenissuer.NewService(),
 		Svc.Init(func(svc *Service) {
 			svc.SetTimeBudget(time.Second * 2)
-			svc.SetPorts("4040,4443")
+			svc.SetPorts("4040,40443")
 			svc.SetAllowedOrigins("allowed.origin")
-			svc.SetPortMappings("4040:*->*, 4443:*->443")
+			svc.SetPortMappings("4040:*->*, 40443:*->443")
 			svc.Middleware().Append("HelloGoodbye", middleware.OnRoutePrefix("/greeting:555/", middleware.Group(
 				func(next connector.HTTPHandler) connector.HTTPHandler {
 					return func(w http.ResponseWriter, r *http.Request) error {
@@ -59,6 +64,7 @@ func Initialize() (err error) {
 					}
 				},
 			)))
+			svc.Middleware().Append("401Redirect", middleware.ErrorPageRedirect(http.StatusUnauthorized, "/login-page"))
 		}),
 	)
 	if err != nil {
@@ -80,8 +86,7 @@ func TestHttpingress_Ports(t *testing.T) {
 		w.Write([]byte("ok"))
 		return nil
 	})
-	App.Add(con)
-	err := con.Startup()
+	err := App.AddAndStartup(con)
 	testarossa.NoError(t, err)
 	defer con.Shutdown()
 
@@ -93,7 +98,7 @@ func TestHttpingress_Ports(t *testing.T) {
 			testarossa.Equal(t, "ok", string(b))
 		}
 	}
-	res, err = client.Get("http://localhost:4443/ports/ok")
+	res, err = client.Get("http://localhost:40443/ports/ok")
 	if testarossa.NoError(t, err) {
 		b, err := io.ReadAll(res.Body)
 		if testarossa.NoError(t, err) {
@@ -233,16 +238,16 @@ func TestHttpingress_PortMapping(t *testing.T) {
 		testarossa.Equal(t, http.StatusNotFound, res.StatusCode)
 	}
 
-	// External port 4443 maps all requests to internal port 443
-	res, err = client.Get("http://localhost:4443/port.mapping/ok443")
+	// External port 40443 maps all requests to internal port 443
+	res, err = client.Get("http://localhost:40443/port.mapping/ok443")
 	if testarossa.NoError(t, err) {
 		testarossa.Equal(t, http.StatusOK, res.StatusCode)
 	}
-	res, err = client.Get("http://localhost:4443/port.mapping:555/ok555")
+	res, err = client.Get("http://localhost:40443/port.mapping:555/ok555")
 	if testarossa.NoError(t, err) {
 		testarossa.Equal(t, http.StatusNotFound, res.StatusCode)
 	}
-	res, err = client.Get("http://localhost:4443/port.mapping:555/ok443")
+	res, err = client.Get("http://localhost:40443/port.mapping:555/ok443")
 	if testarossa.NoError(t, err) {
 		testarossa.Equal(t, http.StatusOK, res.StatusCode)
 	}
@@ -604,8 +609,7 @@ func TestHttpingress_NoCache(t *testing.T) {
 		w.Write([]byte("ok"))
 		return nil
 	})
-	App.Add(con)
-	err := con.Startup()
+	err := App.AddAndStartup(con)
 	testarossa.NoError(t, err)
 	defer con.Shutdown()
 
@@ -613,6 +617,169 @@ func TestHttpingress_NoCache(t *testing.T) {
 	res, err := client.Get("http://localhost:4040/no.cache/ok")
 	if testarossa.NoError(t, err) {
 		testarossa.Equal(t, "no-store", res.Header.Get("Cache-Control"))
+	}
+}
+
+func TestHttpingress_AuthTokenEntry(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context()
+	now := time.Now().Truncate(time.Second)
+
+	countActors := 0
+	con := connector.New("auth.token.entry")
+	con.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
+		if ok, _ := frame.Of(r).IfActor(`iss`); ok {
+			countActors++
+		}
+		return nil
+	})
+	err := App.AddAndStartup(con)
+	testarossa.NoError(t, err)
+	defer con.Shutdown()
+
+	client := http.Client{Timeout: time.Second * 4}
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:4040/auth.token.entry/ok", nil)
+	testarossa.NoError(t, err)
+
+	// No token
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 0, countActors)
+
+	// Token by unknown issuer
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"iss": "my.issuer",
+		"iat": now.Unix(),
+		"exp": now.Add(time.Hour).Unix(),
+	})
+	signedJWT, err := jwtToken.SignedString([]byte("some-key"))
+	testarossa.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+signedJWT)
+
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 0, countActors)
+
+	// Attempt to impersonate issuer (wrong key)
+	jwtToken = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"iss": tokenissuerapi.Hostname,
+		"iat": now.Unix(),
+		"exp": now.Add(time.Hour).Unix(),
+	})
+	signedJWT, err = jwtToken.SignedString([]byte("wrong-key"))
+	testarossa.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+signedJWT)
+
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 0, countActors)
+
+	// Do not accept incoming Microbus-Actor header
+	req.Header.Del("Authorization")
+	req.Header.Set(frame.HeaderActor, `{"iss":"`+tokenissuerapi.Hostname+`"}`)
+
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 0, countActors)
+
+	// Valid as Authorization Bearer header
+	signedJWT, err = tokenissuerapi.NewClient(Svc).IssueToken(ctx, nil)
+	testarossa.NoError(t, err)
+	req.Header.Del(frame.HeaderActor)
+	req.Header.Set("Authorization", "Bearer "+signedJWT)
+
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 1, countActors)
+
+	// Also in Authorization cookie
+	req.Header.Del("Authorization")
+	req.AddCookie(&http.Cookie{
+		Name:     "Authorization",
+		Value:    signedJWT,
+		MaxAge:   60,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+	})
+
+	_, err = client.Do(req)
+	testarossa.NoError(t, err)
+	testarossa.Equal(t, 2, countActors)
+}
+
+func TestHttpingress_Authorization(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context()
+
+	con := connector.New("authorization")
+	con.Subscribe("GET", "protected", func(w http.ResponseWriter, r *http.Request) error {
+		w.Write([]byte("Access Granted"))
+		return nil
+	}, sub.Actor("role=='major'"))
+	con.Subscribe("GET", "//login-page", func(w http.ResponseWriter, r *http.Request) error {
+		w.Write([]byte("Login"))
+		return nil
+	})
+	err := App.AddAndStartup(con)
+	testarossa.NoError(t, err)
+	defer con.Shutdown()
+
+	client := http.Client{Timeout: time.Second * 2}
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:4040/authorization/protected", nil)
+	testarossa.NoError(t, err)
+
+	// Request not originating from a browser should be denied
+	res, err := client.Do(req)
+	if testarossa.NoError(t, err) {
+		testarossa.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	}
+
+	// Request origination from a browser should be redirected to the login page
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	res, err = client.Do(req)
+	if testarossa.NoError(t, err) {
+		body, _ := io.ReadAll(res.Body)
+		testarossa.Equal(t, "Login", string(body))
+	}
+
+	// Request with insufficient auth token should be rejected
+	signedToken, err := tokenissuerapi.NewClient(Svc).IssueToken(ctx, jwt.MapClaims{"role": "minor"})
+	testarossa.NoError(t, err)
+	req.AddCookie(&http.Cookie{
+		Name:     "Authorization",
+		Value:    signedToken,
+		MaxAge:   60,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+	})
+	testarossa.Len(t, req.Cookies(), 1)
+	res, err = client.Do(req)
+	if testarossa.NoError(t, err) {
+		testarossa.Equal(t, http.StatusForbidden, res.StatusCode)
+	}
+
+	// Request with valid auth token should be served
+	signedToken, err = tokenissuerapi.NewClient(Svc).IssueToken(ctx, jwt.MapClaims{"role": "major"})
+	testarossa.NoError(t, err)
+	req.Header.Del("Cookie")
+	req.AddCookie(&http.Cookie{
+		Name:     "Authorization",
+		Value:    signedToken,
+		MaxAge:   60,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+	})
+	testarossa.Len(t, req.Cookies(), 1)
+	res, err = client.Do(req)
+	if testarossa.NoError(t, err) {
+		body, _ := io.ReadAll(res.Body)
+		testarossa.Equal(t, "Access Granted", string(body))
 	}
 }
 
@@ -653,7 +820,7 @@ func TestHttpingress_MultiValueHeaders(t *testing.T) {
 
 	con := connector.New("multi.value.headers")
 	con.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-		if testarossa.Equal(t, 3, len(r.Header["Multi-Value"])) {
+		if testarossa.Len(t, r.Header["Multi-Value"], 3) {
 			testarossa.Equal(t, "Send 1", r.Header["Multi-Value"][0])
 			testarossa.Equal(t, "Send 2", r.Header["Multi-Value"][1])
 			testarossa.Equal(t, "Send 3", r.Header["Multi-Value"][2])
@@ -678,7 +845,7 @@ func TestHttpingress_MultiValueHeaders(t *testing.T) {
 	}
 	res, err := client.Do(req)
 	if testarossa.NoError(t, err) {
-		if testarossa.Equal(t, 2, len(res.Header["Multi-Value"])) {
+		if testarossa.Len(t, res.Header["Multi-Value"], 2) {
 			testarossa.Equal(t, "Return 1", res.Header["Multi-Value"][0])
 			testarossa.Equal(t, "Return 2", res.Header["Multi-Value"][1])
 		}

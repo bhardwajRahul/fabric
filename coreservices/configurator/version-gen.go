@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package configurator
 
-const Version = 183
-const SourceCodeSHA256 = "94f6d91af661494b22520b12611ce493168a4246c7352a1d8611a6f81f45a6c1"
-const Timestamp = "2024-08-31T21:14:17.242073Z"
+const Version = 202
+const SourceCodeSHA256 = "b4ed7270320af9844f53c5934073489b262e5f990408da2b5f0c99e7ee2fa2a1"
+const Timestamp = "2025-05-08T13:43:41.979227Z"
 
 /* {
-	"ver": 183,
-	"sha256": "94f6d91af661494b22520b12611ce493168a4246c7352a1d8611a6f81f45a6c1",
-	"ts": "2024-08-31T21:14:17.242073Z"
+	"ver": 202,
+	"sha256": "b4ed7270320af9844f53c5934073489b262e5f990408da2b5f0c99e7ee2fa2a1",
+	"ts": "2025-05-08T13:43:41.979227Z"
 } */

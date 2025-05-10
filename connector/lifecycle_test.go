@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -246,7 +246,7 @@ func TestConnector_Restart(t *testing.T) {
 	testarossa.Equal(t, "default", con.configs["config"].Value)
 
 	// Startup
-	configurator.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Write([]byte(`{"values":{"config":"overriden"}}`))
 		return nil
 	})
@@ -267,8 +267,8 @@ func TestConnector_Restart(t *testing.T) {
 	testarossa.Equal(t, 1, shutdownCalled)
 
 	// Restart
-	configurator.Unsubscribe("POST", "/values")
-	configurator.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	configurator.Unsubscribe("POST", ":888/values")
+	configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Write([]byte(`{}`))
 		return nil
 	})

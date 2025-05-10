@@ -13,7 +13,7 @@ For example:
 
 ```go
 req, _ := http.NewRequest("DELETE", "https://example.com/ex/5", nil)
-req.Header.Set("Authentication", "Bearer " + token)
+req.Header.Set("Authorization", "Bearer " + token)
 shortCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 resp, err := httpegressapi.NewClient(svc).Do(shortCtx, req)
 cancel()
@@ -38,4 +38,4 @@ To mock the egress microservice, create `Mock` of it and handle the request manu
 	}
 ```
 
-Note that the single endpoint of the HTTP egress microservice `MakeRequest` is listening on internal `Microbus` port `:444` rather than `:443`. That is because port `:443` is open by default to the outside via the HTTP ingress proxy.
+Note that the single endpoint of the HTTP egress microservice `MakeRequest` is listening on internal `Microbus` [port](../tech/ports.md) `:444` rather than `:443`. That is because port `:443` is open by default to the outside via the [HTTP ingress proxy](../structure/coreservices-httpingress.md).

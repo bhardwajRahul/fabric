@@ -29,4 +29,4 @@ svc.Go(ctx, func(ctx context.Context) (err error) {
 })
 ```
 
-Note that a multicast may return no results at all. Unlike a unicast, a `404` error is not returned in this case.
+Note that a multicast may return no results at all. Unlike a unicast, a `404 Not Found` error is not returned in this case.

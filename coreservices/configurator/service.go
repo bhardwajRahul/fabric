@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,10 +26,10 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/pub"
 
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
 	"github.com/microbus-io/fabric/coreservices/configurator/intermediate"
+	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 )
 
 var (
@@ -127,9 +127,9 @@ func (svc *Service) Refresh(ctx context.Context) (err error) {
 }
 
 /*
-Sync is used to synchronize values among replica peers of the configurator.
+SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (svc *Service) Sync(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+func (svc *Service) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	// Only respond to peers, and not to self
 	if frame.Of(ctx).FromHost() != svc.Hostname() || frame.Of(ctx).FromID() == svc.ID() {
 		return nil
@@ -172,9 +172,9 @@ An error is returned if any of the values sent to the microservices fails valida
 */
 func (svc *Service) PeriodicRefresh(ctx context.Context) (err error) {
 	var lastErr error
-	ch := svc.Publish(ctx, pub.GET("https://all:888/config-refresh"))
+	ch := controlapi.NewMulticastClient(svc).ForHost("all").ConfigRefresh(ctx)
 	for i := range ch {
-		_, err := i.Get()
+		err := i.Get()
 		if err != nil && errors.StatusCode(err) != http.StatusNotFound {
 			lastErr = errors.Trace(err)
 			svc.LogError(ctx, "Updating config", "error", lastErr)
@@ -191,7 +191,7 @@ func (svc *Service) publishSync(ctx context.Context) error {
 	svc.lock.RUnlock()
 
 	// Broadcast to peers
-	ch := configuratorapi.NewMulticastClient(svc).Sync(ctx, timestamp, values)
+	ch := configuratorapi.NewMulticastClient(svc).SyncRepo(ctx, timestamp, values)
 	for range ch {
 		// Ignore results
 	}
@@ -211,4 +211,40 @@ func (svc *Service) loadYAML(configYAML string) error {
 	svc.repoTimestamp = time.Now()
 	svc.lock.Unlock()
 	return nil
+}
+
+/*
+Values443 is deprecated.
+*/
+func (svc *Service) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
+	if frame.Of(ctx).XForwardedBaseURL() != "" {
+		// Disallow external requests
+		return nil, errors.Newc(http.StatusNotFound, "")
+	}
+	svc.LogWarn(ctx, "Port 443 is deprecated")
+	return svc.Values(ctx, names)
+}
+
+/*
+Refresh443 is deprecated.
+*/
+func (svc *Service) Refresh443(ctx context.Context) (err error) {
+	if frame.Of(ctx).XForwardedBaseURL() != "" {
+		// Disallow external requests
+		return errors.Newc(http.StatusNotFound, "")
+	}
+	svc.LogWarn(ctx, "Port 443 is deprecated")
+	return svc.Refresh(ctx)
+}
+
+/*
+Sync443 is deprecated.
+*/
+func (svc *Service) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+	if frame.Of(ctx).XForwardedBaseURL() != "" {
+		// Disallow external requests
+		return errors.Newc(http.StatusNotFound, "")
+	}
+	svc.LogWarn(ctx, "Port 443 is deprecated")
+	return svc.SyncRepo(ctx, timestamp, values)
 }

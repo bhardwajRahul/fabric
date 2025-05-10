@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"regexp"
 
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/utils"
 )
 
 // Option is used to construct a subscription in Connector.Subscribe
@@ -69,4 +70,20 @@ func DefaultQueue() Option {
 // Requests will be load-balanced among all instances of this microservice
 func LoadBalanced() Option {
 	return DefaultQueue()
+}
+
+// Actor requires that the properties of the actor associated with the request satisfy the boolean expression.
+// For example: iss=='my_issuer' && (roles=~'admin' || roles=~'manager') && region=="US".
+// The =~ and !~ operators evaluate the left operand against a regexp.
+// String constants, including regexp patterns, must be quoted using single quotes, double quotes or backticks.
+// A request that doesn't satisfy the constraint is denied with a 403 forbidden error.
+func Actor(boolExp string) Option {
+	return func(sub *Subscription) error {
+		_, err := utils.EvaluateBoolExp(boolExp, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		sub.Actor = boolExp
+		return nil
+	}
 }

@@ -129,14 +129,20 @@ func NewService(impl ToDo, version int) *Intermediate {
 
 	// Functions
 	{{- range .Functions }}
-	svc.Subscribe(`{{ .Method }}`, `{{ .Path }}`, svc.do{{ .Name }} {{- if eq .Queue "none"}}, sub.NoQueue(){{end -}} )
+	svc.Subscribe(`{{ .Method }}`, `{{ .Path }}`, svc.do{{ .Name }}
+		{{- if eq .Queue "none"}}, sub.NoQueue(){{end -}}
+		{{- if .Actor }}, sub.Actor(`{{ .Actor }}`){{ end -}}
+	)
 	{{- end }}{{ end }}
 
 	{{- if .Webs }}
 
 	// Webs
 	{{- range .Webs }}
-	svc.Subscribe(`{{ .Method }}`, `{{ .Path }}`, svc.impl.{{ .Name }} {{- if eq .Queue "none" }}, sub.NoQueue(){{ end -}} )
+	svc.Subscribe(`{{ .Method }}`, `{{ .Path }}`, svc.impl.{{ .Name }}
+		{{- if eq .Queue "none" }}, sub.NoQueue(){{ end -}}
+		{{- if .Actor }}, sub.Actor(`{{ .Actor }}`){{ end -}}
+	)
 	{{- end }}{{ end }}
 
 	{{- if .Sinks }}
@@ -146,7 +152,8 @@ func NewService(impl ToDo, version int) *Intermediate {
 	{{ .SourceSuffix }}api{{ Add $i 1 }}.NewHook(svc).
 	{{- if .ForHost }}ForHost(`{{ .ForHost }}`).{{ end }}
 	{{- .Event }}(svc.impl.{{ .Name }}
-	{{- if eq .Queue "none"}}, sub.NoQueue(){{ end -}}
+		{{- if eq .Queue "none"}}, sub.NoQueue(){{ end -}}
+		{{- if .Actor }}, sub.Actor(`{{ .Actor }}`){{ end -}}
 	)
 	{{- end }}{{ end }}
 
@@ -188,7 +195,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 		RemoteURI:   frame.Of(r).XForwardedFullURL(),
 	}
 
-	{{- if .General.OpenAPI}}{{- range (JoinHandlers .Functions .Webs) }}{{- if .OpenAPI}}
+	{{- if .General.OpenAPI }}{{- range (JoinHandlers .Functions .Webs) }}{{- if .OpenAPI }}
 	if r.URL.Port() == "{{ .Port }}" || "{{ .Port }}" == "0" {
 		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
 			Type:        `{{ .Type }}`,
@@ -196,20 +203,29 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Method:      `{{ .Method }}`,
 			Path:        `{{ .Path }}`,
 			Summary:     `{{ .Signature.OrigString }}`,
+			{{- if .Description }}
 			Description: `{{ .Description }}`,
+			{{- end }}
+			{{- if .Actor }}
+			Actor:       `{{ .Actor }}`,
+			{{- end }}
+			{{- if .Signature.InputArgs }}
 			InputArgs: struct {
-				{{- range .Signature.InputArgs}}
+				{{- range .Signature.InputArgs }}
 				{{ CapitalizeIdentifier .Name }} {{ .Type }} `json:"{{ .Name }}"`
 				{{- end}}
 			}{},
+			{{- end }}
+			{{- if .Signature.OutputArgs }}
 			OutputArgs: struct {
-				{{- range .Signature.OutputArgs}}
+				{{- range .Signature.OutputArgs }}
 				{{ CapitalizeIdentifier .Name }} {{ .Type }} `json:"{{ if eq .Name "httpStatusCode" }}-{{ else }}{{ .Name }}{{ end }}"`
 				{{- end }}
 			}{},
+			{{- end }}
 		})
 	}
-	{{- end}}{{end}}{{end}}
+	{{- end }}{{ end }}{{ end }}
 
 	if len(oapiSvc.Endpoints) == 0 {
 		w.WriteHeader(http.StatusNotFound)
@@ -217,7 +233,9 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
 	err := encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }

@@ -12,6 +12,7 @@ The `Connector` is the most fundamental construct of the framework, providing ke
 * [Distributed cache](../blocks/distrib-cache.md)
 * [Embedded resource files](../blocks/embedded-res.md) and [strings](../blocks/i18n.md)
 * [Distributed tracing](../blocks/distrib-tracing.md)
+* [Authorization](../blocks/authorization.md)
 
 The `connector` package includes a separate source file for each functional area of the microservice. All these source files implement the same `Connector` class.
 

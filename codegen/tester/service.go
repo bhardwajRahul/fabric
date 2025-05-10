@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -293,4 +293,18 @@ WhatTimeIsIt tests shifting the clock.
 */
 func (svc *Service) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
 	return svc.Now(ctx), nil
+}
+
+/*
+AuthzRequired tests authorization.
+*/
+func (svc *Service) AuthzRequired(ctx context.Context) (err error) {
+	return nil
+}
+
+/*
+EchoAnything tests arguments of type any.
+*/
+func (svc *Service) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
+	return original, nil
 }

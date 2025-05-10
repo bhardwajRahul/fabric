@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package calculator
 
-const Version = 243
-const SourceCodeSHA256 = "8b54c077aa1c0a527b3b0380a8c92b7443b862cbfdaf4ea2255a7f6112070e40"
-const Timestamp = "2024-08-31T21:14:20.031652Z"
+const Version = 252
+const SourceCodeSHA256 = "274a46f33f69a3d3a0585288a9693252726e872bf2e0a35560a76e5ab74e7583"
+const Timestamp = "2025-05-08T13:43:45.845716Z"
 
 /* {
-	"ver": 243,
-	"sha256": "8b54c077aa1c0a527b3b0380a8c92b7443b862cbfdaf4ea2255a7f6112070e40",
-	"ts": "2024-08-31T21:14:20.031652Z"
+	"ver": 252,
+	"sha256": "274a46f33f69a3d3a0585288a9693252726e872bf2e0a35560a76e5ab74e7583",
+	"ts": "2025-05-08T13:43:45.845716Z"
 } */

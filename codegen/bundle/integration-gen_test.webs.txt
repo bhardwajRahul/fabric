@@ -12,7 +12,7 @@ type {{ .Name }}TestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *{{ .Name }}TestCase) StatusOK() *{{ .Name }}TestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -20,7 +20,7 @@ func (tc *{{ .Name }}TestCase) StatusOK() *{{ .Name }}TestCase {
 // StatusCode asserts no error and a status code.
 func (tc *{{ .Name }}TestCase) StatusCode(statusCode int) *{{ .Name }}TestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -122,7 +122,7 @@ func (tc *{{ .Name }}TestCase) HeaderExists(headerName string) *{{ .Name }}TestC
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *{{ .Name }}TestCase) HeaderNotExists(headerName string) *{{ .Name }}TestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -202,7 +202,7 @@ func (tc *{{ .Name }}TestCase) TagNotExists(cssSelectorQuery string) *{{ .Name }
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ var (
 /*
 Service implements the helloworld.example microservice.
 
-The HelloWorld microservice demonstrates the minimalist classic example.
+The HelloWorld microservice demonstrates the classic minimalist example.
 */
 type Service struct {
 	*intermediate.Intermediate // DO NOT REMOVE

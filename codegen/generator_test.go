@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,6 +50,7 @@ functions:
     description: Func2 is a distributed search.
     path: :1234/count-occurrences
     queue: none
+    actor: roles.x || roles.y
 events:
   - signature: OnEvent1(x Type1) (ok bool)
     description: OnEvent1 is fired before deletion.
@@ -103,24 +104,19 @@ tickers:
 		}
 	}
 
-	fileContains(
-		filepath.Join("app", dir, "main-gen.go"),
+	fileContains(filepath.Join("app", dir, "main-gen.go"),
 		"func main", dir+".NewService()",
 	)
-	fileContains(
-		filepath.Join(dir+"api", "clients-gen.go"),
+	fileContains(filepath.Join(dir+"api", "clients-gen.go"),
 		"Func1(ctx", "Func2(ctx", "Web1(ctx", "Web2(ctx", "OnEvent1(ctx", "OnEvent2(ctx", "OnEvent1(handler", "OnEvent2(handler",
 	)
-	fileContains(
-		filepath.Join(dir+"api", "type1.go"),
+	fileContains(filepath.Join(dir+"api", "type1.go"),
 		"type Type1 struct",
 	)
-	fileContains(
-		filepath.Join(dir+"api", "type2.go"),
+	fileContains(filepath.Join(dir+"api", "type2.go"),
 		"type Type2 struct",
 	)
-	fileContains(
-		filepath.Join("intermediate", "intermediate-gen.go"),
+	fileContains(filepath.Join("intermediate", "intermediate-gen.go"),
 		"svc.Subscribe(",
 		"svc.impl.Func1", "svc.impl.Func1",
 		") doFunc1(w", ") doFunc2(w",
@@ -132,24 +128,23 @@ tickers:
 		"svc.impl.OnChangedConfig1",
 		") Config1() (b bool)", ") Config2() (dur time.Duration)",
 		") SetConfig1(b bool)", ") SetConfig2(dur time.Duration)",
+		"roles.x || roles.y",
+		":1234/count-occurrences",
+		":1234/distance",
 	)
-	fileContains(
-		filepath.Join("resources", "embed-gen.go"),
+	fileContains(filepath.Join("resources", "embed-gen.go"),
 		"go:embed",
 	)
-	fileContains(
-		"service.go",
+	fileContains("service.go",
 		") Func1(ctx", ") Func2(ctx",
 		") Web1(w", ") Web2(w",
 		") Ticker1(ctx", ") Ticker2(ctx",
 		") OnChangedConfig1(ctx",
 	)
-	fileContains(
-		"version-gen.go",
+	fileContains("version-gen.go",
 		"Version", "SourceCodeSHA256",
 	)
-	fileContains(
-		"version-gen_test.go",
+	fileContains("version-gen_test.go",
 		"SourceCodeSHA256",
 	)
 

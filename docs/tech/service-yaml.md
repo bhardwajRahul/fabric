@@ -9,7 +9,7 @@
 
 ## General
 
-The `general` section of `service.yaml` defines the `host` name of the microservice and a human-friendly `description`. The hostname is required. It is how the microservice will be addressed by other microservices. A hierarchical naming scheme for hostnames such as `myservice.mydomain.mysolution` can help avoid conflicts. These names along with port numbers are the basis for enforcing [authorization of microservices](../blocks/unicast.md#notes-on-subscription-subjects) in low-trust environments.
+The `general` section of `service.yaml` defines the `host` name of the microservice and a human-friendly `description`. The hostname is required. It is how the microservice will be addressed by other microservices. A hierarchical naming scheme for hostnames such as `myservice.mydomain.mysolution` can help avoid conflicts. These names along with port numbers are the basis for enforcing [access control](../blocks/unicast.md#notes-on-subscription-subjects) in low-trust environments.
 
 ```yaml
 # General
@@ -80,7 +80,7 @@ func (svc *Service) OnChangedFoo(ctx context.Context) (err error) {
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :443
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -94,6 +94,7 @@ func (svc *Service) OnChangedFoo(ctx context.Context) (err error) {
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 functions:
   # - signature:
@@ -102,7 +103,7 @@ functions:
 
 The `signature` defines the function name (which must start with an uppercase letter) and the input and output arguments. For any unknown type, the code generator automatically defines an empty struct in a file of the same name in the API package of the microservice. 
 
-`Microbus` takes care of marhsaling and unmarshaling of arguments and return values behind the scenes. Input arguments are unmarshaled from either the HTTP request path (if [path arguments](./patharguments.md) of the same name are defined), HTTP query arguments of the same name, or the JSON or URL form encoded body of the HTTP request. Output arguments are marshaled as JSON to the HTTP response body. Specially named [HTTP magic arguments](./httparguments.md) allow finer control over the marhsaling and unmarshaling of arguments.
+`Microbus` takes care of marhsaling and unmarshaling of arguments and return values behind the scenes. Input arguments are unmarshaled from either the HTTP request path (if [path arguments](../tech/path-arguments.md) of the same name are defined), HTTP query arguments of the same name, or the JSON or URL form encoded body of the HTTP request. Output arguments are marshaled as JSON to the HTTP response body. Specially named [HTTP magic arguments](../tech/http-arguments.md) allow finer control over the marshaling and unmarshaling of arguments.
 
 A typical generated functional request handler will look similar to the following:
 
@@ -117,9 +118,20 @@ func (svc *Service) FuncHandler(ctx context.Context, id string) (ok bool, err er
 
 `method` can be used to restrict the function to accept only certain HTTP methods. By default, the function is agnostic to the HTTP method.
 
-Along with the hostname of the microservice, the `path` defines the URL to this endpoint. It defaults to the function name in `kebab-case`. It may include [path arguments](./patharguments.md).
+Along with the hostname of the microservice, the `path` defines the URL to this endpoint. It defaults to the function name in `kebab-case`. It may include [path arguments](../tech/path-arguments.md).
 
 `queue` defines whether a request is routed to one of the replicas of the microservice (load-balanced) or to all (pervasive).
+
+`actor` stipulates authorization requirements as a boolean expression over the properties of the actor associated with the request. If no actor is associated with the request, it is rejected with a `401 Unauthorized` error. If an actor is associated but it does not satisfy the requirements, the request is rejected with a `403 Forbidden` error.
+
+The `actor` boolean expression supports the following syntax:
+- Boolean operators `&&`, `||` and `!`
+- Comparison operators `==` and `!=`
+- Order operators `>`, `>=`, `<` and `<=`
+- Regexp operators `=~` and `!~`. The regular expression must be quoted and on the right, e.g. `prop=~"regexp"`
+- Grouping operators `(` and `)`
+- String quotation marks `"` or `'`
+- Dot notation `.` for traversing nested objects. For this purpose, arrays are construed as `map[string]bool`, enabling expressions such as `array.value` to match the property `"array": ["value", "another_value"]`
 
 `openApi` controls whether or not to expose the function in the `/openapi.json` endpoint.
 
@@ -138,7 +150,7 @@ Along with the hostname of the microservice, the `path` defines the URL to this 
 # description - Documentation
 # method - "GET", "POST", etc. (defaults to "POST")
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :417
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -174,6 +186,7 @@ The `signature` defines the event name (which must start with the word `On` foll
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 sinks:
   # - signature:
   #   description:
@@ -208,7 +221,7 @@ The `webs` section defines raw web handlers which allow the microservice to hand
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :443
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -222,6 +235,7 @@ The `webs` section defines raw web handlers which allow the microservice to hand
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 webs:
   # - signature:
@@ -269,7 +283,7 @@ func (svc *Service) TickerHandler(ctx context.Context) (err error) {
 }
 ```
 
-`ctx` will be canceled if when the microservice shuts down.
+`ctx` will be canceled when the microservice shuts down.
 
 ## Metrics
 
@@ -298,4 +312,3 @@ metrics:
 Metrics support three [collector types](https://prometheus.io/docs/concepts/metric_types/): counter, gauge and histogram.
 
 The name of the metric is derived from the function signature. It should adhere to the [naming best practices](https://prometheus.io/docs/practices/naming/) if at all possible. A Prometheus alias is automatically generated but may be overridden if necessary.
-

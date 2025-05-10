@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -127,23 +127,14 @@ func NewConnector() *Connector {
 		subs:             map[string]*sub.Subscription{},
 		tickers:          map[string]*tickerCallback{},
 		lifetimeCtx:      context.Background(),
-		knownResponders:  lru.NewCache[string, map[string]bool](),
-		postRequestData:  lru.NewCache[string, string](),
-		localResponder:   lru.NewCache[string, string](),
+		knownResponders:  lru.New[string, map[string]bool](64<<10, 24*time.Hour), // 64KB
+		postRequestData:  lru.New[string, string](256<<10, time.Minute),          // 256KB
+		localResponder:   lru.New[string, string](64<<10, 24*time.Hour),          // 64KB
 		multicastChanCap: 32,
 		metricDefs:       map[string]*metric{},
 	}
-
 	c.SetResFSDir(".")
-	c.knownResponders.SetMaxWeight(16 << 10) // 16KB
-	c.knownResponders.SetMaxAge(24 * time.Hour)
-	c.postRequestData.SetMaxWeight(256 << 10) // 256KB
-	c.postRequestData.SetMaxAge(time.Minute)
-	c.localResponder.SetMaxWeight(16 << 10) // 16KB
-	c.localResponder.SetMaxAge(24 * time.Hour)
-
 	c.newMetricsRegistry()
-
 	return c
 }
 

@@ -1,0 +1,56 @@
+<!--
+Copyright (c) 2023-2025 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<html>
+    <head>
+        <title>Login</title>
+        <style>
+            * {
+                font-family: "helvetica neue", helvetica, sans-serif;
+                font-size: 14pt;
+            }
+            FORM {
+                display: block;
+                width: 440px;
+                margin: auto;
+                margin-top: 25vh;
+            }
+            FORM > TABLE {
+                border: solid 1px #888888;
+                border-radius: 8px;
+                padding: 16px;
+            }
+            INPUT[type=text], INPUT[type=password]{
+                display: block;
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        Usernames: "admin@example.com", "manager@example.com" or "user@example.com"<br>
+        Password: "password"
+
+        <form method="POST">
+            <input type="hidden" name="src" value="{{ .Src }}">
+            <table>
+                <tr><td>Username</td><td><input type="text" name="u" value="{{ .U }}"></td></tr>
+                <tr><td>Password</td><td><input type="password" name="p" value="{{ .P }}"></td></tr>
+                <tr><td></td><td><input type="submit" name="l" value="Login"></td></tr>
+            </table>
+            {{ if .Denied }}Access Denied{{ end }}
+        </form>
+    </body>
+</html>

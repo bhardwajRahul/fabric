@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ type Handler struct {
 	Path        string     `yaml:"path"`
 	Queue       string     `yaml:"queue"`
 	OpenAPI     bool       `yaml:"openApi"`
+	Actor       string     `yaml:"actor"`
 
 	// Sink
 	Event   string `yaml:"event"`
@@ -113,7 +114,10 @@ func (h *Handler) validate() error {
 		return errors.Newf("invalid method '%s'", h.Method)
 	}
 	if strings.Contains(h.Path, "`") {
-		return errors.Newf("backquote not allowed in path '%s' in '%s'", h.Path, h.Name())
+		return errors.Newf("backtick not allowed in path '%s' in '%s'", h.Path, h.Name())
+	}
+	if strings.Contains(h.Actor, "`") {
+		return errors.Newf("backtick not allowed in actor '%s' in '%s'", h.Actor, h.Name())
 	}
 	u, err := httpx.ParseURL(httpx.JoinHostAndPath("hostname", h.Path))
 	if err != nil {
@@ -217,6 +221,12 @@ func (h *Handler) validate() error {
 			return errors.Newf("non-positive interval '%v' in '%s'", h.Interval, h.Name())
 		}
 	case "function", "event", "sink":
+		if h.Actor != "" {
+			_, err = utils.EvaluateBoolExp(h.Actor, nil)
+			if err != nil {
+				return errors.Newf("invalid boolean expression '%s' in actor", h.Actor)
+			}
+		}
 		for _, arg := range h.Signature.InputArgs {
 			if !h.MethodWithBody() && arg.Name == "httpRequestBody" {
 				return errors.Newf("cannot use '%s' in '%s' because method '%s' has no body", arg.Name, h.Signature.OrigString, h.Method)

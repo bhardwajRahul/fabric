@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,7 +77,10 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	Values(ctx context.Context, names []string) (values map[string]string, err error)
 	Refresh(ctx context.Context) (err error)
-	Sync(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
+	SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
+	Values443(ctx context.Context, names []string) (values map[string]string, err error)
+	Refresh443(ctx context.Context) (err error)
+	Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
 	PeriodicRefresh(ctx context.Context) (err error)
 }
 
@@ -105,9 +108,12 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)	
 
 	// Functions
-	svc.Subscribe(`ANY`, `:443/values`, svc.doValues)
-	svc.Subscribe(`ANY`, `:443/refresh`, svc.doRefresh)
-	svc.Subscribe(`ANY`, `:443/sync`, svc.doSync, sub.NoQueue())
+	svc.Subscribe(`ANY`, `:888/values`, svc.doValues)
+	svc.Subscribe(`ANY`, `:444/refresh`, svc.doRefresh)
+	svc.Subscribe(`ANY`, `:888/sync-repo`, svc.doSyncRepo, sub.NoQueue())
+	svc.Subscribe(`ANY`, `:443/values`, svc.doValues443)
+	svc.Subscribe(`ANY`, `:443/refresh`, svc.doRefresh443)
+	svc.Subscribe(`ANY`, `:443/sync`, svc.doSync443)
 
 	// Tickers
 	intervalPeriodicRefresh, _ := time.ParseDuration("20m0s")
@@ -153,8 +159,8 @@ func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if strings.ContainsAny(`:443/values`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/values`), r.URL.Path)
+	if strings.ContainsAny(`:888/values`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/values`), r.URL.Path)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -190,8 +196,8 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if strings.ContainsAny(`:443/refresh`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/refresh`), r.URL.Path)
+	if strings.ContainsAny(`:444/refresh`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/refresh`), r.URL.Path)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -218,10 +224,121 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-// doSync handles marshaling for the Sync function.
-func (svc *Intermediate) doSync(w http.ResponseWriter, r *http.Request) error {
-	var i configuratorapi.SyncIn
-	var o configuratorapi.SyncOut
+// doSyncRepo handles marshaling for the SyncRepo function.
+func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) error {
+	var i configuratorapi.SyncRepoIn
+	var o configuratorapi.SyncRepoOut
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if strings.ContainsAny(`:888/sync-repo`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/sync-repo`), r.URL.Path)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = svc.impl.SyncRepo(
+		r.Context(),
+		i.Timestamp,
+		i.Values,
+	)
+	if err != nil {
+		return err // No trace
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
+	err = encoder.Encode(o)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doValues443 handles marshaling for the Values443 function.
+func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) error {
+	var i configuratorapi.Values443In
+	var o configuratorapi.Values443Out
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if strings.ContainsAny(`:443/values`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/values`), r.URL.Path)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	o.Values, err = svc.impl.Values443(
+		r.Context(),
+		i.Names,
+	)
+	if err != nil {
+		return err // No trace
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
+	err = encoder.Encode(o)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doRefresh443 handles marshaling for the Refresh443 function.
+func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) error {
+	var i configuratorapi.Refresh443In
+	var o configuratorapi.Refresh443Out
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if strings.ContainsAny(`:443/refresh`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/refresh`), r.URL.Path)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = svc.impl.Refresh443(
+		r.Context(),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
+	err = encoder.Encode(o)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doSync443 handles marshaling for the Sync443 function.
+func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) error {
+	var i configuratorapi.Sync443In
+	var o configuratorapi.Sync443Out
 	err := httpx.ParseRequestData(r, &i)
 	if err != nil {
 		return errors.Trace(err)
@@ -236,7 +353,7 @@ func (svc *Intermediate) doSync(w http.ResponseWriter, r *http.Request) error {
 			return errors.Trace(err)
 		}
 	}
-	err = svc.impl.Sync(
+	err = svc.impl.Sync443(
 		r.Context(),
 		i.Timestamp,
 		i.Values,

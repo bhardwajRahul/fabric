@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -251,7 +251,9 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
 	err := encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }

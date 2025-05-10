@@ -23,7 +23,6 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/sub"
 )
 
 var (
@@ -37,7 +36,6 @@ var (
 	_ *errors.TracedError
 	_ *httpx.BodyReader
 	_ pub.Option
-	_ sub.Option
 )
 
 // Hostname is the default hostname of the microservice: {{ .General.Host }}.

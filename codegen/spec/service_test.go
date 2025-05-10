@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,6 +52,34 @@ functions:
     path: //bad.ho$t
 `), &svc)
 	testarossa.ErrorContains(t, err, "invalid hostname")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(s string)
+    path: /backtick`+"`"+`
+`), &svc)
+	testarossa.ErrorContains(t, err, "backtick not allowed")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(s string)
+    path: /backtick`+"`"+`
+`), &svc)
+	testarossa.ErrorContains(t, err, "backtick not allowed")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(s string)
+    actor: roles=~`+"`admin`"+`
+`), &svc)
+	testarossa.ErrorContains(t, err, "backtick not allowed")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(s string)
+    actor: x || (y
+`), &svc)
+	testarossa.ErrorContains(t, err, "boolean expression")
 }
 
 func TestSpec_ErrorsInPathArguments(t *testing.T) {

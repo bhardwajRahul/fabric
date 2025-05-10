@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ limitations under the License.
 package httpx
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/utils"
 )
 
 var jsonNumberRegexp = regexp.MustCompile(`^(\-?)(0|([1-9][0-9]*))(\.[0-9]+)?([eE][\+\-]?[0-9]+)?$`)
@@ -33,13 +33,12 @@ var jsonNumberRegexp = regexp.MustCompile(`^(\-?)(0|([1-9][0-9]*))(\.[0-9]+)?([e
 // EncodeDeepObject encodes an object into string representation with bracketed nested fields names.
 // For example, color[R]=100&color[G]=200&color[B]=150 .
 func EncodeDeepObject(obj any) (url.Values, error) {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(obj)
+	buf, err := json.Marshal(obj)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	var m map[string]any
-	err = json.NewDecoder(&buf).Decode(&m)
+	err = json.Unmarshal(buf, &m)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -130,14 +129,14 @@ func decodeOne(k, v string, data any) error {
 	j += strings.Repeat("}", countDots+1)
 
 	// Override values in the data
-	err := json.Unmarshal([]byte(j), data)
+	err := json.Unmarshal(utils.UnsafeStringToBytes(j), data)
 	if jErr, ok := err.(*json.UnmarshalTypeError); ok {
 		if strings.HasPrefix(jErr.Value, "string") {
 			j = jPre + v + strings.Repeat("}", countDots+1)
-			err = json.Unmarshal([]byte(j), data)
+			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
 		} else {
 			j = jPre + `"` + v + `"` + strings.Repeat("}", countDots+1)
-			err = json.Unmarshal([]byte(j), data)
+			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
 		}
 	}
 	if err != nil {

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -158,10 +158,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/hello`,
 			Summary:     `Hello()`,
 			Description: `Hello prints a greeting.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -172,10 +168,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/echo`,
 			Summary:     `Echo()`,
 			Description: `Echo back the incoming request in wire format.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -186,10 +178,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/ping`,
 			Summary:     `Ping()`,
 			Description: `Ping all microservices and list them.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -202,10 +190,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Description: `Calculator renders a UI for a calculator.
 The calculation operation is delegated to another microservice in order to demonstrate
 a call from one microservice to another.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -216,10 +200,6 @@ a call from one microservice to another.`,
 			Path:        `:443/bus.png`,
 			Summary:     `BusPNG()`,
 			Description: `BusPNG serves an image from the embedded resources.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -230,10 +210,6 @@ a call from one microservice to another.`,
 			Path:        `:443/localization`,
 			Summary:     `Localization()`,
 			Description: `Localization prints hello in the language best matching the request's Accept-Language header.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -244,10 +220,6 @@ a call from one microservice to another.`,
 			Path:        `//root`,
 			Summary:     `Root()`,
 			Description: `Root is the top-most root page.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 

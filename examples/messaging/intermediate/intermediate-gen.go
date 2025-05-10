@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -135,10 +135,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/home`,
 			Summary:     `Home()`,
 			Description: `Home demonstrates making requests using multicast and unicast request/response patterns.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -151,10 +147,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Description: `NoQueue demonstrates how the NoQueue subscription option is used to create
 a multicast request/response communication pattern.
 All instances of this microservice will respond to each request.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -167,10 +159,6 @@ All instances of this microservice will respond to each request.`,
 			Description: `DefaultQueue demonstrates how the DefaultQueue subscription option is used to create
 a unicast request/response communication pattern.
 Only one of the instances of this microservice will respond to each request.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -181,10 +169,6 @@ Only one of the instances of this microservice will respond to each request.`,
 			Path:        `:443/cache-load`,
 			Summary:     `CacheLoad()`,
 			Description: `CacheLoad looks up an element in the distributed cache of the microservice.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -195,10 +179,6 @@ Only one of the instances of this microservice will respond to each request.`,
 			Path:        `:443/cache-store`,
 			Summary:     `CacheStore()`,
 			Description: `CacheStore stores an element in the distributed cache of the microservice.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 

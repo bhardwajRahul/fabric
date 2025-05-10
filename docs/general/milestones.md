@@ -242,3 +242,16 @@ Note: These milestones are maintained in separate branches in order to demonstra
 * Adjusted interface of middleware
 * Refactored the HTTP ingress proxy as a customizable chain of middleware
 * Moved `utils.CatchPanic` to `errors.CatchPanic`
+
+[Milestone 31](https://github.com/microbus-io/fabric/tree/milestone/31):
+
+* `TokenIssuer` core microservice
+* Methods for setting and getting auth tokens using a `Frame`
+* `Actor` options for subscriptions
+* Code generation support for `actor`
+* `ErrorPageRedirect` middleware
+* `Authorization` token validation middleware
+* `Login` example microservice
+* Moved configurator's endpoints to port `:888`
+* Unsafe `string` to `[]byte` conversions
+* Updated dependencies to latest versions

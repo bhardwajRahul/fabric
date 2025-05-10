@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,17 +46,19 @@ type oapiServer struct {
 // oapiOperation describes a single API operation on a path.
 // https://spec.openapis.org/oas/v3.1.0#operation-object
 type oapiOperation struct {
-	Summary     string                   `json:"summary"`
-	Description string                   `json:"description,omitempty"`
-	Parameters  []*oapiParameter         `json:"parameters,omitempty"`
-	RequestBody *oapiRequestBody         `json:"requestBody,omitempty"`
-	Responses   map[string]*oapiResponse `json:"responses,omitempty"`
+	Summary     string                     `json:"summary"`
+	Description string                     `json:"description,omitempty"`
+	Parameters  []*oapiParameter           `json:"parameters,omitempty"`
+	RequestBody *oapiRequestBody           `json:"requestBody,omitempty"`
+	Responses   map[string]*oapiResponse   `json:"responses,omitempty"`
+	Security    []*oapiSecurityRequirement `json:"security,omitempty"`
 }
 
 // oapiComponents holds a set of reusable objects for different aspects of the OpenAPI schema.
 // https://spec.openapis.org/oas/v3.1.0#components-object
 type oapiComponents struct {
-	Schemas map[string]*jsonschema.Schema `json:"schemas,omitempty"`
+	Schemas         map[string]*jsonschema.Schema  `json:"schemas,omitempty"`
+	SecuritySchemes map[string]*oapiSecurityScheme `json:"securitySchemes,omitempty"`
 }
 
 // oapiParameter describes a single operation parameter.
@@ -92,3 +94,16 @@ type oapiResponse struct {
 	Description string                    `json:"description,omitempty"`
 	Content     map[string]*oapiMediaType `json:"content,omitempty"`
 }
+
+// oapiSecurityScheme describes means of authentication.
+// https://spec.openapis.org/oas/v3.1.0#security-scheme-object
+type oapiSecurityScheme struct {
+	Type         string `json:"type,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Scheme       string `json:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+}
+
+// oapiSecurityRequirement specifies a security scheme required to access an API Operation.
+// https://spec.openapis.org/oas/v3.1.0#security-requirement-object
+type oapiSecurityRequirement map[string][]string

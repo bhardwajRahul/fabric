@@ -249,6 +249,12 @@ func main() {
 		configurator.NewService(),
 	)
 	app.Add(
+		httpegress.NewService(),
+		openapiportal.NewService(),
+		metrics.NewService(),
+		tokenissuer.NewService(),
+	)
+	app.Add(
         // ...
     	wordly.NewService(), // <-- Add
 	)
@@ -281,4 +287,4 @@ This microservice is far from being polished. Try the following on your own:
 * Accept guesses only if they are themselves valid words
 * Print the secret word when the player fails to guess it
 * Support 4, 6 and 7 letter words
-* The microservice stores state in local memory which will break when a second replica is added to the app and requests are load-balanced. Use the [distributed cache](./structure/dlru.md) to work around that
+* The microservice stores state in local memory which will break when a second replica is added to the app and requests are load-balanced. Use the [distributed cache](../structure/dlru.md) to work around that

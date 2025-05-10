@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -66,10 +67,12 @@ func TestConnector_ClockOffset(t *testing.T) {
 
 	// Shift the time in the context one minute in the past
 	ctx := frame.ContextWithFrame(context.Background())
-	frame.Of(ctx).SetClockShift(-time.Minute)
+	f := frame.Of(ctx)
+	f.SetClockShift(-time.Minute)
+	testarossa.Equal(t, -time.Minute, f.ClockShift())
 
 	// Send message and validate that beta receives the offset time
-	realTime := time.Now()
+	realTime := time.Now().UTC()
 	time.Sleep(10 * time.Millisecond)
 	alphaTime := alpha.Now(ctx) // Offset by -1m
 	testarossa.True(t, alphaTime.Before(realTime))
@@ -82,16 +85,20 @@ func TestConnector_ClockOffset(t *testing.T) {
 
 	// Shift the time in the context one hour in the future
 	ctx = frame.ContextWithFrame(context.Background())
-	frame.Of(ctx).SetClockShift(time.Hour)
+	f = frame.Of(ctx)
+	f.SetClockShift(15 * time.Minute)
+	f.IncrementClockShift(45 * time.Minute)
+	f.SetClockShift(time.Hour)
 
 	// Send message and validate that beta receives the offset time
-	realTime = time.Now()
+	realTime = time.Now().UTC()
+	fmt.Println(realTime)
 	alphaTime = alpha.Now(ctx) // Offset by +1h
 	testarossa.True(t, alphaTime.After(realTime.Add(time.Minute)))
 	_, err = alpha.GET(ctx, "https://beta.clock.offset.connector/shift")
 	testarossa.NoError(t, err)
-	testarossa.True(t, betaTime.After(realTime.Add(time.Minute)))
-	testarossa.True(t, gammaTime.After(realTime.Add(time.Minute)))
+	testarossa.True(t, betaTime.After(realTime.Add(59*time.Minute)))
+	testarossa.True(t, gammaTime.After(realTime.Add(59*time.Minute)))
 	testarossa.Equal(t, time.Hour, betaShift)
 	testarossa.Equal(t, time.Hour, gammaShift)
 }

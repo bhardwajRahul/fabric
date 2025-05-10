@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +42,10 @@ type Mock struct {
 	*Intermediate
 	mockValues func(ctx context.Context, names []string) (values map[string]string, err error)
 	mockRefresh func(ctx context.Context) (err error)
-	mockSync func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
+	mockSyncRepo func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
+	mockValues443 func(ctx context.Context, names []string) (values map[string]string, err error)
+	mockRefresh443 func(ctx context.Context) (err error)
+	mockSync443 func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -95,19 +98,64 @@ func (svc *Mock) Refresh(ctx context.Context) (err error) {
 	return svc.mockRefresh(ctx)
 }
 
-// MockSync sets up a mock handler for the Sync endpoint.
-func (svc *Mock) MockSync(handler func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)) *Mock {
-	svc.mockSync = handler
+// MockSyncRepo sets up a mock handler for the SyncRepo endpoint.
+func (svc *Mock) MockSyncRepo(handler func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)) *Mock {
+	svc.mockSyncRepo = handler
 	return svc
 }
 
-// Sync runs the mock handler set by MockSync.
-func (svc *Mock) Sync(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
-	if svc.mockSync == nil {
-		err = errors.New("mocked endpoint 'Sync' not implemented")
+// SyncRepo runs the mock handler set by MockSyncRepo.
+func (svc *Mock) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+	if svc.mockSyncRepo == nil {
+		err = errors.New("mocked endpoint 'SyncRepo' not implemented")
 		return
 	}
-	return svc.mockSync(ctx, timestamp, values)
+	return svc.mockSyncRepo(ctx, timestamp, values)
+}
+
+// MockValues443 sets up a mock handler for the Values443 endpoint.
+func (svc *Mock) MockValues443(handler func(ctx context.Context, names []string) (values map[string]string, err error)) *Mock {
+	svc.mockValues443 = handler
+	return svc
+}
+
+// Values443 runs the mock handler set by MockValues443.
+func (svc *Mock) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
+	if svc.mockValues443 == nil {
+		err = errors.New("mocked endpoint 'Values443' not implemented")
+		return
+	}
+	return svc.mockValues443(ctx, names)
+}
+
+// MockRefresh443 sets up a mock handler for the Refresh443 endpoint.
+func (svc *Mock) MockRefresh443(handler func(ctx context.Context) (err error)) *Mock {
+	svc.mockRefresh443 = handler
+	return svc
+}
+
+// Refresh443 runs the mock handler set by MockRefresh443.
+func (svc *Mock) Refresh443(ctx context.Context) (err error) {
+	if svc.mockRefresh443 == nil {
+		err = errors.New("mocked endpoint 'Refresh443' not implemented")
+		return
+	}
+	return svc.mockRefresh443(ctx)
+}
+
+// MockSync443 sets up a mock handler for the Sync443 endpoint.
+func (svc *Mock) MockSync443(handler func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)) *Mock {
+	svc.mockSync443 = handler
+	return svc
+}
+
+// Sync443 runs the mock handler set by MockSync443.
+func (svc *Mock) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+	if svc.mockSync443 == nil {
+		err = errors.New("mocked endpoint 'Sync443' not implemented")
+		return
+	}
+	return svc.mockSync443(ctx, timestamp, values)
 }
 
 // PeriodicRefresh is a no op.

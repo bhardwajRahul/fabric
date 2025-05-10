@@ -74,7 +74,7 @@ The HTTP ingress core microservice keeps the chain of middleware in a `middlewar
 Each middleware in the chain is addressable by name and can be replaced, removed or used as an insertion point.
 
 The chain is initialized with reasonable defaults that perform various functions:
-`ErrorPrinter -> BlockedPaths -> Logger -> Enter -> SecureRedirect -> CORS -> XForward -> InternalHeaders -> RootPath -> Timeout -> Ready -> CacheControl -> Compress -> DefaultFavIcon`
+`ErrorPrinter` -> `BlockedPaths` -> `Logger` -> `Enter` -> `SecureRedirect` -> `CORS` -> `XForwarded` -> `InternalHeaders` -> `RootPath` -> `Timeout` -> `Authorization` -> `Ready` -> `CacheControl` -> `Compress` -> `DefaultFavIcon`
 
 The `Enter` middleware is a noop marker that indicates that the request was accepted. Middleware after this point typically manipulate the request headers.
 The `Ready` middleware is a noop marker that indicates that the request is ready to be processed. Middleware after this point typically manipulate the response headers or body.
@@ -88,22 +88,20 @@ httpIngress.Middleware().InsertAfter("Enter", "Contrived", middleware.OnRoutePre
 		// Modifying the request should be done before calling next
 		r.Header.Del("Accept-Encoding") // Disable compression
 		
-		// Call the next middleware in the chain
-		err = next(w, r)
-		if err == nil {
-			w.Header().Add("X-Check", "OK")
+		// Delegate the request downstream
+		ww := httpx.NewResponseRecorder()
+		err = next(ww, r)
+		if err != nil {
+			w.Header().Add("X-Check", "Error")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Oops!"))
 			return nil
 		}
 
-		// Modifying the result typically makes sense after calling next
-		if ww, ok := w.(*httpx.ResponseRecorder); ok { // Always true
-			ww.ClearBody()
-			ww.Write([]byte("Oops!"))
-		}
-		w.Header().Add("X-Check", "Error")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return nil
+		// Copy the result from downstream into the original writer
+		err = httpx.Copy(w, ww.Result())
+		w.Header().Add("X-Check", "OK")
+		return errors.Trace(err)
 	}
 }))
 ```

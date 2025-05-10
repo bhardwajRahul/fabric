@@ -92,6 +92,7 @@ func main() {
 		httpegress.NewService(),
 		openapiportal.NewService(),
 		metrics.NewService(),
+		tokenissuer.NewService(),
 	)
 	app.Add(
 		// Add solution microservices here
@@ -171,6 +172,7 @@ Build your microservices on top of a `Connector` construct and use its simple AP
 
 ### And More...
 * [Configuration](./docs/blocks/configuration.md)
+* [Authorization](./docs/blocks/authorization.md)
 * [Client stubs](./docs/blocks/client-stubs.md)
 * [Live integration tests](./docs/blocks/integration-testing.md)
 * [OpenAPI](./docs/blocks/openapi.md)
@@ -200,7 +202,8 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [RPC over JSON vs REST](./docs/tech/rpc-vs-rest.md) - Implement these common web API styles
 * [Adaptable topology](./docs/blocks/topology.md) - Grow the topology of your system to match your requirements
 * [Bootstrap a new project](./docs/howto/new-project.md) - Create a project for your solution
-* [Create a new microservice](./docs/howto/create-microservice.md) - Create a new microservice and add it to your solution
+* [New microservice](./docs/howto/create-microservice.md) - Create a new microservice and add it to your solution
+* [Enabling authorization](./docs/howto/enabling-auth.md) - Control access to microservices based on the actor associated with the request
 
 ### Under the Hood
 
@@ -226,11 +229,13 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [Connectivity liveness tests](./docs/blocks/connectivity-liveness-test.md) - A microservice's connection to the messaging bus represents its liveness
 * [Skeleton code](./docs/blocks/skeleton-code.md) - Skeleton code is a placeholder for filling in meaningful code
 * [Client stubs](./docs/blocks/client-stubs.md) - Client stubs facilitate calling downstream microservices
+* [Ports](./docs/tech/ports.md) - Ports can be external or internal
+* [Authorization](./docs/blocks/authorization.md) - Control access to microservices based on the actor associated with the request
 
 ### Design Choices
 
 * [Encapsulation pattern](./docs/tech/encapsulation.md) - The reasons for encapsulating third-party technologies
-* [JSON vs Protobuf](./docs/tech/json-vs-protobuf.md) - Why JSON over HTTP was chosen as the protocol
+* [JSON/HTTP vs Protobuf](./docs/tech/json-vs-protobuf.md) - Why JSON/HTTP was chosen as the protocol
 * [Out of scope](./docs/tech/out-of-scope.md) - Areas that `Microbus` stays out of
 
 ### Miscellaneous
@@ -279,7 +284,6 @@ Find us at any of the following channels. We're looking forward to hearing from 
 | Email      | in<span>fo</span>@microbus<span>.io</span> |
 | Github     | [github.com/microbus-io](https://www.github.com/microbus-io) |
 | LinkedIn   | [linkedin.com/company/microbus-io](https://www.linkedin.com/company/microbus-io) |
-| Slack      | [microbus-io.slack.com](https://microbus-io.slack.com) |
 | Discord    | [discord.gg/FAJHnGkNqJ](https://discord.gg/FAJHnGkNqJ) |
 | Reddit     | [r/microbus](https://reddit.com/r/microbus) |
 | YouTube    | [@microbus-io](https://www.youtube.com/@microbus-io) |

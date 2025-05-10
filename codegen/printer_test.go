@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,19 +38,19 @@ func TestCodegen_PrinterWriters(t *testing.T) {
 	testarossa.NotContains(t, outBuf.String(), "Hello")
 	p.Debug("Hello")
 	testarossa.Contains(t, outBuf.String(), "Hello")
-	testarossa.SliceLen(t, errBuf.Bytes(), 0)
+	testarossa.Len(t, errBuf.Bytes(), 0)
 	outBuf.Reset()
 
 	testarossa.NotContains(t, outBuf.String(), "Hello")
 	p.Info("Hello")
 	testarossa.Contains(t, outBuf.String(), "Hello")
-	testarossa.SliceLen(t, errBuf.Bytes(), 0)
+	testarossa.Len(t, errBuf.Bytes(), 0)
 	outBuf.Reset()
 
 	testarossa.NotContains(t, errBuf.String(), "Hello")
 	p.Error("Hello")
 	testarossa.Contains(t, errBuf.String(), "Hello")
-	testarossa.SliceLen(t, outBuf.Bytes(), 0)
+	testarossa.Len(t, outBuf.Bytes(), 0)
 	errBuf.Reset()
 }
 

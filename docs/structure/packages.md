@@ -7,6 +7,7 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
 * [codegen](../structure/codegen.md) - The code generator
 * [connector](../structure/connector.md) - The primary construct of the framework and the basis for all microservices
 * [coreservices](../structure/coreservices.md) - Microservices that are required for most if not all apps
+    * [tokenissuer](../structure/coreservices-tokenissuer.md) - An issuer and validator of JWTs
     * [configurator](../structure/coreservices-configurator.md) - The configurator core microservice
     * [control](../structure/coreservices-control.md) - Client API for the `:888` control subscriptions
     * [httpegress](../structure/coreservices-httpegress.md) - The HTTP egress proxy core microservice
@@ -23,7 +24,8 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
     * [directory](../structure/examples-directory.md) is an example of a microservice that provides a RESTful CRUD API backed by a database
     * [eventsink and eventsource](../structure/examples-events.md) shows how events can be used to reverse the dependency between two microservices
     * [hello](../structure/examples-hello.md) demonstrates the key capabilities of the framework
-    * [helloworld](../structure/examples-helloworld.md) demonstrates the minimalist classic example
+    * [helloworld](../structure/examples-helloworld.md) demonstrates the classic minimalist example
+    * [login](../structure/examples-login.md) employs authentication and authorization to restrict access to certain endpoints
     * [messaging](../structure/examples-messaging.md) demonstrates load-balanced unicast, multicast and direct addressing messaging
 * [frame](../structure/frame.md) - A utility for type-safe manipulation of the HTTP control headers used by the framework
 * [httpx](../structure/httpx.md) - Various HTTP utilities

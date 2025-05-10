@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 	contentLen := intReq.Header.Get("Content-Length")
 	testarossa.True(t, contentLen == strconv.Itoa(len(body)))
 
-	if testarossa.SliceLen(t, intReq.Header["Foo"], 2) {
+	if testarossa.Len(t, intReq.Header["Foo"], 2) {
 		testarossa.Equal(t, "Bar 1", intReq.Header["Foo"][0])
 		testarossa.Equal(t, "Bar 2", intReq.Header["Foo"][1])
 	}
@@ -172,7 +172,7 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 	contentLen := intRes.Header.Get("Content-Length")
 	testarossa.True(t, contentLen == strconv.Itoa(len(body)))
 
-	if testarossa.SliceLen(t, intRes.Header["Foo"], 2) {
+	if testarossa.Len(t, intRes.Header["Foo"], 2) {
 		testarossa.Equal(t, "Bar 1", intRes.Header["Foo"][0])
 		testarossa.Equal(t, "Bar 2", intRes.Header["Foo"][1])
 	}

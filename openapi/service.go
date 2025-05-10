@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,7 +49,8 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 		},
 		Paths: map[string]map[string]*oapiOperation{},
 		Components: &oapiComponents{
-			Schemas: map[string]*jsonschema.Schema{},
+			Schemas:         map[string]*jsonschema.Schema{},
+			SecuritySchemes: map[string]*oapiSecurityScheme{},
 		},
 		Servers: []*oapiServer{
 			{
@@ -69,6 +70,12 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 
 	for _, ep := range s.Endpoints {
 		var op *oapiOperation
+		if ep.InputArgs == nil {
+			ep.InputArgs = struct{}{}
+		}
+		if ep.OutputArgs == nil {
+			ep.OutputArgs = struct{}{}
+		}
 
 		path := httpx.JoinHostAndPath(s.ServiceName, ep.Path)
 		_, path, _ = strings.Cut(path, "://")
@@ -122,18 +129,6 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 									Ref: "#/components/schemas/" + ep.Name + "_OUT",
 								},
 							},
-						},
-					},
-					"4XX": {
-						Description: "User error",
-						Content: map[string]*oapiMediaType{
-							"text/plain": {},
-						},
-					},
-					"5XX": {
-						Description: "Server error",
-						Content: map[string]*oapiMediaType{
-							"text/plain": {},
 						},
 					},
 				},
@@ -238,7 +233,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 				Description: ep.Description,
 				Parameters:  []*oapiParameter{},
 				Responses: map[string]*oapiResponse{
-					"200": {
+					"2XX": {
 						Description: "OK",
 					},
 				},
@@ -247,15 +242,55 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			if p >= 0 {
 				contentType := mime.TypeByExtension(ep.Path[p:])
 				if contentType != "" {
-					op.Responses = map[string]*oapiResponse{
-						"200": {
-							Content: map[string]*oapiMediaType{
-								contentType: {},
-							},
-						},
+					op.Responses["2XX"].Content = map[string]*oapiMediaType{
+						contentType: {},
 					}
 				}
 			}
+		}
+
+		if op == nil {
+			continue
+		}
+
+		// Authorization
+		if ep.Actor != "" {
+			const securitySchemaName = "http_bearer_jwt"
+			if doc.Components.SecuritySchemes[securitySchemaName] == nil {
+				doc.Components.SecuritySchemes[securitySchemaName] = &oapiSecurityScheme{
+					Type:         "http",
+					Scheme:       "bearer",
+					BearerFormat: "JWT",
+				}
+			}
+			op.Security = append(op.Security, &oapiSecurityRequirement{securitySchemaName: {}})
+			op.Responses["401"] = &oapiResponse{
+				Description: "Unauthorized",
+				Content: map[string]*oapiMediaType{
+					"text/plain": {},
+				},
+			}
+			if ep.Actor != "" {
+				op.Responses["403"] = &oapiResponse{
+					Description: "Forbidden; token required with: " + ep.Actor,
+					Content: map[string]*oapiMediaType{
+						"text/plain": {},
+					},
+				}
+			}
+		}
+
+		op.Responses["4XX"] = &oapiResponse{
+			Description: "User error",
+			Content: map[string]*oapiMediaType{
+				"text/plain": {},
+			},
+		}
+		op.Responses["5XX"] = &oapiResponse{
+			Description: "Server error",
+			Content: map[string]*oapiMediaType{
+				"text/plain": {},
+			},
 		}
 
 		// Path arguments
@@ -336,6 +371,12 @@ func resolveRefs(doc oapiDoc, schema *jsonschema.Schema, endpoint string) {
 		if strings.HasPrefix(pair.Value.Ref, "#/$defs/") {
 			// #/$defs/ABC ===> #/components/schemas/ENDPOINT_ABC
 			pair.Value.Ref = "#/components/schemas/" + endpoint + "_" + pair.Value.Ref[8:]
+		}
+		if pair.Value.Ref == "" && pair.Value.Type == "" {
+			// Type "any"
+			pair.Value.Examples = []any{
+				struct{}{},
+			}
 		}
 	}
 	schema.Definitions = nil

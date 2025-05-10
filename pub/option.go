@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ limitations under the License.
 package pub
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -26,6 +28,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/utils"
 )
 
 // Option is used to construct a request in Connector.Publish.
@@ -289,6 +292,24 @@ func Multicast() Option {
 // Noop does nothing.
 func Noop() Option {
 	return func(r *Request) error {
+		return nil
+	}
+}
+
+// Actor sets the actor associated with the request. It overwrites any previously set value.
+func Actor(actor any) Option {
+	return func(req *Request) error {
+		buf, err := json.Marshal(actor)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		buf = bytes.TrimSpace(buf)
+		value := utils.UnsafeBytesToString(buf)
+		if value != "" {
+			req.Header.Set(frame.HeaderActor, value)
+		} else {
+			req.Header.Del(frame.HeaderActor)
+		}
 		return nil
 	}
 }

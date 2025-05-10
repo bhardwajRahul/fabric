@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ type BrowseTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *BrowseTestCase) StatusOK() *BrowseTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -146,7 +146,7 @@ func (tc *BrowseTestCase) StatusOK() *BrowseTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *BrowseTestCase) StatusCode(statusCode int) *BrowseTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -248,7 +248,7 @@ func (tc *BrowseTestCase) HeaderExists(headerName string) *BrowseTestCase {
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *BrowseTestCase) HeaderNotExists(headerName string) *BrowseTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -328,7 +328,7 @@ func (tc *BrowseTestCase) TagNotExists(cssSelectorQuery string) *BrowseTestCase 
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }

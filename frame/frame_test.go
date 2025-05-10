@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -159,5 +159,107 @@ func TestFrame_Languages(t *testing.T) {
 			expected = strings.Split(testCases[i+1], ",")
 		}
 		testarossa.SliceEqual(t, expected, langs)
+	}
+}
+
+func TestFrame_ParseActor(t *testing.T) {
+	f := Of(make(http.Header))
+
+	// Map
+	m1 := map[string]any{"iss": "my_issuer", "number": 6.0, "string": "example", "array": []any{"x", "y", "z"}}
+	var m2 map[string]any
+	f.SetActor(m1)
+	ok, err := f.ParseActor(&m2)
+	if testarossa.NoError(t, err) && testarossa.True(t, ok) {
+		testarossa.Equal(t, m1, m2)
+	}
+
+	// Object
+	type Obj struct {
+		Iss    string   `json:"iss"`
+		Number float64  `json:"number"`
+		String string   `json:"string"`
+		Array  []string `json:"array"`
+	}
+	o1 := Obj{Iss: "my_issuer", Number: 6.0, String: "example", Array: []string{"x", "y", "z"}}
+	var o2 Obj
+	f.SetActor(o1)
+	ok, err = f.ParseActor(&o2)
+	if testarossa.NoError(t, err) && testarossa.True(t, ok) {
+		testarossa.Equal(t, o1, o2)
+	}
+
+	// Overwrite with another object
+	o1 = Obj{Iss: "another_issuer", Number: 8.0, String: "foo", Array: []string{"a", "b", "c"}}
+	f.SetActor(o1)
+	ok, err = f.ParseActor(&o2)
+	if testarossa.NoError(t, err) && testarossa.True(t, ok) {
+		testarossa.Equal(t, o1, o2)
+	}
+}
+
+func TestFrame_IfActor(t *testing.T) {
+	f := Of(make(http.Header))
+
+	// False before setting actor
+	ok, err := f.IfActor("anything")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
+	}
+	ok, err = f.IfActor("first_issuer")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
+	}
+	ok, err = f.IfActor("iss=='first_issuer' && super_user")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
+	}
+	ok, err = f.IfActor("iss=='first_issuer' && sub")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
+	}
+
+	// Set actor
+	f.SetActor(map[string]any{
+		"iss":        "first_issuer",
+		"sub":        "subject@first.com",
+		"super_user": true,
+		"roles":      "admin, manager, user",
+		"groups":     []any{"sales", "engineering"},
+	})
+
+	// Should trim newline
+	testarossa.NotContains(t, f.Header().Get(HeaderActor), "\n")
+
+	// True
+	ok, err = f.IfActor("iss=='first_issuer'")
+	if testarossa.NoError(t, err) {
+		testarossa.True(t, ok)
+	}
+	ok, err = f.IfActor("iss=='first_issuer' && super_user")
+	if testarossa.NoError(t, err) {
+		testarossa.True(t, ok)
+	}
+	ok, err = f.IfActor("iss=='first_issuer' && sub")
+	if testarossa.NoError(t, err) {
+		testarossa.True(t, ok)
+	}
+	ok, err = f.IfActor("roles=~'manager' && sub!~'example.com'")
+	if testarossa.NoError(t, err) {
+		testarossa.True(t, ok)
+	}
+	ok, err = f.IfActor("groups.sales && groups.engineering && !groups.hr")
+	if testarossa.NoError(t, err) {
+		testarossa.True(t, ok)
+	}
+
+	// False
+	ok, err = f.IfActor("iss=='second_issuer'")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
+	}
+	ok, err = f.IfActor("groups.hr || roles=~'director'")
+	if testarossa.NoError(t, err) {
+		testarossa.False(t, ok)
 	}
 }

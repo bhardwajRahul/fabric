@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ limitations under the License.
 package lru
 
 import (
-	"errors"
 	"sync"
 	"time"
 )
@@ -48,23 +47,34 @@ type Cache[K comparable, V any] struct {
 	timeOffset time.Duration // For testing only
 }
 
-// NewCache creates a new LRU cache with a weight capacity of 16384 and a maximum age of 1hr.
+// NewCache creates a new LRU cache with max weight 16384 and max age of 1 hour.
+//
+// Deprecated: Use New to explicitly specify max weight and max age.
 func NewCache[K comparable, V any]() *Cache[K, V] {
+	return New[K, V](16384, time.Hour)
+}
+
+// New creates a new LRU cache.
+func New[K comparable, V any](maxWeight int, maxAge time.Duration) *Cache[K, V] {
 	return &Cache[K, V]{
 		lookup:    make(map[K]*node[K, V]),
-		maxWeight: 16384,
-		maxAge:    time.Hour,
+		maxWeight: maxWeight,
+		maxAge:    maxAge,
 	}
 }
 
 // Clear empties the cache but does not reset the hit/miss statistics.
 func (c *Cache[K, V]) Clear() {
 	c.lock.Lock()
+	c.clear()
+	c.lock.Unlock()
+}
+
+func (c *Cache[K, V]) clear() {
 	c.lookup = make(map[K]*node[K, V])
 	c.weight = 0
 	c.newest = nil
 	c.oldest = nil
-	c.lock.Unlock()
 }
 
 // Store inserts an element to the front of the cache.
@@ -89,6 +99,9 @@ func (c *Cache[K, V]) Store(key K, value V, options ...Option) {
 }
 
 func (c *Cache[K, V]) store(key K, value V, opts cacheOptions) {
+	if c.maxWeight <= 0 || c.maxAge <= 0 {
+		return
+	}
 	// Create and store the node
 	nd := &node[K, V]{
 		key:      key,
@@ -288,15 +301,13 @@ func (c *Cache[K, V]) Misses() int {
 }
 
 // SetMaxAge sets the total weight limit of elements in this cache.
-// If not specified, elements default to a weight of 1.
 func (c *Cache[K, V]) SetMaxWeight(weight int) error {
-	if weight < 0 {
-		return errors.New("negative weight")
-	}
 	c.lock.Lock()
 	reduced := weight < c.maxWeight
 	c.maxWeight = weight
-	if reduced {
+	if weight <= 0 {
+		c.clear()
+	} else if reduced {
 		c.diet()
 	}
 	c.lock.Unlock()
@@ -314,11 +325,14 @@ func (c *Cache[K, V]) MaxWeight() int {
 // SetMaxAge sets the age limit of elements in this cache.
 // Elements that are bumped have their life span reset and will therefore survive longer.
 func (c *Cache[K, V]) SetMaxAge(ttl time.Duration) error {
-	if ttl <= 0 {
-		return errors.New("non-positive TTL")
-	}
 	c.lock.Lock()
+	reduced := ttl < c.maxAge
 	c.maxAge = ttl
+	if ttl <= 0 {
+		c.clear()
+	} else if reduced {
+		c.diet()
+	}
 	c.lock.Unlock()
 	return nil
 }

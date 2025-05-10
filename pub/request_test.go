@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -192,6 +193,15 @@ func TestPub_Apply(t *testing.T) {
 
 	r.Apply(Header("Foo", "Bar"))
 	testarossa.Equal(t, "Bar", r.Header.Get("Foo"))
+
+	r.Apply(Actor(struct {
+		Sub   string   `json:"sub"`
+		Roles []string `json:"roles"`
+	}{
+		Sub:   "foo@example.com",
+		Roles: []string{"a", "b", "c"},
+	}))
+	testarossa.Equal(t, `{"sub":"foo@example.com","roles":["a","b","c"]}`, r.Header.Get(frame.HeaderActor))
 }
 
 func TestPub_QueryArgs(t *testing.T) {

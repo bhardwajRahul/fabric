@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,12 +17,17 @@ limitations under the License.
 package main
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/coreservices/configurator"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
+	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/metrics"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
+	"github.com/microbus-io/fabric/coreservices/tokenissuer"
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
 	"github.com/microbus-io/fabric/examples/directory"
@@ -30,6 +35,7 @@ import (
 	"github.com/microbus-io/fabric/examples/eventsource"
 	"github.com/microbus-io/fabric/examples/hello"
 	"github.com/microbus-io/fabric/examples/helloworld"
+	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
 )
 
@@ -46,6 +52,7 @@ func main() {
 		httpegress.NewService(),
 		openapiportal.NewService(),
 		metrics.NewService(),
+		tokenissuer.NewService(),
 	)
 	app.Add(
 		// Add solution microservices here
@@ -59,10 +66,20 @@ func main() {
 		eventsink.NewService(),
 		directory.NewService(),
 		browser.NewService(),
+		login.NewService(),
 	)
 	app.Add(
 		// When everything is ready, begin to accept external requests
-		httpingress.NewService(),
+		httpingress.NewService().Init(func(svc *httpingress.Service) {
+			svc.Middleware().Append("LoginExample401Redirect",
+				middleware.OnRoute(
+					func(path string) bool {
+						return strings.HasPrefix(path, "/"+login.Hostname+"/")
+					},
+					middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+login.Hostname+"/login"),
+				),
+			)
+		}),
 		// smtpingress.NewService(),
 	)
 	app.Run()

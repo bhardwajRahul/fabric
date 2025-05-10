@@ -66,6 +66,7 @@ Try the following URLs in your browser:
 * http://localhost:8080/directory.example/persons
 * http://localhost:8080/directory.example/persons/key/1
 * http://localhost:8080/directory.example/web-ui?method=DELETE&path=/persons/key/1 (push submit to perform the DELETE request)
+* http://localhost:8080/login.example/welcome
 
 Feel free to experiment with different values for the query arguments.
 

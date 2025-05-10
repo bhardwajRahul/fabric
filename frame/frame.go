@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,12 +17,17 @@ limitations under the License.
 package frame
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/utils"
 )
 
 const (
@@ -39,6 +44,7 @@ const (
 	HeaderFragment      = HeaderPrefix + "Fragment"
 	HeaderClockShift    = HeaderPrefix + "Clock-Shift"
 	HeaderLocality      = HeaderPrefix + "Locality"
+	HeaderActor         = HeaderPrefix + "Actor"
 
 	OpCodeError    = "Err"
 	OpCodeAck      = "Ack"
@@ -340,24 +346,34 @@ func (f Frame) ClockShift() time.Duration {
 	return d
 }
 
-// SetClockShift sets the time offset in the frame.
-// Time offsets are used during testing to offset the clock of a transaction.
-// A positive offset moves the clock into the future.
-// A negative offset moves the clock into the past.
-func (f Frame) SetClockShift(offset time.Duration) {
-	if offset == 0 {
+// SetClockShift sets the clock shift in the frame.
+// A clock shift enables time-coordinated testing across microservices.
+// A positive offset shifts the clock into the future.
+// A negative offset shifts the clock into the past.
+func (f Frame) SetClockShift(shift time.Duration) {
+	if shift == 0 {
 		f.h.Del(HeaderClockShift)
 	} else {
-		f.h.Set(HeaderClockShift, offset.String())
+		f.h.Set(HeaderClockShift, shift.String())
 	}
 }
 
-// Baggage is an arbitrary header that is passed through to downstream microservices.
-func (f Frame) Baggage(name string) string {
+// IncrementClockShift adds to the clock offset in the frame.
+// A clock shift enables time-coordinated testing across microservices.
+// A positive offset shifts the clock into the future.
+// A negative offset shifts the clock into the past.
+func (f Frame) IncrementClockShift(increment time.Duration) {
+	if increment != 0 {
+		f.SetClockShift(f.ClockShift() + increment)
+	}
+}
+
+// Baggage is an arbitrary name=value pair that is passed through to downstream microservices.
+func (f Frame) Baggage(name string) (value string) {
 	return f.h.Get(HeaderBaggagePrefix + name)
 }
 
-// SetBaggage sets an arbitrary header that is passed through to downstream microservices.
+// SetBaggage sets an arbitrary name=value pair that is passed through to downstream microservices.
 func (f Frame) SetBaggage(name string, value string) {
 	if value == "" {
 		f.h.Del(HeaderBaggagePrefix + name)
@@ -426,4 +442,56 @@ func (f Frame) SetLocality(locality string) {
 	} else {
 		f.h.Set(HeaderLocality, locality)
 	}
+}
+
+// HeaderActor associates an actor with the frame.
+func (f Frame) SetActor(actor any) error {
+	buf, err := json.Marshal(actor)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	buf = bytes.TrimSpace(buf)
+	value := utils.UnsafeBytesToString(buf)
+	if value == "" {
+		f.h.Del(HeaderActor)
+	} else {
+		f.h.Set(HeaderActor, value)
+	}
+	return nil
+}
+
+// ParseActor parses the actor associated with the frame into the provided object.
+// The OK flag indicates whether or not an actor is associated with the frame.
+func (f Frame) ParseActor(obj any) (ok bool, err error) {
+	value := f.h.Get(HeaderActor)
+	if value == "" {
+		return false, nil
+	}
+	err = json.NewDecoder(strings.NewReader(value)).Decode(&obj)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
+}
+
+// IfActor evaluates the boolean expression against the properties of the actor associated with the frame.
+// The =~ and !~ operators evaluate the left operand against a regexp.
+// String constants, including regexp patterns, must be quoted using single quotes, double quotes or backticks.
+//
+// For example, "iss=='my_issuer' && (roles.admin || roles.manager) && foo!='baz' && level>=5 && region=~'US'" evaluates to true
+// for the actor {"iss":"my_issuer","sub":"harry@hogwarts.edu","roles":["admin"],"foo":"bar","level":5,"region":"AMER US"}.
+func (f Frame) IfActor(boolExp string) (ok bool, err error) {
+	value := f.h.Get(HeaderActor)
+	var properties map[string]any
+	if value != "" {
+		err = json.NewDecoder(strings.NewReader(value)).Decode(&properties)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+	}
+	satisfy, err := utils.EvaluateBoolExp(boolExp, properties)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return satisfy, nil
 }

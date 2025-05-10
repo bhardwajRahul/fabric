@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/sub"
 )
 
 var (
@@ -51,7 +50,6 @@ var (
 	_ *errors.TracedError
 	_ *httpx.BodyReader
 	_ pub.Option
-	_ sub.Option
 )
 
 // Hostname is the default hostname of the microservice: configurator.core.
@@ -59,9 +57,12 @@ const Hostname = "configurator.core"
 
 // Fully-qualified URLs of the microservice's endpoints.
 var (
-	URLOfValues = httpx.JoinHostAndPath(Hostname, `:443/values`)
-	URLOfRefresh = httpx.JoinHostAndPath(Hostname, `:443/refresh`)
-	URLOfSync = httpx.JoinHostAndPath(Hostname, `:443/sync`)
+	URLOfValues = httpx.JoinHostAndPath(Hostname, `:888/values`)
+	URLOfRefresh = httpx.JoinHostAndPath(Hostname, `:444/refresh`)
+	URLOfSyncRepo = httpx.JoinHostAndPath(Hostname, `:888/sync-repo`)
+	URLOfValues443 = httpx.JoinHostAndPath(Hostname, `:443/values`)
+	URLOfRefresh443 = httpx.JoinHostAndPath(Hostname, `:443/refresh`)
+	URLOfSync443 = httpx.JoinHostAndPath(Hostname, `:443/sync`)
 )
 
 // Client is an interface to calling the endpoints of the configurator.core microservice.
@@ -134,7 +135,7 @@ func (_out *ValuesResponse) Get() (values map[string]string, err error) {
 Values returns the values associated with the specified config property names for the caller microservice.
 */
 func (_c *MulticastClient) Values(ctx context.Context, names []string) <-chan *ValuesResponse {
-	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
+	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`names`: names,
 	})
@@ -175,7 +176,7 @@ Values returns the values associated with the specified config property names fo
 */
 func (_c *Client) Values(ctx context.Context, names []string) (values map[string]string, err error) {
 	var _err error
-	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
+	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`names`: names,
 	})
@@ -231,7 +232,7 @@ Refresh tells all microservices to contact the configurator and refresh their co
 An error is returned if any of the values sent to the microservices fails validation.
 */
 func (_c *MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse {
-	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
+	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
 	_in := RefreshIn{
@@ -271,7 +272,7 @@ An error is returned if any of the values sent to the microservices fails valida
 */
 func (_c *Client) Refresh(ctx context.Context) (err error) {
 	var _err error
-	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
+	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
 	_in := RefreshIn{
@@ -298,39 +299,39 @@ func (_c *Client) Refresh(ctx context.Context) (err error) {
 	return
 }
 
-// SyncIn are the input arguments of Sync.
-type SyncIn struct {
+// SyncRepoIn are the input arguments of SyncRepo.
+type SyncRepoIn struct {
 	Timestamp time.Time `json:"timestamp"`
 	Values map[string]map[string]string `json:"values"`
 }
 
-// SyncOut are the return values of Sync.
-type SyncOut struct {
+// SyncRepoOut are the return values of SyncRepo.
+type SyncRepoOut struct {
 }
 
-// SyncResponse is the response to Sync.
-type SyncResponse struct {
-	data SyncOut
+// SyncRepoResponse is the response to SyncRepo.
+type SyncRepoResponse struct {
+	data SyncRepoOut
 	HTTPResponse *http.Response
 	err error
 }
 
 // Get retrieves the return values.
-func (_out *SyncResponse) Get() (err error) {
+func (_out *SyncRepoResponse) Get() (err error) {
 	err = _out.err
 	return
 }
 
 /*
-Sync is used to synchronize values among replica peers of the configurator.
+SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (_c *MulticastClient) Sync(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncResponse {
-	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
+func (_c *MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncRepoResponse {
+	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`timestamp`: timestamp,
 		`values`: values,
 	})
-	_in := SyncIn{
+	_in := SyncRepoIn{
 		timestamp,
 		values,
 	}
@@ -344,9 +345,9 @@ func (_c *MulticastClient) Sync(ctx context.Context, timestamp time.Time, values
 		pub.Body(_body),
 	)
 
-	_res := make(chan *SyncResponse, cap(_ch))
+	_res := make(chan *SyncRepoResponse, cap(_ch))
 	for _i := range _ch {
-		var _r SyncResponse
+		var _r SyncRepoResponse
 		_httpRes, _err := _i.Get()
 		_r.HTTPResponse = _httpRes
 		if _err != nil {
@@ -364,16 +365,16 @@ func (_c *MulticastClient) Sync(ctx context.Context, timestamp time.Time, values
 }
 
 /*
-Sync is used to synchronize values among replica peers of the configurator.
+SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (_c *Client) Sync(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+func (_c *Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	var _err error
-	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
+	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`timestamp`: timestamp,
 		`values`: values,
 	})
-	_in := SyncIn{
+	_in := SyncRepoIn{
 		timestamp,
 		values,
 	}
@@ -390,7 +391,298 @@ func (_c *Client) Sync(ctx context.Context, timestamp time.Time, values map[stri
 		err = _err // No trace
 		return
 	}
-	var _out SyncOut
+	var _out SyncRepoOut
+	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
+	if _err != nil {
+		err = errors.Trace(_err)
+		return
+	}
+	return
+}
+
+// Values443In are the input arguments of Values443.
+type Values443In struct {
+	Names []string `json:"names"`
+}
+
+// Values443Out are the return values of Values443.
+type Values443Out struct {
+	Values map[string]string `json:"values"`
+}
+
+// Values443Response is the response to Values443.
+type Values443Response struct {
+	data Values443Out
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *Values443Response) Get() (values map[string]string, err error) {
+	values = _out.data.Values
+	err = _out.err
+	return
+}
+
+/*
+Values443 is deprecated.
+*/
+func (_c *MulticastClient) Values443(ctx context.Context, names []string) <-chan *Values443Response {
+	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`names`: names,
+	})
+	_in := Values443In{
+		names,
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+
+	_res := make(chan *Values443Response, cap(_ch))
+	for _i := range _ch {
+		var _r Values443Response
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+Values443 is deprecated.
+*/
+func (_c *Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
+	var _err error
+	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`names`: names,
+	})
+	_in := Values443In{
+		names,
+	}
+	var _query url.Values
+	_body := _in
+	_httpRes, _err := _c.svc.Request(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+	if _err != nil {
+		err = _err // No trace
+		return
+	}
+	var _out Values443Out
+	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
+	if _err != nil {
+		err = errors.Trace(_err)
+		return
+	}
+	values = _out.Values
+	return
+}
+
+// Refresh443In are the input arguments of Refresh443.
+type Refresh443In struct {
+}
+
+// Refresh443Out are the return values of Refresh443.
+type Refresh443Out struct {
+}
+
+// Refresh443Response is the response to Refresh443.
+type Refresh443Response struct {
+	data Refresh443Out
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *Refresh443Response) Get() (err error) {
+	err = _out.err
+	return
+}
+
+/*
+Refresh443 is deprecated.
+*/
+func (_c *MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Response {
+	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+	})
+	_in := Refresh443In{
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+
+	_res := make(chan *Refresh443Response, cap(_ch))
+	for _i := range _ch {
+		var _r Refresh443Response
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+Refresh443 is deprecated.
+*/
+func (_c *Client) Refresh443(ctx context.Context) (err error) {
+	var _err error
+	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+	})
+	_in := Refresh443In{
+	}
+	var _query url.Values
+	_body := _in
+	_httpRes, _err := _c.svc.Request(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+	if _err != nil {
+		err = _err // No trace
+		return
+	}
+	var _out Refresh443Out
+	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
+	if _err != nil {
+		err = errors.Trace(_err)
+		return
+	}
+	return
+}
+
+// Sync443In are the input arguments of Sync443.
+type Sync443In struct {
+	Timestamp time.Time `json:"timestamp"`
+	Values map[string]map[string]string `json:"values"`
+}
+
+// Sync443Out are the return values of Sync443.
+type Sync443Out struct {
+}
+
+// Sync443Response is the response to Sync443.
+type Sync443Response struct {
+	data Sync443Out
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *Sync443Response) Get() (err error) {
+	err = _out.err
+	return
+}
+
+/*
+Sync443 is deprecated.
+*/
+func (_c *MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *Sync443Response {
+	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`timestamp`: timestamp,
+		`values`: values,
+	})
+	_in := Sync443In{
+		timestamp,
+		values,
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+
+	_res := make(chan *Sync443Response, cap(_ch))
+	for _i := range _ch {
+		var _r Sync443Response
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+Sync443 is deprecated.
+*/
+func (_c *Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+	var _err error
+	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`timestamp`: timestamp,
+		`values`: values,
+	})
+	_in := Sync443In{
+		timestamp,
+		values,
+	}
+	var _query url.Values
+	_body := _in
+	_httpRes, _err := _c.svc.Request(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+	if _err != nil {
+		err = _err // No trace
+		return
+	}
+	var _out Sync443Out
 	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
 	if _err != nil {
 		err = errors.Trace(_err)

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@ limitations under the License.
 
 package browser
 
-const Version = 79
-const SourceCodeSHA256 = "a31a853bcd1764d9e1b3739a9b35c81e7b627f2ea11b86f26481bb495c3c1719"
-const Timestamp = "2024-08-31T21:14:19.685717Z"
+const Version = 88
+const SourceCodeSHA256 = "b63ff6590ca62276838f66c074c2716468e42465a8531e2fb8974f83b035f18f"
+const Timestamp = "2025-05-08T13:43:45.412258Z"
 
 /* {
-	"ver": 79,
-	"sha256": "a31a853bcd1764d9e1b3739a9b35c81e7b627f2ea11b86f26481bb495c3c1719",
-	"ts": "2024-08-31T21:14:19.685717Z"
+	"ver": 88,
+	"sha256": "b63ff6590ca62276838f66c074c2716468e42465a8531e2fb8974f83b035f18f",
+	"ts": "2025-05-08T13:43:45.412258Z"
 } */

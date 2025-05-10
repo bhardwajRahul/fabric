@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ limitations under the License.
 Package helloworldapi implements the public API of the helloworld.example microservice,
 including clients and data structures.
 
-The HelloWorld microservice demonstrates the minimalist classic example.
+The HelloWorld microservice demonstrates the classic minimalist example.
 */
 package helloworldapi
 
@@ -37,7 +37,6 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/sub"
 )
 
 var (
@@ -51,7 +50,6 @@ var (
 	_ *errors.TracedError
 	_ *httpx.BodyReader
 	_ pub.Option
-	_ sub.Option
 )
 
 // Hostname is the default hostname of the microservice: helloworld.example.

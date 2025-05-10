@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -393,6 +393,73 @@ func LinesIntersection(t *testing.T, ctx context.Context, l1 testerapi.XYLine, l
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
 		tc.b, tc.err = Svc.LinesIntersection(ctx, l1, l2)
+		return tc.err
+	})
+	tc._dur = time.Since(t0)
+	return tc
+}
+
+// EchoAnythingTestCase assists in asserting against the results of executing EchoAnything.
+type EchoAnythingTestCase struct {
+	_t *testing.T
+	_dur time.Duration
+	echoed any
+	err error
+}
+
+// Expect asserts no error and exact return values.
+func (_tc *EchoAnythingTestCase) Expect(echoed any) *EchoAnythingTestCase {
+	if testarossa.NoError(_tc._t, _tc.err) {
+		testarossa.Equal(_tc._t, echoed, _tc.echoed)
+	}
+	return _tc
+}
+
+// Error asserts an error.
+func (tc *EchoAnythingTestCase) Error(errContains string) *EchoAnythingTestCase {
+	if testarossa.Error(tc._t, tc.err) {
+		testarossa.Contains(tc._t, tc.err.Error(), errContains)
+	}
+	return tc
+}
+
+// ErrorCode asserts an error by its status code.
+func (tc *EchoAnythingTestCase) ErrorCode(statusCode int) *EchoAnythingTestCase {
+	if testarossa.Error(tc._t, tc.err) {
+		testarossa.Equal(tc._t, statusCode, errors.StatusCode(tc.err))
+	}
+	return tc
+}
+
+// NoError asserts no error.
+func (tc *EchoAnythingTestCase) NoError() *EchoAnythingTestCase {
+	testarossa.NoError(tc._t, tc.err)
+	return tc
+}
+
+// CompletedIn checks that the duration of the operation is less than or equal the threshold.
+func (tc *EchoAnythingTestCase) CompletedIn(threshold time.Duration) *EchoAnythingTestCase {
+	testarossa.True(tc._t, tc._dur <= threshold)
+	return tc
+}
+
+// Assert asserts using a provided function.
+func (tc *EchoAnythingTestCase) Assert(asserter func(t *testing.T, echoed any, err error)) *EchoAnythingTestCase {
+	asserter(tc._t, tc.echoed, tc.err)
+	return tc
+}
+
+// Get returns the result of executing EchoAnything.
+func (tc *EchoAnythingTestCase) Get() (echoed any, err error) {
+	return tc.echoed, tc.err
+}
+
+// EchoAnything executes the function and returns a corresponding test case.
+func EchoAnything(t *testing.T, ctx context.Context, original any) *EchoAnythingTestCase {
+	tc := &EchoAnythingTestCase{_t: t}
+	t0 := time.Now()
+	tc.err = errors.CatchPanic(func() error {
+		tc.echoed, tc.err = Svc.EchoAnything(ctx, original)
 		return tc.err
 	})
 	tc._dur = time.Since(t0)
@@ -872,6 +939,70 @@ func WhatTimeIsIt(testingT *testing.T, ctx context.Context) *WhatTimeIsItTestCas
 	return tc
 }
 
+// AuthzRequiredTestCase assists in asserting against the results of executing AuthzRequired.
+type AuthzRequiredTestCase struct {
+	_t *testing.T
+	_dur time.Duration
+	err error
+}
+
+// Expect asserts no error and exact return values.
+func (_tc *AuthzRequiredTestCase) Expect() *AuthzRequiredTestCase {
+	testarossa.NoError(_tc._t, _tc.err)
+	return _tc
+}
+
+// Error asserts an error.
+func (tc *AuthzRequiredTestCase) Error(errContains string) *AuthzRequiredTestCase {
+	if testarossa.Error(tc._t, tc.err) {
+		testarossa.Contains(tc._t, tc.err.Error(), errContains)
+	}
+	return tc
+}
+
+// ErrorCode asserts an error by its status code.
+func (tc *AuthzRequiredTestCase) ErrorCode(statusCode int) *AuthzRequiredTestCase {
+	if testarossa.Error(tc._t, tc.err) {
+		testarossa.Equal(tc._t, statusCode, errors.StatusCode(tc.err))
+	}
+	return tc
+}
+
+// NoError asserts no error.
+func (tc *AuthzRequiredTestCase) NoError() *AuthzRequiredTestCase {
+	testarossa.NoError(tc._t, tc.err)
+	return tc
+}
+
+// CompletedIn checks that the duration of the operation is less than or equal the threshold.
+func (tc *AuthzRequiredTestCase) CompletedIn(threshold time.Duration) *AuthzRequiredTestCase {
+	testarossa.True(tc._t, tc._dur <= threshold)
+	return tc
+}
+
+// Assert asserts using a provided function.
+func (tc *AuthzRequiredTestCase) Assert(asserter func(t *testing.T, err error)) *AuthzRequiredTestCase {
+	asserter(tc._t, tc.err)
+	return tc
+}
+
+// Get returns the result of executing AuthzRequired.
+func (tc *AuthzRequiredTestCase) Get() (err error) {
+	return tc.err
+}
+
+// AuthzRequired executes the function and returns a corresponding test case.
+func AuthzRequired(t *testing.T, ctx context.Context) *AuthzRequiredTestCase {
+	tc := &AuthzRequiredTestCase{_t: t}
+	t0 := time.Now()
+	tc.err = errors.CatchPanic(func() error {
+		tc.err = Svc.AuthzRequired(ctx)
+		return tc.err
+	})
+	tc._dur = time.Since(t0)
+	return tc
+}
+
 // OnDiscoveredSinkTestCase assists in asserting against the results of executing OnDiscoveredSink.
 type OnDiscoveredSinkTestCase struct {
 	_t *testing.T
@@ -1042,7 +1173,7 @@ type EchoTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *EchoTestCase) StatusOK() *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -1050,7 +1181,7 @@ func (tc *EchoTestCase) StatusOK() *EchoTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *EchoTestCase) StatusCode(statusCode int) *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -1152,7 +1283,7 @@ func (tc *EchoTestCase) HeaderExists(headerName string) *EchoTestCase {
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *EchoTestCase) HeaderNotExists(headerName string) *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -1232,7 +1363,7 @@ func (tc *EchoTestCase) TagNotExists(cssSelectorQuery string) *EchoTestCase {
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }
@@ -1655,7 +1786,7 @@ type MultiValueHeadersTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *MultiValueHeadersTestCase) StatusOK() *MultiValueHeadersTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -1663,7 +1794,7 @@ func (tc *MultiValueHeadersTestCase) StatusOK() *MultiValueHeadersTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *MultiValueHeadersTestCase) StatusCode(statusCode int) *MultiValueHeadersTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -1765,7 +1896,7 @@ func (tc *MultiValueHeadersTestCase) HeaderExists(headerName string) *MultiValue
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *MultiValueHeadersTestCase) HeaderNotExists(headerName string) *MultiValueHeadersTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -1845,7 +1976,7 @@ func (tc *MultiValueHeadersTestCase) TagNotExists(cssSelectorQuery string) *Mult
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }
@@ -2268,7 +2399,7 @@ type WebPathArgumentsTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *WebPathArgumentsTestCase) StatusOK() *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -2276,7 +2407,7 @@ func (tc *WebPathArgumentsTestCase) StatusOK() *WebPathArgumentsTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *WebPathArgumentsTestCase) StatusCode(statusCode int) *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -2378,7 +2509,7 @@ func (tc *WebPathArgumentsTestCase) HeaderExists(headerName string) *WebPathArgu
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *WebPathArgumentsTestCase) HeaderNotExists(headerName string) *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -2458,7 +2589,7 @@ func (tc *WebPathArgumentsTestCase) TagNotExists(cssSelectorQuery string) *WebPa
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }
@@ -2881,7 +3012,7 @@ type UnnamedWebPathArgumentsTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *UnnamedWebPathArgumentsTestCase) StatusOK() *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -2889,7 +3020,7 @@ func (tc *UnnamedWebPathArgumentsTestCase) StatusOK() *UnnamedWebPathArgumentsTe
 // StatusCode asserts no error and a status code.
 func (tc *UnnamedWebPathArgumentsTestCase) StatusCode(statusCode int) *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -2991,7 +3122,7 @@ func (tc *UnnamedWebPathArgumentsTestCase) HeaderExists(headerName string) *Unna
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *UnnamedWebPathArgumentsTestCase) HeaderNotExists(headerName string) *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -3071,7 +3202,7 @@ func (tc *UnnamedWebPathArgumentsTestCase) TagNotExists(cssSelectorQuery string)
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }
@@ -3448,7 +3579,7 @@ type DirectoryServerTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *DirectoryServerTestCase) StatusOK() *DirectoryServerTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -3456,7 +3587,7 @@ func (tc *DirectoryServerTestCase) StatusOK() *DirectoryServerTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *DirectoryServerTestCase) StatusCode(statusCode int) *DirectoryServerTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -3558,7 +3689,7 @@ func (tc *DirectoryServerTestCase) HeaderExists(headerName string) *DirectorySer
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *DirectoryServerTestCase) HeaderNotExists(headerName string) *DirectoryServerTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -3638,7 +3769,7 @@ func (tc *DirectoryServerTestCase) TagNotExists(cssSelectorQuery string) *Direct
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }
@@ -4015,7 +4146,7 @@ type HelloTestCase struct {
 // StatusOK asserts no error and a status code 200.
 func (tc *HelloTestCase) StatusOK() *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, http.StatusOK)
+		testarossa.Equal(tc.t, http.StatusOK, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -4023,7 +4154,7 @@ func (tc *HelloTestCase) StatusOK() *HelloTestCase {
 // StatusCode asserts no error and a status code.
 func (tc *HelloTestCase) StatusCode(statusCode int) *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, tc.res.StatusCode, statusCode)
+		testarossa.Equal(tc.t, statusCode, tc.res.StatusCode)
 	}
 	return tc
 }
@@ -4125,7 +4256,7 @@ func (tc *HelloTestCase) HeaderExists(headerName string) *HelloTestCase {
 // HeaderNotExists asserts no error and that the named header does not exists.
 func (tc *HelloTestCase) HeaderNotExists(headerName string) *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
-		testarossa.Equal(tc.t, 0, len(tc.res.Header.Values(headerName)), "Header %s exists", headerName)
+		testarossa.Len(tc.t, tc.res.Header.Values(headerName), 0, "Header %s exists", headerName)
 	}
 	return tc
 }
@@ -4205,7 +4336,7 @@ func (tc *HelloTestCase) TagNotExists(cssSelectorQuery string) *HelloTestCase {
 			return tc
 		}
 		matches := selector.MatchAll(doc)
-		testarossa.Equal(tc.t, 0, len(matches), "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
+		testarossa.Len(tc.t, matches, 0, "Found %d tag(s) matching %s", len(matches), cssSelectorQuery)
 	}
 	return tc
 }

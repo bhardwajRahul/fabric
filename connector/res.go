@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -123,11 +124,11 @@ func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Req
 // These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML]
 // respectively. Use of these types presents a security risk.
 func (c *Connector) ExecuteResTemplate(name string, data any) (string, error) {
-	b, err := c.resourcesFS.ReadFile(name)
+	templateFile, err := c.resourcesFS.ReadFile(name)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	var buf bytes.Buffer
+	var renderedPage bytes.Buffer
 	if strings.HasSuffix(strings.ToLower(name), ".html") {
 		funcMap := htmltemplate.FuncMap{
 			"attr": func(s string) htmltemplate.HTMLAttr {
@@ -143,25 +144,25 @@ func (c *Connector) ExecuteResTemplate(name string, data any) (string, error) {
 				return htmltemplate.HTML(s)
 			},
 		}
-		htmlTmpl, err := htmltemplate.New(name).Funcs(funcMap).Parse(string(b))
+		htmlTmpl, err := htmltemplate.New(name).Funcs(funcMap).Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
 			return "", errors.Trace(err)
 		}
-		err = htmlTmpl.ExecuteTemplate(&buf, name, data)
+		err = htmlTmpl.ExecuteTemplate(&renderedPage, name, data)
 		if err != nil {
 			return "", errors.Trace(err)
 		}
 	} else {
-		textTmpl, err := texttemplate.New(name).Parse(string(b))
+		textTmpl, err := texttemplate.New(name).Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
 			return "", errors.Trace(err)
 		}
-		err = textTmpl.ExecuteTemplate(&buf, name, data)
+		err = textTmpl.ExecuteTemplate(&renderedPage, name, data)
 		if err != nil {
 			return "", errors.Trace(err)
 		}
 	}
-	return buf.String(), nil
+	return utils.UnsafeBytesToString(renderedPage.Bytes()), nil
 }
 
 // initStringBundle reads strings.yaml from the FS into an in-memory map.

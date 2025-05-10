@@ -21,11 +21,6 @@ The code generator prepares the testing app `App` and includes in it the microse
 ```go
 // Initialize starts up the testing app.
 func Initialize() (err error) {
-	App.Init(func(svc service.Service) {
-		// Initialize all microservices
-		svc.SetConfig("SQL", sqlConnectionString)
-	})
-
 	// Add microservices to the testing app
 	err = App.AddAndStartup(
 		downstream.NewService().Init(func(svc *downstream.Service) {

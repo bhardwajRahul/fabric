@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ func TestErrors_New(t *testing.T) {
 	tracedErr := New("This is a new error!")
 	testarossa.Error(t, tracedErr)
 	testarossa.Equal(t, "This is a new error!", tracedErr.Error())
-	testarossa.SliceLen(t, tracedErr.(*TracedError).stack, 1)
+	testarossa.Len(t, tracedErr.(*TracedError).stack, 1)
 	testarossa.Contains(t, tracedErr.(*TracedError).stack[0].Function, "TestErrors_New")
 }
 
@@ -52,7 +52,7 @@ func TestErrors_Newf(t *testing.T) {
 	err := Newf("Error %s", "Error")
 	testarossa.Error(t, err)
 	testarossa.Equal(t, "Error Error", err.Error())
-	testarossa.SliceLen(t, err.(*TracedError).stack, 1)
+	testarossa.Len(t, err.(*TracedError).stack, 1)
 	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newf")
 }
 
@@ -64,7 +64,7 @@ func TestErrors_Newc(t *testing.T) {
 	testarossa.Equal(t, "User Error", err.Error())
 	testarossa.Equal(t, 400, err.(*TracedError).StatusCode)
 	testarossa.Equal(t, 400, StatusCode(err))
-	testarossa.SliceLen(t, err.(*TracedError).stack, 1)
+	testarossa.Len(t, err.(*TracedError).stack, 1)
 	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newc")
 }
 
@@ -76,7 +76,7 @@ func TestErrors_Newcf(t *testing.T) {
 	testarossa.Equal(t, "User Error", err.Error())
 	testarossa.Equal(t, 400, err.(*TracedError).StatusCode)
 	testarossa.Equal(t, 400, StatusCode(err))
-	testarossa.SliceLen(t, err.(*TracedError).stack, 1)
+	testarossa.Len(t, err.(*TracedError).stack, 1)
 	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newcf")
 }
 
@@ -88,15 +88,15 @@ func TestErrors_Trace(t *testing.T) {
 
 	err := Trace(stdErr)
 	testarossa.Error(t, err)
-	testarossa.SliceLen(t, err.(*TracedError).stack, 1)
+	testarossa.Len(t, err.(*TracedError).stack, 1)
 	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Trace")
 
 	err = Trace(err)
-	testarossa.SliceLen(t, err.(*TracedError).stack, 2)
+	testarossa.Len(t, err.(*TracedError).stack, 2)
 	testarossa.NotEqual(t, "", err.(*TracedError).String())
 
 	err = Trace(err)
-	testarossa.SliceLen(t, err.(*TracedError).stack, 3)
+	testarossa.Len(t, err.(*TracedError).stack, 3)
 	testarossa.NotEqual(t, "", err.(*TracedError).String())
 
 	stdErr = Trace(nil)
@@ -112,12 +112,12 @@ func TestErrors_Convert(t *testing.T) {
 
 	err := Convert(stdErr)
 	testarossa.Error(t, err)
-	testarossa.SliceLen(t, err.stack, 0)
+	testarossa.Len(t, err.stack, 0)
 
 	stdErr = Trace(err)
 	err = Convert(stdErr)
 	testarossa.Error(t, err)
-	testarossa.SliceLen(t, err.stack, 1)
+	testarossa.Len(t, err.stack, 1)
 
 	err = Convert(nil)
 	testarossa.Nil(t, err)
@@ -187,7 +187,7 @@ func TestErrors_Join(t *testing.T) {
 	testarossa.True(t, Is(j, e4b))
 	jj, ok := j.(*TracedError)
 	if testarossa.True(t, ok) {
-		testarossa.SliceLen(t, jj.stack, 1)
+		testarossa.Len(t, jj.stack, 1)
 		testarossa.Equal(t, 500, jj.StatusCode)
 	}
 
@@ -227,10 +227,10 @@ func TestErrors_TraceFull(t *testing.T) {
 	errUp1 := TraceUp(stdErr, 1)
 	errFull := TraceFull(stdErr, 0)
 
-	testarossa.SliceLen(t, err.(*TracedError).stack, 1)
+	testarossa.Len(t, err.(*TracedError).stack, 1)
 
-	testarossa.SliceLen(t, errUp0.(*TracedError).stack, 1)
-	testarossa.SliceLen(t, errUp1.(*TracedError).stack, 1)
+	testarossa.Len(t, errUp0.(*TracedError).stack, 1)
+	testarossa.Len(t, errUp1.(*TracedError).stack, 1)
 	testarossa.NotEqual(t, errUp0.(*TracedError).stack[0].Function, errUp1.(*TracedError).stack[0].Function)
 
 	testarossa.True(t, len(errFull.(*TracedError).stack) > 1)

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ limitations under the License.
 /*
 Package intermediate serves as the foundation of the helloworld.example microservice.
 
-The HelloWorld microservice demonstrates the minimalist classic example.
+The HelloWorld microservice demonstrates the classic minimalist example.
 */
 package intermediate
 
@@ -92,7 +92,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 		impl: impl,
 	}
 	svc.SetVersion(version)
-	svc.SetDescription(`The HelloWorld microservice demonstrates the minimalist classic example.`)
+	svc.SetDescription(`The HelloWorld microservice demonstrates the classic minimalist example.`)
 	
 	// Lifecycle
 	svc.SetOnStartup(svc.impl.OnStartup)
@@ -127,10 +127,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/hello-world`,
 			Summary:     `HelloWorld()`,
 			Description: `HelloWorld prints the classic greeting.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 

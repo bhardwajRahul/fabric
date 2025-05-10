@@ -1,6 +1,6 @@
 # Package `coreservices/configurator`
 
-The configurator is a core microservice of `Microbus` and it must be included with practically all applications. Microservices that define config properties will not start if they cannot reach the configurator. This is why you'll see the configurator included in most self-contained apps, such as in `main/main.go`:
+The configurator is a core microservice of `Microbus` and it must be included with practically all applications. Microservices that define config properties will not start if they cannot reach the configurator. This is why you'll see the configurator included first in most self-contained apps, such as in `main/main.go`:
 
 ```go
 func main() {
@@ -10,7 +10,7 @@ func main() {
 		configurator.NewService(),
 	)
 	app.Add(
-		// ...
+		// Other microservices...
 	)
 	app.Run()
 }
@@ -44,6 +44,6 @@ zzz.DefineConfig("Moo")
 zzz.DefineConfig("Zoo")
 ```
 
-Every 20 minutes the configurator broadcasts the command `https://all:888/config-refresh` to instruct all microservices to refresh their config. The microservices will respond by calling the configurator's `https://configurator.core/values` endpoint to fetch the current values. This guarantees that microservices do not fall out of sync with their configuration, at least not for long.
+Every 20 minutes the configurator broadcasts the command `https://all:888/config-refresh` to instruct all microservices to refresh their config. They respond by calling the configurator's `:888/values` endpoint to fetch the current values. This guarantees that microservices do not fall out of sync with their configuration, at least not for long.
 
-The `/refresh` endpoint can be called manually to force a refresh at any time.
+The `:444/refresh` endpoint can be called manually to force a refresh at any time.

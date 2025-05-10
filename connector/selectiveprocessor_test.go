@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -203,21 +203,21 @@ func TestConnector_TracingSelectorCapacityRollover(t *testing.T) {
 	for i := 0; i < maxSelected/2; i++ {
 		ts.Select(strconv.Itoa(i))
 	}
-	testarossa.Equal(t, maxSelected/2, len(ts.selected1))
+	testarossa.Len(t, ts.selected1, maxSelected/2)
 
 	ts.Select(strconv.Itoa(maxSelected / 2))
-	testarossa.Equal(t, 1, len(ts.selected1))
-	testarossa.Equal(t, maxSelected/2, len(ts.selected2))
+	testarossa.Len(t, ts.selected1, 1)
+	testarossa.Len(t, ts.selected2, maxSelected/2)
 
 	for i := 1; i < maxSelected/2; i++ {
 		ts.Select(strconv.Itoa(maxSelected/2 + i))
 	}
-	testarossa.Equal(t, maxSelected/2, len(ts.selected1))
-	testarossa.Equal(t, maxSelected/2, len(ts.selected2))
+	testarossa.Len(t, ts.selected1, maxSelected/2)
+	testarossa.Len(t, ts.selected2, maxSelected/2)
 
 	ts.Select(strconv.Itoa(maxSelected))
-	testarossa.Equal(t, 1, len(ts.selected1))
-	testarossa.Equal(t, maxSelected/2, len(ts.selected2))
+	testarossa.Len(t, ts.selected1, 1)
+	testarossa.Len(t, ts.selected2, maxSelected/2)
 }
 
 func TestConnector_TracingBufferCapacityRollover(t *testing.T) {

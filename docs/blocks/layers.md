@@ -44,6 +44,8 @@ The [metrics](../structure/coreservices-metrics.md) microservice aggregates metr
 
 The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI documents of each and every microservices.
 
+The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs. Tokens enable the authentication of actors and the authorization of their requests based on a set of claims.
+
 ## Code Generator
 
 [Code generation](../blocks/codegen.md) facilitates rapid application development (RAD) by generating boilerplate and skeleton code from declarations in a [`service.yaml`](../tech/service-yaml.md) file. The developer needs only fill in the gaps and implement the business logic.
@@ -63,30 +65,6 @@ A [uniform code structure](../blocks/uniform-code.md) is a byproduct of using co
 ## Connector Construct
 
 The [`Connector`](../structure/connector.md) is the base class of all microservices and provides most of their core capabilities.
-
-### General
-
-[Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In `Microbus`, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
-
-The [distributed cache](../blocks/distrib-cache.md) is an in-memory cache that is shared among the replica peers of microservice.
-
-[Tickers](../blocks/tickers.md) are jobs that run on a recurring basis.
-
-Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pending requests, goroutines and jobs are drained before the microservice quits.
-
-Images, scripts, templates and any other [static resources](../blocks/embedded-res.md) are made available to each microservice by association of a file system (`FS`).
-
-A specially-named resource `strings.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
-
-### Observability
-
-[Structured logs](../blocks/logging.md) are sent to `stderr`.
-
-[Distributed tracing](../blocks/distrib-tracing.md) enables the visualization of the flow of function calls across microservices and processes. Tracing spans are automatically captured for each endpoint call.
-
-[Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are stored in Prometheus and visualized with Grafana dashboards.
-
-[Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered (Grafana), [traced](../blocks/distrib-tracing.md) (Jaeger) and propagated up the stack to the upstream microservice.
 
 ### Transport
 
@@ -108,7 +86,33 @@ A microservices transparently makes itself [discoverable](../blocks/discovery.md
 
 With [locality-aware routing](../blocks/locality-aware-routing.md) unicast requests are routed to the replica of the downstream microservice whose locality is nearest to the upstream's locality.
 
-A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is connected to the messaging bus and can send and receive messages. The bus validates the connection using regular pings. Explicit liveness checks are unnecessary. 
+A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is connected to the messaging bus and can send and receive messages. The bus validates the connection using regular pings. Explicit liveness checks are unnecessary.
+
+### Observability
+
+[Structured logs](../blocks/logging.md) are sent to `stderr`.
+
+[Distributed tracing](../blocks/distrib-tracing.md) enables the visualization of the flow of function calls across microservices and processes. Tracing spans are automatically captured for each endpoint call.
+
+[Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are stored in Prometheus and visualized with Grafana dashboards.
+
+[Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered (Grafana), [traced](../blocks/distrib-tracing.md) (Jaeger) and propagated up the stack to the upstream microservice.
+
+### General
+
+[Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In `Microbus`, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
+
+Microservices may stipulate that incoming requests be authenticated and authorized. Requests that do not satisfy the [authorization](../blocks/authorization.md) requirements are denied.
+
+[Tickers](../blocks/tickers.md) are jobs that run on a recurring basis.
+
+Images, scripts, templates and any other [static resources](../blocks/embedded-res.md) are made available to each microservice by association of a file system (`FS`).
+
+A specially-named resource `strings.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
+
+The [distributed cache](../blocks/distrib-cache.md) is an in-memory cache that is shared among the replica peers of microservice.
+
+Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pending requests, goroutines and jobs are drained before the microservice quits.
 
 ## OSS
 
@@ -123,5 +127,7 @@ A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is co
 [Grafana](https://grafana.com) is a dashboard that provides visibility into the metrics collected by Prometheus.
 
 [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
+
+[JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
 
 [Cascadia](https://github.com/andybalholm/cascadia) implements CSS selectors for use with parsed HTML trees produced by Go's `html` package. Used in unit and integration tests, it facilitates assertions against an HTML document. 

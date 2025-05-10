@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,11 +35,13 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
+	"github.com/microbus-io/fabric/utils"
 
 	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/microbus-io/fabric/coreservices/httpingress/intermediate"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
 )
 
 /*
@@ -112,7 +114,6 @@ func (svc *Service) Middleware() *middleware.Chain {
 	// Default middleware
 	if svc.middleware == nil {
 		m := &middleware.Chain{}
-
 		// Warning: renaming or removing middleware is a breaking change because the names are used as location markers
 		m.Append("ErrorPrinter", middleware.ErrorPrinter())
 		m.Append("BlockedPaths", middleware.BlockedPaths(func(path string) bool {
@@ -135,9 +136,15 @@ func (svc *Service) Middleware() *middleware.Chain {
 		}))
 		m.Append("XForward", middleware.XForwarded())
 		m.Append("InternalHeaders", middleware.InternalHeaders())
-		m.Append("RootPath", middleware.RewriteRootPath("/root"))
-		m.Append("Timeout", middleware.RequestTimeout(func() time.Duration {
+		m.Append("RootPath", middleware.RootPath("/root"))
+		m.Append("Timeout", middleware.Timeout(func() time.Duration {
 			return svc.TimeBudget()
+		}))
+		m.Append("Authorization", middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
+			if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok {
+				actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(validator).ValidateToken(ctx, token)
+			}
+			return actor, valid, errors.Trace(err)
 		}))
 		m.Append("Ready", middleware.NoOp()) // Marker
 		m.Append("CacheControl", middleware.CacheControl("no-store"))
@@ -371,13 +378,11 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	u, err := resolveInternalURL(r.URL, svc.portMappings)
 	if err != nil {
 		// Ignore requests to invalid internal hostnames, such as via https://example.com/%3Fterms=1 or https://example.com/.env
-		w.WriteHeader(http.StatusNotFound)
-		return nil
+		return errors.Newc(http.StatusNotFound, "")
 	}
-	// Disallow requests to internal port 888
+	// Disallow requests to control plane port 888
 	if u.Port() == "888" {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
+		return errors.Newc(http.StatusNotFound, "")
 	}
 	internalURL := u.String()
 

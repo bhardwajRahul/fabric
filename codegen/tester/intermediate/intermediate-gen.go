@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -81,6 +81,7 @@ type ToDo interface {
 	PointDistance(ctx context.Context, p1 testerapi.XYCoord, p2 *testerapi.XYCoord) (d float64, err error)
 	ShiftPoint(ctx context.Context, p *testerapi.XYCoord, x float64, y float64) (shifted *testerapi.XYCoord, err error)
 	LinesIntersection(ctx context.Context, l1 testerapi.XYLine, l2 *testerapi.XYLine) (b bool, err error)
+	EchoAnything(ctx context.Context, original any) (echoed any, err error)
 	SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) (httpResponseBody []int, httpStatusCode int, err error)
 	SumTwoIntegers(ctx context.Context, x int, y int) (sum int, httpStatusCode int, err error)
 	FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) (joined string, err error)
@@ -88,6 +89,7 @@ type ToDo interface {
 	UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) (joined string, err error)
 	PathArgumentsPriority(ctx context.Context, foo string) (echo string, err error)
 	WhatTimeIsIt(ctx context.Context) (t time.Time, err error)
+	AuthzRequired(ctx context.Context) (err error)
 	OnDiscoveredSink(ctx context.Context, p testerapi.XYCoord, n int) (q testerapi.XYCoord, m int, err error)
 	Echo(w http.ResponseWriter, r *http.Request) (err error)
 	MultiValueHeaders(w http.ResponseWriter, r *http.Request) (err error)
@@ -125,6 +127,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe(`GET`, `:443/point-distance`, svc.doPointDistance)
 	svc.Subscribe(`ANY`, `:443/shift-point`, svc.doShiftPoint)
 	svc.Subscribe(`ANY`, `:443/lines-intersection`, svc.doLinesIntersection)
+	svc.Subscribe(`ANY`, `:443/echo-anything`, svc.doEchoAnything)
 	svc.Subscribe(`ANY`, `:443/sub-array-range/{max}`, svc.doSubArrayRange)
 	svc.Subscribe(`ANY`, `:443/sum-two-integers`, svc.doSumTwoIntegers)
 	svc.Subscribe(`GET`, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`, svc.doFunctionPathArguments)
@@ -132,6 +135,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe(`GET`, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`, svc.doUnnamedFunctionPathArguments)
 	svc.Subscribe(`ANY`, `:443/path-arguments-priority/{foo}`, svc.doPathArgumentsPriority)
 	svc.Subscribe(`ANY`, `:443/what-time-is-it`, svc.doWhatTimeIsIt)
+	svc.Subscribe(`ANY`, `:443/authz-required`, svc.doAuthzRequired, sub.Actor(`roles=~"(a|b|c)" || scopes=~"r"`))
 
 	// Webs
 	svc.Subscribe(`ANY`, `:443/echo`, svc.impl.Echo)
@@ -227,6 +231,22 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			}{},
 			OutputArgs: struct {
 				B bool `json:"b"`
+			}{},
+		})
+	}
+	if r.URL.Port() == "443" || "443" == "0" {
+		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
+			Type:        `function`,
+			Name:        `EchoAnything`,
+			Method:      `ANY`,
+			Path:        `:443/echo-anything`,
+			Summary:     `EchoAnything(original any) (echoed any)`,
+			Description: `EchoAnything tests arguments of type any.`,
+			InputArgs: struct {
+				Original any `json:"original"`
+			}{},
+			OutputArgs: struct {
+				Echoed any `json:"echoed"`
 			}{},
 		})
 	}
@@ -347,11 +367,20 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/what-time-is-it`,
 			Summary:     `WhatTimeIsIt() (t time.Time)`,
 			Description: `WhatTimeIsIt tests shifting the clock.`,
-			InputArgs: struct {
-			}{},
 			OutputArgs: struct {
 				T time.Time `json:"t"`
 			}{},
+		})
+	}
+	if r.URL.Port() == "443" || "443" == "0" {
+		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
+			Type:        `function`,
+			Name:        `AuthzRequired`,
+			Method:      `ANY`,
+			Path:        `:443/authz-required`,
+			Summary:     `AuthzRequired()`,
+			Description: `AuthzRequired tests authorization.`,
+			Actor:       `roles=~"(a|b|c)" || scopes=~"r"`,
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -362,10 +391,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/echo`,
 			Summary:     `Echo()`,
 			Description: `Echo tests a typical web handler.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -376,10 +401,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/multi-value-headers`,
 			Summary:     `MultiValueHeaders()`,
 			Description: `MultiValueHeaders tests a passing in and returning headers with multiple values.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -390,10 +411,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/web-path-arguments/fixed/{named}/{}/{suffix+}`,
 			Summary:     `WebPathArguments()`,
 			Description: `WebPathArguments tests path arguments in web handlers.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -404,10 +421,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/unnamed-web-path-arguments/{}/foo/{}/bar/{+}`,
 			Summary:     `UnnamedWebPathArguments()`,
 			Description: `UnnamedWebPathArguments tests path arguments that are not named.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -418,10 +431,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/directory-server/{filename+}`,
 			Summary:     `DirectoryServer()`,
 			Description: `DirectoryServer tests service resources given a greedy path argument.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -432,10 +441,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 			Path:        `:443/hello`,
 			Summary:     `Hello()`,
 			Description: `Hello prints hello in the language best matching the request's Accept-Language header.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 
@@ -592,6 +597,43 @@ func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Requ
 		r.Context(),
 		i.L1,
 		i.L2,
+	)
+	if err != nil {
+		return err // No trace
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
+	err = encoder.Encode(o)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doEchoAnything handles marshaling for the EchoAnything function.
+func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) error {
+	var i testerapi.EchoAnythingIn
+	var o testerapi.EchoAnythingOut
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if strings.ContainsAny(`:443/echo-anything`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/echo-anything`), r.URL.Path)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	o.Echoed, err = svc.impl.EchoAnything(
+		r.Context(),
+		i.Original,
 	)
 	if err != nil {
 		return err // No trace
@@ -864,6 +906,42 @@ func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	o.T, err = svc.impl.WhatTimeIsIt(
+		r.Context(),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
+	err = encoder.Encode(o)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doAuthzRequired handles marshaling for the AuthzRequired function.
+func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request) error {
+	var i testerapi.AuthzRequiredIn
+	var o testerapi.AuthzRequiredOut
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if strings.ContainsAny(`:443/authz-required`, "{}") {
+		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/authz-required`), r.URL.Path)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = svc.impl.AuthzRequired(
 		r.Context(),
 	)
 	if err != nil {

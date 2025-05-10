@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -364,10 +364,26 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	}
 	httpReq = httpReq.WithContext(ctx)
 
+	// Check actor constraints
+	if s.Actor != "" {
+		if httpReq.Header.Get(frame.HeaderActor) == "" {
+			handlerErr = errors.Newc(http.StatusUnauthorized, "")
+		} else {
+			satisfied, err := frame.Of(httpReq).IfActor(s.Actor)
+			if err != nil {
+				handlerErr = errors.Trace(err)
+			} else if !satisfied {
+				handlerErr = errors.Newc(http.StatusForbidden, "")
+			}
+		}
+	}
+
 	// Call the handler
-	handlerErr = errors.CatchPanic(func() error {
-		return s.Handler.(HTTPHandler)(httpRecorder, httpReq)
-	})
+	if handlerErr == nil {
+		handlerErr = errors.CatchPanic(func() error {
+			return s.Handler.(HTTPHandler)(httpRecorder, httpReq)
+		})
+	}
 	cancel()
 
 	if handlerErr != nil {
@@ -396,12 +412,15 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 		// Prepare an error response instead
 		httpRecorder = httpx.NewResponseRecorder()
 		httpRecorder.Header().Set("Content-Type", "application/json")
-		body, err := json.MarshalIndent(handlerErr, "", "\t")
+		httpRecorder.WriteHeader(statusCode)
+		encoder := json.NewEncoder(httpRecorder)
+		if c.Deployment() == LOCAL {
+			encoder.SetIndent("", "  ")
+		}
+		err = encoder.Encode(handlerErr)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		httpRecorder.WriteHeader(statusCode)
-		httpRecorder.Write(body)
 	}
 
 	// Meter

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/microbus-io/fabric/cfg"
@@ -178,9 +179,17 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 		)
 		response, err := c.Request(
 			ctx,
-			pub.POST("https://configurator.core/values"),
+			pub.POST("https://configurator.core:888/values"),
 			pub.Body(req),
 		)
+		if err != nil && errors.StatusCode(err) == http.StatusNotFound {
+			// Backward compatibility
+			response, err = c.Request(
+				ctx,
+				pub.POST("https://configurator.core/values"),
+				pub.Body(req),
+			)
+		}
 		if err != nil {
 			return errors.Trace(err)
 		}

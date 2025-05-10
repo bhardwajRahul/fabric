@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 )
 
 /*
@@ -52,7 +53,7 @@ callback of the microservice and destroyed in the OnShutdown.
 	con := connector.New("www.example.com")
 	var myCache dlru.Cache
 	con.SetOnStartup(func(ctx context.Context) error {
-		myCache = dlru.NewCache(ctx, con, ":1234/cache", dlru.MaxMemoryMB(128))
+		myCache = dlru.NewCache(ctx, con, ":444/my-cache")
 	})
 	con.SetOnShutdown(func(ctx context.Context) error {
 		myCache.Close(ctx)
@@ -75,7 +76,8 @@ type Service interface {
 }
 
 // NewCache starts a new cache for the service at a given path.
-// For security reasons, it is advised to use a non-public port for the path, such as :444/token-cache .
+// For security reasons, it is advised to use a non-public port for the path, such as :444/my-cache .
+// By default, the cache size limit is set to 32MB and the TTL to 1 hour.
 func NewCache(ctx context.Context, svc Service, path string) (*Cache, error) {
 	basePath := httpx.JoinHostAndPath(svc.Hostname(), path)
 	basePath = strings.TrimSuffix(basePath, "/")
@@ -84,9 +86,7 @@ func NewCache(ctx context.Context, svc Service, path string) (*Cache, error) {
 		basePath: basePath,
 		svc:      svc,
 	}
-	c.localCache = lru.NewCache[string, []byte]()
-	c.localCache.SetMaxAge(time.Hour)
-	c.localCache.SetMaxWeight(32 * 1024 * 1024) // 32MB
+	c.localCache = lru.New[string, []byte](32<<20, time.Hour)
 
 	err := c.start(ctx)
 	if err != nil {
@@ -131,7 +131,7 @@ func (c *Cache) SetMaxMemory(bytes int) error {
 
 // SetMaxMemoryMB limits the memory used by the cache.
 func (c *Cache) SetMaxMemoryMB(megaBytes int) error {
-	err := c.localCache.SetMaxWeight(megaBytes * 1024 * 1024)
+	err := c.localCache.SetMaxWeight(megaBytes << 20)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -654,7 +654,7 @@ func (c *Cache) Weight(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		wt, err := strconv.Atoi(string(body))
+		wt, err := strconv.Atoi(utils.UnsafeBytesToString(body))
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -678,7 +678,7 @@ func (c *Cache) Len(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		len, err := strconv.Atoi(string(body))
+		len, err := strconv.Atoi(utils.UnsafeBytesToString(body))
 		if err != nil {
 			return 0, errors.Trace(err)
 		}

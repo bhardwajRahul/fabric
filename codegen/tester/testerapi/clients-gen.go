@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/sub"
 )
 
 var (
@@ -51,7 +50,6 @@ var (
 	_ *errors.TracedError
 	_ *httpx.BodyReader
 	_ pub.Option
-	_ sub.Option
 )
 
 // Hostname is the default hostname of the microservice: codegen.test.
@@ -63,6 +61,7 @@ var (
 	URLOfPointDistance = httpx.JoinHostAndPath(Hostname, `:443/point-distance`)
 	URLOfShiftPoint = httpx.JoinHostAndPath(Hostname, `:443/shift-point`)
 	URLOfLinesIntersection = httpx.JoinHostAndPath(Hostname, `:443/lines-intersection`)
+	URLOfEchoAnything = httpx.JoinHostAndPath(Hostname, `:443/echo-anything`)
 	URLOfSubArrayRange = httpx.JoinHostAndPath(Hostname, `:443/sub-array-range/{max}`)
 	URLOfSumTwoIntegers = httpx.JoinHostAndPath(Hostname, `:443/sum-two-integers`)
 	URLOfFunctionPathArguments = httpx.JoinHostAndPath(Hostname, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`)
@@ -70,6 +69,7 @@ var (
 	URLOfUnnamedFunctionPathArguments = httpx.JoinHostAndPath(Hostname, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`)
 	URLOfPathArgumentsPriority = httpx.JoinHostAndPath(Hostname, `:443/path-arguments-priority/{foo}`)
 	URLOfWhatTimeIsIt = httpx.JoinHostAndPath(Hostname, `:443/what-time-is-it`)
+	URLOfAuthzRequired = httpx.JoinHostAndPath(Hostname, `:443/authz-required`)
 	URLOfEcho = httpx.JoinHostAndPath(Hostname, `:443/echo`)
 	URLOfMultiValueHeaders = httpx.JoinHostAndPath(Hostname, `:443/multi-value-headers`)
 	URLOfWebPathArguments = httpx.JoinHostAndPath(Hostname, `:443/web-path-arguments/fixed/{named}/{}/{suffix+}`)
@@ -1377,6 +1377,105 @@ func (_c *Client) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) 
 	return
 }
 
+// EchoAnythingIn are the input arguments of EchoAnything.
+type EchoAnythingIn struct {
+	Original any `json:"original"`
+}
+
+// EchoAnythingOut are the return values of EchoAnything.
+type EchoAnythingOut struct {
+	Echoed any `json:"echoed"`
+}
+
+// EchoAnythingResponse is the response to EchoAnything.
+type EchoAnythingResponse struct {
+	data EchoAnythingOut
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *EchoAnythingResponse) Get() (echoed any, err error) {
+	echoed = _out.data.Echoed
+	err = _out.err
+	return
+}
+
+/*
+EchoAnything tests arguments of type any.
+*/
+func (_c *MulticastClient) EchoAnything(ctx context.Context, original any) <-chan *EchoAnythingResponse {
+	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`original`: original,
+	})
+	_in := EchoAnythingIn{
+		original,
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+
+	_res := make(chan *EchoAnythingResponse, cap(_ch))
+	for _i := range _ch {
+		var _r EchoAnythingResponse
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+EchoAnything tests arguments of type any.
+*/
+func (_c *Client) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
+	var _err error
+	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+		`original`: original,
+	})
+	_in := EchoAnythingIn{
+		original,
+	}
+	var _query url.Values
+	_body := _in
+	_httpRes, _err := _c.svc.Request(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+	if _err != nil {
+		err = _err // No trace
+		return
+	}
+	var _out EchoAnythingOut
+	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
+	if _err != nil {
+		err = errors.Trace(_err)
+		return
+	}
+	echoed = _out.Echoed
+	return
+}
+
 // SubArrayRangeIn are the input arguments of SubArrayRange.
 type SubArrayRangeIn struct {
 	HTTPRequestBody []int `json:"-"`
@@ -2159,6 +2258,97 @@ func (_c *Client) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
 		return
 	}
 	t = _out.T
+	return
+}
+
+// AuthzRequiredIn are the input arguments of AuthzRequired.
+type AuthzRequiredIn struct {
+}
+
+// AuthzRequiredOut are the return values of AuthzRequired.
+type AuthzRequiredOut struct {
+}
+
+// AuthzRequiredResponse is the response to AuthzRequired.
+type AuthzRequiredResponse struct {
+	data AuthzRequiredOut
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *AuthzRequiredResponse) Get() (err error) {
+	err = _out.err
+	return
+}
+
+/*
+AuthzRequired tests authorization.
+*/
+func (_c *MulticastClient) AuthzRequired(ctx context.Context) <-chan *AuthzRequiredResponse {
+	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+	})
+	_in := AuthzRequiredIn{
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+
+	_res := make(chan *AuthzRequiredResponse, cap(_ch))
+	for _i := range _ch {
+		var _r AuthzRequiredResponse
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+AuthzRequired tests authorization.
+*/
+func (_c *Client) AuthzRequired(ctx context.Context) (err error) {
+	var _err error
+	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
+	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
+	})
+	_in := AuthzRequiredIn{
+	}
+	var _query url.Values
+	_body := _in
+	_httpRes, _err := _c.svc.Request(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+	)
+	if _err != nil {
+		err = _err // No trace
+		return
+	}
+	var _out AuthzRequiredOut
+	_err = json.NewDecoder(_httpRes.Body).Decode(&_out)
+	if _err != nil {
+		err = errors.Trace(_err)
+		return
+	}
 	return
 }
 

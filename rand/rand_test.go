@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ func TestRand_AlphaNum64(t *testing.T) {
 	re := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an64 := AlphaNum64(i)
-		testarossa.StrLen(t, an64, i)
+		testarossa.Len(t, an64, i)
 		match := re.MatchString(an64)
 		testarossa.True(t, match)
 	}
@@ -48,7 +48,7 @@ func TestRand_AlphaNum32(t *testing.T) {
 	re := regexp.MustCompile(`^[A-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an32 := AlphaNum32(i)
-		testarossa.StrLen(t, an32, i)
+		testarossa.Len(t, an32, i)
 		match := re.MatchString(an32)
 		testarossa.True(t, match)
 	}

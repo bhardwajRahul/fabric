@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,29 +77,47 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	errOutput := make(chan *pub.Response, 1)
 	defer close(errOutput)
 
-	// Build the request
-	req, err := pub.NewRequest(options...)
-	if err != nil {
-		errOutput <- pub.NewErrorResponse(errors.Trace(err))
-		return errOutput
-	}
-
 	// Check if there's enough time budget
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkHop {
-		err = errors.Newc(http.StatusRequestTimeout, "timeout")
+		err := errors.Newc(http.StatusRequestTimeout, "timeout")
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
 
 	// Limit number of hops
 	inboundFrame := frame.Of(ctx)
-	outboundFrame := frame.Of(req.Header)
 	depth := inboundFrame.CallDepth()
 	if depth >= c.maxCallDepth {
-		err = errors.Newc(http.StatusLoopDetected, "call depth overflow")
+		err := errors.Newc(http.StatusLoopDetected, "call depth overflow")
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
+
+	// Build the request
+	req, err := pub.NewRequest()
+	if err != nil {
+		errOutput <- pub.NewErrorResponse(errors.Trace(err))
+		return errOutput
+	}
+	outboundFrame := frame.Of(req.Header)
+
+	// Copy X-Forwarded headers (set by ingress proxy), baggage, clock shift, actor, and Accept-Language headers
+	for k, vv := range inboundFrame.Header() {
+		if strings.HasPrefix(k, "X-Forwarded-") ||
+			strings.HasPrefix(k, frame.HeaderBaggagePrefix) ||
+			k == "Accept-Language" ||
+			k == frame.HeaderClockShift ||
+			k == frame.HeaderActor {
+			for _, v := range vv {
+				outboundFrame.Header().Add(k, v)
+			}
+		}
+	}
+
+	// Options can override anything above
+	req.Apply(options...)
+
+	// Set depth
 	outboundFrame.SetCallDepth(depth + 1)
 
 	// Set return address
@@ -108,20 +125,6 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	outboundFrame.SetFromID(c.id)
 	outboundFrame.SetFromVersion(c.version)
 	outboundFrame.SetOpCode(frame.OpCodeRequest)
-
-	// Copy X-Forwarded headers (set by ingress proxy), baggage, clock shift, and Accept-Language headers
-	for k, vv := range inboundFrame.Header() {
-		if strings.HasPrefix(k, "X-Forwarded-") ||
-			strings.HasPrefix(k, frame.HeaderBaggagePrefix) ||
-			k == "Accept-Language" ||
-			k == frame.HeaderClockShift {
-			if len(outboundFrame.Header()[k]) == 0 {
-				for _, v := range vv {
-					outboundFrame.Header().Add(k, v)
-				}
-			}
-		}
-	}
 
 	// OpenTelemetry: pass the span in headers
 	carrier := make(propagation.HeaderCarrier)
@@ -420,11 +423,8 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			if opCode == frame.OpCodeError {
 				// Reconstitute the error
 				var reconstitutedError *errors.TracedError
-				body, err := io.ReadAll(response.Body)
-				if err == nil {
-					json.Unmarshal(body, &reconstitutedError)
-				}
-				if reconstitutedError == nil {
+				err = json.NewDecoder(response.Body).Decode(&reconstitutedError)
+				if err != nil || reconstitutedError == nil {
 					err = errors.New("unparsable error response")
 				} else {
 					err = errors.Convert(reconstitutedError)

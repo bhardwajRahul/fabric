@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,8 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/microbus-io/testarossa"
 
+	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
 
@@ -126,6 +128,9 @@ func TestTester_StringCut(t *testing.T) {
 	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|s|type"))
 	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|sep|type"))
 	// Output argument
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|2XX"))
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|4XX"))
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|5XX"))
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
 	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
@@ -189,6 +194,62 @@ func TestTester_PointDistance(t *testing.T) {
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
 	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
 	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|d|type"))
+}
+
+func TestTester_EchoAnything(t *testing.T) {
+	t.Parallel()
+	/*
+		ctx := Context()
+		EchoAnything(t, ctx, x).
+			Expect(y)
+	*/
+
+	ctx := Context()
+	// --- Test cases ---
+	EchoAnything(t, ctx, "string").
+		Expect("string")
+	EchoAnything(t, ctx, 5.0).
+		Expect(5.0)
+	EchoAnything(t, ctx, nil).
+		Expect(nil)
+	EchoAnything(t, ctx, testerapi.XYCoord{X: 5, Y: 6}).
+		Expect(testerapi.XYCoord{X: 5, Y: 6})
+
+	// --- Requests ---
+	res, err := Svc.Request(ctx, pub.POST("https://"+Hostname+"/echo-anything"), pub.Body(struct {
+		Original testerapi.XYCoord `json:"original"`
+	}{
+		testerapi.XYCoord{X: 1, Y: 2},
+	}))
+	if testarossa.NoError(t, err) {
+		var out struct {
+			Echoed testerapi.XYCoord `json:"echoed"`
+		}
+		json.NewDecoder(res.Body).Decode(&out)
+		testarossa.Equal(t, 1.0, out.Echoed.X)
+		testarossa.Equal(t, 2.0, out.Echoed.Y)
+	}
+	res, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/echo-anything?original=hello"))
+	if testarossa.NoError(t, err) {
+		var out struct {
+			Echoed string `json:"echoed"`
+		}
+		json.NewDecoder(res.Body).Decode(&out)
+		testarossa.Equal(t, "hello", out.Echoed)
+	}
+
+	// --- OpenAPI ---
+	basePath := "paths|/" + Hostname + ":443/echo-anything|post|"
+	// Input argument should exist but have no type
+	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
+	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
+	testarossa.NotNil(t, openAPIValue(schemaRef+"properties|original"))
+	testarossa.Nil(t, openAPIValue(schemaRef+"properties|original|type"))
+	// Output argument should exist but have no type
+	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
+	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
+	testarossa.NotNil(t, openAPIValue(schemaRef+"properties|echoed"))
+	testarossa.Nil(t, openAPIValue(schemaRef+"properties|echoed|type"))
 }
 
 func TestTester_ShiftPoint(t *testing.T) {
@@ -281,7 +342,7 @@ func TestTester_SubArrayRange(t *testing.T) {
 	testarossa.Equal(t, "max", openAPIValue(basePath+"parameters|1|name"))
 	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
 	// httpRequestBody should not be listed as an argument
-	testarossa.Equal(t, 2, len(openAPIValue(basePath+"parameters").([]any)))
+	testarossa.Len(t, openAPIValue(basePath+"parameters").([]any), 2)
 	// --- Requests --- schema is an array
 	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
@@ -586,6 +647,12 @@ func TestTester_Echo(t *testing.T) {
 		testarossa.Contains(t, string(body), "Content-Type: text/plain")
 		testarossa.Contains(t, string(body), "HEAVY PAYLOAD")
 	}
+
+	// --- OpenAPI ---
+	basePath := "paths|/" + Hostname + ":443/echo|get|"
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|2XX"))
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|4XX"))
+	testarossa.NotNil(t, openAPIValue(basePath+"responses|5XX"))
 }
 
 func TestTester_MultiValueHeaders(t *testing.T) {
@@ -605,12 +672,12 @@ func TestTester_MultiValueHeaders(t *testing.T) {
 	httpReq.Header.Add("Multi-In", "In1")
 	httpReq.Header.Add("Multi-In", "In2")
 	res, _ := MultiValueHeaders(t, httpReq).NoError().Get()
-	testarossa.SliceLen(t, res.Header["Multi-Out"], 2)
+	testarossa.Len(t, res.Header["Multi-Out"], 2)
 	httpReq, _ = http.NewRequestWithContext(ctx, "POST", "", strings.NewReader("Payload"))
 	httpReq.Header.Add("Multi-In", "In1")
 	httpReq.Header.Add("Multi-In", "In2")
 	res, _ = MultiValueHeaders(t, httpReq).NoError().Get()
-	testarossa.SliceLen(t, res.Header["Multi-Out"], 2)
+	testarossa.Len(t, res.Header["Multi-Out"], 2)
 }
 
 func TestTester_PathArgumentsPriority(t *testing.T) {
@@ -1046,4 +1113,41 @@ func TestTester_WhatTimeIsIt(t *testing.T) {
 	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
 	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|t|type"))
 	testarossa.Equal(t, "date-time", openAPIValue(schemaRef+"properties|t|format"))
+}
+
+func TestTester_AuthzRequired(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context()
+
+	// Without auth token
+	err := testerapi.NewClient(Svc).AuthzRequired(ctx)
+	if testarossa.Error(t, err) {
+		testarossa.Equal(t, http.StatusUnauthorized, errors.StatusCode(err))
+	}
+
+	// With insufficient role
+	frame.Of(ctx).SetActor(jwt.MapClaims{"roles": "d"})
+	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
+	if testarossa.Error(t, err) {
+		testarossa.Equal(t, http.StatusForbidden, errors.StatusCode(err))
+	}
+
+	// With sufficient roles
+	frame.Of(ctx).SetActor(jwt.MapClaims{"roles": "ac"})
+	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
+	testarossa.NoError(t, err)
+
+	frame.Of(ctx).SetActor(jwt.MapClaims{"scopes": "r"})
+	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
+	testarossa.NoError(t, err)
+
+	// --- OpenAPI ---
+	basePath := "paths|/" + Hostname + ":443/authz-required|post|"
+	testarossa.Equal(t, []any{}, openAPIValue(basePath+"security|0|http_bearer_jwt"))
+	testarossa.Contains(t, openAPIValue(basePath+"responses|403|description").(string), `roles=~"(a|b|c)" || scopes=~"r"`)
+	securitySchemePath := "components|securitySchemes|http_bearer_jwt|"
+	testarossa.Equal(t, "http", openAPIValue(securitySchemePath+"type"))
+	testarossa.Equal(t, "bearer", openAPIValue(securitySchemePath+"scheme"))
+	testarossa.Equal(t, "JWT", openAPIValue(securitySchemePath+"bearerFormat"))
 }

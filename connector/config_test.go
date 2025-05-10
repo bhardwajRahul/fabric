@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ func TestConnector_SetConfig(t *testing.T) {
 	mockCfg := New("configurator.core")
 	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("{}"))
 		return nil
@@ -83,7 +83,7 @@ func TestConnector_FetchConfig(t *testing.T) {
 	mockCfg := New("configurator.core")
 	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"values":{"foo":"baz","int":"$$$"}}`))
 		return nil
@@ -121,8 +121,8 @@ func TestConnector_FetchConfig(t *testing.T) {
 	testarossa.Equal(t, "5", con.Config("int"), "Invalid value should not be accepted")
 	testarossa.False(t, callbackCalled)
 
-	mockCfg.Unsubscribe("POST", "/values")
-	mockCfg.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	mockCfg.Unsubscribe("POST", ":888/values")
+	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"values":{"foo":"bam","int":"8"}}`))
 		return nil
@@ -144,7 +144,7 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	// Mock a config service
 	mockCfg := New("configurator.core")
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", "/values", func(w http.ResponseWriter, r *http.Request) error {
+	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"values":{"foo":"baz"}}`))
 		return nil

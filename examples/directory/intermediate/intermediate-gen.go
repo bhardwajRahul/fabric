@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -183,8 +183,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			InputArgs: struct {
 				Key directoryapi.PersonKey `json:"key"`
 			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 	if r.URL.Port() == "443" || "443" == "0" {
@@ -198,8 +196,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			InputArgs: struct {
 				Key directoryapi.PersonKey `json:"key"`
 				HTTPRequestBody *directoryapi.Person `json:"httpRequestBody"`
-			}{},
-			OutputArgs: struct {
 			}{},
 		})
 	}
@@ -227,8 +223,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/persons`,
 			Summary:     `List() (httpResponseBody []PersonKey)`,
 			Description: `List returns the keys of all the persons in the directory.`,
-			InputArgs: struct {
-			}{},
 			OutputArgs: struct {
 				HTTPResponseBody []directoryapi.PersonKey `json:"httpResponseBody"`
 			}{},
@@ -242,10 +236,6 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Path:        `:443/web-ui`,
 			Summary:     `WebUI()`,
 			Description: `WebUI provides a form for making web requests to the CRUD endpoints.`,
-			InputArgs: struct {
-			}{},
-			OutputArgs: struct {
-			}{},
 		})
 	}
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2024 Microbus LLC and various contributors
+# Copyright (c) 2023-2025 Microbus LLC and various contributors
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ configs:
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :443
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -72,17 +72,30 @@ configs:
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 functions:
   - signature: Values(names []string) (values map[string]string)
     description: Values returns the values associated with the specified config property names for the caller microservice.
+    path: :888/...
   - signature: Refresh()
     description: |-
       Refresh tells all microservices to contact the configurator and refresh their configs.
       An error is returned if any of the values sent to the microservices fails validation.
-  - signature: Sync(timestamp time.Time, values map[string]map[string]string)
-    description: Sync is used to synchronize values among replica peers of the configurator.
+    path: :444/...
+  - signature: SyncRepo(timestamp time.Time, values map[string]map[string]string)
+    description: SyncRepo is used to synchronize values among replica peers of the configurator.
+    path: :888/...
     queue: none
+  - signature: Values443(names []string) (values map[string]string)
+    description: Values443 is deprecated.
+    path: :443/values 
+  - signature: Refresh443()
+    description: Refresh443 is deprecated.
+    path: :443/refresh 
+  - signature: Sync443(timestamp time.Time, values map[string]map[string]string)
+    description: Sync443 is deprecated.
+    path: :443/sync 
 
 # Event sources
 #
@@ -94,7 +107,7 @@ functions:
 # description - Documentation
 # method - "GET", "POST", etc. (defaults to "POST")
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :417
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -122,6 +135,7 @@ events:
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 sinks:
   # - signature:
   #   description:
@@ -134,7 +148,7 @@ sinks:
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
-#   (empty) - The function name in kebab-case
+#   (empty) - The function name in kebab-case (default)
 #   /path - Default port :443
 #   /directory/{filename+} - Greedy path argument
 #   /article/{aid}/comment/{cid} - Path arguments
@@ -148,6 +162,7 @@ sinks:
 # queue - The subscription queue
 #   default - Load balanced (default)
 #   none - Pervasive
+# actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 webs:
   # - signature:

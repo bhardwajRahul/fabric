@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2024 Microbus LLC and various contributors
+Copyright (c) 2023-2025 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -157,7 +157,7 @@ func TestConnector_StandardMetrics(t *testing.T) {
 	t.Parallel()
 
 	con := New("standard.metrics.connector")
-	testarossa.Equal(t, 11, len(con.metricDefs))
+	testarossa.Len(t, con.metricDefs, 11)
 	testarossa.NotNil(t, con.metricDefs["microbus_callback_duration_seconds"])
 	testarossa.NotNil(t, con.metricDefs["microbus_response_duration_seconds"])
 	testarossa.NotNil(t, con.metricDefs["microbus_response_size_bytes"])

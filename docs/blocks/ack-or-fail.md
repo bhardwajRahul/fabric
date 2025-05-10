@@ -4,7 +4,7 @@ When the connector of the downstream microservice receives a request, it sends a
 
 Conversely, if an ack is not received within a short ack timeout (250ms by default), the connector of the upstream microservice fails fast under the assumption that no downstream microservice is available to process the request.
 
-The ack is an HTTP response that is identified by an `Ack` op code and status code `100`:
+The ack is an HTTP response that is identified by an `Ack` op code and status code `100 Continue`:
 
 ```http
 HTTP/1.1 100 Continue
