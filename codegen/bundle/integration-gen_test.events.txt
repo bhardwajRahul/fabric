@@ -18,7 +18,7 @@ type {{ .Name }}TestCase struct {
 }
 
 // Expect asserts that the event sink was triggered with an exact match of its input arguments.
-func (_tc *{{ .Name }}TestCase) Expect({{ range $i, $e := .Signature.InputArgs }}{{ if $i }}, {{ end }}{{ .Name }} {{ .Type }}{{ end }}) *{{ .Name }}TestCase {
+func (_tc *{{ .Name }}TestCase) Expect({{ .In "name type" }}) *{{ .Name }}TestCase {
 	_tc._asserters = append(_tc._asserters, func() {
 		if testarossa.True(_tc._t, _tc._triggered, "Event sink was not triggered") {
 			{{- range .Signature.InputArgs }}
@@ -33,7 +33,7 @@ func (_tc *{{ .Name }}TestCase) Expect({{ range $i, $e := .Signature.InputArgs }
 }
 
 // Assert asserts that the event sink was triggered with a custom function to assert its input arguments.
-func (_tc *{{ .Name }}TestCase) Assert(asserter func({{ $t }} *testing.T, {{ .In }})) *{{ .Name }}TestCase {
+func (_tc *{{ .Name }}TestCase) Assert(asserter func({{ $t }} *testing.T, ctx context.Context {{- .In ", name type" }})) *{{ .Name }}TestCase {
 	_tc._asserters = append(_tc._asserters, func() {
 		if testarossa.True(_tc._t, _tc._triggered, "Event sink was not triggered") {
 			asserter(_tc._t, _tc.ctx {{- range .Signature.InputArgs }}, _tc.{{ .Name }}{{ end }})
@@ -43,7 +43,7 @@ func (_tc *{{ .Name }}TestCase) Assert(asserter func({{ $t }} *testing.T, {{ .In
 }
 
 // Return sets the values to return from the event sink to the event source.
-func (_tc *{{ .Name }}TestCase) Return({{ .Out }}) *{{ .Name }}TestCase {
+func (_tc *{{ .Name }}TestCase) Return({{ .Out "name type," -}} err error) *{{ .Name }}TestCase {
 	{{- range .Signature.OutputArgs }}
 	_tc.{{ .Name }} = {{ .Name }}
 	{{- end }}
@@ -74,7 +74,7 @@ func {{ .Name }}(t *testing.T) *{{ .Name }}TestCase {
 		_done: make(chan bool),
 	}
 	con := connector.New("{{ .Name }}." + rand.AlphaNum64(12))
-	{{ $pkgSuffix }}api.NewHook(con).{{ .Name }}(func({{ .In }}) ({{ .Out }}) {
+	{{ $pkgSuffix }}api.NewHook(con).{{ .Name }}(func(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error) {
 		{{ $pkgSuffix }}api.NewHook(con).{{ .Name }}(nil)
 		_tc.ctx = ctx
 		{{- range .Signature.InputArgs }}

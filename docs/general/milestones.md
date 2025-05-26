@@ -255,3 +255,10 @@ Note: These milestones are maintained in separate branches in order to demonstra
 * Moved configurator's endpoints to port `:888`
 * Unsafe `string` to `[]byte` conversions
 * Updated dependencies to latest versions
+
+[Milestone 32](https://github.com/microbus-io/fabric/tree/milestone/32):
+
+* Push metrics via OpenTelemetry
+* Grafana LGTM replaces Jaeger and Prometheus
+* Callbacks for observing metrics just in time
+* Revamped Grafana dashboards

@@ -50,7 +50,10 @@ func (c *Connector) LogDebug(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Debug(msg, args...)
-	_ = c.IncrementMetric("microbus_log_messages_total", 1, msg, "DEBUG")
+	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+		"message", msg,
+		"severity", "DEBUG",
+	)
 }
 
 /*
@@ -76,7 +79,10 @@ func (c *Connector) LogInfo(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Info(msg, args...)
-	_ = c.IncrementMetric("microbus_log_messages_total", 1, msg, "INFO")
+	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+		"message", msg,
+		"severity", "INFO",
+	)
 }
 
 /*
@@ -102,7 +108,10 @@ func (c *Connector) LogWarn(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Warn(msg, args...)
-	_ = c.IncrementMetric("microbus_log_messages_total", 1, msg, "WARN")
+	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+		"message", msg,
+		"severity", "WARN",
+	)
 
 	if c.deployment == LOCAL || c.deployment == TESTING {
 		for _, f := range args {
@@ -139,7 +148,10 @@ func (c *Connector) LogError(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Error(msg, args...)
-	_ = c.IncrementMetric("microbus_log_messages_total", 1, msg, "ERROR")
+	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+		"message", msg,
+		"severity", "ERROR",
+	)
 
 	if c.deployment == LOCAL || c.deployment == TESTING {
 		for _, f := range args {
@@ -184,9 +196,11 @@ func (c *Connector) initLogger() (err error) {
 	}
 
 	c.logger = slog.New(handler).With(
-		"host", c.Hostname(),
-		"id", c.ID(),
+		"plane", c.Plane(),
+		"service", c.Hostname(),
 		"ver", c.Version(),
+		"id", c.ID(),
+		"deployment", c.Deployment(),
 	)
 	return nil
 }

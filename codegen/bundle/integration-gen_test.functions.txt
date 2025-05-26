@@ -11,7 +11,7 @@ type {{ .Name }}TestCase struct {
 }
 
 // Expect asserts no error and exact return values.
-func (_tc *{{ .Name }}TestCase) Expect({{ range $i, $e := .Signature.OutputArgs }}{{ if $i }}, {{ end }}{{ .Name }} {{ .Type }}{{ end }}) *{{ .Name }}TestCase {
+func (_tc *{{ .Name }}TestCase) Expect({{ .Out "name type" }}) *{{ .Name }}TestCase {
 	{{- if .Signature.OutputArgs }}
 	if testarossa.NoError(_tc._t, _tc.err) {
 		{{- range .Signature.OutputArgs }}
@@ -56,22 +56,22 @@ func (tc *{{ .Name }}TestCase) CompletedIn(threshold time.Duration) *{{ .Name }}
 }
 
 // Assert asserts using a provided function.
-func (tc *{{ .Name }}TestCase) Assert(asserter func({{ $t }} *testing.T, {{ .Out }})) *{{ .Name }}TestCase {
+func (tc *{{ .Name }}TestCase) Assert(asserter func({{ $t }} *testing.T, {{ .Out "name type," -}} err error)) *{{ .Name }}TestCase {
 	asserter(tc._t, {{ range .Signature.OutputArgs }}tc.{{ .Name }}, {{ end }}tc.err)
 	return tc
 }
 
 // Get returns the result of executing {{ .Name }}.
-func (tc *{{ .Name }}TestCase) Get() ({{ .Out }}) {
+func (tc *{{ .Name }}TestCase) Get() ({{ .Out "name type," -}} err error) {
 	return {{ range .Signature.OutputArgs }}tc.{{ .Name }}, {{ end }}tc.err
 }
 
 // {{ .Name }} executes the function and returns a corresponding test case.
-func {{ .Name }}({{ $t }} *testing.T, {{ .In }}) *{{ .Name }}TestCase {
+func {{ .Name }}({{ $t }} *testing.T, ctx context.Context {{- .In ", name type" }}) *{{ .Name }}TestCase {
 	tc := &{{ .Name }}TestCase{_t: {{ $t }}}
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
-		{{ range .Signature.OutputArgs }}tc.{{ .Name }}, {{ end }}tc.err = Svc.{{ .Name }}(ctx {{- range .Signature.InputArgs }}, {{ .Name }}{{ end }})
+		{{ range .Signature.OutputArgs }}tc.{{ .Name }}, {{ end }}tc.err = Svc.{{ .Name }}(ctx {{- .In ", name" }})
 		return tc.err
 	})
 	tc._dur = time.Since(t0)

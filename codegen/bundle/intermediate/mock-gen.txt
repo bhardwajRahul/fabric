@@ -25,7 +25,7 @@ var (
 type Mock struct {
 	*Intermediate
 	{{- range (JoinHandlers .Functions .Sinks)}}
-	mock{{ .Name }} func({{ .In }}) ({{ .Out }})
+	mock{{ .Name }} func(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error)
 	{{- end}}
 	{{- range .Webs}}
 	mock{{ .Name }} func(w http.ResponseWriter, r *http.Request) (err error)
@@ -55,18 +55,18 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 {{- range (JoinHandlers .Functions .Sinks) }}
 
 // Mock{{ .Name }} sets up a mock handler for the {{ .Name }} endpoint.
-func (svc *Mock) Mock{{ .Name }}(handler func({{ .In }}) ({{ .Out }})) *Mock {
+func (svc *Mock) Mock{{ .Name }}(handler func(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error)) *Mock {
 	svc.mock{{ .Name }} = handler
 	return svc
 }
 
 // {{ .Name }} runs the mock handler set by Mock{{ .Name }}.
-func (svc *Mock) {{ .Name }}({{ .In }}) ({{ .Out }}) {
+func (svc *Mock) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error) {
 	if svc.mock{{ .Name }} == nil {
 		err = errors.New("mocked endpoint '{{ .Name }}' not implemented")
 		return
 	}
-	return svc.mock{{ .Name }}(ctx {{- range .Signature.InputArgs }}, {{ .Name }}{{ end }})
+	return svc.mock{{ .Name }}(ctx {{- .In ", name" }})
 }
 {{- end}}
 
@@ -103,3 +103,11 @@ func (svc *Mock) {{ .Name }}(ctx context.Context) (err error) {
 	return nil
 }
 {{- end}}
+
+{{- range .Metrics}}{{ if .Callback}}
+
+// OnObserve{{ .Name }} is a no op.
+func (svc *Mock) OnObserve{{ .Name }}(ctx context.Context) (err error) {
+	return nil
+}
+{{- end}}{{- end}}

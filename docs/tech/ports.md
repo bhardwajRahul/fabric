@@ -14,7 +14,7 @@ Similarly, the [SMTP ingress proxy](../structure/coreservices-smtpingress.md) li
 
 All microservices connect to the NATS messaging bus, by default on port `:4222`. Microservice exchange messages with other microservice over this bi-directional multiplexed connection.
 
-The UI of [Prometheus](https://prometheus.io) by default runs on port `:9090`, [Grafana](https://grafana.com/)'s on port `:3000` and [Jaeger](https://www.jaegertracing.io)'s on port `:16686`.
+Telemetry is pushed to via OpenTelemetry on ports `:4317` (gRPC) or `:4318` (HTTP) to [Grafana](https://grafana.com/). The UI of Grafana is exposed on port `:3000` by default.
 
 ### Emulated Ports
 

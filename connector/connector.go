@@ -40,6 +40,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -71,10 +73,13 @@ type Connector struct {
 	initErr         error
 	startupTime     time.Time
 
-	metricsRegistry *prometheus.Registry
-	metricsHandler  http.Handler
-	metricDefs      map[string]*metric
-	metricLock      sync.RWMutex
+	metricsRegistry   *prometheus.Registry
+	metricsHandler    http.Handler
+	metricLock        sync.RWMutex
+	meterProvider     *sdkmetric.MeterProvider
+	meter             metric.Meter
+	metricInstruments map[string]*metricInstrument
+	onObserveMetrics  []service.ObserveMetricsHandler
 
 	traceProvider  *sdktrace.TracerProvider
 	tracer         trace.Tracer
@@ -119,22 +124,21 @@ type Connector struct {
 // NewConnector constructs a new Connector.
 func NewConnector() *Connector {
 	c := &Connector{
-		id:               strings.ToLower(rand.AlphaNum32(10)),
-		configs:          map[string]*cfg.Config{},
-		networkHop:       250 * time.Millisecond,
-		ackTimeout:       250 * time.Millisecond,
-		maxCallDepth:     64,
-		subs:             map[string]*sub.Subscription{},
-		tickers:          map[string]*tickerCallback{},
-		lifetimeCtx:      context.Background(),
-		knownResponders:  lru.New[string, map[string]bool](64<<10, 24*time.Hour), // 64KB
-		postRequestData:  lru.New[string, string](256<<10, time.Minute),          // 256KB
-		localResponder:   lru.New[string, string](64<<10, 24*time.Hour),          // 64KB
-		multicastChanCap: 32,
-		metricDefs:       map[string]*metric{},
+		id:                strings.ToLower(rand.AlphaNum32(10)),
+		configs:           map[string]*cfg.Config{},
+		networkHop:        250 * time.Millisecond,
+		ackTimeout:        250 * time.Millisecond,
+		maxCallDepth:      64,
+		subs:              map[string]*sub.Subscription{},
+		tickers:           map[string]*tickerCallback{},
+		lifetimeCtx:       context.Background(),
+		knownResponders:   lru.New[string, map[string]bool](64<<10, 24*time.Hour), // 64KB
+		postRequestData:   lru.New[string, string](256<<10, time.Minute),          // 256KB
+		localResponder:    lru.New[string, string](64<<10, 24*time.Hour),          // 64KB
+		multicastChanCap:  32,
+		metricInstruments: map[string]*metricInstrument{},
 	}
 	c.SetResFSDir(".")
-	c.newMetricsRegistry()
 	return c
 }
 

@@ -45,7 +45,7 @@ func (tc *OnChanged{{ .Name }}TestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChanged{{ .Name }} executes the on changed callback and returns a corresponding test case.
+// OnChanged{{ .Name }} executes the callback and returns a corresponding test case.
 func OnChanged{{ .Name }}(t *testing.T, ctx context.Context) *OnChanged{{ .Name }}TestCase {
 	tc := &OnChanged{{ .Name }}TestCase{t: t}
 	t0 := time.Now()

@@ -5,9 +5,9 @@ func Test{{ $pkg }}_{{ .Name }}(t *testing.T) {
 	t.Parallel()
 	/*
 		ctx := Context()
-		{{ .Name }}(t, ctx {{- range .Signature.InputArgs }}, {{ .Name }}{{ end }}).
+		{{ .Name }}(t, ctx {{ .In ", name" }}).
 			{{- if .Signature.OutputArgs }}
-			Expect({{ range $i, $e := .Signature.OutputArgs }}{{ if $i }}, {{ end }}{{ .Name }}{{ end }})
+			Expect({{ .Out "name" }})
 			{{- else }}
 			NoError()
 			{{- end }}
@@ -24,8 +24,8 @@ func Test{{ $pkg }}_{{ .Name }}(t *testing.T) {
 	/*
 		ctx := Context()
 		tc := {{ .Name }}(t).
-			Expect({{ range $i, $e := .Signature.InputArgs }}{{ if $i }}, {{ end }}{{ .Name }}{{ end }}).
-			Return({{ range .Signature.OutputArgs }}{{ .Name }}, {{ end }}err)
+			Expect({{ .In "name" }}).
+			Return({{ .Out "name," -}} err)
 		...
 		tc.Wait()
 	*/
@@ -80,5 +80,17 @@ func Test{{ $pkg }}_OnChanged{{ .Name }}(t *testing.T) {
 	*/
 
 	// TO{{/**/}}DO: Test OnChanged{{ .Name }}
+}
+{{ end }}{{ end }}{{ end }}
+
+{{- range .Metrics }}{{ if .Callback }}{{ if not .Exists }}
+func Test{{ $pkg }}_OnObserve{{ .Name }}(t *testing.T) {
+	t.Parallel()
+	/*
+		ctx := Context()
+		OnObserve{{ .Name }}(t, ctx).NoError()
+	*/
+
+	// TO{{/**/}}DO: Test OnObserve{{ .Name }}
 }
 {{ end }}{{ end }}{{ end }}

@@ -1151,3 +1151,17 @@ func TestTester_AuthzRequired(t *testing.T) {
 	testarossa.Equal(t, "bearer", openAPIValue(securitySchemePath+"scheme"))
 	testarossa.Equal(t, "JWT", openAPIValue(securitySchemePath+"bearerFormat"))
 }
+
+func TestTester_OnceAMinute(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context()
+	OnceAMinute(t, ctx).NoError()
+}
+
+func TestTester_OnObserveMemoryAvailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := Context()
+	OnObserveMemoryAvailable(t, ctx).NoError()
+}

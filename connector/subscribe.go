@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -47,7 +46,7 @@ If the path ends with a / all sub-paths under the path are capture by the subscr
 
 If the path does not include a hostname, the default host is used.
 If a port is not specified, 443 is used by default.
-If a method is not specified, * is used by default to capture all methods.
+If a method is not specified, "ANY" is used by default to capture all methods.
 
 Examples of valid paths:
 
@@ -64,6 +63,9 @@ Examples of valid paths:
 func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandler, options ...sub.Option) error {
 	if c.hostname == "" {
 		return c.captureInitErr(errors.New("hostname is not set"))
+	}
+	if method == "" {
+		method = "ANY"
 	}
 	newSub, err := sub.NewSub(method, c.hostname, path, handler, options...)
 	if err != nil {
@@ -85,6 +87,9 @@ func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandle
 
 // Unsubscribe removes the handler for the specified path
 func (c *Connector) Unsubscribe(method string, path string) error {
+	if method == "" {
+		method = "ANY"
+	}
 	newSub, err := sub.NewSub(method, c.hostname, path, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -348,7 +353,12 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	}
 	ctx = propagation.TraceContext{}.Extract(ctx, propagation.HeaderCarrier(httpReq.Header))
 	ctx, span := c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Path), spanOptions...)
-	defer span.End()
+	spanEnded := false
+	defer func() {
+		if !spanEnded {
+			span.End()
+		}
+	}()
 
 	// Execute the request
 	handlerStartTime := time.Now()
@@ -424,28 +434,30 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	}
 
 	// Meter
-	_ = c.ObserveMetric(
-		"microbus_response_duration_seconds",
+	_ = c.RecordHistogram(
+		ctx,
+		"microbus_server_request_duration_seconds",
 		time.Since(handlerStartTime).Seconds(),
-		s.Canonical(),
-		s.Port,
-		httpReq.Method,
-		strconv.Itoa(httpRecorder.StatusCode()),
-		func() string {
+		"handler", s.Canonical(),
+		"port", s.Port,
+		"method", httpReq.Method,
+		"code", httpRecorder.StatusCode(),
+		"error", func() string {
 			if handlerErr != nil {
 				return "ERROR"
 			}
 			return "OK"
 		}(),
 	)
-	_ = c.ObserveMetric(
-		"microbus_response_size_bytes",
+	_ = c.RecordHistogram(
+		ctx,
+		"microbus_server_response_body_bytes",
 		float64(httpRecorder.ContentLength()),
-		s.Canonical(),
-		s.Port,
-		httpReq.Method,
-		strconv.Itoa(httpRecorder.StatusCode()),
-		func() string {
+		"handler", s.Canonical(),
+		"port", s.Port,
+		"method", httpReq.Method,
+		"code", httpRecorder.StatusCode(),
+		"error", func() string {
 			if handlerErr != nil {
 				return "ERROR"
 			}
@@ -492,5 +504,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 		}
 	}
 
+	span.End()
+	spanEnded = true
 	return nil
 }

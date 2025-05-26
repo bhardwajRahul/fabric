@@ -1,11 +1,11 @@
 # Distributed Tracing
 
 Distributed tracing enables the visualization of the flow of function calls across microservices and processes. Without distributed tracing, it's extremely challenging to troubleshoot a distributed system.
-`Microbus` leverages [Jaeger](https://www.jaegertracing.io) and [OpenTelemetry](https://opentelemetry.io) to automatically create and collect tracing spans for executions of endpoints, [tickers](../blocks/tickers.md) and callbacks of all microservices and visualize them as a single stack trace.
+`Microbus` leverages [OpenTelemetry](https://opentelemetry.io) to automatically create and collect tracing spans for executions of endpoints, [tickers](../blocks/tickers.md) and callbacks of all microservices and visualize them as a single stack trace.
 
 ### Configuration
 
-`Microbus` exports tracing spans via the OTLP HTTP collector. The `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or the `OTEL_EXPORTER_OTLP_ENDPOINT` [environment variables](../tech/envars.md) may be used to configure the collector's endpoint.
+`Microbus` exports tracing spans via the OTLP collector. The `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or the `OTEL_EXPORTER_OTLP_ENDPOINT` [environment variables](../tech/envars.md) may be used to configure the collector's endpoint.
 
 Whether or not a trace is exported to the collector depends on the [deployment environment](../tech/deployments.md) of the microservice:
 
@@ -14,7 +14,7 @@ Whether or not a trace is exported to the collector depends on the [deployment e
 
 ### Example
 
-Here's a Jaeger visualization of a fictitious microservice `alpha` using the notorious N+1 anti-pattern. One can easily spot the serialized nature of the code. It took 115ms to complete.
+Here's a visualization of a fictitious microservice `alpha` using the notorious N+1 anti-pattern. One can easily spot the serialized nature of the code. It took 104ms to complete.
 
 ```go
 func (svc *Service) Calculate(ctx context.Context) (sigma float64, err error) {
@@ -28,10 +28,10 @@ func (svc *Service) Calculate(ctx context.Context) (sigma float64, err error) {
 }
 ```
 
-<img src="./distrib-tracing-1.png" width="658">
+<img src="./distrib-tracing-1.png" width="1095">
 <p></p>
 
-And here's the same function rewritten to perform the N operations in parallel. It completed in 33ms, almost a 4x improvement.
+And here's the same function rewritten to perform the N operations in parallel. It completed in 28ms, almost a 4x improvement.
 
 ```go
 func (svc *Service) Calculate(ctx context.Context) (sigma float64, err error) {
@@ -51,5 +51,5 @@ func (svc *Service) Calculate(ctx context.Context) (sigma float64, err error) {
 }
 ```
 
-<img src="./distrib-tracing-2.png" width="658">
+<img src="./distrib-tracing-2.png" width="1095">
 <p></p>

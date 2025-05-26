@@ -21,7 +21,7 @@ type {{ .Name }}Response struct {
 }
 
 // Get retrieves the return values.
-func (_out *{{ .Name }}Response) Get() ({{ .Out }}) {
+func (_out *{{ .Name }}Response) Get() ({{ .Out "name type," -}} err error) {
 	{{- range .Signature.OutputArgs }}
 	{{ .Name }} = _out.data.{{ CapitalizeIdentifier .Name }}
 	{{- end }}
@@ -34,7 +34,7 @@ func (_out *{{ .Name }}Response) Get() ({{ .Out }}) {
 */
 func (_c *Multicast
 {{- if eq .Type "function" }}Client{{ else }}Trigger{{ end -}}
-) {{ .Name }}({{ .In }}) <-chan *{{ .Name }}Response {
+) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) <-chan *{{ .Name }}Response {
 	_url := httpx.JoinHostAndPath(_c.host, `{{ .Path }}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		{{- range .Signature.InputArgs }}{{- if ne .Name "httpRequestBody" }}
@@ -103,7 +103,7 @@ func (_c *Multicast
 /*
 {{ .Description }}
 */
-func (_c *Client) {{ .Name }}({{ .In }}) ({{ .Out }}) {
+func (_c *Client) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `{{ .Path }}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -165,7 +165,7 @@ func (_c *Client) {{ .Name }}({{ .In }}) ({{ .Out }}) {
 /*
 {{ .Description }}
 */
-func (_c *Hook) {{ .Name }}(handler func({{ .In }}) ({{ .Out }})) error {
+func (_c *Hook) {{ .Name }}(handler func(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error)) error {
 	do{{ .Name }} := func(w http.ResponseWriter, r *http.Request) error {
 		var i {{ .Name }}In
 		var o {{ .Name }}Out

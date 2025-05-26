@@ -26,7 +26,7 @@ func Initialize() (err error) {
 		Svc.Init(func(svc *Service) {
 			// Initialize the microservice under test
 			{{- range .Configs }}
-			// svc.Set{{ .Name }}({{ with index .Signature.OutputArgs 0 }}{{ .Name }}{{ end }})
+			// svc.Set{{ .Name }}({{ .Out "name" }})
 			{{- end}}
 		}),
 	)

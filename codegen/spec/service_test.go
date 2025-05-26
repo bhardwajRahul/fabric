@@ -365,8 +365,8 @@ func TestSpec_HandlerInAndOut(t *testing.T) {
 	var h Handler
 	err := yaml.Unmarshal([]byte(code), &h)
 	testarossa.NoError(t, err)
-	testarossa.Equal(t, h.In(), "ctx context.Context, i int, b bool, s string, f float64")
-	testarossa.Equal(t, h.Out(), "m map[string]string, a []int, err error")
+	testarossa.Equal(t, h.In("name type"), "i int, b bool, s string, f float64")
+	testarossa.Equal(t, h.Out("name type"), "m map[string]string, a []int")
 }
 
 func TestSpec_QualifyTypes(t *testing.T) {

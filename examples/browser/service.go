@@ -64,7 +64,7 @@ Browser shows a simple address bar and the source code of a URL.
 func (svc *Service) Browse(w http.ResponseWriter, r *http.Request) (err error) {
 	ctx := r.Context()
 	u := r.URL.Query().Get("url")
-	if !strings.Contains(u, "://") {
+	if u != "" && !strings.Contains(u, "://") {
 		u = "https://" + u
 	}
 

@@ -27,7 +27,8 @@ general:
 
 # Config properties
 #
-# signature - Func() (val Type)
+# signature - Go-style method signature (no arguments, one return value)
+#   MyConfig() (myConfig int) - string, int, bool, duration or float types
 # description - Documentation
 # default - A default value (defaults to empty)
 # validation - A validation pattern
@@ -40,8 +41,8 @@ general:
 #   url
 #   email
 #   json
-# callback - "true" to handle the change event (defaults to "false")
-# secret - "true" to indicate a secret (defaults to "false")
+# callback - Whether or not to handle the change event (defaults to false)
+# secret - Whether or not this is a secret (defaults to false)
 configs:
   # - signature:
   #   description:
@@ -51,10 +52,10 @@ configs:
 # Functions
 #
 # signature - Go-style method signature
-#   Func(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
-#   Func(val Complex, ptr *Complex)
-#   Func(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
-#   Func(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
+#   MyFunc(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
+#   MyFunc(val Complex, ptr *Complex)
+#   MyFunc(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
+#   MyFunc(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
@@ -100,10 +101,10 @@ functions:
 # Event sources
 #
 # signature - Go-style method signature
-#   OnEvent(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
-#   OnEvent(val Complex, ptr *Complex)
-#   OnEvent(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
-#   OnEvent(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
+#   OnMyEvent(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
+#   OnMyEvent(val Complex, ptr *Complex)
+#   OnMyEvent(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
+#   OnMyEvent(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
 # description - Documentation
 # method - "GET", "POST", etc. (defaults to "POST")
 # path - The URL path of the subscription, relative to the hostname of the microservice
@@ -124,10 +125,10 @@ events:
 # Event sinks
 #
 # signature - Go-style method signature
-#   OnEvent(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
-#   OnEvent(val Complex, ptr *Complex)
-#   OnEvent(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
-#   OnEvent(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
+#   OnMyEvent(s string, f float64, i int, b bool) (t time.Time, d time.Duration)
+#   OnMyEvent(val Complex, ptr *Complex)
+#   OnMyEvent(m1 map[string]int, m2 map[string]*Complex) (a1 []int, a2 []*Complex)
+#   OnMyEvent(httpRequestBody *Complex, queryArg int, pathArg string) (httpResponseBody []string, httpStatusCode int)
 # description - Documentation
 # event - The name of the event at the source (defaults to the function name)
 # source - The package path of the microservice that is the source of the event
@@ -143,8 +144,8 @@ sinks:
 
 # Web handlers
 #
-# signature - Go-style method signature (no arguments)
-#   Handler()
+# signature - Go-style method signature (no arguments or return values)
+#   MyHandler()
 # description - Documentation
 # method - "GET", "POST", etc. or "ANY" (default)
 # path - The URL path of the subscription, relative to the hostname of the microservice
@@ -170,8 +171,8 @@ webs:
 
 # Tickers
 #
-# signature - Go-style method signature (no arguments)
-#   Ticker()
+# signature - Go-style method signature (no arguments or return values)
+#   MyTicker()
 # description - Documentation
 # interval - Duration between iterations (e.g. 15m)
 tickers:
@@ -183,17 +184,16 @@ tickers:
 
 # Metrics
 #
-# signature - Go-style method signature (numeric measure, ...labels)
-#   RequestDurationSeconds(dur time.Duration, method string, success bool)
-#   MemoryUsageBytes(b int64)
-#   DistanceMiles(miles float64, countryCode int)
-#   RequestsCount(count int, domain string) - unit-less accumulating count
-#   CPUSecondsTotal(dur time.Duration) - accumulating count with unit
-#   See https://prometheus.io/docs/practices/naming/ for naming best practices
+# signature - Go-style method signature (numeric measure and labels for arguments, no return value)
+#   MyMetric(measure float64) - int, float or duration measure argument
+#   MyMetric(measure int, label1 string, label2 int, label3 bool) - labels of any type
+#   MyMetricSeconds(dur time.Duration) - time unit name as suffix
+#   MyMetricMegaBytes(mb float64) - byte size unit name as suffix
 # description - Documentation
 # kind - The kind of the metric, "counter" (default), "gauge" or "histogram"
 # buckets - Bucket boundaries for histograms [x,y,z,...]
-# alias - The name of the metric in Prometheus (defaults to package+function in snake_case)
+# alias - The name of the OpenTelemetry metric (defaults to module_package_function_name)
+# callback - Whether or not to observe the metric just in time (defaults to false)
 metrics:
   # - signature:
   #   description:

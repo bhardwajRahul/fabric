@@ -9,3 +9,4 @@ The `coreservices` package is a collection of microservices that implement commo
 * The [metrics](../structure/coreservices-metrics.md) microservice aggregates metrics from all microservices in response to a request from Prometheus
 * The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI endpoints of all microservices.
 * The [SMTP ingress](../structure/coreservices-smtpingress.md) microservice transforms incoming emails to actionable events
+* The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs.

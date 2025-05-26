@@ -11,8 +11,8 @@ The more common case is to define tickers in `service.yaml` and use the [code ge
 ```yaml
 # Tickers
 #
-# signature - Go-style method signature (no arguments)
-#   Ticker()
+# signature - Go-style method signature (no arguments or return values)
+#   MyTicker()
 # description - Documentation
 # interval - Duration between iterations (e.g. 15m)
 tickers:

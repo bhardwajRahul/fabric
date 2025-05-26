@@ -49,7 +49,6 @@ import (
 	"github.com/microbus-io/fabric/coreservices/configurator"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
-	"github.com/microbus-io/fabric/coreservices/metrics"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
 )
 
@@ -61,7 +60,6 @@ func main() {
 	app.Add(
 		httpegress.NewService(),
 		openapiportal.NewService(),
-		metrics.NewService(),
 		tokenissuer.NewService(),
 	)
 	app.Add(
@@ -103,9 +101,9 @@ MICROBUS_DEPLOYMENT: LOCAL
 # Any non-empty value enables logging of debug-level messages
 # MICROBUS_LOG_DEBUG: 1
 
-# The endpoint of the OTLP HTTP collector of OpenTelemetry
-OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://127.0.0.1:4318
-# OTEL_EXPORTER_OTLP_ENDPOINT:
+# OpenTelemetry
+OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
 ```
 
 Create `main/config.yaml` where you'll store the [configuration](../blocks/configuration.md) of your microservices:

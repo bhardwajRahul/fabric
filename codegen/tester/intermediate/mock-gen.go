@@ -381,3 +381,13 @@ func (svc *Mock) Hello(w http.ResponseWriter, r *http.Request) (err error) {
 	err = svc.mockHello(w, r)
 	return errors.Trace(err)
 }
+
+// OnceAMinute is a no op.
+func (svc *Mock) OnceAMinute(ctx context.Context) (err error) {
+	return nil
+}
+
+// OnObserveMemoryAvailable is a no op.
+func (svc *Mock) OnObserveMemoryAvailable(ctx context.Context) (err error) {
+	return nil
+}

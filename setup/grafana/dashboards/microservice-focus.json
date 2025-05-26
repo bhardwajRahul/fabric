@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 2,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -100,7 +100,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum(rate(microbus_server_request_duration_seconds_count{port!=\"888\"}[$__range]))",
+          "expr": "60 * sum(rate(microbus_server_request_duration_seconds_count{port!=\"888\", service=\"$service\"}[$__range]))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -167,7 +167,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(microbus_server_request_duration_seconds_bucket{port!=\"888\"}[$__range])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(microbus_server_request_duration_seconds_bucket{service=\"$service\", port!=\"888\"}[$__range])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -256,7 +256,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(microbus_server_request_duration_seconds_count{port!=\"888\",error=\"ERROR\",code=~\"^5..$\"}[$__range]))\n/\nsum(rate(microbus_server_request_duration_seconds_count{port!=\"888\"}[$__range]))",
+          "expr": "sum(rate(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\",error=\"ERROR\",code=~\"^5..$\"}[$__range]))\n/\nsum(rate(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\"}[$__range]))",
           "legendFormat": "{{error}} {{code}}",
           "range": true,
           "refId": "A"
@@ -335,7 +335,7 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "60 * (sum by (le) (rate(microbus_server_request_duration_seconds_bucket{port!=\"888\"}[$interval])))",
+          "expr": "60 * (sum by (le) (rate(microbus_server_request_duration_seconds_bucket{service=\"$service\",port!=\"888\"}[$interval])))",
           "format": "heatmap",
           "instant": false,
           "legendFormat": "__auto",
@@ -402,7 +402,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "avg(max_over_time(microbus_uptime_duration_seconds[$__interval]))",
+          "expr": "avg(max_over_time(microbus_uptime_duration_seconds{service=\"$service\"}[$__interval]))",
           "format": "time_series",
           "hide": false,
           "instant": true,
@@ -472,7 +472,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(count_over_time(microbus_uptime_duration_seconds[$__interval]))",
+          "expr": "count(count_over_time(microbus_uptime_duration_seconds{service=\"$service\"}[$__interval]))",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -600,7 +600,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{port!=\"888\",error=\"ERROR\",code=~\"^5..$\"}[$__range])))",
+          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\",error=\"ERROR\",code=~\"^5..$\"}[$__range])))",
           "legendFormat": "{{error}} {{code}}",
           "range": true,
           "refId": "5XX"
@@ -611,7 +611,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{port!=\"888\",error!=\"ERROR\",code=~\"^2..$\"}[$__range])))",
+          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\",error!=\"ERROR\",code=~\"^2..$\"}[$__range])))",
           "hide": false,
           "legendFormat": "{{error}} {{code}}",
           "range": true,
@@ -623,7 +623,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{port!=\"888\",error=\"ERROR\",code!~\"^5..$\"}[$__range])))",
+          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\",error=\"ERROR\",code!~\"^5..$\"}[$__range])))",
           "hide": false,
           "legendFormat": "{{error}} {{code}}",
           "range": true,
@@ -635,7 +635,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{port!=\"888\",error!=\"ERROR\",code!~\"^2..$\"}[$__range])))",
+          "expr": "round(sum by(error, code) (increase(microbus_server_request_duration_seconds_count{service=\"$service\",port!=\"888\",error!=\"ERROR\",code!~\"^2..$\"}[$__range])))",
           "hide": false,
           "legendFormat": "{{error}} {{code}}",
           "range": true,
@@ -731,9 +731,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max by(host, ver, id) (microbus_uptime_duration_seconds)",
+          "expr": "max by(ver, id) (microbus_uptime_duration_seconds{service=\"$service\"})",
           "format": "time_series",
-          "legendFormat": "{{host}} v{{ver}} {{id}}",
+          "legendFormat": "v{{ver}} {{id}}",
           "range": true,
           "refId": "A"
         }
@@ -804,7 +804,7 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "round(sum by (le) (increase(microbus_server_request_duration_seconds_bucket{port!=\"888\"}[$__range])))",
+          "expr": "round(sum by (le) (increase(microbus_server_request_duration_seconds_bucket{service=\"$service\",port!=\"888\"}[$__range])))",
           "format": "heatmap",
           "instant": true,
           "legendFormat": "__auto",
@@ -917,8 +917,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(service) (rate(microbus_server_request_duration_seconds_count{port!=\"888\"}[$interval]))",
-          "legendFormat": "{{service}}",
+          "expr": "60 * sum by(method, handler) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", service=\"$service\"}[$interval]))",
+          "legendFormat": "{{method}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -1014,8 +1014,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(service) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", error=\"ERROR\", code=~\"^5..$\"}[$interval]))\n/\nsum by(service) (rate(microbus_server_request_duration_seconds_count{port!=\"888\"}[$interval]))",
-          "legendFormat": "{{service}}",
+          "expr": "sum by(method, handler) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", error=\"ERROR\", code=~\"^5..$\", service=\"$service\"}[$interval]))\n/\nsum by(method, handler) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", service=\"$service\"}[$interval]))",
+          "legendFormat": "{{method}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -1112,8 +1112,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, service) (rate(microbus_server_request_duration_seconds_bucket{port!=\"888\"}[$interval])))",
-          "legendFormat": "{{service}}",
+          "expr": "histogram_quantile(0.95, sum by(le, method, handler) (rate(microbus_server_request_duration_seconds_bucket{port!=\"888\", service=\"$service\"}[$interval])))",
+          "legendFormat": "{{method}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -1208,8 +1208,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(code, service) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", error=\"ERROR\"}[$interval])) != 0",
-          "legendFormat": "[{{code}}] {{service}}",
+          "expr": "60 * sum by(code, method, handler) (rate(microbus_server_request_duration_seconds_count{port!=\"888\", error=\"ERROR\", service=\"$service\"}[$interval])) != 0",
+          "legendFormat": "[{{code}}] {{method}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -1306,8 +1306,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, service) (rate(microbus_server_response_body_bytes_bucket{port!=\"888\"}[$interval])))",
-          "legendFormat": "{{service}}",
+          "expr": "histogram_quantile(0.95, sum by(le, method, handler) (rate(microbus_server_response_body_bytes_bucket{port!=\"888\", service=\"$service\"}[$interval])))",
+          "legendFormat": "{{method}} {{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -1462,7 +1462,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{severity=\"ERROR\"}[$interval])) != 0",
+          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{service=\"$service\",severity=\"ERROR\"}[$interval])) != 0",
           "legendFormat": "{{severity}} {{message}}",
           "range": true,
           "refId": "ERROR"
@@ -1473,7 +1473,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{severity=\"WARN\"}[$__rate_interval])) != 0",
+          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{service=\"$service\",severity=\"WARN\"}[$__rate_interval])) != 0",
           "hide": false,
           "legendFormat": "{{severity}} {{message}}",
           "range": true,
@@ -1485,7 +1485,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{severity=\"INFO\"}[$__rate_interval])) != 0",
+          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{service=\"$service\",severity=\"INFO\"}[$__rate_interval])) != 0",
           "hide": false,
           "legendFormat": "{{severity}} {{message}}",
           "range": true,
@@ -1497,7 +1497,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{severity=\"DEBUG\"}[$__rate_interval])) != 0",
+          "expr": "60 * sum by(severity, message) (rate(microbus_log_messages_total{service=\"$service\",severity=\"DEBUG\"}[$__rate_interval])) != 0",
           "hide": false,
           "legendFormat": "{{severity}} {{message}}",
           "range": true,
@@ -1580,7 +1580,7 @@
         "x": 0,
         "y": 37
       },
-      "id": 41,
+      "id": 42,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -1608,7 +1608,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{duration>=1s}",
+          "query": "{duration>=1s && resource.service.name=\"$service\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1635,7 +1635,6 @@
               "nested": 5
             },
             "renameByName": {
-              "Duration": "",
               "Start time": "Time"
             }
           }
@@ -1659,6 +1658,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "fixedColor": "red",
             "mode": "thresholds"
           },
           "custom": {
@@ -1673,7 +1673,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "text"
               }
             ]
           }
@@ -1711,7 +1711,7 @@
         "x": 12,
         "y": 37
       },
-      "id": 42,
+      "id": 41,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -1739,7 +1739,7 @@
           },
           "limit": 20,
           "metricsQueryType": "range",
-          "query": "{status=error}",
+          "query": "{status=error && resource.service.name=\"$service\"}",
           "queryType": "traceql",
           "refId": "A",
           "tableType": "traces"
@@ -1766,7 +1766,8 @@
               "nested": 5
             },
             "renameByName": {
-              "Start time": "Time"
+              "Start time": "Time",
+              "Trace ID": ""
             }
           }
         },
@@ -1883,7 +1884,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.5, sum by(le, host) (rate(microbus_client_ack_roundtrip_latency_seconds_bucket{port!=\"888\"}[$interval])))",
+          "expr": "histogram_quantile(0.5, sum by(le, host) (rate(microbus_client_ack_roundtrip_latency_seconds_bucket{port!=\"888\", service=\"$service\"}[$interval])))",
           "legendFormat": "{{host}}",
           "range": true,
           "refId": "A"
@@ -1970,7 +1971,7 @@
         "x": 12,
         "y": 45
       },
-      "id": 44,
+      "id": 23,
       "options": {
         "legend": {
           "calcs": [],
@@ -1992,7 +1993,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(code) (rate(microbus_client_timeout_requests_total{port!=\"888\"}[$interval])) != 0",
+          "expr": "60 * sum by(code) (rate(microbus_client_timeout_requests_total{port!=\"888\", service=\"$service\"}[$interval])) != 0",
           "legendFormat": "{{code}}",
           "range": true,
           "refId": "A"
@@ -2100,8 +2101,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, service) (rate(microbus_callback_duration_seconds_bucket[$interval])))",
-          "legendFormat": "{{service}}",
+          "expr": "histogram_quantile(0.95, sum by(le, handler) (rate(microbus_callback_duration_seconds_bucket{service=\"$service\"}[$interval])))",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
@@ -2198,8 +2199,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(service) (rate(microbus_callback_duration_seconds_count{error=\"ERROR\"}[$__rate_interval])) != 0",
-          "legendFormat": "{{service}}",
+          "expr": "60 * sum by(handler) (rate(microbus_callback_duration_seconds_count{error=\"ERROR\", service=\"$service\"}[$__rate_interval])) != 0",
+          "legendFormat": "{{handler}}",
           "range": true,
           "refId": "A"
         }
@@ -2308,7 +2309,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(increase(microbus_cache_operations_total{op=\"load\",hit!=\"miss\"}[$interval])) /\nsum(increase(microbus_cache_operations_total{op=\"load\"}[$interval]))",
+          "expr": "sum(increase(microbus_cache_operations_total{service=\"$service\",op=\"load\",hit!=\"miss\"}[$interval])) /\nsum(increase(microbus_cache_operations_total{service=\"$service\",op=\"load\"}[$interval]))",
           "instant": false,
           "legendFormat": "Hit ratio",
           "range": true,
@@ -2405,7 +2406,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "60 * (sum by (op) (rate(microbus_cache_operations_total[$interval])))",
+          "expr": "60 * (sum by (op) (rate(microbus_cache_operations_total{service=\"$service\"}[$interval])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2501,7 +2502,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(service) (microbus_cache_memory_bytes) != 0",
+          "expr": "sum by(id) (microbus_cache_memory_bytes{service=\"$service\"}) != 0",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2600,7 +2601,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "round(sum by(service) (microbus_cache_elements) != 0)",
+          "expr": "round(sum by(id) (microbus_cache_elements{service=\"$service\"}) != 0)",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -2634,8 +2635,31 @@
       },
       {
         "current": {
-          "text": "1h",
-          "value": "1h"
+          "text": "http.ingress.core",
+          "value": "http.ingress.core"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(microbus_uptime_duration_seconds,service)",
+        "includeAll": false,
+        "label": "Service",
+        "name": "service",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(microbus_uptime_duration_seconds,service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "4m",
+          "value": "4m"
         },
         "description": "",
         "label": "Interval",
@@ -2647,7 +2671,7 @@
             "value": "1m"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "4m",
             "value": "4m"
           },
@@ -2672,7 +2696,7 @@
             "value": "30m"
           },
           {
-            "selected": true,
+            "selected": false,
             "text": "1h",
             "value": "1h"
           },
@@ -2708,12 +2732,12 @@
     ]
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
-  "title": "System Overview",
-  "uid": "microbus_qTPVYZ",
-  "version": 12
+  "title": "Microservice Focus",
+  "uid": "microbus_WY4avE",
+  "version": 9
 }

@@ -19,6 +19,7 @@ package connector
 import (
 	"context"
 	"net/url"
+	"strings"
 
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/errors"
@@ -27,11 +28,12 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
-	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	prototrace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
 // initTracer initializes an OpenTelemetry tracer
@@ -41,45 +43,54 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 		return nil
 	}
 
-	// Use the OTLP HTTP endpoint
+	// Use the OTLP endpoint
 	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
+	// https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
+	// https://opentelemetry.io/docs/specs/otel/protocol/exporter/
 	endpoint := env.Get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 	if endpoint == "" {
 		endpoint = env.Get("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
-
-	var sp sdktrace.SpanProcessor
-	switch c.deployment {
-	case LOCAL, TESTING:
-		var exp *otlptrace.Exporter
-		if endpoint == "" {
-			// Use a nil client rather than return nil to allow for testing of span creation
-			exp, err = otlptrace.New(ctx, &nilTraceClient{})
+	var exp *otlptrace.Exporter
+	if endpoint != "" {
+		protocol := env.Get("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
+		if protocol == "" {
+			protocol = env.Get("OTEL_EXPORTER_OTLP_PROTOCOL")
+		}
+		if protocol == "" && strings.Contains(endpoint, ":4317") {
+			protocol = "grpc"
+		}
+		if protocol == "grpc" {
+			exp, err = otlptracegrpc.New(ctx, otlptracegrpc.WithEndpointURL(endpoint))
 		} else {
 			exp, err = otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
 		}
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+
+	var sp sdktrace.SpanProcessor
+	switch c.deployment {
+	case LOCAL, TESTING:
+		if exp == nil {
+			// Use a nil client rather than return nil to allow for testing of span creation
+			exp, err = otlptrace.New(ctx, &nilTraceClient{})
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		sp = sdktrace.NewBatchSpanProcessor(exp)
 	case LAB:
-		if endpoint == "" {
+		if exp == nil {
 			return nil // Disables tracing without overhead
-		}
-		exp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
-		if err != nil {
-			return errors.Trace(err)
 		}
 		sp = sdktrace.NewBatchSpanProcessor(exp)
 	default: // PROD
-		if endpoint == "" {
+		if exp == nil {
 			return nil // Disables tracing without overhead
 		}
 		// Trace only explicitly selected transactions
-		exp, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
-		if err != nil {
-			return errors.Trace(err)
-		}
 		c.traceProcessor = newSelectiveProcessor(exp, 8192) // Approx 10MB per microservice
 		sp = c.traceProcessor
 	}
@@ -87,10 +98,11 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 		sdktrace.WithSampler(sdktrace.ParentBased(newMuffler())),
 		sdktrace.WithSpanProcessor(sp),
 		sdktrace.WithResource(resource.NewSchemaless(
-			attribute.String("service.namespace", c.plane),
-			attribute.String("service.name", c.hostname),
-			attribute.Int("service.version", c.version),
-			attribute.String("service.instance.id", c.id),
+			attribute.String("service.namespace", c.Plane()),
+			attribute.String("service.name", c.Hostname()),
+			attribute.Int("service.version", c.Version()),
+			attribute.String("service.instance.id", c.ID()),
+			attribute.String("deployment.environment", c.Deployment()),
 		)),
 	)
 	c.tracer = c.traceProvider.Tracer("")
@@ -163,6 +175,6 @@ func (nc *nilTraceClient) Start(ctx context.Context) error {
 func (nc *nilTraceClient) Stop(ctx context.Context) error {
 	return nil
 }
-func (nc *nilTraceClient) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
+func (nc *nilTraceClient) UploadTraces(ctx context.Context, protoSpans []*prototrace.ResourceSpans) error {
 	return nil
 }

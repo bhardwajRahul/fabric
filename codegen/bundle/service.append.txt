@@ -11,9 +11,9 @@ func (svc *Service) OnChanged{{ .Name }}(ctx context.Context) (err error) {
 /*
 {{ .Description }}
 */
-func (svc *Service) {{ .Name }}({{ .In }}) ({{ .Out }}) {
+func (svc *Service) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error) {
 	// TO{{/**/}}DO: Implement {{ .Name }}
-	return {{ range .Signature.OutputArgs }}{{ .Name }}, {{ end }}nil
+	return {{ .Out "name," -}} nil
 }
 {{ end }}{{ end }}
 
@@ -37,3 +37,19 @@ func (svc *Service) {{ .Name }}(ctx context.Context) (err error) {
 	return nil
 }
 {{ end }}{{ end }}
+
+{{- range .Metrics }}{{ if .Callback }}{{ if not .Exists }}
+/*
+OnObserve{{ .Name }} observes the value of the {{ .Name }} {{ .Kind }} metric.
+{{ .Description }}
+*/
+func (svc *Service) OnObserve{{ .Name }}(ctx context.Context) (err error) {
+	// TO{{/**/}}DO: Implement OnObserve{{ .Name }}
+	// svc.
+	{{- if eq .Kind "counter" }}Add{{ end }}
+	{{- if eq .Kind "gauge" }}Record{{ end }}
+	{{- if eq .Kind "histogram" }}Record{{ end }}
+	{{- .Name }}(ctx {{- .In ",name" }})
+	return nil
+}
+{{ end }}{{ end }}{{ end }}

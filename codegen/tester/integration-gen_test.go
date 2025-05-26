@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ var (
 	_ *http.Request
 	_ os.File
 	_ time.Time
+	_ *regexp.Regexp
 	_ strings.Builder
 	_ cascadia.Sel
 	_ *connector.Connector
@@ -1240,6 +1242,26 @@ func (tc *EchoTestCase) BodyNotContains(value any) *EchoTestCase {
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *EchoTestCase) BodyMatchesRegexp(pattern string) *EchoTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *EchoTestCase) HeaderContains(headerName string, value string) *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -1849,6 +1871,26 @@ func (tc *MultiValueHeadersTestCase) BodyNotContains(value any) *MultiValueHeade
 			vv := fmt.Sprintf("%v", v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
+	}
+	return tc
+}
+
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *MultiValueHeadersTestCase) BodyMatchesRegexp(pattern string) *MultiValueHeadersTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
 	}
 	return tc
 }
@@ -2466,6 +2508,26 @@ func (tc *WebPathArgumentsTestCase) BodyNotContains(value any) *WebPathArguments
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *WebPathArgumentsTestCase) BodyMatchesRegexp(pattern string) *WebPathArgumentsTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *WebPathArgumentsTestCase) HeaderContains(headerName string, value string) *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -3079,6 +3141,26 @@ func (tc *UnnamedWebPathArgumentsTestCase) BodyNotContains(value any) *UnnamedWe
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *UnnamedWebPathArgumentsTestCase) BodyMatchesRegexp(pattern string) *UnnamedWebPathArgumentsTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *UnnamedWebPathArgumentsTestCase) HeaderContains(headerName string, value string) *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -3642,6 +3724,26 @@ func (tc *DirectoryServerTestCase) BodyNotContains(value any) *DirectoryServerTe
 			vv := fmt.Sprintf("%v", v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
+	}
+	return tc
+}
+
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *DirectoryServerTestCase) BodyMatchesRegexp(pattern string) *DirectoryServerTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
 	}
 	return tc
 }
@@ -4213,6 +4315,26 @@ func (tc *HelloTestCase) BodyNotContains(value any) *HelloTestCase {
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *HelloTestCase) BodyMatchesRegexp(pattern string) *HelloTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *HelloTestCase) HeaderContains(headerName string, value string) *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -4744,6 +4866,120 @@ func Hello(t *testing.T, r *http.Request) *HelloTestCase {
 		return Svc.Hello(w, r)
 	})
 	tc.res = w.Result()
+	tc.dur = time.Since(t0)
+	return tc
+}
+
+// OnceAMinuteTestCase assists in asserting against the results of executing OnceAMinute.
+type OnceAMinuteTestCase struct {
+	t *testing.T
+	dur time.Duration
+	err error
+}
+
+// Error asserts an error.
+func (tc *OnceAMinuteTestCase) Error(errContains string) *OnceAMinuteTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Contains(tc.t, tc.err.Error(), errContains)
+	}
+	return tc
+}
+
+// ErrorCode asserts an error by its status code.
+func (tc *OnceAMinuteTestCase) ErrorCode(statusCode int) *OnceAMinuteTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Equal(tc.t, statusCode, errors.Convert(tc.err).StatusCode)
+	}
+	return tc
+}
+
+// NoError asserts no error.
+func (tc *OnceAMinuteTestCase) NoError() *OnceAMinuteTestCase {
+	testarossa.NoError(tc.t, tc.err)
+	return tc
+}
+
+// CompletedIn checks that the duration of the operation is less than or equal the threshold.
+func (tc *OnceAMinuteTestCase) CompletedIn(threshold time.Duration) *OnceAMinuteTestCase {
+	testarossa.True(tc.t, tc.dur <= threshold)
+	return tc
+}
+
+// Assert asserts using a provided function.
+func (tc *OnceAMinuteTestCase) Assert(asserter func(t *testing.T, err error)) *OnceAMinuteTestCase {
+	asserter(tc.t, tc.err)
+	return tc
+}
+
+// Get returns the result of executing OnceAMinute.
+func (tc *OnceAMinuteTestCase) Get() (err error) {
+	return tc.err
+}
+
+// OnceAMinute executes the ticker and returns a corresponding test case.
+func OnceAMinute(t *testing.T, ctx context.Context) *OnceAMinuteTestCase {
+	tc := &OnceAMinuteTestCase{t: t}
+	t0 := time.Now()
+	tc.err = errors.CatchPanic(func() error {
+		return Svc.OnceAMinute(ctx)
+	})
+	tc.dur = time.Since(t0)
+	return tc
+}
+
+// OnObserveMemoryAvailableTestCase assists in asserting against the results of executing OnObserveMemoryAvailable.
+type OnObserveMemoryAvailableTestCase struct {
+	t *testing.T
+	dur time.Duration
+	err error
+}
+
+// Error asserts an error.
+func (tc *OnObserveMemoryAvailableTestCase) Error(errContains string) *OnObserveMemoryAvailableTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Contains(tc.t, tc.err.Error(), errContains)
+	}
+	return tc
+}
+
+// ErrorCode asserts an error by its status code.
+func (tc *OnObserveMemoryAvailableTestCase) ErrorCode(statusCode int) *OnObserveMemoryAvailableTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Equal(tc.t, statusCode, errors.Convert(tc.err).StatusCode)
+	}
+	return tc
+}
+
+// NoError asserts no error.
+func (tc *OnObserveMemoryAvailableTestCase) NoError() *OnObserveMemoryAvailableTestCase {
+	testarossa.NoError(tc.t, tc.err)
+	return tc
+}
+
+// CompletedIn checks that the duration of the operation is less than or equal the threshold.
+func (tc *OnObserveMemoryAvailableTestCase) CompletedIn(threshold time.Duration) *OnObserveMemoryAvailableTestCase {
+	testarossa.True(tc.t, tc.dur <= threshold)
+	return tc
+}
+
+// Assert asserts using a provided function.
+func (tc *OnObserveMemoryAvailableTestCase) Assert(asserter func(t *testing.T, err error)) *OnObserveMemoryAvailableTestCase {
+	asserter(tc.t, tc.err)
+	return tc
+}
+
+// Get returns the result of executing MemoryAvailable.
+func (tc *OnObserveMemoryAvailableTestCase) Get() (err error) {
+	return tc.err
+}
+
+// OnObserveMemoryAvailable executes the callback and returns a corresponding test case.
+func OnObserveMemoryAvailable(t *testing.T, ctx context.Context) *OnObserveMemoryAvailableTestCase {
+	tc := &OnObserveMemoryAvailableTestCase{t: t}
+	t0 := time.Now()
+	tc.err = errors.CatchPanic(func() error {
+		return Svc.OnObserveMemoryAvailable(ctx)
+	})
 	tc.dur = time.Since(t0)
 	return tc
 }

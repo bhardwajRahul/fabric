@@ -20,6 +20,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/microbus-io/fabric/errors"
 
@@ -41,6 +42,11 @@ The Calculator microservice performs simple mathematical operations.
 */
 type Service struct {
 	*intermediate.Intermediate // DO NOT REMOVE
+
+	sumAdd      atomic.Int64
+	sumSubtract atomic.Int64
+	sumMultiply atomic.Int64
+	sumDivide   atomic.Int64
 }
 
 // OnStartup is called when the microservice is started up.
@@ -62,18 +68,22 @@ func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xE
 	}
 	// Perform the arithmetic operation
 	switch op {
-	case "*":
-		result = x * y
 	case "+":
 		result = x + y
+		svc.sumAdd.Add(int64(result))
 	case "-":
 		result = x - y
+		svc.sumSubtract.Add(int64(result))
+	case "*":
+		result = x * y
+		svc.sumMultiply.Add(int64(result))
 	case "/":
 		result = x / y
+		svc.sumDivide.Add(int64(result))
 	default:
 		return x, op, y, result, errors.Newf("invalid operator '%s'", op)
 	}
-	svc.IncrementOpCount(1, op)
+	svc.AddUsedOperators(ctx, 1, op)
 	return x, op, y, result, nil
 }
 
@@ -81,7 +91,7 @@ func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xE
 Square prints the square of the integer x.
 */
 func (svc *Service) Square(ctx context.Context, x int) (xEcho int, result int, err error) {
-	svc.IncrementOpCount(1, "^2")
+	svc.AddUsedOperators(ctx, 1, "^2")
 	return x, x * x, nil
 }
 
@@ -93,4 +103,16 @@ func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 cal
 	dx := p1.X - p2.X
 	dy := p1.Y - p2.Y
 	return math.Sqrt(dx*dx + dy*dy), nil
+}
+
+/*
+OnObserveSumOperations observes the value of the SumOperations gauge metric.
+SumOperations tracks the total sum of the results of all operators.
+*/
+func (svc *Service) OnObserveSumOperations(ctx context.Context) (err error) {
+	svc.RecordSumOperations(ctx, int(svc.sumAdd.Load()), "+")
+	svc.RecordSumOperations(ctx, int(svc.sumSubtract.Load()), "-")
+	svc.RecordSumOperations(ctx, int(svc.sumMultiply.Load()), "*")
+	svc.RecordSumOperations(ctx, int(svc.sumDivide.Load()), "/")
+	return nil
 }

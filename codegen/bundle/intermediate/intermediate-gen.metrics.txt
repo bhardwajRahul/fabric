@@ -1,13 +1,90 @@
+{{- if .Metrics }}
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	var lastErr error
+	{{- range .Metrics}}{{ if .Callback}}
+	err = svc.impl.OnObserve{{ .Name}}(ctx)
+	if err != nil {
+		lastErr = err
+	}
+	{{- end}}{{- end}}
+	return lastErr
+}
+{{ end -}}
+
 {{- range .Metrics }}
 
-{{- if .Observable }}
+{{- if eq .Kind "gauge" }}
 /*
-Observe{{ .Name }} observes the current value of the "{{ .Alias }}" metric.
+Record{{ .Name }} records the current value of the {{ .Kind }} metric.
 {{ .Description }}
 */
-func (svc *Intermediate) Observe{{ .Name }}({{ range $i, $elem := .Signature.InputArgs }}{{ if $i }}, {{ end }}{{ .Name }} {{ .Type }}{{ end }}) error {
+func (svc *Intermediate) Record{{ .Name }}(ctx context.Context {{- .In ", name type" }}) error {
 	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
-	x{{ .Name }} := fmt.Sprintf("%v", {{ .Name }})
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
+	{{ else -}}
+	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
+	{{ end }}{{ end -}}
+	return svc.RecordGauge(ctx, "{{ .Alias }}"{{ range $i, $elem := .Signature.InputArgs }},
+		{{ if $i }}`{{ .Name }}`, {{ end }}x{{ .Name }}{{ end }})
+}
+
+/*
+Observe{{ .Name }} observes the current value of the {{ .Kind }} metric.
+{{ .Description }}
+
+Deprecated: Use Record{{ .Name }}
+*/
+func (svc *Intermediate) Observe{{ .Name }}({{ .In "name type" }}) error {
+	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
+	{{ else -}}
+	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
+	{{ end }}{{ end -}}
+	return svc.ObserveMetric("{{ .Alias }}"{{ range .Signature.InputArgs }}, x{{ .Name }}{{ end }})
+}
+
+/*
+Increment{{ .Name }} increments the value of the {{ .Kind }} metric.
+{{ .Description }}
+
+Deprecated: Use Record{{ .Name }}
+*/
+func (svc *Intermediate) Increment{{ .Name }}({{ .In "name type" }}) error {
+	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
+	{{ else -}}
+	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
+	{{ end }}{{ end -}}
+	return svc.IncrementMetric("{{ .Alias }}"{{ range .Signature.InputArgs }}, x{{ .Name }}{{ end }})
+}
+{{ end }}
+
+
+{{- if eq .Kind "histogram" }}
+/*
+Record{{ .Name }} records the current value of the {{ .Kind }} metric.
+{{ .Description }}
+*/
+func (svc *Intermediate) Record{{ .Name }}(ctx context.Context {{- .In ", name type" }}) error {
+	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
+	{{ else -}}
+	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
+	{{ end }}{{ end -}}
+	return svc.RecordHistogram(ctx, "{{ .Alias }}"{{ range $i, $elem := .Signature.InputArgs }},
+		{{ if $i }}`{{ .Name }}`, {{ end }}x{{ .Name }}{{ end }})
+}
+
+/*
+Observe{{ .Name }} observes the current value of the {{ .Kind }} metric.
+{{ .Description }}
+
+Deprecated: Use Record{{ .Name }}
+*/
+func (svc *Intermediate) Observe{{ .Name }}({{ .In "name type" }}) error {
+	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
 	{{ else -}}
 	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
 	{{ end }}{{ end -}}
@@ -15,16 +92,32 @@ func (svc *Intermediate) Observe{{ .Name }}({{ range $i, $elem := .Signature.Inp
 }
 {{ end }}
 
-{{- if .Incrementable }}
+{{- if eq .Kind "counter" }}
 /*
-Increment{{ .Name }} increments the value of the "{{ .Alias }}" metric.
+Add{{ .Name }} adds to the value of the {{ .Kind }} metric.
 {{ .Description }}
 */
-func (svc *Intermediate) Increment{{ .Name }}({{ range $i, $elem := .Signature.InputArgs }}{{ if $i }}, {{ end }}{{ .Name }} {{ .Type }}{{ end }}) error {
+func (svc *Intermediate) Add{{ .Name }}(ctx context.Context {{- .In ", name type" }}) error {
 	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
-	x{{ .Name }} := fmt.Sprintf("%v", {{ .Name }})
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
 	{{ else -}}
 	x{{ .Name }} := {{if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
+	{{ end }}{{ end -}}
+	return svc.AddCounter(ctx, "{{ .Alias }}"{{ range $i, $elem := .Signature.InputArgs }},
+		{{ if $i }}`{{ .Name }}`, {{ end }}x{{ .Name }}{{ end }})
+}
+
+/*
+Increment{{ .Name }} increments the value of the {{ .Kind }} metric.
+{{ .Description }}
+
+Deprecated: Use Add{{ .Name }}
+*/
+func (svc *Intermediate) Increment{{ .Name }}({{ .In "name type" }}) error {
+	{{ range $i, $elem := .Signature.InputArgs }}{{ if $i -}}
+	x{{ .Name }} := {{ if eq .Type "string" }}{{ .Name }}{{ else }}fmt.Sprintf("%v", {{ .Name }}){{ end }}
+	{{ else -}}
+	x{{ .Name }} := {{ if eq .Type "time.Duration" }}{{ .Name }}.Seconds(){{ else }}float64({{ .Name }}){{ end }}
 	{{ end }}{{ end -}}
 	return svc.IncrementMetric("{{ .Alias }}"{{ range .Signature.InputArgs }}, x{{ .Name }}{{ end }})
 }

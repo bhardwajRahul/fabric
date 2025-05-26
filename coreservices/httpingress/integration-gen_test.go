@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ var (
 	_ *http.Request
 	_ os.File
 	_ time.Time
+	_ *regexp.Regexp
 	_ strings.Builder
 	_ cascadia.Sel
 	_ *connector.Connector
@@ -173,7 +175,7 @@ func (tc *OnChangedPortsTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedPorts executes the on changed callback and returns a corresponding test case.
+// OnChangedPorts executes the callback and returns a corresponding test case.
 func OnChangedPorts(t *testing.T, ctx context.Context) *OnChangedPortsTestCase {
 	tc := &OnChangedPortsTestCase{t: t}
 	t0 := time.Now()
@@ -230,7 +232,7 @@ func (tc *OnChangedAllowedOriginsTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedAllowedOrigins executes the on changed callback and returns a corresponding test case.
+// OnChangedAllowedOrigins executes the callback and returns a corresponding test case.
 func OnChangedAllowedOrigins(t *testing.T, ctx context.Context) *OnChangedAllowedOriginsTestCase {
 	tc := &OnChangedAllowedOriginsTestCase{t: t}
 	t0 := time.Now()
@@ -287,7 +289,7 @@ func (tc *OnChangedPortMappingsTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedPortMappings executes the on changed callback and returns a corresponding test case.
+// OnChangedPortMappings executes the callback and returns a corresponding test case.
 func OnChangedPortMappings(t *testing.T, ctx context.Context) *OnChangedPortMappingsTestCase {
 	tc := &OnChangedPortMappingsTestCase{t: t}
 	t0 := time.Now()
@@ -344,7 +346,7 @@ func (tc *OnChangedReadTimeoutTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedReadTimeout executes the on changed callback and returns a corresponding test case.
+// OnChangedReadTimeout executes the callback and returns a corresponding test case.
 func OnChangedReadTimeout(t *testing.T, ctx context.Context) *OnChangedReadTimeoutTestCase {
 	tc := &OnChangedReadTimeoutTestCase{t: t}
 	t0 := time.Now()
@@ -401,7 +403,7 @@ func (tc *OnChangedWriteTimeoutTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedWriteTimeout executes the on changed callback and returns a corresponding test case.
+// OnChangedWriteTimeout executes the callback and returns a corresponding test case.
 func OnChangedWriteTimeout(t *testing.T, ctx context.Context) *OnChangedWriteTimeoutTestCase {
 	tc := &OnChangedWriteTimeoutTestCase{t: t}
 	t0 := time.Now()
@@ -458,7 +460,7 @@ func (tc *OnChangedReadHeaderTimeoutTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedReadHeaderTimeout executes the on changed callback and returns a corresponding test case.
+// OnChangedReadHeaderTimeout executes the callback and returns a corresponding test case.
 func OnChangedReadHeaderTimeout(t *testing.T, ctx context.Context) *OnChangedReadHeaderTimeoutTestCase {
 	tc := &OnChangedReadHeaderTimeoutTestCase{t: t}
 	t0 := time.Now()
@@ -515,7 +517,7 @@ func (tc *OnChangedBlockedPathsTestCase) Get() (err error) {
 	return tc.err
 }
 
-// OnChangedBlockedPaths executes the on changed callback and returns a corresponding test case.
+// OnChangedBlockedPaths executes the callback and returns a corresponding test case.
 func OnChangedBlockedPaths(t *testing.T, ctx context.Context) *OnChangedBlockedPathsTestCase {
 	tc := &OnChangedBlockedPathsTestCase{t: t}
 	t0 := time.Now()

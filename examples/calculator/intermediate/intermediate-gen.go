@@ -78,6 +78,7 @@ type ToDo interface {
 	Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error)
 	Square(ctx context.Context, x int) (xEcho int, result int, err error)
 	Distance(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error)
+	OnObserveSumOperations(ctx context.Context) (err error)
 }
 
 // Intermediate extends and customizes the generic base connector.
@@ -109,10 +110,14 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe(`ANY`, `:443/distance`, svc.doDistance)
 
 	// Metrics
-	svc.DefineCounter(
-		`calculator_op_count`,
-		`OpCount tracks the types of arithmetic calculations.`,
-		[]string{"op"},
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.DescribeCounter(
+		`fabric_calculator_used_operators`,
+		`UsedOperators tracks the types of the arithmetic operators used.`,
+	)
+	svc.DescribeGauge(
+		`fabric_calculator_sum_operations`,
+		`SumOperations tracks the total sum of the results of all operators.`,
 	)
 
 	// Resources file system
@@ -193,7 +198,9 @@ It demonstrates the use of the defined type Point.`,
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
 	err := encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
@@ -317,12 +324,72 @@ func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	var lastErr error
+	err = svc.impl.OnObserveSumOperations(ctx)
+	if err != nil {
+		lastErr = err
+	}
+	return lastErr
+}
+
 /*
-IncrementOpCount increments the value of the "calculator_op_count" metric.
-OpCount tracks the types of arithmetic calculations.
+AddUsedOperators adds to the value of the counter metric.
+UsedOperators tracks the types of the arithmetic operators used.
 */
-func (svc *Intermediate) IncrementOpCount(num int, op string) error {
+func (svc *Intermediate) AddUsedOperators(ctx context.Context, num int, op string) error {
 	xnum := float64(num)
-	xop := fmt.Sprintf("%v", op)
-	return svc.IncrementMetric("calculator_op_count", xnum, xop)
+	xop := op
+	return svc.AddCounter(ctx, "fabric_calculator_used_operators",
+		xnum,
+		`op`, xop)
+}
+
+/*
+IncrementUsedOperators increments the value of the counter metric.
+UsedOperators tracks the types of the arithmetic operators used.
+
+Deprecated: Use AddUsedOperators
+*/
+func (svc *Intermediate) IncrementUsedOperators(num int, op string) error {
+	xnum := float64(num)
+	xop := op
+	return svc.IncrementMetric("fabric_calculator_used_operators", xnum, xop)
+}
+
+/*
+RecordSumOperations records the current value of the gauge metric.
+SumOperations tracks the total sum of the results of all operators.
+*/
+func (svc *Intermediate) RecordSumOperations(ctx context.Context, sum int, op string) error {
+	xsum := float64(sum)
+	xop := op
+	return svc.RecordGauge(ctx, "fabric_calculator_sum_operations",
+		xsum,
+		`op`, xop)
+}
+
+/*
+ObserveSumOperations observes the current value of the gauge metric.
+SumOperations tracks the total sum of the results of all operators.
+
+Deprecated: Use RecordSumOperations
+*/
+func (svc *Intermediate) ObserveSumOperations(sum int, op string) error {
+	xsum := float64(sum)
+	xop := op
+	return svc.ObserveMetric("fabric_calculator_sum_operations", xsum, xop)
+}
+
+/*
+IncrementSumOperations increments the value of the gauge metric.
+SumOperations tracks the total sum of the results of all operators.
+
+Deprecated: Use RecordSumOperations
+*/
+func (svc *Intermediate) IncrementSumOperations(sum int, op string) error {
+	xsum := float64(sum)
+	xop := op
+	return svc.IncrementMetric("fabric_calculator_sum_operations", xsum, xop)
 }

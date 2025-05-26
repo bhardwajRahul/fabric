@@ -308,3 +308,19 @@ EchoAnything tests arguments of type any.
 func (svc *Service) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
 	return original, nil
 }
+
+/*
+OnceAMinute runs once a minute.
+*/
+func (svc *Service) OnceAMinute(ctx context.Context) (err error) {
+	return nil
+}
+
+/*
+OnObserveMemoryAvailable observes the value of the MemoryAvailable gauge metric.
+MemoryAvailable gauges the amount of available memory.
+*/
+func (svc *Service) OnObserveMemoryAvailable(ctx context.Context) (err error) {
+	svc.RecordMemoryAvailable(ctx, 0)
+	return nil
+}

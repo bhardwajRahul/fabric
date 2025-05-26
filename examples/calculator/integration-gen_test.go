@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ var (
 	_ *http.Request
 	_ os.File
 	_ time.Time
+	_ *regexp.Regexp
 	_ strings.Builder
 	_ cascadia.Sel
 	_ *connector.Connector
@@ -333,5 +335,62 @@ func Distance(t *testing.T, ctx context.Context, p1 calculatorapi.Point, p2 calc
 		return tc.err
 	})
 	tc._dur = time.Since(t0)
+	return tc
+}
+
+// OnObserveSumOperationsTestCase assists in asserting against the results of executing OnObserveSumOperations.
+type OnObserveSumOperationsTestCase struct {
+	t *testing.T
+	dur time.Duration
+	err error
+}
+
+// Error asserts an error.
+func (tc *OnObserveSumOperationsTestCase) Error(errContains string) *OnObserveSumOperationsTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Contains(tc.t, tc.err.Error(), errContains)
+	}
+	return tc
+}
+
+// ErrorCode asserts an error by its status code.
+func (tc *OnObserveSumOperationsTestCase) ErrorCode(statusCode int) *OnObserveSumOperationsTestCase {
+	if testarossa.Error(tc.t, tc.err) {
+		testarossa.Equal(tc.t, statusCode, errors.Convert(tc.err).StatusCode)
+	}
+	return tc
+}
+
+// NoError asserts no error.
+func (tc *OnObserveSumOperationsTestCase) NoError() *OnObserveSumOperationsTestCase {
+	testarossa.NoError(tc.t, tc.err)
+	return tc
+}
+
+// CompletedIn checks that the duration of the operation is less than or equal the threshold.
+func (tc *OnObserveSumOperationsTestCase) CompletedIn(threshold time.Duration) *OnObserveSumOperationsTestCase {
+	testarossa.True(tc.t, tc.dur <= threshold)
+	return tc
+}
+
+// Assert asserts using a provided function.
+func (tc *OnObserveSumOperationsTestCase) Assert(asserter func(t *testing.T, err error)) *OnObserveSumOperationsTestCase {
+	asserter(tc.t, tc.err)
+	return tc
+}
+
+// Get returns the result of executing SumOperations.
+func (tc *OnObserveSumOperationsTestCase) Get() (err error) {
+	return tc.err
+}
+
+// OnObserveSumOperations executes the callback and returns a corresponding test case.
+func OnObserveSumOperations(t *testing.T, ctx context.Context) *OnObserveSumOperationsTestCase {
+	tc := &OnObserveSumOperationsTestCase{t: t}
+	t0 := time.Now()
+	tc.err = errors.CatchPanic(func() error {
+		return Svc.OnObserveSumOperations(ctx)
+	})
+	tc.dur = time.Since(t0)
 	return tc
 }

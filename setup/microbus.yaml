@@ -13,36 +13,16 @@
 # limitations under the License.
 
 services:
-  jaeger:
-    image: jaegertracing/all-in-one
-    environment:
-      COLLECTOR_OTLP_ENABLED: 'true'
+  lgtm:
+    image: grafana/otel-lgtm
     ports:
-      - "16686:16686"
+      - "3000:3000"
       - "4317:4317"
       - "4318:4318"
     networks:
       - microbus-network
-  prometheus:
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - microbus-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
-      - ./prometheus.yaml:/etc/prometheus/prometheus.yml
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3000:3000"
-    networks:
-      - microbus-network
-    depends_on:
-      - prometheus
-    volumes:
-      - ./grafana:/etc/grafana/provisioning/
+      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards
   nats:
     image: nats:2-alpine
     ports:

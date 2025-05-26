@@ -66,9 +66,16 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 Collect returns the latest aggregated metrics.
 */
 func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) {
+	if svc.SecretKey() == "" && svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("secret key required")
+	}
+
 	secretKey := r.URL.Query().Get("secretKey")
 	if secretKey == "" {
 		secretKey = r.URL.Query().Get("secretkey")
+	}
+	if secretKey == "" {
+		secretKey = r.URL.Query().Get("secret_key")
 	}
 	if secretKey != svc.SecretKey() {
 		return errors.Newc(http.StatusNotFound, "incorrect secret key")

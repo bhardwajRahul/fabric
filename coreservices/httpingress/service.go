@@ -317,7 +317,12 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var span trc.Span
 	ctx, span = svc.StartSpan(ctx, ":"+port+r.URL.Path, spanOptions...)
-	defer span.End()
+	spanEnded := false
+	defer func() {
+		if !spanEnded {
+			span.End()
+		}
+	}()
 	r = r.WithContext(ctx)
 
 	ww := httpx.NewResponseRecorder() // This recorder allows modifying the response after it was written
@@ -337,34 +342,38 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.Copy(w, ww.Result())
 
 	// Meter
-	_ = svc.ObserveMetric(
-		"microbus_response_duration_seconds",
+	_ = svc.RecordHistogram(
+		ctx,
+		"microbus_server_request_duration_seconds",
 		time.Since(handlerStartTime).Seconds(),
-		r.Host+"/",
-		port,
-		r.Method,
-		strconv.Itoa(ww.StatusCode()),
-		func() string {
+		"handler", r.Host+"/",
+		"port", port,
+		"method", r.Method,
+		"code", ww.StatusCode(),
+		"error", func() string {
 			if err != nil {
 				return "ERROR"
 			}
 			return "OK"
 		}(),
 	)
-	_ = svc.ObserveMetric(
-		"microbus_response_size_bytes",
+	_ = svc.RecordHistogram(
+		ctx,
+		"microbus_server_response_body_bytes",
 		float64(ww.ContentLength()),
-		r.Host+"/",
-		port,
-		r.Method,
-		strconv.Itoa(ww.StatusCode()),
-		func() string {
+		"handler", r.Host+"/",
+		"port", port,
+		"method", r.Method,
+		"code", ww.StatusCode(),
+		"error", func() string {
 			if err != nil {
 				return "ERROR"
 			}
 			return "OK"
 		}(),
 	)
+	span.End()
+	spanEnded = true
 }
 
 // serveHTTP forwards incoming HTTP requests to the appropriate microservice on NATS.

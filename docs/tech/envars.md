@@ -39,6 +39,10 @@ The `MICROBUS_LOCALITY` environment variable sets the locality of the microservi
 
 Setting the `MICROBUS_LOG_DEBUG` environment variable to any non-empty value is required for microservices to [log](../blocks/logging.md) debug-level messages.
  
-### Distributed Tracing
+### OpenTelemetry
 
-`Microbus` is using OpenTelemetry to send tracing spans to Jaeger via the OTLP HTTP collector. In order to enable tracing, the endpoint of the collector must be set in the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` environment variables.
+`Microbus` pushes telemetry to Grafana via its OpenTelemetry collector. The endpoint of the collector is configured using the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` environment variables.
+
+The `OTEL_METRIC_EXPORT_INTERVAL` variable can be used to set the interval (in milliseconds) between pushes of metrics. It defaults to 15 seconds in `LOCAL` or `TESTING` deployments, and 60 seconds in `PROD` or `LAB` deployments.
+
+Other [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/) are respected.

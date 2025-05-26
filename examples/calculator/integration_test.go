@@ -90,3 +90,14 @@ func TestCalculator_Distance(t *testing.T) {
 	Distance(t, ctx, calculatorapi.Point{X: -5, Y: -8}, calculatorapi.Point{X: 5, Y: -8}).Expect(10)
 	Distance(t, ctx, calculatorapi.Point{X: 0, Y: 0}, calculatorapi.Point{X: 0, Y: 0}).Expect(0)
 }
+
+func TestCalculator_OnObserveSumOperations(t *testing.T) {
+	t.Parallel()
+	/*
+		ctx := Context()
+		OnObserveSumOperations(t, ctx).NoError()
+	*/
+
+	ctx := Context()
+	OnObserveSumOperations(t, ctx).NoError()
+}

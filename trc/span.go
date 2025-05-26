@@ -61,7 +61,7 @@ func (s Span) SetError(err error) {
 	))
 	s.internal.SetStatus(codes.Error, err.Error())
 	sc := errors.StatusCode(err)
-	s.internal.SetAttributes(attribute.Int("http.response.status_code", sc))
+	s.internal.SetAttributes(attribute.Int("http.status_code", sc))
 }
 
 // SetOK sets the status of the span to OK, with the indicated response status code.
@@ -70,9 +70,7 @@ func (s Span) SetOK(statusCode int) {
 		return
 	}
 	s.internal.SetStatus(codes.Ok, "")
-	if statusCode != http.StatusOK {
-		s.internal.SetAttributes(attribute.Int("http.response.status_code", statusCode))
-	}
+	s.internal.SetAttributes(attribute.Int("http.status_code", statusCode))
 }
 
 // slogToTracingAttrs converts a slog attribute to an OpenTracing set of attribute

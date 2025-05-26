@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ var (
 	_ *http.Request
 	_ os.File
 	_ time.Time
+	_ *regexp.Regexp
 	_ strings.Builder
 	_ cascadia.Sel
 	_ *connector.Connector

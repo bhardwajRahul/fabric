@@ -73,6 +73,7 @@ type Service interface {
 	service.PublisherSubscriber
 	service.Identifier
 	service.Logger
+	service.Meter
 }
 
 // NewCache starts a new cache for the service at a given path.
@@ -469,6 +470,10 @@ func (c *Cache) Store(ctx context.Context, key string, value []byte, options ...
 	// Store in local cache
 	c.localCache.Store(key, value, lru.Weight(len(value)))
 
+	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		"op", "store",
+	)
+
 	return nil
 }
 
@@ -493,6 +498,10 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 	if ok {
 		if !opts.ConsistencyCheck {
 			atomic.AddInt64(&c.hits, 1)
+			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+				"op", "load",
+				"hit", "local",
+			)
 			return value, true, nil
 		}
 		// Calculate checksum of local copy
@@ -534,8 +543,16 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 		}
 		if ok {
 			atomic.AddInt64(&c.hits, 1)
+			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+				"op", "load",
+				"hit", "local",
+			)
 		} else {
 			atomic.AddInt64(&c.misses, 1)
+			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+				"op", "load",
+				"hit", "miss",
+			)
 		}
 		return value, ok, nil
 	}
@@ -569,8 +586,16 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 	}
 	if ok {
 		atomic.AddInt64(&c.hits, 1)
+		c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+			"op", "load",
+			"hit", "remote",
+		)
 	} else {
 		atomic.AddInt64(&c.misses, 1)
+		c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+			"op", "load",
+			"hit", "miss",
+		)
 	}
 	return value, ok, nil
 }
@@ -592,6 +617,10 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 			return errors.Trace(err)
 		}
 	}
+
+	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		"op", "delete",
+	)
 	return nil
 }
 
@@ -614,6 +643,10 @@ func (c *Cache) DeletePrefix(ctx context.Context, keyPrefix string) error {
 			return errors.Trace(err)
 		}
 	}
+
+	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		"op", "delete",
+	)
 	return nil
 }
 
@@ -636,6 +669,10 @@ func (c *Cache) DeleteContains(ctx context.Context, keySubstring string) error {
 			return errors.Trace(err)
 		}
 	}
+
+	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		"op", "delete",
+	)
 	return nil
 }
 

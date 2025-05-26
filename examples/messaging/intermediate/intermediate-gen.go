@@ -188,7 +188,9 @@ Only one of the instances of this microservice will respond to each request.`,
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
 	err := encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }

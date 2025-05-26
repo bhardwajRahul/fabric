@@ -72,7 +72,7 @@ type ToDo interface {
 	{{- end}}{{- end}}
 
 	{{- range (JoinHandlers .Functions .Sinks)}}
-	{{ .Name }}({{ .In }}) ({{ .Out }})
+	{{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error)
 	{{- end}}
 
 	{{- range .Webs}}
@@ -82,6 +82,10 @@ type ToDo interface {
 	{{- range .Tickers}}
 	{{ .Name }}(ctx context.Context) (err error)
 	{{- end}}
+
+	{{- range .Metrics}}{{ if .Callback}}
+	OnObserve{{ .Name }}(ctx context.Context) (err error)
+	{{- end}}{{- end}}
 }
 
 // Intermediate extends and customizes the generic base connector.
@@ -168,14 +172,16 @@ func NewService(impl ToDo, version int) *Intermediate {
 	{{- if .Metrics }}
 
 	// Metrics
+	{{- if .Metrics }}
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	{{- end }}
 	{{- range .Metrics }}
-	svc.Define{{ CapitalizeIdentifier .Kind }}(
+	svc.Describe{{ CapitalizeIdentifier .Kind }}(
 		`{{ .Alias }}`,
 		`{{ .Description }}`,
 		{{- if .Buckets }}
 		[]float64{{ "{" }}{{ range $i, $elem := .Buckets }}{{ if $i }}, {{ end }}{{ . }}{{ end }}{{ "}" }},
 		{{- end }}
-		[]string{{ "{" }}{{ range $i, $elem := .Signature.InputArgs }}{{ if gt $i 1 }}, {{ end }}{{ if gt $i 0 }}"{{ .Name }}"{{ end }}{{ end }}{{ "}" }},
 	)
 	{{- end }}{{ end }}
 

@@ -251,7 +251,6 @@ func main() {
 	app.Add(
 		httpegress.NewService(),
 		openapiportal.NewService(),
-		metrics.NewService(),
 		tokenissuer.NewService(),
 	)
 	app.Add(

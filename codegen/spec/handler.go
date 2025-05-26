@@ -43,6 +43,7 @@ type Handler struct {
 	Queue       string     `yaml:"queue"`
 	OpenAPI     bool       `yaml:"openApi"`
 	Actor       string     `yaml:"actor"`
+	Callback    bool       `yaml:"callback"`
 
 	// Sink
 	Event   string `yaml:"event"`
@@ -52,7 +53,6 @@ type Handler struct {
 	// Config
 	Default    string `yaml:"default"`
 	Validation string `yaml:"validation"`
-	Callback   bool   `yaml:"callback"`
 	Secret     bool   `yaml:"secret"`
 
 	// Metrics
@@ -239,6 +239,9 @@ func (h *Handler) validate() error {
 		if len(h.Signature.InputArgs) == 0 {
 			return errors.Newf("at least one argument expected in '%s'", h.Signature.OrigString)
 		}
+		if h.Kind == "histogram" && len(h.Buckets) < 1 {
+			return errors.Newf("at least one bucket is required in '%s'", h.Signature.OrigString)
+		}
 		t := h.Signature.InputArgs[0].Type
 		if t != "int" && t != "time.Duration" && t != "float64" {
 			return errors.Newf("first argument is of a non-numeric type '%s' in '%s'", t, h.Signature.OrigString)
@@ -275,29 +278,73 @@ func (h *Handler) Name() string {
 	return h.Signature.Name
 }
 
-// In returns the input argument list as a string.
-func (h *Handler) In() string {
+/*
+In returns the input argument list as a string.
+Spec options:
+
+	, name type
+	, name
+	name type,
+	name,
+	name
+	name type
+*/
+func (h *Handler) In(spec string) string {
 	var b strings.Builder
-	b.WriteString("ctx context.Context")
-	for _, arg := range h.Signature.InputArgs {
+	commaBefore := strings.HasPrefix(spec, ",")
+	commaAfter := strings.HasSuffix(spec, ",")
+	showType := strings.Contains(spec, "type")
+	if commaBefore && len(h.Signature.InputArgs) > 0 {
 		b.WriteString(", ")
+	}
+	for i, arg := range h.Signature.InputArgs {
+		if i > 0 {
+			b.WriteString(", ")
+		}
 		b.WriteString(arg.Name)
-		b.WriteString(" ")
-		b.WriteString(arg.Type)
+		if showType {
+			b.WriteString(" ")
+			b.WriteString(arg.Type)
+		}
+	}
+	if commaAfter && len(h.Signature.InputArgs) > 0 {
+		b.WriteString(", ")
 	}
 	return b.String()
 }
 
-// In returns the output argument list as a string.
-func (h *Handler) Out() string {
+/*
+Out returns the output argument list as a string.
+Spec options:
+
+	, name type
+	, name
+	name type,
+	name,
+	name
+	name type
+*/
+func (h *Handler) Out(spec string) string {
 	var b strings.Builder
-	for _, arg := range h.Signature.OutputArgs {
-		b.WriteString(arg.Name)
-		b.WriteString(" ")
-		b.WriteString(arg.Type)
+	commaBefore := strings.HasPrefix(spec, ",")
+	commaAfter := strings.HasSuffix(spec, ",")
+	showType := strings.Contains(spec, "type")
+	if commaBefore && len(h.Signature.OutputArgs) > 0 {
 		b.WriteString(", ")
 	}
-	b.WriteString("err error")
+	for i, arg := range h.Signature.OutputArgs {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(arg.Name)
+		if showType {
+			b.WriteString(" ")
+			b.WriteString(arg.Type)
+		}
+	}
+	if commaAfter && len(h.Signature.OutputArgs) > 0 {
+		b.WriteString(", ")
+	}
 	return b.String()
 }
 
@@ -309,16 +356,6 @@ func (h *Handler) SourceSuffix() string {
 		return h.Source
 	}
 	return h.Source[p+1:]
-}
-
-// Observable indicates if the metric can be observed.
-func (h *Handler) Observable() bool {
-	return h.Kind == "histogram" || h.Kind == "gauge"
-}
-
-// Incrementable indicates if the metric can be incremented.
-func (h *Handler) Incrementable() bool {
-	return h.Kind == "counter" || h.Kind == "gauge"
 }
 
 // Port returns the port number set in the path.

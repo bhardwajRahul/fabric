@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -162,14 +163,17 @@ func (c *Connector) runTicker(job *tickerCallback) {
 				// OpenTelemetry: record the error
 				span.SetError(err)
 				c.ForceTrace(ctx)
+			} else {
+				span.SetOK(http.StatusOK)
 			}
 			dur := time.Since(startTime)
 			atomic.AddInt32(&c.pendingOps, -1)
-			_ = c.ObserveMetric(
+			_ = c.RecordHistogram(
+				ctx,
 				"microbus_callback_duration_seconds",
 				dur.Seconds(),
-				job.Name,
-				func() string {
+				"handler", job.Name,
+				"error", func() string {
 					if err != nil {
 						return "ERROR"
 					}

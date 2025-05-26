@@ -137,7 +137,12 @@ func (svc *Service) startDaemon(ctx context.Context) (err error) {
 					// OpenTelemetry: create the root span
 					var span trc.Span
 					ctx, span = svc.StartSpan(svc.Lifetime(), ":"+strconv.Itoa(svc.Port()), trc.Server()) // Use lifetime as parent ctx
-					defer span.End()
+					spanEnded := false
+					defer func() {
+						if !spanEnded {
+							span.End()
+						}
+					}()
 
 					err = errors.CatchPanic(func() error {
 						res, err = svc.processEnvelope(p, e, task)
@@ -156,10 +161,14 @@ func (svc *Service) startDaemon(ctx context.Context) (err error) {
 						// OpenTelemetry: record the error, adding the request attributes
 						span.SetError(err)
 						svc.ForceTrace(ctx)
+						span.End()
+						spanEnded = true
 						return backends.NewResult(fmt.Sprintf("554 Error: %s", err)), err // No trace
 					}
 					// OpenTelemetry: record the status code
 					span.SetOK(res.Code())
+					span.End()
+					spanEnded = true
 					return res, nil
 				},
 			)

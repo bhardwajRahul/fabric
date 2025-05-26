@@ -30,7 +30,7 @@ These are the microservices that implement the business logic of the solution.
 
 ## Core Microservices
 
-`Microbus` comes bundled with a few core microservices that implement common functionality required by most if not all `Microbus` applications.
+`Microbus` comes bundled with a few [core microservices](../structure/coreservices.md) that implement common functionality required by most if not all `Microbus` applications.
 
 The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP-based clients and microservices running on `Microbus`.
 
@@ -94,9 +94,9 @@ A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is co
 
 [Distributed tracing](../blocks/distrib-tracing.md) enables the visualization of the flow of function calls across microservices and processes. Tracing spans are automatically captured for each endpoint call.
 
-[Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are stored in Prometheus and visualized with Grafana dashboards.
+[Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are collected and visualized by Grafana.
 
-[Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered (Grafana), [traced](../blocks/distrib-tracing.md) (Jaeger) and propagated up the stack to the upstream microservice.
+[Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered, traced and propagated up the stack to the upstream microservice.
 
 ### General
 
@@ -120,11 +120,7 @@ Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pen
 
 [OpenTelemetry](https://opentelemetry.io) is a standard for the collection of metrics, distributed tracing and logs.
 
-[Jaeger](https://www.jaegertracing.io) is a distributed tracing observability platform that maps the flow of requests as they traverse a distributed system such as `Microbus`. It is an implementation of the OpenTelemetry standards.
-
-[Prometheus](https://prometheus.io) is a database for storing highly-dimensional time-series data, specifically system and solution-specific metrics.
-
-[Grafana](https://grafana.com) is a dashboard that provides visibility into the metrics collected by Prometheus.
+[Grafana](https://grafana.com)'s LGTM stack is a bundle of applications (Loki, Grafana, Tempo, Mimir) that collect and visualize OpenTelemetry.
 
 [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
 

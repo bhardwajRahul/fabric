@@ -97,6 +97,8 @@ type ToDo interface {
 	UnnamedWebPathArguments(w http.ResponseWriter, r *http.Request) (err error)
 	DirectoryServer(w http.ResponseWriter, r *http.Request) (err error)
 	Hello(w http.ResponseWriter, r *http.Request) (err error)
+	OnceAMinute(ctx context.Context) (err error)
+	OnObserveMemoryAvailable(ctx context.Context) (err error)
 }
 
 // Intermediate extends and customizes the generic base connector.
@@ -147,6 +149,26 @@ func NewService(impl ToDo, version int) *Intermediate {
 
 	// Sinks
 	testerapi1.NewHook(svc).OnDiscovered(svc.impl.OnDiscoveredSink)
+
+	// Tickers
+	intervalOnceAMinute, _ := time.ParseDuration("1m0s")
+	svc.StartTicker("OnceAMinute", intervalOnceAMinute, svc.impl.OnceAMinute)
+
+	// Metrics
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.DescribeCounter(
+		`fabric_tester_num_of_ops`,
+		`NumOfOps counts the number of operations.`,
+	)
+	svc.DescribeGauge(
+		`fabric_tester_memory_available`,
+		`MemoryAvailable gauges the amount of available memory.`,
+	)
+	svc.DescribeHistogram(
+		`fabric_tester_op_duration_seconds`,
+		`OpDurationSeconds keeps track of the duration of operations.`,
+		[]float64{0.1, 0.5, 1, 5, 10},
+	)
 
 	// Resources file system
 	svc.SetResFS(resources.FS)
@@ -450,7 +472,9 @@ An httpResponseBody argument prevents returning additional values, except for th
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if svc.Deployment() == connector.LOCAL {
+		encoder.SetIndent("", "  ")
+	}
 	err := encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
@@ -957,4 +981,106 @@ func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request)
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	var lastErr error
+	err = svc.impl.OnObserveMemoryAvailable(ctx)
+	if err != nil {
+		lastErr = err
+	}
+	return lastErr
+}
+
+/*
+AddNumOfOps adds to the value of the counter metric.
+NumOfOps counts the number of operations.
+*/
+func (svc *Intermediate) AddNumOfOps(ctx context.Context, val int, op string, code int, success bool) error {
+	xval := float64(val)
+	xop := op
+	xcode := fmt.Sprintf("%v", code)
+	xsuccess := fmt.Sprintf("%v", success)
+	return svc.AddCounter(ctx, "fabric_tester_num_of_ops",
+		xval,
+		`op`, xop,
+		`code`, xcode,
+		`success`, xsuccess)
+}
+
+/*
+IncrementNumOfOps increments the value of the counter metric.
+NumOfOps counts the number of operations.
+
+Deprecated: Use AddNumOfOps
+*/
+func (svc *Intermediate) IncrementNumOfOps(val int, op string, code int, success bool) error {
+	xval := float64(val)
+	xop := op
+	xcode := fmt.Sprintf("%v", code)
+	xsuccess := fmt.Sprintf("%v", success)
+	return svc.IncrementMetric("fabric_tester_num_of_ops", xval, xop, xcode, xsuccess)
+}
+
+/*
+RecordMemoryAvailable records the current value of the gauge metric.
+MemoryAvailable gauges the amount of available memory.
+*/
+func (svc *Intermediate) RecordMemoryAvailable(ctx context.Context, bytes int) error {
+	xbytes := float64(bytes)
+	return svc.RecordGauge(ctx, "fabric_tester_memory_available",
+		xbytes)
+}
+
+/*
+ObserveMemoryAvailable observes the current value of the gauge metric.
+MemoryAvailable gauges the amount of available memory.
+
+Deprecated: Use RecordMemoryAvailable
+*/
+func (svc *Intermediate) ObserveMemoryAvailable(bytes int) error {
+	xbytes := float64(bytes)
+	return svc.ObserveMetric("fabric_tester_memory_available", xbytes)
+}
+
+/*
+IncrementMemoryAvailable increments the value of the gauge metric.
+MemoryAvailable gauges the amount of available memory.
+
+Deprecated: Use RecordMemoryAvailable
+*/
+func (svc *Intermediate) IncrementMemoryAvailable(bytes int) error {
+	xbytes := float64(bytes)
+	return svc.IncrementMetric("fabric_tester_memory_available", xbytes)
+}
+
+/*
+RecordOpDurationSeconds records the current value of the histogram metric.
+OpDurationSeconds keeps track of the duration of operations.
+*/
+func (svc *Intermediate) RecordOpDurationSeconds(ctx context.Context, d time.Duration, op string, code int, success bool) error {
+	xd := d.Seconds()
+	xop := op
+	xcode := fmt.Sprintf("%v", code)
+	xsuccess := fmt.Sprintf("%v", success)
+	return svc.RecordHistogram(ctx, "fabric_tester_op_duration_seconds",
+		xd,
+		`op`, xop,
+		`code`, xcode,
+		`success`, xsuccess)
+}
+
+/*
+ObserveOpDurationSeconds observes the current value of the histogram metric.
+OpDurationSeconds keeps track of the duration of operations.
+
+Deprecated: Use RecordOpDurationSeconds
+*/
+func (svc *Intermediate) ObserveOpDurationSeconds(d time.Duration, op string, code int, success bool) error {
+	xd := d.Seconds()
+	xop := op
+	xcode := fmt.Sprintf("%v", code)
+	xsuccess := fmt.Sprintf("%v", success)
+	return svc.ObserveMetric("fabric_tester_op_duration_seconds", xd, xop, xcode, xsuccess)
 }

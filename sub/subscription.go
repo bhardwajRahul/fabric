@@ -138,7 +138,7 @@ func (sub *Subscription) Apply(options ...Option) error {
 	return nil
 }
 
-// Canonical returns the fully-qualified canonical host:port/path of the subscription, not including the scheme.
+// Canonical returns the fully-qualified canonical host:port/path of the subscription, not including the scheme or the method.
 func (sub *Subscription) Canonical() string {
 	return fmt.Sprintf("%s:%s%s", sub.Host, sub.Port, sub.Path)
 }

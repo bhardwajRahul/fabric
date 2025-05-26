@@ -95,11 +95,11 @@ func (c *Connector) SetConfig(name string, value any) error {
 	origValue := config.Value
 	config.Value = v
 
-	// Call the callback function, if provided
+	// Call the callback functions, if provided
 	if c.IsStarted() && config.Value != origValue {
-		for i := 0; i < len(c.onConfigChanged); i++ {
+		for _, callback := range c.onConfigChanged {
 			err := errors.CatchPanic(func() error {
-				return c.onConfigChanged[i](
+				return callback(
 					c.lifetimeCtx,
 					func(n string) bool {
 						return strings.EqualFold(n, name)

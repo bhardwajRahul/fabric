@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+
 apiVersion: 1
 
 providers:
-- name: 'prometheus'
+- name: 'Microbus'
   orgId: 1
   folder: ''
   type: file
   disableDeletion: false
-  editable: true
+  allowUiUpdates: true
   options:
-    path: /etc/grafana/provisioning/dashboards
+    path: /otel-lgtm/grafana/conf/provisioning/dashboards

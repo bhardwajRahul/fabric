@@ -25,6 +25,7 @@ import (
 
 // Service is the spec of the microservice parsed from service.yaml.
 type Service struct {
+	Module  string `yaml:"-"`
 	Package string `yaml:"-"`
 
 	General   General    `yaml:"general"`
@@ -51,8 +52,10 @@ func (s *Service) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return errors.Trace(err)
 	}
 	pkg := s.Package
+	mod := s.Module
 	*s = Service(x)
 	s.Package = pkg
+	s.Module = mod
 
 	// Validate
 	err = s.validate()
@@ -63,7 +66,7 @@ func (s *Service) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Default alias for metrics (requires the package name)
 	for _, metric := range s.Metrics {
 		if metric.Alias == "" {
-			metric.Alias = utils.ToSnakeCase(s.PackageSuffix() + metric.Name())
+			metric.Alias = strings.ToLower(s.ModuleSuffix()+"_"+s.PackageSuffix()) + "_" + utils.ToSnakeCase(metric.Name())
 		}
 	}
 
@@ -139,26 +142,26 @@ func (s *Service) validate() error {
 
 	// Has to repeat validation after setting the types because
 	// the handlers don't know their type during parsing.
-	for _, w := range s.Configs {
-		w.Type = "config"
+	for _, h := range s.Configs {
+		h.Type = "config"
 	}
-	for _, w := range s.Functions {
-		w.Type = "function"
+	for _, h := range s.Functions {
+		h.Type = "function"
 	}
-	for _, w := range s.Webs {
-		w.Type = "web"
+	for _, h := range s.Webs {
+		h.Type = "web"
 	}
-	for _, w := range s.Tickers {
-		w.Type = "ticker"
+	for _, h := range s.Tickers {
+		h.Type = "ticker"
 	}
-	for _, w := range s.Events {
-		w.Type = "event"
+	for _, h := range s.Events {
+		h.Type = "event"
 	}
-	for _, w := range s.Sinks {
-		w.Type = "sink"
+	for _, h := range s.Sinks {
+		h.Type = "sink"
 	}
-	for _, w := range s.Metrics {
-		w.Type = "metric"
+	for _, h := range s.Metrics {
+		h.Type = "metric"
 	}
 	for _, h := range s.AllHandlers() {
 		err := h.validate()
@@ -206,6 +209,15 @@ func (s *Service) PackageSuffix() string {
 	return s.Package[p+1:]
 }
 
+// ModuleSuffix returns only the last portion of the full module path.
+func (s *Service) ModuleSuffix() string {
+	p := strings.LastIndex(s.Module, "/")
+	if p < 0 {
+		return s.Module
+	}
+	return s.Module[p+1:]
+}
+
 // AllHandlers returns an array holding all handlers of all types.
 func (s *Service) AllHandlers() []*Handler {
 	var result []*Handler
@@ -215,5 +227,6 @@ func (s *Service) AllHandlers() []*Handler {
 	result = append(result, s.Sinks...)
 	result = append(result, s.Webs...)
 	result = append(result, s.Tickers...)
+	result = append(result, s.Metrics...)
 	return result
 }

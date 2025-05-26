@@ -4,8 +4,7 @@ The HTTP egress proxy is a core microservice that relays HTTP requests to extern
 
 * Requests are easily mockable in tests
 * The [time budget](../blocks/time-budget.md) is correctly taken into account
-* Requests are traced in Jaeger
-* Requests are metered in Prometheus and Grafana
+* Telemetry is captured and visualized by Grafana
 
 To make a request via the egress proxy, use `Get`, `Post` or `Do` methods of the client.
 To set a timeout shorter than the time budget of the current context, use `context.WithTimeout`.

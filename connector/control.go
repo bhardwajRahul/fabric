@@ -18,7 +18,6 @@ package connector
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/sub"
@@ -87,11 +86,8 @@ func (c *Connector) handleControlConfigRefresh(w http.ResponseWriter, r *http.Re
 
 // handleMetrics responds to the :888/metrics control request with collected metrics.
 func (c *Connector) handleMetrics(w http.ResponseWriter, r *http.Request) error {
-	_ = c.ObserveMetric("microbus_uptime_duration_seconds_total", time.Since(c.startupTime).Seconds())
-	_ = c.ObserveMetric("microbus_cache_len_total", float64(c.distribCache.LocalCache().Len()))
-	_ = c.ObserveMetric("microbus_cache_weight_total", float64(c.distribCache.LocalCache().Weight()))
-	_ = c.ObserveMetric("microbus_cache_hits_total", float64(c.distribCache.Hits()))
-	_ = c.ObserveMetric("microbus_cache_misses_total", float64(c.distribCache.Misses()))
+	ctx := r.Context()
+	c.observeMetricsJustInTime(ctx)
 	if c.metricsHandler != nil {
 		if c.Deployment() == LOCAL {
 			// Do not compress the response on local to avoid special characters when running NATS is debug mode

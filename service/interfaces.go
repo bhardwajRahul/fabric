@@ -47,12 +47,31 @@ type PublisherSubscriber interface {
 	Subscriber
 }
 
-// Subscriber are the actions used to output log messages.
+// Logger are the actions used to output log messages.
 type Logger interface {
 	LogDebug(ctx context.Context, msg string, args ...any)
 	LogInfo(ctx context.Context, msg string, args ...any)
 	LogWarn(ctx context.Context, msg string, args ...any)
 	LogError(ctx context.Context, msg string, args ...any)
+}
+
+// ObserveMetricsHandler handles the OnObserveMetrics callback.
+type ObserveMetricsHandler func(ctx context.Context) error
+
+// MeterDescriber are the actions used to describe metrics.
+type MeterDescriber interface {
+	DescribeCounter(name string, desc string) (err error)
+	DescribeGauge(name string, desc string) (err error)
+	DescribeHistogram(name string, desc string, buckets []float64) (err error)
+
+	SetOnObserveMetrics(handler ObserveMetricsHandler) error
+}
+
+// Meter are the actions used to record metrics.
+type Meter interface {
+	AddCounter(ctx context.Context, name string, val float64, attributes ...any) (err error)
+	RecordGauge(ctx context.Context, name string, val float64, attributes ...any) (err error)
+	RecordHistogram(ctx context.Context, name string, val float64, attributes ...any) (err error)
 }
 
 // Tracer are the actions used to operate distributed tracing spans.
@@ -65,7 +84,7 @@ type Tracer interface {
 // StartupHandler handles the OnStartup callback.
 type StartupHandler func(ctx context.Context) error
 
-// StartupHandler handles the OnShutdown callback.
+// ShutdownHandler handles the OnShutdown callback.
 type ShutdownHandler func(ctx context.Context) error
 
 // StarterStopper are the lifecycle actions of the microservice.
@@ -94,7 +113,7 @@ type Identifier interface {
 	Locality() string
 }
 
-// StartupHandler handles the OnStartup callback.
+// ConfigChangedHandler handles the OnConfigChanged callback.
 type ConfigChangedHandler func(ctx context.Context, changed func(string) bool) error
 
 // Configurable are the actions used to configure the microservice.
@@ -139,6 +158,8 @@ type Service interface {
 	Publisher
 	Subscriber
 	Logger
+	MeterDescriber
+	Meter
 	Tracer
 	StarterStopper
 	Identifier

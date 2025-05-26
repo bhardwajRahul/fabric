@@ -86,4 +86,9 @@ func TestBrowser_Browse(t *testing.T) {
 		TagExists(`INPUT[name="url"][type="text"][value="https://mocked.example.com/"]`).
 		TagContains(`PRE`, `<html><body>Lorem Ipsum<body></html>`).
 		CompletedIn(100 * time.Millisecond)
+	Browse_Get(t, ctx, "").
+		NoError().
+		StatusOK().
+		TagExists(`INPUT[name="url"][type="text"][value=""]`).
+		CompletedIn(100 * time.Millisecond)
 }

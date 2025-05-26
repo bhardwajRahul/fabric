@@ -36,13 +36,13 @@ func (gen *Generator) makeIntegration() error {
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 
-	if !gen.specs.General.IntegrationTests {
+	if !gen.Specs.General.IntegrationTests {
 		gen.Printer.Debug("Disabled in service.yaml")
 		return nil
 	}
 
 	// Fully qualify the types outside of the API directory
-	gen.specs.FullyQualifyTypes()
+	gen.Specs.FullyQualifyTypes()
 
 	// integration-gen_test.go
 	fileName := filepath.Join(gen.WorkDir, "integration-gen_test.go")
@@ -53,11 +53,12 @@ func (gen *Generator) makeIntegration() error {
 		"integration-gen_test.webs.txt",
 		"integration-gen_test.tickers.txt",
 		"integration-gen_test.configs.txt",
+		"integration-gen_test.metrics.txt",
 	)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -71,7 +72,7 @@ func (gen *Generator) makeIntegration() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err := tt.Overwrite(fileName, gen.specs)
+		err := tt.Overwrite(fileName, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -80,7 +81,7 @@ func (gen *Generator) makeIntegration() error {
 
 	// Scan .go files for existing endpoints
 	gen.Printer.Debug("Scanning for existing tests")
-	pkg := capitalizeIdentifier(gen.specs.PackageSuffix())
+	pkg := capitalizeIdentifier(gen.Specs.PackageSuffix())
 	existingTests, err := gen.scanFiles(
 		gen.WorkDir,
 		func(file fs.DirEntry) bool {
@@ -100,11 +101,13 @@ func (gen *Generator) makeIntegration() error {
 
 	// Mark existing tests in the specs
 	newTests := false
-	for _, h := range gen.specs.AllHandlers() {
-		if h.Type != "function" && h.Type != "event" && h.Type != "sink" && h.Type != "web" && h.Type != "ticker" && h.Type != "config" {
+	for _, h := range gen.Specs.AllHandlers() {
+		if h.Type != "function" && h.Type != "event" && h.Type != "sink" && h.Type != "web" && h.Type != "ticker" && h.Type != "config" && h.Type != "metric" {
 			continue
 		}
-		if existingTests[h.Name()] || existingTests["OnChanged"+h.Name()] {
+		if existingTests[h.Name()] ||
+			existingTests["OnChanged"+h.Name()] ||
+			existingTests["OnObserve"+h.Name()] {
 			h.Exists = true
 		} else {
 			h.Exists = false
@@ -119,14 +122,14 @@ func (gen *Generator) makeIntegration() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = tt.AppendTo(fileName, gen.specs)
+		err = tt.AppendTo(fileName, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		gen.Printer.Debug("New tests created")
 		gen.Printer.Indent()
-		for _, h := range gen.specs.AllHandlers() {
+		for _, h := range gen.Specs.AllHandlers() {
 			if h.Type != "function" && h.Type != "event" && h.Type != "sink" && h.Type != "web" && h.Type != "ticker" {
 				continue
 			}
@@ -147,7 +150,7 @@ func (gen *Generator) makeIntermediate() error {
 	defer gen.Printer.Unindent()
 
 	// Fully qualify the types outside of the API directory
-	gen.specs.FullyQualifyTypes()
+	gen.Specs.FullyQualifyTypes()
 
 	// Create the directory
 	dir := filepath.Join(gen.WorkDir, "intermediate")
@@ -170,7 +173,7 @@ func (gen *Generator) makeIntermediate() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -184,7 +187,7 @@ func (gen *Generator) makeIntermediate() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -214,7 +217,7 @@ func (gen *Generator) makeResources() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -239,26 +242,26 @@ func (gen *Generator) makeApp() error {
 		return errors.Trace(err)
 	}
 
-	dir = filepath.Join(gen.WorkDir, "app", gen.specs.PackageSuffix())
+	dir = filepath.Join(gen.WorkDir, "app", gen.Specs.PackageSuffix())
 	_, err = os.Stat(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir app/%s", gen.specs.PackageSuffix())
+		gen.Printer.Debug("mkdir app/%s", gen.Specs.PackageSuffix())
 	} else if err != nil {
 		return errors.Trace(err)
 	}
 
 	// main-gen.go
-	fileName := filepath.Join(gen.WorkDir, "app", gen.specs.PackageSuffix(), "main-gen.go")
+	fileName := filepath.Join(gen.WorkDir, "app", gen.Specs.PackageSuffix(), "main-gen.go")
 	tt, err := LoadTemplate("app/main-gen.txt")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Debug("app/%s/main-gen.go", gen.specs.PackageSuffix())
+	gen.Printer.Debug("app/%s/main-gen.go", gen.Specs.PackageSuffix())
 
 	return nil
 }
@@ -270,20 +273,20 @@ func (gen *Generator) makeAPI() error {
 	defer gen.Printer.Unindent()
 
 	// Should not fully qualify types when generating inside the API directory
-	gen.specs.ShorthandTypes()
+	gen.Specs.ShorthandTypes()
 
 	// Create the directories
-	dir := filepath.Join(gen.WorkDir, gen.specs.PackageSuffix()+"api")
+	dir := filepath.Join(gen.WorkDir, gen.Specs.PackageSuffix()+"api")
 	_, err := os.Stat(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir %sapi", gen.specs.PackageSuffix())
+		gen.Printer.Debug("mkdir %sapi", gen.Specs.PackageSuffix())
 	} else if err != nil {
 		return errors.Trace(err)
 	}
 
 	// Types
-	if len(gen.specs.Types) > 0 {
+	if len(gen.Specs.Types) > 0 {
 		// Scan .go files for existing types
 		gen.Printer.Debug("Scanning for existing types")
 		existingTypes, err := gen.scanFiles(
@@ -306,7 +309,7 @@ func (gen *Generator) makeAPI() error {
 
 		// Mark existing types in the specs
 		newTypes := false
-		for _, ct := range gen.specs.Types {
+		for _, ct := range gen.Specs.Types {
 			ct.Exists = existingTypes[ct.Name]
 			newTypes = newTypes || !ct.Exists
 		}
@@ -319,7 +322,7 @@ func (gen *Generator) makeAPI() error {
 				return errors.Trace(err)
 			}
 			hasImports := false
-			for _, ct := range gen.specs.Types {
+			for _, ct := range gen.Specs.Types {
 				if !ct.Exists && len(typeDefs[ct.Name]) == 1 {
 					ct.Package = typeDefs[ct.Name][0]
 					hasImports = true
@@ -332,36 +335,36 @@ func (gen *Generator) makeAPI() error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				err = tt.Overwrite(fileName, gen.specs)
+				err = tt.Overwrite(fileName, gen.Specs)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				gen.Printer.Debug("%sapi/imports-gen.go", gen.specs.PackageSuffix())
+				gen.Printer.Debug("%sapi/imports-gen.go", gen.Specs.PackageSuffix())
 			} else {
 				os.Remove(fileName)
 			}
 
 			// Create a file for each new type
-			for _, ct := range gen.specs.Types {
+			for _, ct := range gen.Specs.Types {
 				if !ct.Exists && len(typeDefs[ct.Name]) != 1 {
 					fileName := filepath.Join(dir, strings.ToLower(ct.Name)+".go")
 					tt, err := LoadTemplate("api/type.txt")
 					if err != nil {
 						return errors.Trace(err)
 					}
-					ct.Package = gen.specs.Package // Hack
+					ct.Package = gen.Specs.Package // Hack
 					err = tt.Overwrite(fileName, ct)
 					if err != nil {
 						return errors.Trace(err)
 					}
-					gen.Printer.Debug("%sapi/%s.go", gen.specs.PackageSuffix(), strings.ToLower(ct.Name))
+					gen.Printer.Debug("%sapi/%s.go", gen.Specs.PackageSuffix(), strings.ToLower(ct.Name))
 				}
 			}
 		}
 	}
 
 	// clients-gen.go
-	fileName := filepath.Join(gen.WorkDir, gen.specs.PackageSuffix()+"api", "clients-gen.go")
+	fileName := filepath.Join(gen.WorkDir, gen.Specs.PackageSuffix()+"api", "clients-gen.go")
 	tt, err := LoadTemplate(
 		"api/clients-gen.txt",
 		"api/clients-gen.webs.txt",
@@ -370,11 +373,11 @@ func (gen *Generator) makeAPI() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Debug("%sapi/clients-gen.go", gen.specs.PackageSuffix())
+	gen.Printer.Debug("%sapi/clients-gen.go", gen.Specs.PackageSuffix())
 
 	return nil
 }
@@ -386,7 +389,7 @@ func (gen *Generator) makeImplementation() error {
 	defer gen.Printer.Unindent()
 
 	// Fully qualify the types outside of the API directory
-	gen.specs.FullyQualifyTypes()
+	gen.Specs.FullyQualifyTypes()
 
 	// Overwrite service-gen.go
 	fileName := filepath.Join(gen.WorkDir, "service-gen.go")
@@ -394,7 +397,7 @@ func (gen *Generator) makeImplementation() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = tt.Overwrite(fileName, gen.specs)
+	err = tt.Overwrite(fileName, gen.Specs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -408,7 +411,7 @@ func (gen *Generator) makeImplementation() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err := tt.Overwrite(fileName, gen.specs)
+		err := tt.Overwrite(fileName, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -437,11 +440,16 @@ func (gen *Generator) makeImplementation() error {
 
 	// Mark existing handlers in the specs
 	newEndpoints := false
-	for _, h := range gen.specs.AllHandlers() {
+	for _, h := range gen.Specs.AllHandlers() {
 		if h.Type == "config" && !h.Callback {
 			continue
 		}
-		if existingEndpoints[h.Name()] || existingEndpoints["OnChanged"+h.Name()] {
+		if h.Type == "metric" && !h.Callback {
+			continue
+		}
+		if existingEndpoints[h.Name()] ||
+			existingEndpoints["OnChanged"+h.Name()] ||
+			existingEndpoints["OnObserve"+h.Name()] {
 			h.Exists = true
 		} else {
 			h.Exists = false
@@ -456,20 +464,25 @@ func (gen *Generator) makeImplementation() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = tt.AppendTo(fileName, gen.specs)
+		err = tt.AppendTo(fileName, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		gen.Printer.Debug("New handlers created")
 		gen.Printer.Indent()
-		for _, h := range gen.specs.AllHandlers() {
+		for _, h := range gen.Specs.AllHandlers() {
 			if h.Type == "config" && !h.Callback {
+				continue
+			}
+			if h.Type == "metric" && !h.Callback {
 				continue
 			}
 			if !h.Exists {
 				if h.Type == "config" {
 					gen.Printer.Debug("OnChanged%s", h.Name())
+				} else if h.Type == "metric" {
+					gen.Printer.Debug("OnObserve%s", h.Name())
 				} else {
 					gen.Printer.Debug("%s", h.Name())
 				}
@@ -517,7 +530,7 @@ func (gen *Generator) scanProjectTypeDefinitions() (map[string][]string, error) 
 	gen.Printer.Debug("Scanning project type definitions")
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
-	err := gen.scanDirTypeDefinitions(gen.ProjectPath, found)
+	err := gen.scanDirTypeDefinitions(gen.ProjectDir, found)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -549,7 +562,7 @@ func (gen *Generator) scanDirTypeDefinitions(workDir string, found map[string][]
 			return errors.Trace(err)
 		}
 		if len(typeDefs) > 0 {
-			subPath := strings.TrimPrefix(workDir, gen.ProjectPath)
+			subPath := strings.TrimPrefix(workDir, gen.ProjectDir)
 			pkg := strings.ReplaceAll(filepath.Join(gen.ModulePath, subPath), "\\", "/")
 			gen.Printer.Debug(pkg)
 			gen.Printer.Indent()
@@ -694,7 +707,7 @@ func (gen *Generator) makeRefreshSignature() error {
 	defer gen.Printer.Unindent()
 
 	// Fully qualify the types outside of the API directory
-	gen.specs.FullyQualifyTypes()
+	gen.Specs.FullyQualifyTypes()
 
 	files, err := os.ReadDir(gen.WorkDir)
 	if err != nil {
@@ -715,8 +728,8 @@ func (gen *Generator) makeRefreshSignature() error {
 			return errors.Trace(err)
 		}
 		body := string(buf)
-		alteredBody := findReplaceSignature(gen.specs, body)
-		alteredBody = findReplaceDescription(gen.specs, alteredBody)
+		alteredBody := findReplaceSignature(gen.Specs, body)
+		alteredBody = findReplaceDescription(gen.Specs, alteredBody)
 		if body != alteredBody {
 			err = os.WriteFile(fileName, []byte(alteredBody), 0666)
 			if err != nil {
@@ -739,7 +752,7 @@ func findReplaceSignature(specs *spec.Service, source string) (modified string) 
 		if p < 0 {
 			continue
 		}
-		fnSig := "func (svc *Service) " + fn.Name() + "(" + fn.In() + ") (" + fn.Out() + ")"
+		fnSig := "func (svc *Service) " + fn.Name() + "(ctx context.Context" + fn.In(", name type") + ") (" + fn.Out("name type,") + "err error)"
 		q := strings.Index(source[p:], fnSig)
 		if q != 0 {
 			// Signature changed
@@ -814,7 +827,7 @@ func (gen *Generator) makeVersion(version int) error {
 	}
 
 	v := &spec.Version{
-		Package:   gen.specs.Package,
+		Package:   gen.Specs.Package,
 		Version:   version,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		SHA256:    hash,

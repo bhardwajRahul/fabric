@@ -22,6 +22,8 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,7 +61,7 @@ func TestMetrics_Collect(t *testing.T) {
 
 	ctx := Context()
 	Collect_Get(t, ctx, "").
-		// All three services should be detected
+		// Only the metrics service should be detected
 		BodyContains("metrics.core").
 		BodyNotContains("one.collect").
 		BodyNotContains("two.collect")
@@ -103,6 +105,28 @@ func TestMetrics_Collect(t *testing.T) {
 			bytes.Contains(body, []byte("two.collect")) {
 			break
 		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	re := func(name string, value string, attrs ...string) string {
+		var sb strings.Builder
+		if name != "" {
+			sb.WriteString(regexp.QuoteMeta(name))
+			sb.WriteString(regexp.QuoteMeta("{"))
+		}
+		for i := 0; i < len(attrs); i += 2 {
+			sb.WriteString(".*")
+			sb.WriteString(regexp.QuoteMeta(attrs[i]))
+			sb.WriteString(regexp.QuoteMeta(`="`))
+			sb.WriteString(regexp.QuoteMeta(attrs[i+1]))
+			sb.WriteString(regexp.QuoteMeta(`"`))
+		}
+		sb.WriteString(".*")
+		if value != "" {
+			sb.WriteString(regexp.QuoteMeta("} "))
+			sb.WriteString(regexp.QuoteMeta(value))
+		}
+		return sb.String()
 	}
 
 	Collect_Get(t, ctx, "").
@@ -111,25 +135,102 @@ func TestMetrics_Collect(t *testing.T) {
 		BodyContains("one.collect").
 		BodyContains("two.collect").
 		// The startup callback should take between 100ms and 500ms
-		BodyContains(`microbus_callback_duration_seconds_bucket{error="OK",handler="startup",id="` + con1.ID() + `",service="one.collect",ver="0",le="0.1"} 0`).
-		BodyContains(`microbus_callback_duration_seconds_bucket{error="OK",handler="startup",id="` + con1.ID() + `",service="one.collect",ver="0",le="0.5"} 1`).
-		BodyContains(`microbus_log_messages_total{id="` + con1.ID() + `",message="Startup",service="one.collect",severity="INFO",ver="0"} 1`).
-		BodyContains(`microbus_uptime_duration_seconds_total{id="` + con1.ID() + `",service="one.collect",ver="0"}`).
+		BodyMatchesRegexp(re("microbus_callback_duration_seconds_bucket", "0",
+			"error", "OK",
+			"handler", "startup",
+			"id", con1.ID(),
+			"service", "one.collect",
+			"le", "0.1",
+		)).
+		BodyMatchesRegexp(re("microbus_callback_duration_seconds_bucket", "1",
+			"error", "OK",
+			"handler", "startup",
+			"id", con1.ID(),
+			"service", "one.collect",
+			"le", "0.5",
+		)).
+		BodyMatchesRegexp(re("microbus_log_messages_total", "1",
+			"id", con1.ID(),
+			"message", "Startup",
+			"service", "one.collect",
+			"severity", "INFO",
+		)).
+		BodyMatchesRegexp(re("microbus_uptime_duration_seconds", "",
+			"id", con1.ID(),
+			"service", "one.collect",
+		)).
 		// Cache should have 1 element of 10 bytes
-		BodyContains(`microbus_cache_weight_total{id="` + con1.ID() + `",service="one.collect",ver="0"} 10`).
-		BodyContains(`microbus_cache_len_total{id="` + con1.ID() + `",service="one.collect",ver="0"} 1`).
-		BodyContains(`microbus_cache_misses_total{id="` + con1.ID() + `",service="one.collect",ver="0"} 1`).
-		BodyContains(`microbus_cache_hits_total{id="` + con1.ID() + `",service="one.collect",ver="0"} 1`).
-		BodyContains(`microbus_request_count_total{code="404",error="OK",host="one.collect",id="` + con1.ID() + `",method="GET",port="888",service="one.collect",ver="0"} 2`).
+		BodyMatchesRegexp(re("microbus_cache_memory_bytes", "10",
+			"id", con1.ID(),
+			"service", "one.collect",
+		)).
+		BodyMatchesRegexp(re("microbus_cache_elements", "1",
+			"id", con1.ID(),
+			"service", "one.collect",
+		)).
+		BodyMatchesRegexp(re("microbus_cache_operations_total", "1",
+			"hit", "miss",
+			"id", con1.ID(),
+			"op", "load",
+			"service", "one.collect",
+		)).
+		BodyMatchesRegexp(re("microbus_cache_operations_total", "1",
+			"hit", "local",
+			"id", con1.ID(),
+			"op", "load",
+			"service", "one.collect",
+		)).
+		BodyMatchesRegexp(re("microbus_server_request_duration_seconds_count", "2",
+			"code", "404",
+			"error", "OK",
+			"handler", "one.collect:888/dcache/all",
+			"id", con1.ID(),
+			"method", "GET",
+			"port", "888",
+			"service", "one.collect",
+		)).
 		// The response size is 10 bytes
-		BodyContains(`microbus_response_size_bytes_sum{code="200",error="OK",handler="one.collect:443/ten",id="` + con1.ID() + `",method="GET",port="443",service="one.collect",ver="0"} 10`).
-		BodyContains(`microbus_response_size_bytes_count{code="200",error="OK",handler="one.collect:443/ten",id="` + con1.ID() + `",method="GET",port="443",service="one.collect",ver="0"} 1`).
+		BodyMatchesRegexp(re("microbus_server_response_body_bytes_sum", "10",
+			"code", "200",
+			"error", "OK",
+			"handler", "one.collect:443/ten",
+			"id", con1.ID(),
+			"method", "GET",
+			"port", "443",
+			"service", "one.collect",
+		)).
+		BodyMatchesRegexp(re("microbus_server_response_body_bytes_count", "1",
+			"code", "200",
+			"error", "OK",
+			"handler", "one.collect:443/ten",
+			"id", con1.ID(),
+			"method", "GET",
+			"port", "443",
+			"service", "one.collect",
+		)).
 		// The request should take between 100ms and 500ms
-		BodyContains(`microbus_request_count_total{code="200",error="OK",host="one.collect",id="` + con1.ID() + `",method="GET",port="443",service="one.collect",ver="0"} 1`).
-		BodyContains(`microbus_response_duration_seconds_bucket{code="200",error="OK",handler="one.collect:443/ten",id="` + con1.ID() + `",method="GET",port="443",service="one.collect",ver="0",le="0.1"} 0`).
-		BodyContains(`microbus_response_duration_seconds_bucket{code="200",error="OK",handler="one.collect:443/ten",id="` + con1.ID() + `",method="GET",port="443",service="one.collect",ver="0",le="0.5"} 1`).
+		BodyMatchesRegexp(re("microbus_server_request_duration_seconds_bucket", "0",
+			"code", "200",
+			"error", "OK",
+			"handler", "one.collect:443/ten",
+			"id", con1.ID(),
+			"method", "GET",
+			"port", "443",
+			"service", "one.collect",
+			"le", "0.1",
+		)).
+		BodyMatchesRegexp(re("microbus_server_request_duration_seconds_bucket", "1",
+			"code", "200",
+			"error", "OK",
+			"handler", "one.collect:443/ten",
+			"id", con1.ID(),
+			"method", "GET",
+			"port", "443",
+			"service", "one.collect",
+			"le", "0.5",
+		)).
 		// Acks should be logged
-		BodyContains("microbus_ack_duration_seconds_bucket")
+		BodyContains("microbus_client_ack_roundtrip_latency_seconds_bucket")
 }
 
 func TestMetrics_GZip(t *testing.T) {
@@ -146,7 +247,7 @@ func TestMetrics_GZip(t *testing.T) {
 			body, err := io.ReadAll(unzipper)
 			unzipper.Close()
 			testarossa.NoError(t, err)
-			testarossa.True(t, bytes.Contains(body, []byte("microbus_log_messages_total")))
+			testarossa.True(t, bytes.Contains(body, []byte("microbus_log_messages")))
 		})
 }
 

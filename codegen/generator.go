@@ -29,15 +29,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Generator is the main operator that operates to generate the code.
+// Generator is the main operator that generates the code.
 type Generator struct {
 	Force       bool
 	WorkDir     string
+	ProjectDir  string
 	ModulePath  string
-	ProjectPath string
+	PackagePath string
 	Printer     IndentPrinter
-
-	specs *spec.Service
+	Specs       *spec.Service
 }
 
 // NewGenerator creates a new code generator set to run on
@@ -61,14 +61,15 @@ func (gen *Generator) Run() error {
 		gen.WorkDir = filepath.Join(cwd, gen.WorkDir)
 	}
 
-	pkgPath, err := gen.identifyPackage()
+	err := gen.identifyPackage()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Info("%s", pkgPath)
+	gen.Printer.Info("%s", gen.PackagePath)
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 	gen.Printer.Debug("Directory %s", gen.WorkDir)
+	gen.Printer.Debug("Package %s", gen.PackagePath)
 
 	// Generate hash
 	hash, err := utils.SourceCodeSHA256(gen.WorkDir)
@@ -114,10 +115,11 @@ func (gen *Generator) Run() error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		gen.specs = &spec.Service{
-			Package: pkgPath, // Must be set before parsing
+		gen.Specs = &spec.Service{
+			Module:  gen.ModulePath,
+			Package: gen.PackagePath, // Must be set before parsing
 		}
-		err = yaml.Unmarshal(b, gen.specs)
+		err = yaml.Unmarshal(b, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -125,7 +127,7 @@ func (gen *Generator) Run() error {
 	}
 
 	// Process specs
-	if gen.specs != nil {
+	if gen.Specs != nil {
 		err = gen.makeApp()
 		if err != nil {
 			return errors.Trace(err)
@@ -161,7 +163,7 @@ func (gen *Generator) Run() error {
 		return errors.Trace(err)
 	}
 
-	if gen.specs != nil {
+	if gen.Specs != nil {
 		verNum := 1
 		if v != nil {
 			verNum = v.Version + 1
@@ -181,7 +183,7 @@ func (gen *Generator) Run() error {
 // identifyPackage identifies the full package path of the working directory.
 // It scans for the go.mod and combines the module name with the relative path of
 // the working directory.
-func (gen *Generator) identifyPackage() (string, error) {
+func (gen *Generator) identifyPackage() error {
 	// Locate module name in go.mod
 	goModExists := func(path string) bool {
 		_, err := os.Stat(filepath.Join(path, "go.mod"))
@@ -192,26 +194,27 @@ func (gen *Generator) identifyPackage() (string, error) {
 		d = filepath.Dir(d)
 	}
 	if d == string(os.PathSeparator) {
-		return "", errors.New("unable to locate go.mod in ancestor directory")
+		return errors.New("unable to locate go.mod in ancestor directory")
 	}
-	gen.ProjectPath = d
+	gen.ProjectDir = d
 	goMod, err := os.ReadFile(filepath.Join(d, "go.mod"))
 	if err != nil {
-		return "", errors.Trace(err)
+		return errors.Trace(err)
 	}
 	re, err := regexp.Compile(`module (.+)\n`)
 	if err != nil {
-		return "", errors.Trace(err)
+		return errors.Trace(err)
 	}
 	subMatches := re.FindSubmatch(goMod)
 	if len(subMatches) != 2 {
-		return "", errors.New("unable to locate module in go.mod")
+		return errors.New("unable to locate module in go.mod")
 	}
 	gen.ModulePath = string(subMatches[1])
 
-	subPath := strings.TrimPrefix(gen.WorkDir, gen.ProjectPath)
+	subPath := strings.TrimPrefix(gen.WorkDir, gen.ProjectDir)
 	pkg := strings.ReplaceAll(filepath.Join(gen.ModulePath, subPath), "\\", "/")
-	return pkg, nil
+	gen.PackagePath = pkg
+	return nil
 }
 
 // currentVersion loads the version information.

@@ -22,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -352,10 +351,12 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			// Ack
 			if opCode == frame.OpCodeAck {
 				if seenIDs[fromID] == "" {
-					_ = c.ObserveMetric(
-						"microbus_ack_duration_seconds",
+					_ = c.RecordHistogram(
+						ctx,
+						"microbus_client_ack_roundtrip_latency_seconds",
 						time.Since(publishTime).Seconds(),
-						httpReq.URL.Hostname(),
+						"host", httpReq.URL.Hostname(),
+						"port", httpReq.URL.Port(),
 					)
 					seenIDs[fromID] = frame.OpCodeAck
 				}
@@ -408,15 +409,6 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			// Response
 			if opCode == frame.OpCodeResponse {
 				output = append(output, pub.NewHTTPResponse(response))
-				_ = c.IncrementMetric(
-					"microbus_request_count_total",
-					1,
-					httpReq.Method,
-					httpReq.URL.Hostname(),
-					port,
-					strconv.Itoa(response.StatusCode),
-					"OK",
-				)
 			}
 
 			// Error
@@ -434,20 +426,6 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 				if statusCode == 0 {
 					statusCode = http.StatusInternalServerError
 				}
-				_ = c.IncrementMetric(
-					"microbus_request_count_total",
-					1,
-					httpReq.Method,
-					httpReq.URL.Hostname(),
-					port,
-					strconv.Itoa(statusCode),
-					func() string {
-						if statusCode == http.StatusNotFound {
-							return "OK"
-						}
-						return "ERROR"
-					}(),
-				)
 			}
 
 			// Response or error (i.e. not an ack)
@@ -480,14 +458,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			err = errors.Newc(http.StatusRequestTimeout, "timeout")
 			output = append(output, pub.NewErrorResponse(err))
 			c.postRequestData.Store("timeout:"+msgID, subject)
-			_ = c.IncrementMetric(
-				"microbus_request_count_total",
+			_ = c.AddCounter(
+				ctx,
+				"microbus_client_timeout_requests",
 				1,
-				httpReq.Method,
-				httpReq.URL.Hostname(),
-				port,
-				strconv.Itoa(http.StatusRequestTimeout),
-				"OK",
+				"code", http.StatusRequestTimeout,
 			)
 
 			// Known responders optimization
@@ -525,14 +500,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 				} else {
 					err = errors.Newc(http.StatusNotFound, "ack timeout")
 					output = append(output, pub.NewErrorResponse(err))
-					_ = c.IncrementMetric(
-						"microbus_request_count_total",
+					_ = c.AddCounter(
+						ctx,
+						"microbus_client_timeout_requests",
 						1,
-						httpReq.Method,
-						httpReq.URL.Hostname(),
-						port,
-						strconv.Itoa(http.StatusNotFound),
-						"OK",
+						"code", http.StatusNotFound,
 					)
 				}
 				return output

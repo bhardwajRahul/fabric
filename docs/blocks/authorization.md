@@ -10,7 +10,7 @@ To get started, the client submits credentials to an authenticator microservice.
 
 `Microbus` does not include authenticators out of the box. The [login example](../structure/examples-login.md) microservice demonstrates how such a microservice may look like when the client is a browser. A `Set-Cookie` response header returns the JWT to the browser, which in turn sends it back with all consecutive requests in the `Cookie` request header. The cookie is named `Authorization` to allow the authorization [middleware](../structure/coreservices-httpingress.md#middleware) to easily locate it.
 
-The login example microservice utilizes the [token issuer](../structure/coreservices-tokenissuer.md) core microservice to issue and validate JWTs. It is possible to replace the core microservice with a [custom token validator](../howto/enabling-auth.md#step-2-token-issuer-and-validator).
+The login example microservice utilizes the [token issuer](../structure/coreservices-tokenissuer.md) core microservice to issue and validate JWTs. It is possible to replace the token issuer core microservice with a [custom token validator](../howto/enabling-auth.md#step-2-token-issuer-and-validator).
 
 ### Flow 2: Authorization
 

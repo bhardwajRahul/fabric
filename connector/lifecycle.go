@@ -156,13 +156,16 @@ func (c *Connector) Startup() (err error) {
 			// OpenTelemetry: record the error
 			span.SetError(err)
 			c.ForceTrace(ctx)
+		} else {
+			span.SetOK(http.StatusOK)
 		}
 		span.End()
-		_ = c.ObserveMetric(
+		_ = c.RecordHistogram(
+			ctx,
 			"microbus_callback_duration_seconds",
 			time.Since(startTime).Seconds(),
-			"startup",
-			func() string {
+			"handler", "startup",
+			"error", func() string {
 				if err != nil {
 					return "ERROR"
 				}
@@ -176,6 +179,11 @@ func (c *Connector) Startup() (err error) {
 	c.onStartupCalled = false
 
 	// OpenTelemetry: init
+	err = c.initMeter(ctx)
+	if err != nil {
+		err = errors.Trace(err)
+		return err
+	}
 	err = c.initTracer(ctx)
 	if err != nil {
 		err = errors.Trace(err)
@@ -370,11 +378,12 @@ func (c *Connector) Shutdown() (err error) {
 		span.SetError(lastErr)
 		c.ForceTrace(ctx)
 	}
-	_ = c.ObserveMetric(
+	_ = c.RecordHistogram(
+		ctx,
 		"microbus_callback_duration_seconds",
 		time.Since(startTime).Seconds(),
-		"shutdown",
-		func() string {
+		"handler", "shutdown",
+		"error", func() string {
 			if lastErr != nil {
 				return "ERROR"
 			}
@@ -385,6 +394,7 @@ func (c *Connector) Shutdown() (err error) {
 	// OpenTelemetry: terminate
 	span.End()
 	_ = c.termTracer(ctx)
+	_ = c.termMeter(ctx)
 
 	c.LogInfo(ctx, "Shutdown")
 
@@ -426,14 +436,14 @@ func (c *Connector) Go(ctx context.Context, f func(ctx context.Context) (err err
 	subCtx, span := c.StartSpan(subCtx, "Goroutine", trc.Consumer())
 
 	go func() {
-		defer span.End()
-		defer atomic.AddInt32(&c.pendingOps, -1)
 		err := errors.CatchPanic(func() error {
 			return errors.Trace(f(subCtx))
 		})
 		if err != nil {
 			c.LogError(subCtx, "Goroutine", "error", err)
 		}
+		atomic.AddInt32(&c.pendingOps, -1)
+		span.End()
 	}()
 	return nil
 }

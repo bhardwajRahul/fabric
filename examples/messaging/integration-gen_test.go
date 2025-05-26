@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ var (
 	_ *http.Request
 	_ os.File
 	_ time.Time
+	_ *regexp.Regexp
 	_ strings.Builder
 	_ cascadia.Sel
 	_ *connector.Connector
@@ -201,6 +203,26 @@ func (tc *HomeTestCase) BodyNotContains(value any) *HomeTestCase {
 			vv := fmt.Sprintf("%v", v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
+	}
+	return tc
+}
+
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *HomeTestCase) BodyMatchesRegexp(pattern string) *HomeTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
 	}
 	return tc
 }
@@ -814,6 +836,26 @@ func (tc *NoQueueTestCase) BodyNotContains(value any) *NoQueueTestCase {
 			vv := fmt.Sprintf("%v", v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
+	}
+	return tc
+}
+
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *NoQueueTestCase) BodyMatchesRegexp(pattern string) *NoQueueTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
 	}
 	return tc
 }
@@ -1437,6 +1479,26 @@ func (tc *DefaultQueueTestCase) BodyNotContains(value any) *DefaultQueueTestCase
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *DefaultQueueTestCase) BodyMatchesRegexp(pattern string) *DefaultQueueTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *DefaultQueueTestCase) HeaderContains(headerName string, value string) *DefaultQueueTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -2056,6 +2118,26 @@ func (tc *CacheLoadTestCase) BodyNotContains(value any) *CacheLoadTestCase {
 	return tc
 }
 
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *CacheLoadTestCase) BodyMatchesRegexp(pattern string) *CacheLoadTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
+	}
+	return tc
+}
+
 // HeaderContains asserts no error and that the named header contains the value.
 func (tc *CacheLoadTestCase) HeaderContains(headerName string, value string) *CacheLoadTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
@@ -2665,6 +2747,26 @@ func (tc *CacheStoreTestCase) BodyNotContains(value any) *CacheStoreTestCase {
 			vv := fmt.Sprintf("%v", v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
+	}
+	return tc
+}
+
+// BodyMatchesRegexp asserts no error and that the response body matches a regexp pattern.
+func (tc *CacheStoreTestCase) BodyMatchesRegexp(pattern string) *CacheStoreTestCase {
+	if testarossa.NoError(tc.t, tc.err) {
+		var body []byte
+		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
+			body = br.Bytes()
+		} else {
+			var err error
+			body, err = io.ReadAll(tc.res.Body)
+			if !testarossa.NoError(tc.t, err, "Failed to read body") {
+				return tc
+			}
+			tc.res.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		re := regexp.MustCompile(pattern)
+		testarossa.True(tc.t, re.MatchString(string(body)), "%v does not match pattern %v", string(body), pattern)
 	}
 	return tc
 }

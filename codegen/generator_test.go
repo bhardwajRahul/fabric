@@ -19,6 +19,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/microbus-io/fabric/rand"
@@ -79,10 +80,18 @@ tickers:
   - signature: Ticker2()
     description: Ticker1 runs once an hour.
     interval: 1h
+metrics:
+  - signature: Metric1(measure time.Duration, label1 string, label2 int, label3 bool)
+    description: Metric1 measures time [second]
+    kind: counter
+  - signature: Metric2(measure int, label1 string, label2 int, label3 bool)
+    description: Metric2 measures bytes [bytes]
+    kind: gauge
+    callback: true
 `
 
 	// Create a temp directory with the service.yaml file
-	dir := "testing-" + rand.AlphaNum32(12)
+	dir := "testing" + rand.AlphaNum32(12)
 	os.Mkdir(dir, os.ModePerm)
 	defer os.RemoveAll(dir)
 	err := os.WriteFile(filepath.Join(dir, "service.yaml"), []byte(serviceYaml), 0666)
@@ -100,7 +109,7 @@ tickers:
 		testarossa.NoError(t, err, "%s", fileName)
 		body := string(b)
 		for _, term := range terms {
-			testarossa.Contains(t, body, term, "%s", fileName)
+			testarossa.Contains(t, body, term, "%s does not contain '%s'", fileName, term)
 		}
 	}
 
@@ -131,6 +140,13 @@ tickers:
 		"roles.x || roles.y",
 		":1234/count-occurrences",
 		":1234/distance",
+		"svc.DescribeCounter",
+		"svc.DescribeGauge",
+		"fabric_"+strings.ToLower(dir)+"_metric1",
+		"fabric_"+strings.ToLower(dir)+"_metric2",
+		"OnObserveMetric2(ctx context.Context",
+		"AddMetric1",
+		"RecordMetric2",
 	)
 	fileContains(filepath.Join("resources", "embed-gen.go"),
 		"go:embed",
@@ -140,6 +156,7 @@ tickers:
 		") Web1(w", ") Web2(w",
 		") Ticker1(ctx", ") Ticker2(ctx",
 		") OnChangedConfig1(ctx",
+		") OnObserveMetric2(ctx",
 	)
 	fileContains("version-gen.go",
 		"Version", "SourceCodeSHA256",

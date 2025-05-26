@@ -91,7 +91,6 @@ func main() {
 	app.Add(
 		httpegress.NewService(),
 		openapiportal.NewService(),
-		metrics.NewService(),
 		tokenissuer.NewService(),
 	)
 	app.Add(
@@ -118,7 +117,7 @@ Distributed tracing, metrics and structured logging provide precision observabil
 <img src="./docs/blocks/distrib-tracing-2.png" width="658">
 <p></p>
 
-<img src="./docs/blocks/metrics-1.png" width="679">
+<img src="./docs/blocks/metrics-1.png" width="1158">
 <p></p>
 
 ### Watch the Video
@@ -215,7 +214,7 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [Control subscriptions](./docs/tech/control-subs.md) - Subscriptions that all microservices implement out of the box on port `:888`
 * [Deployment environments](./docs/tech/deployments.md) - An application can run in one of 4 deployment environments: `PROD`, `LAB`, `LOCAL` and `TESTING`
 * [Events](./docs/blocks/events.md) - How event-driven architecture can be used to decouple microservices
-* [Distributed tracing](./docs/blocks/distrib-tracing.md) - Visualizing stack traces across microservices using OpenTelemetry and Jaeger
+* [Distributed tracing](./docs/blocks/distrib-tracing.md) - Visualizing stack traces across microservices with OpenTelemetry
 * [OpenAPI](./docs/blocks/openapi.md) - OpenAPI document generation for microservices
 * [Local development](./docs/tech/local-dev.md) - Run an entire solution comprising a multitude of microservices in your local IDE
 * [Structured logging](./docs/blocks/logging.md) - JSON logging to `stderr`

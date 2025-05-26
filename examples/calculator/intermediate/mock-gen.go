@@ -109,3 +109,8 @@ func (svc *Mock) Distance(ctx context.Context, p1 calculatorapi.Point, p2 calcul
 	}
 	return svc.mockDistance(ctx, p1, p2)
 }
+
+// OnObserveSumOperations is a no op.
+func (svc *Mock) OnObserveSumOperations(ctx context.Context) (err error) {
+	return nil
+}

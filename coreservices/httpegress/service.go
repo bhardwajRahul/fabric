@@ -87,7 +87,12 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 		spanOptions = append(spanOptions, trc.Request(r))
 	}
 	_, span := svc.StartSpan(ctx, req.URL.Hostname(), spanOptions...)
-	defer span.End()
+	spanEnded := false
+	defer func() {
+		if !spanEnded {
+			span.End()
+		}
+	}()
 
 	client := http.Client{}
 	resp, err := client.Do(req)
@@ -96,11 +101,11 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 		span.SetRequest(req)
 		span.SetError(err)
 		svc.ForceTrace(ctx)
-		return errors.Trace(err)
+	} else {
+		span.SetOK(http.StatusOK)
+		err = httpx.Copy(w, resp)
 	}
-	err = httpx.Copy(w, resp)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	span.End()
+	spanEnded = true
+	return errors.Trace(err)
 }

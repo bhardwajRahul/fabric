@@ -7,14 +7,14 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
 * [codegen](../structure/codegen.md) - The code generator
 * [connector](../structure/connector.md) - The primary construct of the framework and the basis for all microservices
 * [coreservices](../structure/coreservices.md) - Microservices that are required for most if not all apps
-    * [tokenissuer](../structure/coreservices-tokenissuer.md) - An issuer and validator of JWTs
     * [configurator](../structure/coreservices-configurator.md) - The configurator core microservice
     * [control](../structure/coreservices-control.md) - Client API for the `:888` control subscriptions
     * [httpegress](../structure/coreservices-httpegress.md) - The HTTP egress proxy core microservice
     * [httpingress](../structure/coreservices-httpingress.md) - The HTTP ingress proxy core microservice
-    * [metrics](../structure/coreservices-metrics.md) - The metrics microservice collects metrics from microservices and delivers them to Prometheus and Grafana
+    * [metrics](../structure/coreservices-metrics.md) - The metrics microservice collects metrics from microservices in response to a request from Prometheus
     * [openapiportal](../structure/coreservices-openapiportal.md) - The OpenAPI portal microservice produces a portal page that lists all microservices with open endpoints
     * [smtpingress](../structure/coreservices-smtpingress.md) - The SMTP ingress microservice listens for incoming emails and fires appropriate events
+    * [tokenissuer](../structure/coreservices-tokenissuer.md) - The token issuer microservice issues and validates tokens in the form of JWTs.
 * [dlru](../structure/dlru.md) - A distributed LRU cache that is shared among all peers of a microservice
 * [env](../structure/env.md) - Manages the loading of environment variables, with the option of overriding values for testing
 * [errors](../structure/errors.md) - An enhancement of Go's standard `errors` package that adds stack tracing and status codes
