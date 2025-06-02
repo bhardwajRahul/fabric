@@ -26,16 +26,17 @@ import (
 
 func TestPub_Response(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	myErr := errors.New("my error")
 	r := NewErrorResponse(myErr)
 	res, err := r.Get()
-	testarossa.Nil(t, res)
-	testarossa.Equal(t, &myErr, &err)
+	tt.Nil(res)
+	tt.Equal(&myErr, &err)
 
 	var myRes http.Response
 	r = NewHTTPResponse(&myRes)
 	res, err = r.Get()
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, &myRes, res)
+	tt.NoError(err)
+	tt.Equal(&myRes, res)
 }

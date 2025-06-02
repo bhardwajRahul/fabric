@@ -17,6 +17,7 @@ limitations under the License.
 package spec
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/microbus-io/fabric/errors"
@@ -25,8 +26,9 @@ import (
 
 // Service is the spec of the microservice parsed from service.yaml.
 type Service struct {
-	Module  string `yaml:"-"`
-	Package string `yaml:"-"`
+	ModulePath  string `yaml:"-"`
+	PackagePath string `yaml:"-"`
+	PackageDir  string `yaml:"-"`
 
 	General   General    `yaml:"general"`
 	Configs   []*Handler `yaml:"configs"`
@@ -51,11 +53,10 @@ func (s *Service) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	pkg := s.Package
-	mod := s.Module
+	x.PackagePath = s.PackagePath
+	x.ModulePath = s.ModulePath
+	x.PackageDir = s.PackageDir
 	*s = Service(x)
-	s.Package = pkg
-	s.Module = mod
 
 	// Validate
 	err = s.validate()
@@ -66,7 +67,7 @@ func (s *Service) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Default alias for metrics (requires the package name)
 	for _, metric := range s.Metrics {
 		if metric.Alias == "" {
-			metric.Alias = strings.ToLower(s.ModuleSuffix()+"_"+s.PackageSuffix()) + "_" + utils.ToSnakeCase(metric.Name())
+			metric.Alias = strings.ToLower(s.ModulePathSuffix()+"_"+s.PackagePathSuffix()) + "_" + utils.ToSnakeCase(metric.Name())
 		}
 	}
 
@@ -80,7 +81,7 @@ func (s *Service) FullyQualifyTypes() {
 	}
 	s.fullyQualified = true
 
-	apiPkg := s.PackageSuffix() + "api."
+	apiPkg := s.PackagePathSuffix() + "api."
 	for _, w := range s.AllHandlers() {
 		for _, a := range w.Signature.InputArgs {
 			endType := a.EndType()
@@ -104,7 +105,7 @@ func (s *Service) ShorthandTypes() {
 	}
 	s.fullyQualified = false
 
-	apiPkg := s.PackageSuffix() + "api."
+	apiPkg := s.PackagePathSuffix() + "api."
 	for _, w := range s.AllHandlers() {
 		for _, a := range w.Signature.InputArgs {
 			endType := a.EndType()
@@ -131,13 +132,14 @@ func (s *Service) validate() error {
 		return errors.Trace(err)
 	}
 
-	// Disallow duplicate handler names
+	// Disallow duplicate handler names (case insensitive)
 	handlerNames := map[string]bool{}
 	for _, h := range s.AllHandlers() {
-		if handlerNames[h.Name()] {
+		lowerCase := strings.ToLower(h.Name())
+		if handlerNames[lowerCase] {
 			return errors.Newf("duplicate handler name '%s'", h.Name())
 		}
-		handlerNames[h.Name()] = true
+		handlerNames[lowerCase] = true
 	}
 
 	// Has to repeat validation after setting the types because
@@ -200,22 +202,19 @@ func (s *Service) validate() error {
 	return nil
 }
 
-// PackageSuffix returns only the last portion of the full package path.
-func (s *Service) PackageSuffix() string {
-	p := strings.LastIndex(s.Package, "/")
-	if p < 0 {
-		return s.Package
-	}
-	return s.Package[p+1:]
+// PackagePathSuffix returns only the last portion of the full package path.
+func (s *Service) PackagePathSuffix() string {
+	return filepath.Base(s.PackagePath)
 }
 
-// ModuleSuffix returns only the last portion of the full module path.
-func (s *Service) ModuleSuffix() string {
-	p := strings.LastIndex(s.Module, "/")
-	if p < 0 {
-		return s.Module
-	}
-	return s.Module[p+1:]
+// ModulePathSuffix returns only the last portion of the full module path.
+func (s *Service) ModulePathSuffix() string {
+	return filepath.Base(s.ModulePath)
+}
+
+// PackageDirSuffix returns only the last portion of the full package directory path.
+func (s *Service) PackageDirSuffix() string {
+	return filepath.Base(s.PackageDir)
 }
 
 // AllHandlers returns an array holding all handlers of all types.

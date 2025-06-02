@@ -81,7 +81,7 @@ func (gen *Generator) makeIntegration() error {
 
 	// Scan .go files for existing endpoints
 	gen.Printer.Debug("Scanning for existing tests")
-	pkg := capitalizeIdentifier(gen.Specs.PackageSuffix())
+	pkg := capitalizeIdentifier(gen.Specs.PackagePathSuffix())
 	existingTests, err := gen.scanFiles(
 		gen.WorkDir,
 		func(file fs.DirEntry) bool {
@@ -242,17 +242,17 @@ func (gen *Generator) makeApp() error {
 		return errors.Trace(err)
 	}
 
-	dir = filepath.Join(gen.WorkDir, "app", gen.Specs.PackageSuffix())
+	dir = filepath.Join(gen.WorkDir, "app", gen.Specs.PackageDirSuffix())
 	_, err = os.Stat(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir app/%s", gen.Specs.PackageSuffix())
+		gen.Printer.Debug("mkdir app/%s", gen.Specs.PackageDirSuffix())
 	} else if err != nil {
 		return errors.Trace(err)
 	}
 
 	// main-gen.go
-	fileName := filepath.Join(gen.WorkDir, "app", gen.Specs.PackageSuffix(), "main-gen.go")
+	fileName := filepath.Join(gen.WorkDir, "app", gen.Specs.PackageDirSuffix(), "main-gen.go")
 	tt, err := LoadTemplate("app/main-gen.txt")
 	if err != nil {
 		return errors.Trace(err)
@@ -261,7 +261,7 @@ func (gen *Generator) makeApp() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Debug("app/%s/main-gen.go", gen.Specs.PackageSuffix())
+	gen.Printer.Debug("app/%s/main-gen.go", gen.Specs.PackageDirSuffix())
 
 	return nil
 }
@@ -276,11 +276,11 @@ func (gen *Generator) makeAPI() error {
 	gen.Specs.ShorthandTypes()
 
 	// Create the directories
-	dir := filepath.Join(gen.WorkDir, gen.Specs.PackageSuffix()+"api")
+	dir := filepath.Join(gen.WorkDir, gen.Specs.PackageDirSuffix()+"api")
 	_, err := os.Stat(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir %sapi", gen.Specs.PackageSuffix())
+		gen.Printer.Debug("mkdir %sapi", gen.Specs.PackageDirSuffix())
 	} else if err != nil {
 		return errors.Trace(err)
 	}
@@ -324,7 +324,7 @@ func (gen *Generator) makeAPI() error {
 			hasImports := false
 			for _, ct := range gen.Specs.Types {
 				if !ct.Exists && len(typeDefs[ct.Name]) == 1 {
-					ct.Package = typeDefs[ct.Name][0]
+					ct.PackagePath = typeDefs[ct.Name][0]
 					hasImports = true
 				}
 			}
@@ -339,7 +339,7 @@ func (gen *Generator) makeAPI() error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				gen.Printer.Debug("%sapi/imports-gen.go", gen.Specs.PackageSuffix())
+				gen.Printer.Debug("%sapi/imports-gen.go", gen.Specs.PackageDirSuffix())
 			} else {
 				os.Remove(fileName)
 			}
@@ -352,19 +352,19 @@ func (gen *Generator) makeAPI() error {
 					if err != nil {
 						return errors.Trace(err)
 					}
-					ct.Package = gen.Specs.Package // Hack
+					ct.PackagePath = gen.Specs.PackagePath // Hack
 					err = tt.Overwrite(fileName, ct)
 					if err != nil {
 						return errors.Trace(err)
 					}
-					gen.Printer.Debug("%sapi/%s.go", gen.Specs.PackageSuffix(), strings.ToLower(ct.Name))
+					gen.Printer.Debug("%sapi/%s.go", gen.Specs.PackageDirSuffix(), strings.ToLower(ct.Name))
 				}
 			}
 		}
 	}
 
 	// clients-gen.go
-	fileName := filepath.Join(gen.WorkDir, gen.Specs.PackageSuffix()+"api", "clients-gen.go")
+	fileName := filepath.Join(gen.WorkDir, gen.Specs.PackageDirSuffix()+"api", "clients-gen.go")
 	tt, err := LoadTemplate(
 		"api/clients-gen.txt",
 		"api/clients-gen.webs.txt",
@@ -377,7 +377,7 @@ func (gen *Generator) makeAPI() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Debug("%sapi/clients-gen.go", gen.Specs.PackageSuffix())
+	gen.Printer.Debug("%sapi/clients-gen.go", gen.Specs.PackageDirSuffix())
 
 	return nil
 }
@@ -596,7 +596,7 @@ func (gen *Generator) scanDirTypeDefinitions(workDir string, found map[string][]
 
 // makeTraceReturnedErrors adds errors.Trace to returned errors.
 func (gen *Generator) makeTraceReturnedErrors() error {
-	gen.Printer.Debug("Tracing returned errors")
+	gen.Printer.Debug("Adding tracing to returned errors")
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 
@@ -827,10 +827,10 @@ func (gen *Generator) makeVersion(version int) error {
 	}
 
 	v := &spec.Version{
-		Package:   gen.Specs.Package,
-		Version:   version,
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		SHA256:    hash,
+		PackagePath: gen.Specs.PackagePath,
+		Version:     version,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+		SHA256:      hash,
 	}
 	gen.Printer.Debug("Version %d", v.Version)
 	gen.Printer.Debug("SHA256 %s", v.SHA256)

@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ helloapi.Client
 )
@@ -251,11 +253,12 @@ func (svc *Intermediate) Greeting() (greeting string) {
 
 /*
 SetGreeting sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Greeting to use.
 */
 func (svc *Intermediate) SetGreeting(greeting string) error {
-	return svc.SetConfig("Greeting", fmt.Sprintf("%v", greeting))
+	return svc.SetConfig("Greeting", utils.AnyToString(greeting))
 }
 
 /*
@@ -269,9 +272,10 @@ func (svc *Intermediate) Repeat() (count int) {
 
 /*
 SetRepeat sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Repeat indicates how many times to display the greeting.
 */
 func (svc *Intermediate) SetRepeat(count int) error {
-	return svc.SetConfig("Repeat", fmt.Sprintf("%v", count))
+	return svc.SetConfig("Repeat", utils.AnyToString(count))
 }

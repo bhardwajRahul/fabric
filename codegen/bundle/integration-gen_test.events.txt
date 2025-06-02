@@ -1,4 +1,4 @@
-{{ $pkgSuffix := .PackageSuffix }}
+{{ $pkgSuffix := .PackagePathSuffix }}
 {{- range .Events }}
 {{- $t := .Signature.TestingT }}
 // {{ .Name }}TestCase assists in asserting the sink of {{ .Name }}.

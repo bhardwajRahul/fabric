@@ -29,8 +29,8 @@ import (
 	"github.com/microbus-io/fabric/utils"
 )
 
-// Authorization looks for a token in the "Authorization: Bearer" header or the "Authorization" cookie.
-// If the token is validated with its issuer, the corresponding actor is associated with the request.
+// Authorization returns a middleware that looks for a token in the "Authorization: Bearer" header or the "Authorization" cookie.
+// If the token is validated with its issuer, it assicuates the corresponding actor with the request.
 func Authorization(tokenValidator func(ctx context.Context, token string) (actor any, valid bool, err error)) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {

@@ -373,6 +373,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 		ctx, cancel = context.WithTimeout(ctx, budget-c.networkHop)
 	}
 	httpReq = httpReq.WithContext(ctx)
+	httpReq.Header = frame.Of(ctx).Header()
 
 	// Check actor constraints
 	if s.Actor != "" {

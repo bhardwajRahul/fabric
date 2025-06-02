@@ -98,6 +98,9 @@ func TestUtils_FlattenSymbolsMap(t *testing.T) {
 }
 
 func TestUtils_BoolExpArray(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	symbols := map[string]any{
 		"str": []string{"a", "b", "c"},
 		"int": []int{1, 2, 3},
@@ -111,8 +114,8 @@ func TestUtils_BoolExpArray(t *testing.T) {
 	}
 	for _, tc := range tcTrue {
 		b, err := EvaluateBoolExp(tc, symbols)
-		if testarossa.NoError(t, err, tc) {
-			testarossa.True(t, b, tc)
+		if tt.NoError(err, tc) {
+			tt.True(b, tc)
 		}
 	}
 	tcFalse := []string{
@@ -123,13 +126,16 @@ func TestUtils_BoolExpArray(t *testing.T) {
 	}
 	for _, tc := range tcFalse {
 		b, err := EvaluateBoolExp(tc, symbols)
-		if testarossa.NoError(t, err, tc) {
-			testarossa.False(t, b, tc)
+		if tt.NoError(err, tc) {
+			tt.False(b, tc)
 		}
 	}
 }
 
 func TestUtils_BoolExp(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	symbols := map[string]any{
 		"foo":       "bar",
 		"num":       5.0,
@@ -212,8 +218,8 @@ func TestUtils_BoolExp(t *testing.T) {
 	}
 	for _, tc := range tcTrue {
 		b, err := EvaluateBoolExp(tc, symbols)
-		if testarossa.NoError(t, err, tc) {
-			testarossa.True(t, b, tc)
+		if tt.NoError(err, tc) {
+			tt.True(b, tc)
 		}
 	}
 
@@ -280,8 +286,8 @@ func TestUtils_BoolExp(t *testing.T) {
 	}
 	for _, tc := range tcFalse {
 		b, err := EvaluateBoolExp(tc, symbols)
-		if testarossa.NoError(t, err, tc) {
-			testarossa.False(t, b, tc)
+		if tt.NoError(err, tc) {
+			tt.False(b, tc)
 		}
 	}
 
@@ -299,9 +305,9 @@ func TestUtils_BoolExp(t *testing.T) {
 	}
 	for _, tc := range tcErr {
 		_, err := EvaluateBoolExp(tc, nil)
-		testarossa.Error(t, err, tc)
+		tt.Error(err, tc)
 	}
 
 	_, err := EvaluateBoolExp("true", nil) // Nil symbols
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 }

@@ -28,11 +28,12 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
-	"{{ .Package }}/resources"
-	"{{ .Package }}/{{ .PackageSuffix }}api"
+	"{{ .PackageDir }}/resources"
+	"{{ .PackageDir }}/{{ .PackageDirSuffix }}api"
 
 	{{- if .Sinks }}
 	{{ range $i, $s := .Sinks }}
@@ -57,8 +58,9 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
-	_ {{ .PackageSuffix }}api.Client
+	_ {{ .PackagePathSuffix }}api.Client
 )
 
 // ToDo defines the interface that the microservice must implement.

@@ -24,7 +24,6 @@ import (
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/directory/directoryapi"
-	"github.com/microbus-io/fabric/timex"
 )
 
 var (
@@ -52,18 +51,19 @@ func Terminate() (err error) {
 
 func TestDirectory_CRUD(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	person := &directoryapi.Person{
 		FirstName: "Harry",
 		LastName:  "Potter",
 		Email:     "harry.potter@hogwarts.edu.wiz",
-		Birthday:  timex.MustParse("", "1980-07-31").UTC(),
+		Birthday:  time.Date(1980, time.July, 31, 0, 0, 0, 0, time.UTC),
 	}
 	person.Key, _ = Create(t, ctx, person).
 		NoError().
 		Assert(func(t *testing.T, key directoryapi.PersonKey, err error) {
-			testarossa.NotZero(t, int(key))
+			tt.NotZero(int(key))
 		}).
 		Get()
 
@@ -74,7 +74,7 @@ func TestDirectory_CRUD(t *testing.T) {
 	List(t, ctx).
 		NoError().
 		Assert(func(t *testing.T, keys []directoryapi.PersonKey, err error) {
-			testarossa.SliceContains(t, keys, person.Key)
+			tt.Contains(keys, person.Key)
 		})
 
 	person.Email = "harry.potter@gryffindor.wiz"
@@ -105,6 +105,7 @@ func TestDirectory_CRUD(t *testing.T) {
 
 func TestDirectory_Create(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 
@@ -112,7 +113,7 @@ func TestDirectory_Create(t *testing.T) {
 		FirstName: "",
 		LastName:  "Riddle",
 		Email:     "tom.riddle@hogwarts.edu.wiz",
-		Birthday:  timex.MustParse("", "1926-12-31").UTC(),
+		Birthday:  time.Date(1926, time.December, 31, 0, 0, 0, 0, time.UTC),
 	}
 	Create(t, ctx, person).
 		Error("empty")
@@ -128,10 +129,10 @@ func TestDirectory_Create(t *testing.T) {
 		Error("empty")
 	person.Email = "tom.riddle@hogwarts.edu.wiz"
 
-	person.Birthday = timex.New(time.Now().AddDate(1, 0, 0))
+	person.Birthday = time.Now().AddDate(1, 0, 0)
 	Create(t, ctx, person).
 		Error("birthday")
-	person.Birthday = timex.Timex{}
+	person.Birthday = time.Time{}
 
 	person.Key, _ = Create(t, ctx, person).
 		NoError().
@@ -139,7 +140,7 @@ func TestDirectory_Create(t *testing.T) {
 	List(t, ctx).
 		NoError().
 		Assert(func(t *testing.T, keys []directoryapi.PersonKey, err error) {
-			testarossa.SliceContains(t, keys, person.Key)
+			tt.Contains(keys, person.Key)
 		})
 
 	Create(t, ctx, person).
@@ -178,12 +179,12 @@ func TestDirectory_Update(t *testing.T) {
 		Error("empty")
 	person.Email = "ron.weasley@hogwarts.edu.wiz"
 
-	person.Birthday = timex.New(time.Now().AddDate(1, 0, 0))
+	person.Birthday = time.Now().AddDate(1, 0, 0)
 	Create(t, ctx, person).
 		Error("birthday")
-	person.Birthday = timex.Timex{}
+	person.Birthday = time.Time{}
 
-	person.Birthday = timex.MustParse("", "1980-03-01").UTC()
+	person.Birthday = time.Date(1980, time.March, 1, 0, 0, 0, 0, time.UTC)
 	Update(t, ctx, person.Key, person).
 		NoError()
 

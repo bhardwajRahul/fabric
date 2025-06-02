@@ -13,7 +13,7 @@ functions:
     actor: roles.a || roles.m || roles.u
 ```
 
-An `ErrorPageRedirect` middleware is added to the [HTTP ingress proxy](../structure/coreservices-httpingress.md) in the `main` app to redirect users to the login page upon a `401 Unauthorized` error.
+An error page redirect [middleware](../structure/coreservices-httpingress-middleware.md) is added to the [HTTP ingress proxy](../structure/coreservices-httpingress.md) in the `main` app to redirect users to the login page upon a `401 Unauthorized` error.
 
 ```go
 httpingress.NewService().Init(func(svc *httpingress.Service) {
@@ -30,7 +30,7 @@ httpingress.NewService().Init(func(svc *httpingress.Service) {
 
 The `Login` endpoint renders a simple HTML login form. Upon a successful login, it calls the [token issuer](../structure/coreservices-tokenissuer.md) core microservice to generate a JWT with the appropriate claims, places it in a `Set-Cookie` header, and redirects the user to the welcome page.
 
-The `Authorization` middleware of the [HTTP ingress proxy](../structure/coreservices-httpingress.md) detects the token in the `Cookie` header and, after validating it with the [token issuer](../structure/coreservices-tokenissuer.md) core microservice, sets its claims as the actor of the request.
+The authorization [middleware](../structure/coreservices-httpingress-middleware.md) of the [HTTP ingress proxy](../structure/coreservices-httpingress.md) detects the token in the `Cookie` header and, after validating it with the [token issuer](../structure/coreservices-tokenissuer.md) core microservice, sets its claims as the actor of the request.
 
 The `Welcome` endpoint is able to parse the actor of the request into an `Actor` object knowing that it's been validated on ingress. The `welcome.html` template adjusts the content of the welcome page in accordance with the role of the actor.
 
@@ -41,4 +41,4 @@ ok, err := frame.Of(r).ParseActor(&actor)
 
 The `Logout` endpoint clears the cookie and redirects the user to the login screen.
 
-The `AdminOnly` and `ManagerOnly` endpoint, as their name suggests, are restricted to a single role.
+The `AdminOnly` and `ManagerOnly` endpoints, as their name suggests, are restricted to a single role.

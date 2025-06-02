@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -68,6 +69,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ testerapi.Client
 )
@@ -998,15 +1000,15 @@ AddNumOfOps adds to the value of the counter metric.
 NumOfOps counts the number of operations.
 */
 func (svc *Intermediate) AddNumOfOps(ctx context.Context, val int, op string, code int, success bool) error {
-	xval := float64(val)
-	xop := op
-	xcode := fmt.Sprintf("%v", code)
-	xsuccess := fmt.Sprintf("%v", success)
+	_val := float64(val)
+	_op := utils.AnyToString(op)
+	_code := utils.AnyToString(code)
+	_success := utils.AnyToString(success)
 	return svc.AddCounter(ctx, "fabric_tester_num_of_ops",
-		xval,
-		`op`, xop,
-		`code`, xcode,
-		`success`, xsuccess)
+		_val,
+		`op`, _op,
+		`code`, _code,
+		`success`, _success)
 }
 
 /*
@@ -1016,11 +1018,11 @@ NumOfOps counts the number of operations.
 Deprecated: Use AddNumOfOps
 */
 func (svc *Intermediate) IncrementNumOfOps(val int, op string, code int, success bool) error {
-	xval := float64(val)
-	xop := op
-	xcode := fmt.Sprintf("%v", code)
-	xsuccess := fmt.Sprintf("%v", success)
-	return svc.IncrementMetric("fabric_tester_num_of_ops", xval, xop, xcode, xsuccess)
+	_val := float64(val)
+	_op := utils.AnyToString(op)
+	_code := utils.AnyToString(code)
+	_success := utils.AnyToString(success)
+	return svc.IncrementMetric("fabric_tester_num_of_ops", _val, _op, _code, _success)
 }
 
 /*
@@ -1028,9 +1030,9 @@ RecordMemoryAvailable records the current value of the gauge metric.
 MemoryAvailable gauges the amount of available memory.
 */
 func (svc *Intermediate) RecordMemoryAvailable(ctx context.Context, bytes int) error {
-	xbytes := float64(bytes)
+	_bytes := float64(bytes)
 	return svc.RecordGauge(ctx, "fabric_tester_memory_available",
-		xbytes)
+		_bytes)
 }
 
 /*
@@ -1040,8 +1042,8 @@ MemoryAvailable gauges the amount of available memory.
 Deprecated: Use RecordMemoryAvailable
 */
 func (svc *Intermediate) ObserveMemoryAvailable(bytes int) error {
-	xbytes := float64(bytes)
-	return svc.ObserveMetric("fabric_tester_memory_available", xbytes)
+	_bytes := float64(bytes)
+	return svc.ObserveMetric("fabric_tester_memory_available", _bytes)
 }
 
 /*
@@ -1051,8 +1053,8 @@ MemoryAvailable gauges the amount of available memory.
 Deprecated: Use RecordMemoryAvailable
 */
 func (svc *Intermediate) IncrementMemoryAvailable(bytes int) error {
-	xbytes := float64(bytes)
-	return svc.IncrementMetric("fabric_tester_memory_available", xbytes)
+	_bytes := float64(bytes)
+	return svc.IncrementMetric("fabric_tester_memory_available", _bytes)
 }
 
 /*
@@ -1060,15 +1062,15 @@ RecordOpDurationSeconds records the current value of the histogram metric.
 OpDurationSeconds keeps track of the duration of operations.
 */
 func (svc *Intermediate) RecordOpDurationSeconds(ctx context.Context, d time.Duration, op string, code int, success bool) error {
-	xd := d.Seconds()
-	xop := op
-	xcode := fmt.Sprintf("%v", code)
-	xsuccess := fmt.Sprintf("%v", success)
+	_d := d.Seconds()
+	_op := utils.AnyToString(op)
+	_code := utils.AnyToString(code)
+	_success := utils.AnyToString(success)
 	return svc.RecordHistogram(ctx, "fabric_tester_op_duration_seconds",
-		xd,
-		`op`, xop,
-		`code`, xcode,
-		`success`, xsuccess)
+		_d,
+		`op`, _op,
+		`code`, _code,
+		`success`, _success)
 }
 
 /*
@@ -1078,9 +1080,9 @@ OpDurationSeconds keeps track of the duration of operations.
 Deprecated: Use RecordOpDurationSeconds
 */
 func (svc *Intermediate) ObserveOpDurationSeconds(d time.Duration, op string, code int, success bool) error {
-	xd := d.Seconds()
-	xop := op
-	xcode := fmt.Sprintf("%v", code)
-	xsuccess := fmt.Sprintf("%v", success)
-	return svc.ObserveMetric("fabric_tester_op_duration_seconds", xd, xop, xcode, xsuccess)
+	_d := d.Seconds()
+	_op := utils.AnyToString(op)
+	_code := utils.AnyToString(code)
+	_success := utils.AnyToString(success)
+	return svc.ObserveMetric("fabric_tester_op_duration_seconds", _d, _op, _code, _success)
 }

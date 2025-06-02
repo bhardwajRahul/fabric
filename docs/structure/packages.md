@@ -36,6 +36,5 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
 * [service](../structure/service.md) - Interface definitions of microservices
 * [sub](../structure/sub.md) - Options for subscribing to handle requests over the bus
 * [trc](../structure/trc.md) - Options for creating tracing spans
-* [timex](../structure/timex.md) - Enhancement of Go's standard `time.Time`
 * [utils](../structure/utils.md) - Miscellaneous utility classes and functions
 

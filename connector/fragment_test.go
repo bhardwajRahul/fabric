@@ -34,6 +34,7 @@ import (
 
 func TestConnector_Frag(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -43,14 +44,14 @@ func TestConnector_Frag(t *testing.T) {
 	con.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
 		var err error
 		bodyReceived, err = io.ReadAll(r.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		w.Write(bodyReceived)
 		return nil
 	})
 
 	// Startup the microservice
 	err := con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 	con.maxFragmentSize = 128
 
@@ -59,17 +60,18 @@ func TestConnector_Frag(t *testing.T) {
 
 	// Send message and validate that it was received whole
 	res, err := con.POST(ctx, "https://frag.connector/big", bodySent)
-	if testarossa.NoError(t, err) {
-		testarossa.SliceEqual(t, bodySent, bodyReceived)
+	if tt.NoError(err) {
+		tt.Equal(bodySent, bodyReceived)
 		bodyResponded, err := io.ReadAll(res.Body)
-		if testarossa.NoError(t, err) {
-			testarossa.SliceEqual(t, bodySent, bodyResponded)
+		if tt.NoError(err) {
+			tt.Equal(bodySent, bodyResponded)
 		}
 	}
 }
 
 func TestConnector_FragMulticast(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -79,7 +81,7 @@ func TestConnector_FragMulticast(t *testing.T) {
 	alpha.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
 		var err error
 		alphaBodyReceived, err = io.ReadAll(r.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		w.Write(alphaBodyReceived)
 		return nil
 	}, sub.NoQueue())
@@ -89,17 +91,17 @@ func TestConnector_FragMulticast(t *testing.T) {
 	beta.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
 		var err error
 		betaBodyReceived, err = io.ReadAll(r.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		w.Write(betaBodyReceived)
 		return nil
 	}, sub.NoQueue())
 
 	// Startup the microservice
 	err := alpha.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer beta.Shutdown()
 
 	alpha.maxFragmentSize = 1024
@@ -116,17 +118,18 @@ func TestConnector_FragMulticast(t *testing.T) {
 	)
 	for r := range ch {
 		res, err := r.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		bodyResponded, err := io.ReadAll(res.Body)
-		testarossa.NoError(t, err)
-		testarossa.SliceEqual(t, bodySent, bodyResponded)
+		tt.NoError(err)
+		tt.Equal(bodySent, bodyResponded)
 	}
-	testarossa.SliceEqual(t, bodySent, alphaBodyReceived)
-	testarossa.SliceEqual(t, bodySent, betaBodyReceived)
+	tt.Equal(bodySent, alphaBodyReceived)
+	tt.Equal(bodySent, betaBodyReceived)
 }
 
 func TestConnector_FragLoadBalanced(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -136,7 +139,7 @@ func TestConnector_FragLoadBalanced(t *testing.T) {
 	alpha.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
 		var err error
 		alphaBodyReceived, err = io.ReadAll(r.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		w.Write(alphaBodyReceived)
 		return nil
 	}, sub.LoadBalanced())
@@ -146,17 +149,17 @@ func TestConnector_FragLoadBalanced(t *testing.T) {
 	beta.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
 		var err error
 		betaBodyReceived, err = io.ReadAll(r.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		w.Write(betaBodyReceived)
 		return nil
 	}, sub.LoadBalanced())
 
 	// Startup the microservice
 	err := alpha.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer beta.Shutdown()
 
 	alpha.maxFragmentSize = 128
@@ -173,19 +176,19 @@ func TestConnector_FragLoadBalanced(t *testing.T) {
 	)
 	for r := range ch {
 		res, err := r.Get()
-		if testarossa.NoError(t, err) {
+		if tt.NoError(err) {
 			bodyResponded, err := io.ReadAll(res.Body)
-			if testarossa.NoError(t, err) {
-				testarossa.SliceEqual(t, bodySent, bodyResponded)
+			if tt.NoError(err) {
+				tt.Equal(bodySent, bodyResponded)
 			}
 		}
 	}
 	if alphaBodyReceived != nil {
-		testarossa.SliceEqual(t, bodySent, alphaBodyReceived)
-		testarossa.Nil(t, betaBodyReceived)
+		tt.Equal(bodySent, alphaBodyReceived)
+		tt.Nil(betaBodyReceived)
 	} else {
-		testarossa.SliceEqual(t, bodySent, betaBodyReceived)
-		testarossa.Nil(t, alphaBodyReceived)
+		tt.Equal(bodySent, betaBodyReceived)
+		tt.Nil(alphaBodyReceived)
 	}
 }
 
@@ -210,7 +213,7 @@ func BenchmarkConnector_Frag(b *testing.B) {
 	payload := []byte(rand.AlphaNum64(16 * 1024 * 1024))
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Send message and validate that it was received whole
 		res, err := con.POST(ctx, "https://frag.benchmark.connector/big", payload)
 		testarossa.NoError(b, err)
@@ -229,11 +232,12 @@ func BenchmarkConnector_Frag(b *testing.B) {
 
 func TestConnector_DefragRequest(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	con := New("defrag.request.connector")
 	makeChunk := func(msgID string, fragIndex int, fragMax int, content string) *http.Request {
 		r, err := http.NewRequest("GET", "", strings.NewReader(content))
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		f := frame.Of(r)
 		f.SetFromID("12345678")
 		f.SetMessageID(msgID)
@@ -244,67 +248,68 @@ func TestConnector_DefragRequest(t *testing.T) {
 	// One chunk only: should return the exact same object
 	r := makeChunk("one", 1, 1, strings.Repeat("1", 1024))
 	integrated, err := con.defragRequest(r)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, r, integrated)
+	if tt.NoError(err) {
+		tt.Equal(r, integrated)
 	}
 
 	// Three chunks: should return the integrated chunk after the final chunk
 	r = makeChunk("three", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragRequest(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("three", 2, 3, strings.Repeat("2", 1024))
 	integrated, err = con.defragRequest(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("three", 3, 3, strings.Repeat("3", 1024))
 	integrated, err = con.defragRequest(r)
-	if testarossa.NoError(t, err) && testarossa.NotNil(t, integrated) {
+	if tt.NoError(err) && tt.NotNil(integrated) {
 		body, err := io.ReadAll(integrated.Body)
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
+		if tt.NoError(err) {
+			tt.Equal(strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
 		}
 	}
 
 	// Three chunks not in order: should return the integrated chunk after the final chunk
 	r = makeChunk("outoforder", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragRequest(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("outoforder", 3, 3, strings.Repeat("3", 1024))
 	integrated, err = con.defragRequest(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("outoforder", 2, 3, strings.Repeat("2", 1024))
 	integrated, err = con.defragRequest(r)
-	if testarossa.NoError(t, err) && testarossa.NotNil(t, integrated) {
+	if tt.NoError(err) && tt.NotNil(integrated) {
 		body, err := io.ReadAll(integrated.Body)
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
+		if tt.NoError(err) {
+			tt.Equal(strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
 		}
 	}
 
 	// Missing the first chunk: should fail
 	r = makeChunk("missingone", 2, 3, strings.Repeat("2", 1024))
 	_, err = con.defragRequest(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// Taking too long: should timeout
 	r = makeChunk("delayed", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragRequest(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	time.Sleep(con.networkHop * 2)
 	r = makeChunk("delayed", 2, 3, strings.Repeat("2", 1024))
 	_, err = con.defragRequest(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	r = makeChunk("delayed", 3, 3, strings.Repeat("3", 1024))
 	_, err = con.defragRequest(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestConnector_DefragResponse(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	con := New("defrag.response.connector")
 	makeChunk := func(msgID string, fragIndex int, fragMax int, content string) *http.Response {
@@ -320,61 +325,61 @@ func TestConnector_DefragResponse(t *testing.T) {
 	// One chunk only: should return the exact same object
 	r := makeChunk("one", 1, 1, strings.Repeat("1", 1024))
 	integrated, err := con.defragResponse(r)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, r, integrated)
+	if tt.NoError(err) {
+		tt.Equal(r, integrated)
 	}
 
 	// Three chunks: should return the integrated chunk after the final chunk
 	r = makeChunk("three", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragResponse(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("three", 2, 3, strings.Repeat("2", 1024))
 	integrated, err = con.defragResponse(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("three", 3, 3, strings.Repeat("3", 1024))
 	integrated, err = con.defragResponse(r)
-	if testarossa.NoError(t, err) && testarossa.NotNil(t, integrated) {
+	if tt.NoError(err) && tt.NotNil(integrated) {
 		body, err := io.ReadAll(integrated.Body)
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
+		if tt.NoError(err) {
+			tt.Equal(strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
 		}
 	}
 
 	// Three chunks not in order: should return the integrated chunk after the final chunk
 	r = makeChunk("outoforder", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragResponse(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("outoforder", 3, 3, strings.Repeat("3", 1024))
 	integrated, err = con.defragResponse(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	r = makeChunk("outoforder", 2, 3, strings.Repeat("2", 1024))
 	integrated, err = con.defragResponse(r)
-	if testarossa.NoError(t, err) && testarossa.NotNil(t, integrated) {
+	if tt.NoError(err) && tt.NotNil(integrated) {
 		body, err := io.ReadAll(integrated.Body)
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
+		if tt.NoError(err) {
+			tt.Equal(strings.Repeat("1", 1024)+strings.Repeat("2", 1024)+strings.Repeat("3", 1024), string(body))
 		}
 	}
 
 	// Missing the first chunk: should fail
 	r = makeChunk("missingone", 2, 3, strings.Repeat("2", 1024))
 	_, err = con.defragResponse(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// Taking too long: should timeout
 	r = makeChunk("delayed", 1, 3, strings.Repeat("1", 1024))
 	integrated, err = con.defragResponse(r)
-	testarossa.NoError(t, err)
-	testarossa.Nil(t, integrated)
+	tt.NoError(err)
+	tt.Nil(integrated)
 	time.Sleep(con.networkHop * 2)
 	r = makeChunk("delayed", 2, 3, strings.Repeat("2", 1024))
 	_, err = con.defragResponse(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	r = makeChunk("delayed", 3, 3, strings.Repeat("3", 1024))
 	_, err = con.defragResponse(r)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }

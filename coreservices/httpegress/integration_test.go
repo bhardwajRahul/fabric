@@ -74,70 +74,73 @@ func Terminate() (err error) {
 
 func TestHttpegress_Get(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	client := httpegressapi.NewClient(Svc)
 
 	// Echo
 	resp, err := client.Get(ctx, "http://127.0.0.1:5050/echo")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusOK, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusOK, resp.StatusCode)
 		raw, _ := io.ReadAll(resp.Body)
-		testarossa.Contains(t, string(raw), "GET /echo HTTP/1.1\r\n")
-		testarossa.Contains(t, string(raw), "Host: 127.0.0.1:5050\r\n")
-		testarossa.Contains(t, string(raw), "User-Agent: Go-http-client")
+		tt.Contains(string(raw), "GET /echo HTTP/1.1\r\n")
+		tt.Contains(string(raw), "Host: 127.0.0.1:5050\r\n")
+		tt.Contains(string(raw), "User-Agent: Go-http-client")
 	}
 
 	// Not found
 	resp, err = client.Get(ctx, "http://127.0.0.1:5050/x")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusNotFound, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusNotFound, resp.StatusCode)
 	}
 
 	// Bad URL
 	_, err = client.Get(ctx, "not a url")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// Shorter deadline
 	shortCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	_, err = client.Get(shortCtx, "http://127.0.0.1:5050/slow")
 	cancel()
-	if testarossa.Error(t, err) {
-		testarossa.Contains(t, err.Error(), "timeout")
+	if tt.Error(err) {
+		tt.Contains(err.Error(), "timeout")
 	}
 }
 
 func TestHttpegress_Post(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	client := httpegressapi.NewClient(Svc)
 
 	// Echo
 	resp, err := client.Post(ctx, "http://127.0.0.1:5050/echo", "text/plain", strings.NewReader("Lorem Ipsum Dolor Sit Amet"))
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusOK, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusOK, resp.StatusCode)
 		raw, _ := io.ReadAll(resp.Body)
-		testarossa.Contains(t, string(raw), "POST /echo HTTP/1.1\r\n")
-		testarossa.Contains(t, string(raw), "Host: 127.0.0.1:5050\r\n")
-		testarossa.Contains(t, string(raw), "User-Agent: Go-http-client")
-		testarossa.Contains(t, string(raw), "Content-Type: text/plain\r\n")
-		testarossa.Contains(t, string(raw), "Lorem Ipsum Dolor Sit Amet")
+		tt.Contains(string(raw), "POST /echo HTTP/1.1\r\n")
+		tt.Contains(string(raw), "Host: 127.0.0.1:5050\r\n")
+		tt.Contains(string(raw), "User-Agent: Go-http-client")
+		tt.Contains(string(raw), "Content-Type: text/plain\r\n")
+		tt.Contains(string(raw), "Lorem Ipsum Dolor Sit Amet")
 	}
 
 	// Not found
 	resp, err = client.Post(ctx, "http://127.0.0.1:5050/x", "", strings.NewReader("nothing"))
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusNotFound, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusNotFound, resp.StatusCode)
 	}
 
 	// Bad URL
 	_, err = client.Post(ctx, "not a url", "", strings.NewReader("nothing"))
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestHttpegress_Do(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	client := httpegressapi.NewClient(Svc)
@@ -145,39 +148,39 @@ func TestHttpegress_Do(t *testing.T) {
 	// Echo
 	req, err := http.NewRequest(http.MethodPut, "http://127.0.0.1:5050/echo", bytes.NewReader([]byte("Lorem Ipsum")))
 	req.Header["Multi-Value"] = []string{"Foo", "Bar"}
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	req.Header.Set("Content-Type", "text/plain")
 
 	resp, err := client.Do(ctx, req)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusOK, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusOK, resp.StatusCode)
 		raw, _ := io.ReadAll(resp.Body)
-		testarossa.Contains(t, string(raw), "PUT /echo HTTP/1.1\r\n")
-		testarossa.Contains(t, string(raw), "Host: 127.0.0.1:5050\r\n")
-		testarossa.Contains(t, string(raw), "User-Agent: Go-http-client")
-		testarossa.Contains(t, string(raw), "Content-Type: text/plain\r\n")
-		testarossa.Contains(t, string(raw), "Multi-Value: Foo\r\n")
-		testarossa.Contains(t, string(raw), "Multi-Value: Bar\r\n")
-		testarossa.Contains(t, string(raw), "\r\n\r\nLorem Ipsum")
+		tt.Contains(string(raw), "PUT /echo HTTP/1.1\r\n")
+		tt.Contains(string(raw), "Host: 127.0.0.1:5050\r\n")
+		tt.Contains(string(raw), "User-Agent: Go-http-client")
+		tt.Contains(string(raw), "Content-Type: text/plain\r\n")
+		tt.Contains(string(raw), "Multi-Value: Foo\r\n")
+		tt.Contains(string(raw), "Multi-Value: Bar\r\n")
+		tt.Contains(string(raw), "\r\n\r\nLorem Ipsum")
 	}
 
 	// Not found
 	req, err = http.NewRequest(http.MethodPatch, "http://127.0.0.1:5050/x", bytes.NewReader([]byte("Lorem Ipsum")))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	req.Header.Set("Content-Type", "text/plain")
 
 	resp, err = client.Do(ctx, req)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusNotFound, resp.StatusCode)
+	if tt.NoError(err) {
+		tt.Equal(http.StatusNotFound, resp.StatusCode)
 	}
 
 	// Bad URL
 	req, err = http.NewRequest(http.MethodDelete, "not a url", nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	req.Header.Set("Content-Type", "text/plain")
 
 	_, err = client.Do(ctx, req)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestHttpegress_MakeRequest(t *testing.T) {
@@ -186,6 +189,7 @@ func TestHttpegress_MakeRequest(t *testing.T) {
 
 func TestHttpegress_Mock(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	mock := NewMock().
 		MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
@@ -207,7 +211,7 @@ func TestHttpegress_Mock(t *testing.T) {
 		con,
 	)
 	err := app.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer app.Shutdown()
 
 	ctx := Context()
@@ -215,10 +219,10 @@ func TestHttpegress_Mock(t *testing.T) {
 
 	req, _ := http.NewRequest("DELETE", "https://example.com/ex/5", nil)
 	resp, err := client.Do(ctx, req)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, http.StatusOK, resp.StatusCode)
-		testarossa.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	if tt.NoError(err) {
+		tt.Equal(http.StatusOK, resp.StatusCode)
+		tt.Equal("application/json", resp.Header.Get("Content-Type"))
 		raw, _ := io.ReadAll(resp.Body)
-		testarossa.Equal(t, string(raw), `{"deleted":true}`)
+		tt.Equal(string(raw), `{"deleted":true}`)
 	}
 }

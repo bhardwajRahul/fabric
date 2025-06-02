@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ smtpingressapi.Client
 )
@@ -216,11 +218,12 @@ func (svc *Intermediate) Port() (port int) {
 
 /*
 SetPort sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Port is the TCP port to listen to.
 */
 func (svc *Intermediate) SetPort(port int) error {
-	return svc.SetConfig("Port", fmt.Sprintf("%v", port))
+	return svc.SetConfig("Port", utils.AnyToString(port))
 }
 
 /*
@@ -234,11 +237,12 @@ func (svc *Intermediate) Enabled() (enabled bool) {
 
 /*
 SetEnabled sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Enabled determines whether the email server is started.
 */
 func (svc *Intermediate) SetEnabled(enabled bool) error {
-	return svc.SetConfig("Enabled", fmt.Sprintf("%v", enabled))
+	return svc.SetConfig("Enabled", utils.AnyToString(enabled))
 }
 
 /*
@@ -253,12 +257,13 @@ func (svc *Intermediate) MaxSize() (mb int) {
 
 /*
 SetMaxSize sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 MaxSize is the maximum size of messages that will be accepted, in megabytes.
 Defaults to 10 megabytes.
 */
 func (svc *Intermediate) SetMaxSize(mb int) error {
-	return svc.SetConfig("MaxSize", fmt.Sprintf("%v", mb))
+	return svc.SetConfig("MaxSize", utils.AnyToString(mb))
 }
 
 /*
@@ -273,12 +278,13 @@ func (svc *Intermediate) MaxClients() (clients int) {
 
 /*
 SetMaxClients sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 MaxClients controls how many client connection can be opened in parallel.
 Defaults to 128.
 */
 func (svc *Intermediate) SetMaxClients(clients int) error {
-	return svc.SetConfig("MaxClients", fmt.Sprintf("%v", clients))
+	return svc.SetConfig("MaxClients", utils.AnyToString(clients))
 }
 
 /*
@@ -293,10 +299,11 @@ func (svc *Intermediate) Workers() (clients int) {
 
 /*
 SetWorkers sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Workers controls how many workers process incoming mail.
 Defaults to 8.
 */
 func (svc *Intermediate) SetWorkers(clients int) error {
-	return svc.SetConfig("Workers", fmt.Sprintf("%v", clients))
+	return svc.SetConfig("Workers", utils.AnyToString(clients))
 }

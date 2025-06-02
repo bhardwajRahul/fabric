@@ -1,4 +1,4 @@
-package {{ .PackageSuffix }}
+package {{ .PackagePathSuffix }}
 
 import (
 	"testing"
@@ -7,14 +7,14 @@ import (
 
 	"github.com/microbus-io/fabric/service"
 
-	"{{ .Package }}/{{ .PackageSuffix }}api"
+	"{{ .PackageDir }}/{{ .PackageDirSuffix }}api"
 )
 
 var (
 	_ *testing.T
 	_ testarossa.TestingT
 	_ service.Service
-	_ *{{ .PackageSuffix }}api.Client
+	_ *{{ .PackagePathSuffix }}api.Client
 )
 
 // Initialize starts up the testing app.

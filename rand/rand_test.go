@@ -24,7 +24,7 @@ import (
 )
 
 func BenchmarkRand_AlphaNum64(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		AlphaNum64(16)
 	}
 	// On 2021 MacBook M1 Pro 16": 42 ns/op
@@ -32,24 +32,26 @@ func BenchmarkRand_AlphaNum64(b *testing.B) {
 
 func TestRand_AlphaNum64(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	re := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an64 := AlphaNum64(i)
-		testarossa.Len(t, an64, i)
+		tt.Len(an64, i)
 		match := re.MatchString(an64)
-		testarossa.True(t, match)
+		tt.True(match)
 	}
 }
 
 func TestRand_AlphaNum32(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	re := regexp.MustCompile(`^[A-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an32 := AlphaNum32(i)
-		testarossa.Len(t, an32, i)
+		tt.Len(an32, i)
 		match := re.MatchString(an32)
-		testarossa.True(t, match)
+		tt.True(match)
 	}
 }

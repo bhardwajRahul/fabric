@@ -13,7 +13,7 @@ The `IssueToken` endpoint creates a JWT with a set of claims and signs it using 
 }
 ```
 
-JWTs created by the token issuer core microservice include a `validator` claim with the hostname `tokenissuer.core` to inform the authorization [middleware](../structure/coreservices-httpingress.md#middleware) where to validate the token.
+JWTs created by the token issuer core microservice include a `validator` claim with the hostname `tokenissuer.core` to inform the authorization [middleware](../structure/coreservices-httpingress-middleware.md) where to validate the token.
 
 The `ValidateToken` endpoint checks a JWT for validity and returns the actor associated with it. To be considered valid, the JWT's `iss` claim must match, it must not have expired, and its signature must match either `SecretKey` or `AltSecretKey`.
 

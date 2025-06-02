@@ -43,8 +43,6 @@ func Initialize() (err error) {
 }
 ```
 
-`App.Init` is a convenient way to initialize all microservices as they are included in or joined to the `App`. At this level, only the generic `service.Service` interface of the microservices is accessible. Setting a configuration property must therefore be done using `SetConfig`.
-
 The `Init` method at the microservice level, including `Svc.Init` for the service under test, have access to the interface of the individual microservice along with all its customizations.   
 
 ### Testing Functions and Event Sinks
@@ -54,6 +52,7 @@ For each endpoint, the testing harness `integration-gen_test.go` defines a corre
 ```go
 func TestCalculator_Arithmetic(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	/*
 		Arithmetic(t, ctx, x, op, y).
 			Expect(xEcho, opEcho, yEcho, result).
@@ -88,11 +87,11 @@ It is not required to use the provided test cases and asserters. For example, `A
 
 ```go
 x, op, y, sum, err := Svc.Arithmetic(ctx, 3, "-", 8)
-if testarossa.NoError(t, err) {
-	testarossa.Equal(t, 3, x)
-	testarossa.Equal(t, "-", op)
-	testarossa.Equal(t, 8, y)
-	testarossa.Equal(t, -5, sum)
+if tt.NoError(err) {
+	tt.Equal(3, x)
+	tt.Equal("-", op)
+	tt.Equal(8, y)
+	tt.Equal(-5, sum)
 }
 ```
 
@@ -103,6 +102,7 @@ Raw web endpoints are tested in a similar fashion, except that their asserters a
 ```go
 func TestHello_Hello(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	/*
 		Hello_Get(t, ctx, "").
 			BodyContains(value).
@@ -156,6 +156,7 @@ res, err := Hello_Get(t, ctx, "")
 ```go
 func TestHello_TickTock(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	/*
 		TickTock(t, ctx).
 			NoError()
@@ -180,6 +181,7 @@ Callbacks that handle changes to config property values are similarly tested.
 ```go
 func TestExample_OnChangedConnectionString(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	/*
 		OnChangedConnectionString(t, ctx).
 			NoError()
@@ -244,7 +246,8 @@ func TestEventsink_OnRegistered(t *testing.T) {
 
 ### Parallelism
 
-The code generator specifies to run all tests (except for events) in parallel by default. The assumption is that tests written in a single test suite are implemented as to not interfere with one another. Commenting out `t.Parallel()` runs that test separately from other tests, however the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
+The code generator specifies to run all tests (except for events) in parallel by default. The assumption is that tests written in a single test suite are implemented as to not interfere with one another. Commenting out `t.Parallel()
+tt := testarossa.For(t)` runs that test separately from other tests, however the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
 
 ## Mocking
 
@@ -345,7 +348,7 @@ Note that shifting the clock will not cause any timeouts or deadlines to be trig
 
 ## Manipulating the Context
 
-`Microbus` uses the `ctx` or `r.Context()` to pass-in adjunct data to that does not affect the business logic of the endpoint. The context is extended with a [frame](../structure/frame.md) which internally holds an `http.Header` that includes various `Microbus` key-value pairs. Shifting the clock is one common example, another is the language.
+`Microbus` uses the `ctx` or `r.Context()` to pass-in adjunct data that does not affect the business logic of the endpoint. The context is extended with a [frame](../structure/frame.md) which internally holds an `http.Header` that includes various `Microbus` key-value pairs. Shifting the clock is one common example, another is the language.
 
 Use the `frame.Frame` to access and manipulate this header:
 

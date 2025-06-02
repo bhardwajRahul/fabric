@@ -19,14 +19,12 @@ package connector
 import (
 	"context"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/timex"
 	"github.com/microbus-io/fabric/trc"
 	"github.com/microbus-io/fabric/utils"
 )
@@ -41,6 +39,7 @@ type tickerCallback struct {
 
 // StartTicker initiates a recurring job at a set interval.
 // Tickers do not run when the connector is running in the TESTING deployment environment.
+// Ticker names are case-insensitive.
 func (c *Connector) StartTicker(name string, interval time.Duration, handler service.TickerHandler) error {
 	if err := utils.ValidateTickerName(name); err != nil {
 		return c.captureInitErr(errors.Trace(err))
@@ -51,7 +50,7 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 	if interval <= 0 {
 		return c.captureInitErr(errors.Newf("non-positive interval '%v'", interval))
 	}
-	name = strings.ToLower(name)
+	name = utils.ToKebabCase(name)
 
 	c.tickersLock.Lock()
 	_, ok := c.tickers[name]
@@ -73,6 +72,7 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 }
 
 // StopTicker stops a running ticker.
+// Ticker names are case-insensitive.
 func (c *Connector) StopTicker(name string) error {
 	if err := utils.ValidateTickerName(name); err != nil {
 		return c.captureInitErr(errors.Trace(err))
@@ -80,7 +80,7 @@ func (c *Connector) StopTicker(name string) error {
 	if !c.IsStarted() {
 		return nil
 	}
-	name = strings.ToLower(name)
+	name = utils.ToKebabCase(name)
 
 	c.tickersLock.Lock()
 	job, ok := c.tickers[name]
@@ -208,11 +208,4 @@ func (c *Connector) runTicker(job *tickerCallback) {
 func (c *Connector) Now(ctx context.Context) time.Time {
 	offset := frame.Of(ctx).ClockShift()
 	return time.Now().UTC().Add(offset)
-}
-
-// NowX returns the current time in the UTC timezone.
-// The time may be offset if the context was a clock shift was set on the context using the frame.
-func (c *Connector) NowX(ctx context.Context) timex.Timex {
-	offset := frame.Of(ctx).ClockShift()
-	return timex.Now().UTC().Add(offset)
 }

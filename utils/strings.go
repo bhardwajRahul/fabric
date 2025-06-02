@@ -18,7 +18,9 @@ package utils
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/base64"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -41,47 +43,61 @@ func IsLowerCaseIdentifier(id string) bool {
 }
 
 // ToKebabCase converts a CamelCase identifier to kebab-case.
+// Consecutive non-letters or numbers are compressed into a single hyphen.
 func ToKebabCase(id string) string {
 	idRunes := []rune(id)
 	n := len(idRunes)
 	if n == 0 {
 		return id
 	}
-	idRunes = append(idRunes, rune('x')) // Terminal
 	var sb strings.Builder
-	sb.WriteRune(unicode.ToLower(idRunes[0]))
-
-	for i := 1; i < n; i++ {
-		rPrev := idRunes[i-1]
+	lastSpace := false
+	for i := range n {
+		var rPrev, rNext rune
+		if i > 0 {
+			rPrev = idRunes[i-1]
+		}
 		r := idRunes[i]
-		rNext := idRunes[i+1]
+		if i < n-1 {
+			rNext = idRunes[i+1]
+		} else {
+			rNext = 'X'
+		}
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			if lastSpace {
+				continue
+			}
+			sb.WriteByte('-')
+			lastSpace = true
+			continue
+		}
 		if unicode.IsUpper(r) {
 			switch {
-			case unicode.IsLower(rPrev) && unicode.IsLower(rNext):
-				// ooXoo
+			case unicode.IsLower(rPrev) || unicode.IsNumber(rPrev):
+				// ooXoo ooXOo 00Xoo 00XOo
 				sb.WriteByte('-')
 			case unicode.IsUpper(rPrev) && unicode.IsUpper(rNext):
-				// oOXOo
+				// oOXOo oooOX
 				break
 			case unicode.IsUpper(rPrev) && unicode.IsLower(rNext):
-				if i < n-1 {
-					// oOXoo
-					sb.WriteByte('-')
-				} else {
-					// oooOX
-					break
-				}
-			case unicode.IsLower(rPrev) && unicode.IsUpper(rNext):
-				// ooXOo
+				// oOXoo
 				sb.WriteByte('-')
 			}
 		}
+		if unicode.IsNumber(r) && !unicode.IsNumber(rPrev) && !lastSpace && i > 0 {
+			sb.WriteByte('-')
+		}
+		if unicode.IsLower(r) && unicode.IsNumber(rPrev) {
+			sb.WriteByte('-')
+		}
 		sb.WriteRune(unicode.ToLower(r))
+		lastSpace = false
 	}
 	return sb.String()
 }
 
 // ToSnakeCase converts a CamelCase identifier to snake_case.
+// Consecutive non-letters are compressed into a single underscore.
 func ToSnakeCase(id string) string {
 	return strings.ReplaceAll(ToKebabCase(id), "-", "_")
 }
@@ -178,4 +194,22 @@ func UnsafeStringToBytes(s string) []byte {
 func UnsafeBytesToString(b []byte) string {
 	pBytes := unsafe.SliceData(b)
 	return unsafe.String(pBytes, len(b))
+}
+
+// AnyToString returns the string representation of the object.
+// It looks for a TextMarshaler or Stringer interfaces first before defaulting to fmt.Sprintf.
+func AnyToString(o any) string {
+	if s, ok := o.(string); ok {
+		return s
+	}
+	if tm, ok := o.(encoding.TextMarshaler); ok {
+		txt, err := tm.MarshalText()
+		if err == nil {
+			return UnsafeBytesToString(txt)
+		}
+	}
+	if s, ok := o.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return fmt.Sprintf("%v", o)
 }

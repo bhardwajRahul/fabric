@@ -25,6 +25,7 @@ import (
 
 func TestSpec_ErrorsInFunctions(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -37,53 +38,54 @@ functions:
   - signature: Func(s []*int)
     path: :BAD/...
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid port")
+	tt.Contains(err, "invalid port")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     queue: skip
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid queue")
+	tt.Contains(err, "invalid queue")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: //bad.ho$t
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid hostname")
+	tt.Contains(err, "invalid hostname")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /backtick`+"`"+`
 `), &svc)
-	testarossa.ErrorContains(t, err, "backtick not allowed")
+	tt.Contains(err, "backtick not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /backtick`+"`"+`
 `), &svc)
-	testarossa.ErrorContains(t, err, "backtick not allowed")
+	tt.Contains(err, "backtick not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     actor: roles=~`+"`admin`"+`
 `), &svc)
-	testarossa.ErrorContains(t, err, "backtick not allowed")
+	tt.Contains(err, "backtick not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     actor: x || (y
 `), &svc)
-	testarossa.ErrorContains(t, err, "boolean expression")
+	tt.Contains(err, "boolean expression")
 }
 
 func TestSpec_ErrorsInPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -96,46 +98,47 @@ functions:
   - signature: Func(s string)
     path: /{ }
 `), &svc)
-	testarossa.ErrorContains(t, err, "must be an identifier")
+	tt.Contains(err, "must be an identifier")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /{p$}
 `), &svc)
-	testarossa.ErrorContains(t, err, "must be an identifier")
+	tt.Contains(err, "must be an identifier")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /{p +}
 `), &svc)
-	testarossa.ErrorContains(t, err, "must be an identifier")
+	tt.Contains(err, "must be an identifier")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /{ +}
 `), &svc)
-	testarossa.ErrorContains(t, err, "must be an identifier")
+	tt.Contains(err, "must be an identifier")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /{$+}
 `), &svc)
-	testarossa.ErrorContains(t, err, "must be an identifier")
+	tt.Contains(err, "must be an identifier")
 
 	err = yaml.Unmarshal([]byte(general+`
 functions:
   - signature: Func(s string)
     path: /{+}/hello
 `), &svc)
-	testarossa.ErrorContains(t, err, "must end path")
+	tt.Contains(err, "must end path")
 }
 
 func TestSpec_ErrorsInEvents(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -147,25 +150,26 @@ general:
 events:
   - signature: Func(s []*int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "must start with 'On'")
+	tt.Contains(err, "must start with 'On'")
 
 	err = yaml.Unmarshal([]byte(general+`
 events:
   - signature: OnFunc(s []*int)
     path: :BAD/...
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid port")
+	tt.Contains(err, "invalid port")
 
 	err = yaml.Unmarshal([]byte(general+`
 events:
   - signature: OnFunc(s []*int)
     path: :0/...
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid port")
+	tt.Contains(err, "invalid port")
 }
 
 func TestSpec_ErrorsInSinks(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -178,20 +182,20 @@ sinks:
   - signature: Func(s []*int)
     source: from/somewhere/else
 `), &svc)
-	testarossa.ErrorContains(t, err, "must start with 'On'")
+	tt.Contains(err, "must start with 'On'")
 
 	err = yaml.Unmarshal([]byte(general+`
 sinks:
   - signature: OnFunc(s []*int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid source")
+	tt.Contains(err, "invalid source")
 
 	err = yaml.Unmarshal([]byte(general+`
 sinks:
   - signature: OnFunc(s []*int)
     source: https://www.example.com
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid source")
+	tt.Contains(err, "invalid source")
 
 	err = yaml.Unmarshal([]byte(general+`
 sinks:
@@ -199,11 +203,12 @@ sinks:
     source: from/somewhere/else
     forHost: invalid.ho$t
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid hostname")
+	tt.Contains(err, "invalid hostname")
 }
 
 func TestSpec_ErrorsInConfigs(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -215,38 +220,38 @@ general:
 configs:
   - signature: func() (b bool)
 `), &svc)
-	testarossa.ErrorContains(t, err, "start with uppercase")
+	tt.Contains(err, "start with uppercase")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
   - signature: Func()
 `), &svc)
-	testarossa.ErrorContains(t, err, "single return value")
+	tt.Contains(err, "single return value")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
   - signature: Func() (x int, y int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "single return value")
+	tt.Contains(err, "single return value")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
   - signature: Func(x int) (b bool)
 `), &svc)
-	testarossa.ErrorContains(t, err, "arguments not allowed")
+	tt.Contains(err, "arguments not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
   - signature: Func() (b byte)
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid return type")
+	tt.Contains(err, "invalid return type")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
   - signature: Func() (b string)
     validation: xyz
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid validation rule")
+	tt.Contains(err, "invalid validation rule")
 
 	err = yaml.Unmarshal([]byte(general+`
 configs:
@@ -254,11 +259,12 @@ configs:
     validation: str ^[a-z]+$
     default: 123
 `), &svc)
-	testarossa.ErrorContains(t, err, "doesn't validate against rule")
+	tt.Contains(err, "doesn't validate against rule")
 }
 
 func TestSpec_ErrorsInTickers(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -270,36 +276,37 @@ general:
 tickers:
   - signature: func()
 `), &svc)
-	testarossa.ErrorContains(t, err, "start with uppercase")
+	tt.Contains(err, "start with uppercase")
 
 	err = yaml.Unmarshal([]byte(general+`
 tickers:
   - signature: Func(x int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "arguments or return values not allowed")
+	tt.Contains(err, "arguments or return values not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 tickers:
   - signature: Func() (x int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "arguments or return values not allowed")
+	tt.Contains(err, "arguments or return values not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 tickers:
   - signature: Func()
 `), &svc)
-	testarossa.ErrorContains(t, err, "non-positive interval")
+	tt.Contains(err, "non-positive interval")
 
 	err = yaml.Unmarshal([]byte(general+`
 tickers:
   - signature: Func()
     interval: "-2m"
 `), &svc)
-	testarossa.ErrorContains(t, err, "non-positive interval")
+	tt.Contains(err, "non-positive interval")
 }
 
 func TestSpec_ErrorsInWebs(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -311,37 +318,38 @@ general:
 webs:
   - signature: func()
 `), &svc)
-	testarossa.ErrorContains(t, err, "start with uppercase")
+	tt.Contains(err, "start with uppercase")
 
 	err = yaml.Unmarshal([]byte(general+`
 webs:
   - signature: Func(x int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "arguments or return values not allowed")
+	tt.Contains(err, "arguments or return values not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 webs:
   - signature: Func() (x int)
 `), &svc)
-	testarossa.ErrorContains(t, err, "arguments or return values not allowed")
+	tt.Contains(err, "arguments or return values not allowed")
 
 	err = yaml.Unmarshal([]byte(general+`
 webs:
   - signature: Func()
     path: :BAD/...
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid port")
+	tt.Contains(err, "invalid port")
 
 	err = yaml.Unmarshal([]byte(general+`
 webs:
   - signature: Func()
     queue: skip
 `), &svc)
-	testarossa.ErrorContains(t, err, "invalid queue")
+	tt.Contains(err, "invalid queue")
 }
 
 func TestSpec_ErrorsInService(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var svc Service
 	general := `
@@ -355,22 +363,40 @@ functions:
 webs:
   - signature: Func()
 `), &svc)
-	testarossa.ErrorContains(t, err, "duplicate")
+	tt.Contains(err, "duplicate")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(x int) (y int)
+webs:
+  - signature: FUNC()
+`), &svc)
+	tt.Contains(err, "duplicate")
+
+	err = yaml.Unmarshal([]byte(general+`
+functions:
+  - signature: Func(x int) (y int)
+configs:
+  - signature: FUNC() (x int)
+`), &svc)
+	tt.Contains(err, "duplicate")
 }
 
 func TestSpec_HandlerInAndOut(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	code := `signature: Func(i integer, b boolean, s string, f  float64)  (m map[string]string, a []int)`
 	var h Handler
 	err := yaml.Unmarshal([]byte(code), &h)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, h.In("name type"), "i int, b bool, s string, f float64")
-	testarossa.Equal(t, h.Out("name type"), "m map[string]string, a []int")
+	tt.NoError(err)
+	tt.Equal(h.In("name type"), "i int, b bool, s string, f float64")
+	tt.Equal(h.Out("name type"), "m map[string]string, a []int")
 }
 
 func TestSpec_QualifyTypes(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	code := `
 general:
@@ -380,19 +406,19 @@ functions:
 `
 	var svc Service
 	err := yaml.Unmarshal([]byte(code), &svc)
-	testarossa.NoError(t, err)
-	svc.Package = "from/my"
+	tt.NoError(err)
+	svc.PackagePath = "from/my"
 
-	testarossa.Equal(t, "Defined", svc.Functions[0].Signature.InputArgs[0].Type)
-	testarossa.Equal(t, "Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
+	tt.Equal("Defined", svc.Functions[0].Signature.InputArgs[0].Type)
+	tt.Equal("Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
 
 	svc.FullyQualifyTypes()
 
-	testarossa.Equal(t, "myapi.Defined", svc.Functions[0].Signature.InputArgs[0].Type)
-	testarossa.Equal(t, "myapi.Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
+	tt.Equal("myapi.Defined", svc.Functions[0].Signature.InputArgs[0].Type)
+	tt.Equal("myapi.Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
 
 	svc.ShorthandTypes()
 
-	testarossa.Equal(t, "Defined", svc.Functions[0].Signature.InputArgs[0].Type)
-	testarossa.Equal(t, "Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
+	tt.Equal("Defined", svc.Functions[0].Signature.InputArgs[0].Type)
+	tt.Equal("Imported", svc.Functions[0].Signature.OutputArgs[0].Type)
 }

@@ -105,6 +105,7 @@ func TestLogin_Welcome(t *testing.T) {
 
 func TestLogin_AdminOnly(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		AdminOnly_Get(t, ctx, "").BodyContains(value)
@@ -116,42 +117,43 @@ func TestLogin_AdminOnly(t *testing.T) {
 	ctx := Context()
 
 	_, err := loginapi.NewClient(Svc).AdminOnly_Get(ctx, "")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	frame.Of(ctx).SetActor(Actor{
 		Subject: "someone@example.com",
 		Roles:   []string{"m", "u"},
 	})
 	_, err = loginapi.NewClient(Svc).AdminOnly_Get(ctx, "")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	frame.Of(ctx).SetActor(Actor{
 		Subject: "someone@example.com",
 		Roles:   []string{"a"},
 	})
 	_, err = loginapi.NewClient(Svc).AdminOnly_Get(ctx, "")
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 }
 
 func TestLogin_ManagerOnly(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 
 	_, err := loginapi.NewClient(Svc).ManagerOnly_Get(ctx, "")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	frame.Of(ctx).SetActor(Actor{
 		Subject: "someone@example.com",
 		Roles:   []string{"a"},
 	})
 	_, err = loginapi.NewClient(Svc).ManagerOnly_Get(ctx, "")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	frame.Of(ctx).SetActor(Actor{
 		Subject: "someone@example.com",
 		Roles:   []string{"m"},
 	})
 	_, err = loginapi.NewClient(Svc).ManagerOnly_Get(ctx, "")
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 }

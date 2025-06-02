@@ -29,6 +29,9 @@ import (
 )
 
 func TestHttpx_ResponseRecorder(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	rr := NewResponseRecorder()
 
 	// Write once
@@ -37,16 +40,16 @@ func TestHttpx_ResponseRecorder(t *testing.T) {
 
 	bin := []byte("Lorem Ipsum")
 	n, err := rr.Write(bin)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, len(bin), n)
+	tt.NoError(err)
+	tt.Equal(len(bin), n)
 
 	result := rr.Result()
-	testarossa.SliceEqual(t, bin, result.Body.(*BodyReader).Bytes())
+	tt.Equal(bin, result.Body.(*BodyReader).Bytes())
 
 	var buf bytes.Buffer
 	err = result.Write(&buf)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "HTTP/1.1 418 I'm a teapot\r\nContent-Length: 11\r\nFoo: Bar\r\n\r\nLorem Ipsum", buf.String())
+	tt.NoError(err)
+	tt.Equal("HTTP/1.1 418 I'm a teapot\r\nContent-Length: 11\r\nFoo: Bar\r\n\r\nLorem Ipsum", buf.String())
 
 	// Write second time
 	rr.Header().Set("Foo", "Baz")
@@ -54,41 +57,47 @@ func TestHttpx_ResponseRecorder(t *testing.T) {
 
 	bin2 := []byte(" Dolor Sit Amet")
 	n, err = rr.Write(bin2)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, len(bin2), n)
+	tt.NoError(err)
+	tt.Equal(len(bin2), n)
 	bin = append(bin, bin2...)
 
 	result = rr.Result()
-	testarossa.SliceEqual(t, bin, result.Body.(*BodyReader).Bytes())
+	tt.Equal(bin, result.Body.(*BodyReader).Bytes())
 
 	buf.Reset()
 	err = result.Write(&buf)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "HTTP/1.1 409 Conflict\r\nContent-Length: 26\r\nFoo: Baz\r\n\r\nLorem Ipsum Dolor Sit Amet", buf.String())
+	tt.NoError(err)
+	tt.Equal("HTTP/1.1 409 Conflict\r\nContent-Length: 26\r\nFoo: Baz\r\n\r\nLorem Ipsum Dolor Sit Amet", buf.String())
 }
 
 func TestHttpx_FrameOfResponseRecorder(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	utilsRecorder := NewResponseRecorder()
 	utilsRecorder.Header().Set(frame.HeaderMsgId, "123")
-	testarossa.Equal(t, "123", frame.Of(utilsRecorder).MessageID())
+	tt.Equal("123", frame.Of(utilsRecorder).MessageID())
 	httpResponse := utilsRecorder.Result()
-	testarossa.Equal(t, "123", frame.Of(httpResponse).MessageID())
+	tt.Equal("123", frame.Of(httpResponse).MessageID())
 }
 
 func TestHttpx_Copy(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	payload := rand.AlphaNum64(256 * 1024)
 
 	recorder := NewResponseRecorder()
 	recorder.Write([]byte(payload))
 	b, err := io.ReadAll(recorder.Result().Body)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, payload, string(b))
+	tt.NoError(err)
+	tt.Equal(payload, string(b))
 
 	recorder = NewResponseRecorder()
 	n, err := io.Copy(recorder, io.LimitReader(strings.NewReader(payload), int64(len(payload))))
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, int(n), len(payload))
+	tt.NoError(err)
+	tt.Equal(int(n), len(payload))
 	b, err = io.ReadAll(recorder.Result().Body)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, payload, string(b))
+	tt.NoError(err)
+	tt.Equal(payload, string(b))
 }

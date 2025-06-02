@@ -161,19 +161,24 @@ Echo tests a typical web handler.
 */
 func (svc *Service) Echo(w http.ResponseWriter, r *http.Request) (err error) {
 	// Verify that the frame in the context points to the header of the request
-	frameHdr := frame.Of(r.Context()).Header()
-	frameHdr.Add("Magic-Header", "Harry Potter")
-	for k, vv1 := range frameHdr {
+	ctxFrameHdr := frame.Of(r.Context()).Header()
+	ctxFrameHdr.Add("Magic-Header", "Harry Potter")
+	if r.Header.Get("Magic-Header") != "Harry Potter" {
+		return errors.New("headers not same")
+	}
+	for k, vv1 := range ctxFrameHdr {
 		vv2, ok := r.Header[k]
 		if !ok || len(vv1) != len(vv2) {
 			return errors.New("headers not same")
 		}
-		for i := 0; i < len(vv1); i++ {
+		for i := range vv1 {
 			if vv1[i] != vv2[i] {
 				return errors.New("headers not same")
 			}
 		}
 	}
+	ctxFrameHdr.Del("Magic-Header")
+
 	r.Write(w)
 	return nil
 }

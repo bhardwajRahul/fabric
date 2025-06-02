@@ -29,8 +29,7 @@ type Void any
 // It always returns the length of the buffer and a nil error.
 func Read(bytes []byte) (n int, err error) {
 	var x uint64
-	length := len(bytes)
-	for i := 0; i < length; i++ {
+	for i := range bytes {
 		if i%8 == 0 {
 			x = rand.Uint64()
 		} else {
@@ -38,7 +37,7 @@ func Read(bytes []byte) (n int, err error) {
 		}
 		bytes[i] = byte(x & 0xFF)
 	}
-	return length, err
+	return len(bytes), err
 }
 
 // AlphaNum64 generates a random string of the specified length.
@@ -47,7 +46,7 @@ func AlphaNum64(length int) string {
 	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01"
 	bytes := make([]byte, length)
 	var x uint64
-	for i := 0; i < length; i++ {
+	for i := range length {
 		if i%8 == 0 {
 			x = rand.Uint64()
 		} else {
@@ -64,7 +63,7 @@ func AlphaNum32(length int) string {
 	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
 	bytes := make([]byte, length)
 	var x uint64
-	for i := 0; i < length; i++ {
+	for i := range length {
 		if i%8 == 0 {
 			x = rand.Uint64()
 		} else {

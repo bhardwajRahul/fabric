@@ -35,13 +35,11 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
-	"github.com/microbus-io/fabric/utils"
 
 	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/microbus-io/fabric/coreservices/httpingress/intermediate"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
 )
 
 /*
@@ -84,7 +82,7 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 
 	// ASCII art fun
 	if svc.Deployment() == connector.LOCAL {
-		fmt.Print(`
+		fmt.Print(connector.Green, `
 8"""8"""8 8  8""""8 8"""8  8"""88 8""""8   8   8 8""""8 
 8   8   8 8  8    " 8   8  8    8 8    8   8   8 8      
 8e  8   8 8e 8e     8eee8e 8    8 8eeee8ee 8e  8 8eeeee 
@@ -92,7 +90,7 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 88  8   8 88 88   e 88   8 8    8 88     8 88  8 e   88 
 88  8   8 88 88eee8 88   8 8eeee8 88eeeee8 88ee8 8eee88 
 
-`)
+`, connector.Reset)
 	}
 
 	return nil
@@ -111,47 +109,8 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 // The chain is initialized to a default that can be customized.
 // Changing the middleware after the server starts has no effect.
 func (svc *Service) Middleware() *middleware.Chain {
-	// Default middleware
 	if svc.middleware == nil {
-		m := &middleware.Chain{}
-		// Warning: renaming or removing middleware is a breaking change because the names are used as location markers
-		m.Append("ErrorPrinter", middleware.ErrorPrinter())
-		m.Append("BlockedPaths", middleware.BlockedPaths(func(path string) bool {
-			if svc.blockedPaths[path] {
-				return true
-			}
-			dot := strings.LastIndex(path, ".")
-			if dot >= 0 && svc.blockedPaths["*"+path[dot:]] {
-				return true
-			}
-			return false
-		}))
-		m.Append("Logger", middleware.Logger(svc))
-		m.Append("Enter", middleware.NoOp()) // Marker
-		m.Append("SecureRedirect", middleware.SecureRedirect(func() bool {
-			return svc.secure443
-		}))
-		m.Append("CORS", middleware.Cors(func(origin string) bool {
-			return svc.allowedOrigins["*"] || svc.allowedOrigins[origin]
-		}))
-		m.Append("XForward", middleware.XForwarded())
-		m.Append("InternalHeaders", middleware.InternalHeaders())
-		m.Append("RootPath", middleware.RootPath("/root"))
-		m.Append("Timeout", middleware.Timeout(func() time.Duration {
-			return svc.TimeBudget()
-		}))
-		m.Append("Authorization", middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
-			if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok {
-				actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(validator).ValidateToken(ctx, token)
-			}
-			return actor, valid, errors.Trace(err)
-		}))
-		m.Append("Ready", middleware.NoOp()) // Marker
-		m.Append("CacheControl", middleware.CacheControl("no-store"))
-		m.Append("Compress", middleware.Compress())
-		m.Append("DefaultFavIcon", middleware.DefaultFavIcon())
-
-		svc.middleware = m
+		svc.middleware = svc.defaultMiddleware()
 	}
 	return svc.middleware
 }

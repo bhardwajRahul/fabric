@@ -84,6 +84,10 @@ func Of(x any) Frame {
 		if v != nil {
 			h = v
 		}
+	case map[string][]string:
+		if v != nil {
+			h = v
+		}
 	case context.Context:
 		if v != nil {
 			h, _ = v.Value(contextKey).(http.Header)
@@ -93,27 +97,32 @@ func Of(x any) Frame {
 	return Frame{h}
 }
 
+// IsNil indicates if the frame's internal header representation is nil.
+func (f Frame) IsNil() bool {
+	return f.h == nil
+}
+
 // CloneContext returns a new context with a copy of the frame of the parent context, or a new frame if it does not have one.
+// In either case, the returned context is guaranteed to have a frame.
 // Manipulating the frame of the cloned context does not impact the parent's.
 func CloneContext(parent context.Context) (cloned context.Context) {
-	h := http.Header{}
-	for k, vv := range Of(parent).h {
-		h[k] = append(h[k], vv...)
-	}
-	return context.WithValue(parent, contextKey, h)
+	return ContextWithFrameOf(parent, ContextWithFrame(parent))
 }
 
-// ContextWithFrameOf returns a new context derived from the parent, referencing the frame of x.
-// If the parent includes a frame, it will be superseded by the given frame.
-// Manipulating the frame of the new context impacts the original frame.
+// ContextWithFrameOf returns a copy of the parent context, setting on it a clone of the frame obtained from x.
+// Manipulating the frame of the returned context does not impact the parent's.
 func ContextWithFrameOf(parent context.Context, x any) (ctx context.Context) {
-	return context.WithValue(parent, contextKey, Of(x).h)
+	return context.WithValue(parent, contextKey, Of(x).h.Clone())
 }
 
-// ContextWithFrame adds a new empty frame to the context.
-// If the parent includes a frame, it will be superseded by the given frame.
+// ContextWithFrame returns either the parent, or a copy of the parent with a new frame.
+// In either case, the returned context is guaranteed to have a frame.
 func ContextWithFrame(parent context.Context) (ctx context.Context) {
-	return context.WithValue(parent, contextKey, http.Header{})
+	f := Of(parent)
+	if f.h == nil {
+		return ContextWithFrameOf(parent, make(http.Header))
+	}
+	return parent
 }
 
 // Get returns an arbitrary header.

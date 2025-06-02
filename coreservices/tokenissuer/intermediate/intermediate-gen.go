@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ tokenissuerapi.Client
 )
@@ -206,11 +208,12 @@ func (svc *Intermediate) AuthTokenTTL() (ttl time.Duration) {
 
 /*
 SetAuthTokenTTL sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 AuthTokenTTL sets the TTL of the JWT.
 */
 func (svc *Intermediate) SetAuthTokenTTL(ttl time.Duration) error {
-	return svc.SetConfig("AuthTokenTTL", fmt.Sprintf("%v", ttl))
+	return svc.SetConfig("AuthTokenTTL", utils.AnyToString(ttl))
 }
 
 /*
@@ -223,11 +226,12 @@ func (svc *Intermediate) SecretKey() (key string) {
 
 /*
 SetSecretKey sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 SecretKey is a symmetrical key used to sign and validate the JWT when using the HMAC-SHA algorithm.
 */
 func (svc *Intermediate) SetSecretKey(key string) error {
-	return svc.SetConfig("SecretKey", fmt.Sprintf("%v", key))
+	return svc.SetConfig("SecretKey", utils.AnyToString(key))
 }
 
 /*
@@ -241,12 +245,13 @@ func (svc *Intermediate) AltSecretKey() (key string) {
 
 /*
 SetAltSecretKey sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 AltSecretKey is an alternative key used to validate the JWT when using the HMAC-SHA algorithm.
 Setting the previous secret key as an alternative key is useful when rotating keys.
 */
 func (svc *Intermediate) SetAltSecretKey(key string) error {
-	return svc.SetConfig("AltSecretKey", fmt.Sprintf("%v", key))
+	return svc.SetConfig("AltSecretKey", utils.AnyToString(key))
 }
 
 // doIssueToken handles marshaling for the IssueToken function.

@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ metricsapi.Client
 )
@@ -158,10 +160,11 @@ func (svc *Intermediate) SecretKey() (secretKey string) {
 
 /*
 SetSecretKey sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 SecretKey must be provided with the request to collect the metrics.
 This key is required except in local development and tests.
 */
 func (svc *Intermediate) SetSecretKey(secretKey string) error {
-	return svc.SetConfig("SecretKey", fmt.Sprintf("%v", secretKey))
+	return svc.SetConfig("SecretKey", utils.AnyToString(secretKey))
 }

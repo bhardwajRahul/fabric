@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -25,6 +26,7 @@ import (
 
 func TestUtils_ToKebabCase(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	testCases := map[string]string{
 		"fooBar":     "foo-bar",
@@ -38,14 +40,35 @@ func TestUtils_ToKebabCase(t *testing.T) {
 		"A":          "a",
 		"HTTP":       "http",
 		"":           "",
+
+		"Foo BAR":    "foo-bar",
+		"Foo  b A R": "foo-b-a-r",
+		"Foo_BAR":    "foo-bar",
+		"Foo___bAR":  "foo-b-ar",
+		"Foo_ BAR":   "foo-bar",
+		"Foo _ BAR":  "foo-bar",
+		" FooBAR":    "-foo-bar",
+		"_FooBAR":    "-foo-bar",
+		"_ Foo-_BAR": "-foo-bar",
+
+		"Foo123":        "foo-123",
+		"123-foo":       "123-foo",
+		" 123-foo":      "-123-foo",
+		"_123-foo_":     "-123-foo-",
+		"Foo123Bar":     "foo-123-bar",
+		"Foo123bar":     "foo-123-bar",
+		"Foo 123 bar":   "foo-123-bar",
+		"foo 1 2 3 bar": "foo-1-2-3-bar",
 	}
 	for id, expected := range testCases {
-		testarossa.Equal(t, expected, ToKebabCase(id), "%s", id)
+		actual := ToKebabCase(id)
+		tt.Equal(expected, actual, "expected %s, got %s, in %s", expected, actual, id)
 	}
 }
 
 func TestUtils_LooksLikeJWT(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	newSignedToken := func(claims jwt.MapClaims) string {
 		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -53,32 +76,35 @@ func TestUtils_LooksLikeJWT(t *testing.T) {
 		return s
 	}
 
-	testarossa.True(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	testarossa.True(t, LooksLikeJWT(newSignedToken(jwt.MapClaims{})))
-	testarossa.True(t, LooksLikeJWT(newSignedToken(jwt.MapClaims{"claim": "something"})))
-	testarossa.True(t, LooksLikeJWT(newSignedToken(nil)))
+	tt.True(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{})))
+	tt.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{"claim": "something"})))
+	tt.True(LooksLikeJWT(newSignedToken(nil)))
 
 	// Bad characters
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e$$.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e==.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // No padding
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e+/.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // Base64 URL
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e$$.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e==.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // No padding
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e+/.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // Base64 URL
 
 	// Incorrect dots
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
 
 	// Too short
-	testarossa.False(t, LooksLikeJWT("eyXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e30.XXX"))
-	testarossa.False(t, LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.X.X"))
-	testarossa.False(t, LooksLikeJWT("eyX.X.X"))
+	tt.False(LooksLikeJWT("eyXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e30.XXX"))
+	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.X.X"))
+	tt.False(LooksLikeJWT("eyX.X.X"))
 
 	// No ey
-	testarossa.False(t, LooksLikeJWT("xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	tt.False(LooksLikeJWT("xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
 }
 
 func TestUtil_StringClaimFromJWT(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	newSignedToken := func(claims jwt.MapClaims) string {
 		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 		s, _ := x.SignedString([]byte("0123456789abcdef0123456789abcdef"))
@@ -87,17 +113,17 @@ func TestUtil_StringClaimFromJWT(t *testing.T) {
 
 	token := newSignedToken(jwt.MapClaims{"sub": "123456", "claim": "something", "roles": 12345})
 	val, ok := StringClaimFromJWT(token, "claim")
-	testarossa.True(t, ok)
-	testarossa.Equal(t, "something", val)
+	tt.True(ok)
+	tt.Equal("something", val)
 	val, ok = StringClaimFromJWT(token, "sub")
-	testarossa.True(t, ok)
-	testarossa.Equal(t, "123456", val)
+	tt.True(ok)
+	tt.Equal("123456", val)
 	val, ok = StringClaimFromJWT(token, "roles")
-	testarossa.False(t, ok)
-	testarossa.Equal(t, "", val)
+	tt.False(ok)
+	tt.Equal("", val)
 	val, ok = StringClaimFromJWT(token, "nosuchclaim")
-	testarossa.False(t, ok)
-	testarossa.Equal(t, "", val)
+	tt.False(ok)
+	tt.Equal("", val)
 }
 
 func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
@@ -120,4 +146,36 @@ func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
 	for range b.N {
 		StringClaimFromJWT(token, "claim")
 	}
+}
+
+func TestUtil_AnyToString(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	tc := map[string]any{
+		"string":        "string",
+		"5":             5,
+		"123.45":        123.45,
+		"TextMarshaler": &textMarshaler{},
+		"Stringer":      &stringer{},
+		"Error!":        errors.New("Error!"),
+		"true":          true,
+		"false":         false,
+	}
+	for expected, o := range tc {
+		actual := AnyToString(o)
+		tt.Equal(expected, actual)
+	}
+}
+
+type textMarshaler struct{}
+
+func (tm *textMarshaler) MarshalText() ([]byte, error) {
+	return []byte("TextMarshaler"), nil
+}
+
+type stringer struct{}
+
+func (s *stringer) String() string {
+	return "Stringer"
 }

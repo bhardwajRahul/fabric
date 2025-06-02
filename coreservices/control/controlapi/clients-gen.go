@@ -68,6 +68,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the control.core microservice.
@@ -84,11 +85,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the control.core microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the control.core microservice.
@@ -102,6 +110,12 @@ func NewMulticastClient(caller service.Publisher) *MulticastClient {
 // ForHost replaces the default hostname of this client.
 func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -145,6 +159,7 @@ func (_c *MulticastClient) Ping(ctx context.Context) <-chan *PingResponse {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *PingResponse, cap(_ch))
@@ -184,6 +199,7 @@ func (_c *Client) Ping(ctx context.Context) (pong int, err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -237,6 +253,7 @@ func (_c *MulticastClient) ConfigRefresh(ctx context.Context) <-chan *ConfigRefr
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *ConfigRefreshResponse, cap(_ch))
@@ -276,6 +293,7 @@ func (_c *Client) ConfigRefresh(ctx context.Context) (err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -331,6 +349,7 @@ func (_c *MulticastClient) Trace(ctx context.Context, id string) <-chan *TraceRe
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *TraceResponse, cap(_ch))
@@ -372,6 +391,7 @@ func (_c *Client) Trace(ctx context.Context, id string) (err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace

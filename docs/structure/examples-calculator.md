@@ -39,8 +39,8 @@ It can then be filled appropriately for its use case:
 ```go
 // Point is a 2D coordinate (X, Y)
 type Point struct {
-	X float64 `json:"x,omitempty"`
-	Y float64 `json:"y,omitempty"`
+	X float64 `json:"x,omitzero"`
+	Y float64 `json:"y,omitzero"`
 }
 ```
 

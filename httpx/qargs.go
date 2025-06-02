@@ -19,6 +19,8 @@ package httpx
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/microbus-io/fabric/utils"
 )
 
 // Ensure interface
@@ -43,7 +45,7 @@ func (q QArgs) URLValues() url.Values {
 	vals := url.Values{}
 	for k, v := range q {
 		vals[k] = []string{
-			fmt.Sprintf("%v", v),
+			utils.AnyToString(v),
 		}
 	}
 	return vals

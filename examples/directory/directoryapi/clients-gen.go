@@ -71,6 +71,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the directory.example microservice.
@@ -87,11 +88,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the directory.example microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the directory.example microservice.
@@ -105,6 +113,12 @@ func NewMulticastClient(caller service.Publisher) *MulticastClient {
 // ForHost replaces the default hostname of this client.
 func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -132,7 +146,12 @@ func (_c *Client) WebUI_Get(ctx context.Context, url string) (res *http.Response
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -156,7 +175,12 @@ func (_c *MulticastClient) WebUI_Get(ctx context.Context, url string) <-chan *pu
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -178,7 +202,14 @@ func (_c *Client) WebUI_Post(ctx context.Context, url string, contentType string
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -205,7 +236,14 @@ func (_c *MulticastClient) WebUI_Post(ctx context.Context, url string, contentTy
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -228,7 +266,14 @@ func (_c *Client) WebUI(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -256,7 +301,14 @@ func (_c *MulticastClient) WebUI(ctx context.Context, r *http.Request) <-chan *p
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 
 // CreateIn are the input arguments of Create.
@@ -307,6 +359,7 @@ func (_c *MulticastClient) Create(ctx context.Context, httpRequestBody *Person) 
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *CreateResponse, cap(_ch))
@@ -351,6 +404,7 @@ func (_c *Client) Create(ctx context.Context, httpRequestBody *Person) (key Pers
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -415,6 +469,7 @@ func (_c *MulticastClient) Load(ctx context.Context, key PersonKey) <-chan *Load
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *LoadResponse, cap(_ch))
@@ -460,6 +515,7 @@ func (_c *Client) Load(ctx context.Context, key PersonKey) (httpResponseBody *Pe
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -522,6 +578,7 @@ func (_c *MulticastClient) Delete(ctx context.Context, key PersonKey) <-chan *De
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *DeleteResponse, cap(_ch))
@@ -567,6 +624,7 @@ func (_c *Client) Delete(ctx context.Context, key PersonKey) (err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -630,6 +688,7 @@ func (_c *MulticastClient) Update(ctx context.Context, key PersonKey, httpReques
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *UpdateResponse, cap(_ch))
@@ -676,6 +735,7 @@ func (_c *Client) Update(ctx context.Context, key PersonKey, httpRequestBody *Pe
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -739,6 +799,7 @@ func (_c *MulticastClient) LoadByEmail(ctx context.Context, email string) <-chan
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *LoadByEmailResponse, cap(_ch))
@@ -784,6 +845,7 @@ func (_c *Client) LoadByEmail(ctx context.Context, email string) (httpResponseBo
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -845,6 +907,7 @@ func (_c *MulticastClient) List(ctx context.Context) <-chan *ListResponse {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *ListResponse, cap(_ch))
@@ -888,6 +951,7 @@ func (_c *Client) List(ctx context.Context) (httpResponseBody []PersonKey, err e
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace

@@ -19,7 +19,6 @@ package connector
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/utils"
 )
 
 // SetOnConfigChanged adds a function to be called when a new config was received from the configurator.
@@ -56,10 +56,10 @@ func (c *Connector) DefineConfig(name string, options ...cfg.Option) error {
 	c.configLock.Lock()
 	defer c.configLock.Unlock()
 
-	if _, ok := c.configs[strings.ToLower(name)]; ok {
+	if _, ok := c.configs[utils.ToKebabCase(name)]; ok {
 		return c.captureInitErr(errors.Newf("config '%s' is already defined", name))
 	}
-	c.configs[strings.ToLower(name)] = config
+	c.configs[utils.ToKebabCase(name)] = config
 	return nil
 }
 
@@ -69,7 +69,7 @@ func (c *Connector) DefineConfig(name string, options ...cfg.Option) error {
 // Property names are case-insensitive.
 func (c *Connector) Config(name string) (value string) {
 	c.configLock.Lock()
-	config, ok := c.configs[strings.ToLower(name)]
+	config, ok := c.configs[utils.ToKebabCase(name)]
 	if ok {
 		value = config.Value
 	}
@@ -78,17 +78,19 @@ func (c *Connector) Config(name string) (value string) {
 }
 
 // SetConfig sets the value of a previously defined configuration property.
-// This value will be overridden on the next fetch of values from the configurator core microservice,
-// except in a TESTING deployment wherein the configurator is disabled.
+// This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 // Configuration property names are case-insensitive.
 func (c *Connector) SetConfig(name string, value any) error {
+	if c.IsStarted() && c.Deployment() != TESTING {
+		return errors.Newf("setting value of config property '%s' is not allowed outside a %s deployment", name, TESTING)
+	}
 	c.configLock.Lock()
-	config, ok := c.configs[strings.ToLower(name)]
+	config, ok := c.configs[utils.ToKebabCase(name)]
 	c.configLock.Unlock()
 	if !ok {
 		return nil
 	}
-	v := fmt.Sprintf("%v", value)
+	v := utils.AnyToString(value)
 	if !cfg.Validate(config.Validation, v) {
 		return c.captureInitErr(errors.Newf("invalid value '%s' for config property '%s'", v, name))
 	}
@@ -115,12 +117,11 @@ func (c *Connector) SetConfig(name string, value any) error {
 }
 
 // ResetConfig resets the value of a previously defined configuration property to its default value.
-// This value will be overridden on the next fetch of values from the configurator core microservice,
-// except in a TESTING deployment wherein the configurator is disabled.
+// This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 // Configuration property names are case-insensitive.
 func (c *Connector) ResetConfig(name string) error {
 	c.configLock.Lock()
-	config, ok := c.configs[strings.ToLower(name)]
+	config, ok := c.configs[utils.ToKebabCase(name)]
 	c.configLock.Unlock()
 	if !ok {
 		return nil
@@ -219,7 +220,7 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 			return errors.Newf("value '%s' of config '%s' doesn't validate against rule '%s'", printableConfigValue(valueToSet, config.Secret), config.Name, config.Validation)
 		}
 		if valueToSet != config.Value {
-			changed[config.Name] = true
+			changed[utils.ToKebabCase(config.Name)] = true
 			config.Value = valueToSet
 			c.LogInfo(ctx, "Config updated",
 				"name", config.Name,
@@ -231,12 +232,12 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 
 	// Call the callback function, if provided
 	if callback && len(changed) > 0 {
-		for i := 0; i < len(c.onConfigChanged); i++ {
+		for i := range c.onConfigChanged {
 			err := errors.CatchPanic(func() error {
 				return c.onConfigChanged[i](
 					ctx,
 					func(name string) bool {
-						return changed[strings.ToLower(name)]
+						return changed[utils.ToKebabCase(name)]
 					},
 				)
 			})
@@ -260,7 +261,7 @@ func printableConfigValue(value string, secret bool) string {
 		value = strings.Repeat("*", n)
 	}
 	if len([]rune(value)) > 40 {
-		value = string([]rune(value)[:40]) + "..."
+		value = string([]rune(value)[:39]) + "\u2026"
 	}
 	return value
 }

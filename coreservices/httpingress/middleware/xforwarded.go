@@ -22,7 +22,8 @@ import (
 	"github.com/microbus-io/fabric/connector"
 )
 
-// XForwarded returns a middleware that sets the X-Forwarded headers, if not already present.
+// XForwarded returns a middleware that sets the `X-Forwarded` headers pertaining to the request, if not already set.
+// These headers are used by downstream microservices to compose absolute URLs when necessary.
 func XForwarded() Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {

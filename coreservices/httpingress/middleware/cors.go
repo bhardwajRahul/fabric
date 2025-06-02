@@ -23,7 +23,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 )
 
-// Cors returns a middleware that returns a 403 error for disallowed CORS origins.
+// Cors returns a middleware that responds to the CORS origin OPTION request and blocks requests from disallowed origins.
 func Cors(isAllowed func(origin string) bool) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) error {

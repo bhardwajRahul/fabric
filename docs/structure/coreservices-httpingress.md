@@ -62,48 +62,4 @@ The HTTP ingress proxy respects the following incoming headers:
 
 ### Middleware
 
-Middleware is a function that returns a function that can be added to pre- or post-process a request.
-
-```go
-type Middleware func(next connector.HTTPHandler) connector.HTTPHandler
-```
-
-Middlewares are chained together. Each receives the request after it was processed by the preceding (upstream) middleware, passing it along to the `next` (downstream) one. And conversely, each receives the response from the next (downstream) middleware, and passes it back to the preceding (upstream) middleware. Both request and response may be modified by the middleware.
-
-The HTTP ingress core microservice keeps the chain of middleware in a `middleware.Chain` construct that can be accessed via its `Middleware` method.
-Each middleware in the chain is addressable by name and can be replaced, removed or used as an insertion point.
-
-The chain is initialized with reasonable defaults that perform various functions:
-`ErrorPrinter` -> `BlockedPaths` -> `Logger` -> `Enter` -> `SecureRedirect` -> `CORS` -> `XForwarded` -> `InternalHeaders` -> `RootPath` -> `Timeout` -> `Authorization` -> `Ready` -> `CacheControl` -> `Compress` -> `DefaultFavIcon`
-
-The `Enter` middleware is a noop marker that indicates that the request was accepted. Middleware after this point typically manipulate the request headers.
-The `Ready` middleware is a noop marker that indicates that the request is ready to be processed. Middleware after this point typically manipulate the response headers or body.
-
-A somewhat contrived example that inserts a middleware named `Contrived` after the `Enter` marker to process requests whose path starts with `/images/`.
-
-```go
-httpIngress := NewService()
-httpIngress.Middleware().InsertAfter("Enter", "Contrived", middleware.OnRoutePrefix("/images/", func(next connector.HTTPHandler) connector.HTTPHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error) {
-		// Modifying the request should be done before calling next
-		r.Header.Del("Accept-Encoding") // Disable compression
-		
-		// Delegate the request downstream
-		ww := httpx.NewResponseRecorder()
-		err = next(ww, r)
-		if err != nil {
-			w.Header().Add("X-Check", "Error")
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Oops!"))
-			return nil
-		}
-
-		// Copy the result from downstream into the original writer
-		err = httpx.Copy(w, ww.Result())
-		w.Header().Add("X-Check", "OK")
-		return errors.Trace(err)
-	}
-}))
-```
-
-Note that the `w` passed to the middleware is an `httpx.ResponseRecorder` whose headers and status code can be modified even after the body had been written. Appending to the body is also allowed. Modifying the body requires casting in order to clear it first.
+The HTTP ingress proxy employs the [middleware](../structure/coreservices-httpingress-middleware.md) pattern in which requests are channeled through a chain (or pipeline) of sub-processors that each performs only a part of the overall processing of the request. The HTTP ingress proxy comes preset with a [reasonable default middleware chain](../structure/coreservices-httpingress-middleware.md#chain). Applications have full flexibility to customize, replace and remove any of the preset middleware, or create and insert [custom middleware](../structure/coreservices-httpingress-middleware.md#build).

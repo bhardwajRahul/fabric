@@ -28,148 +28,159 @@ import (
 
 func TestErrors_RuntimeTrace(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	file, function, line1, _ := RuntimeTrace(0)
 	_, _, line2, _ := RuntimeTrace(0)
-	testarossa.Contains(t, file, "errors_test.go")
-	testarossa.Equal(t, "errors.TestErrors_RuntimeTrace", function)
-	testarossa.Equal(t, line1+1, line2)
+	tt.Contains(file, "errors_test.go")
+	tt.Equal("errors.TestErrors_RuntimeTrace", function)
+	tt.Equal(line1+1, line2)
 }
 
 func TestErrors_New(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	tracedErr := New("This is a new error!")
-	testarossa.Error(t, tracedErr)
-	testarossa.Equal(t, "This is a new error!", tracedErr.Error())
-	testarossa.Len(t, tracedErr.(*TracedError).stack, 1)
-	testarossa.Contains(t, tracedErr.(*TracedError).stack[0].Function, "TestErrors_New")
+	tt.Error(tracedErr)
+	tt.Equal("This is a new error!", tracedErr.Error())
+	tt.Len(tracedErr.(*TracedError).stack, 1)
+	tt.Contains(tracedErr.(*TracedError).stack[0].Function, "TestErrors_New")
 }
 
 func TestErrors_Newf(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := Newf("Error %s", "Error")
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "Error Error", err.Error())
-	testarossa.Len(t, err.(*TracedError).stack, 1)
-	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newf")
+	tt.Error(err)
+	tt.Equal("Error Error", err.Error())
+	tt.Len(err.(*TracedError).stack, 1)
+	tt.Contains(err.(*TracedError).stack[0].Function, "TestErrors_Newf")
 }
 
 func TestErrors_Newc(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := Newc(400, "User Error")
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "User Error", err.Error())
-	testarossa.Equal(t, 400, err.(*TracedError).StatusCode)
-	testarossa.Equal(t, 400, StatusCode(err))
-	testarossa.Len(t, err.(*TracedError).stack, 1)
-	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newc")
+	tt.Error(err)
+	tt.Equal("User Error", err.Error())
+	tt.Equal(400, err.(*TracedError).StatusCode)
+	tt.Equal(400, StatusCode(err))
+	tt.Len(err.(*TracedError).stack, 1)
+	tt.Contains(err.(*TracedError).stack[0].Function, "TestErrors_Newc")
 }
 
 func TestErrors_Newcf(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := Newcf(400, "User %s", "Error")
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "User Error", err.Error())
-	testarossa.Equal(t, 400, err.(*TracedError).StatusCode)
-	testarossa.Equal(t, 400, StatusCode(err))
-	testarossa.Len(t, err.(*TracedError).stack, 1)
-	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Newcf")
+	tt.Error(err)
+	tt.Equal("User Error", err.Error())
+	tt.Equal(400, err.(*TracedError).StatusCode)
+	tt.Equal(400, StatusCode(err))
+	tt.Len(err.(*TracedError).stack, 1)
+	tt.Contains(err.(*TracedError).stack[0].Function, "TestErrors_Newcf")
 }
 
 func TestErrors_Trace(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	stdErr := stderrors.New("Standard Error")
-	testarossa.Error(t, stdErr)
+	tt.Error(stdErr)
 
 	err := Trace(stdErr)
-	testarossa.Error(t, err)
-	testarossa.Len(t, err.(*TracedError).stack, 1)
-	testarossa.Contains(t, err.(*TracedError).stack[0].Function, "TestErrors_Trace")
+	tt.Error(err)
+	tt.Len(err.(*TracedError).stack, 1)
+	tt.Contains(err.(*TracedError).stack[0].Function, "TestErrors_Trace")
 
 	err = Trace(err)
-	testarossa.Len(t, err.(*TracedError).stack, 2)
-	testarossa.NotEqual(t, "", err.(*TracedError).String())
+	tt.Len(err.(*TracedError).stack, 2)
+	tt.NotEqual("", err.(*TracedError).String())
 
 	err = Trace(err)
-	testarossa.Len(t, err.(*TracedError).stack, 3)
-	testarossa.NotEqual(t, "", err.(*TracedError).String())
+	tt.Len(err.(*TracedError).stack, 3)
+	tt.NotEqual("", err.(*TracedError).String())
 
 	stdErr = Trace(nil)
-	testarossa.NoError(t, stdErr)
-	testarossa.Nil(t, stdErr)
+	tt.NoError(stdErr)
+	tt.Nil(stdErr)
 }
 
 func TestErrors_Convert(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	stdErr := stderrors.New("Other standard error")
-	testarossa.Error(t, stdErr)
+	tt.Error(stdErr)
 
 	err := Convert(stdErr)
-	testarossa.Error(t, err)
-	testarossa.Len(t, err.stack, 0)
+	tt.Error(err)
+	tt.Len(err.stack, 0)
 
 	stdErr = Trace(err)
 	err = Convert(stdErr)
-	testarossa.Error(t, err)
-	testarossa.Len(t, err.stack, 1)
+	tt.Error(err)
+	tt.Len(err.stack, 1)
 
 	err = Convert(nil)
-	testarossa.Nil(t, err)
+	tt.Nil(err)
 }
 
 func TestErrors_JSON(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := New("Error!")
 
 	b, jsonErr := err.(*TracedError).MarshalJSON()
-	testarossa.NoError(t, jsonErr)
+	tt.NoError(jsonErr)
 
 	var unmarshal TracedError
 	jsonErr = unmarshal.UnmarshalJSON(b)
-	testarossa.NoError(t, jsonErr)
+	tt.NoError(jsonErr)
 
-	testarossa.Equal(t, err.Error(), unmarshal.Error())
-	testarossa.Equal(t, err.(*TracedError).String(), unmarshal.String())
+	tt.Equal(err.Error(), unmarshal.Error())
+	tt.Equal(err.(*TracedError).String(), unmarshal.String())
 }
 
 func TestErrors_Format(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := New("my error")
 
 	s := fmt.Sprintf("%s", err)
-	testarossa.Equal(t, "my error", s)
+	tt.Equal("my error", s)
 
 	v := fmt.Sprintf("%v", err)
-	testarossa.Equal(t, "my error", v)
+	tt.Equal("my error", v)
 
 	vPlus := fmt.Sprintf("%+v", err)
-	testarossa.Equal(t, err.(*TracedError).String(), vPlus)
-	testarossa.Contains(t, vPlus, "errors.TestErrors_Format")
-	testarossa.Contains(t, vPlus, "errors/errors_test.go:")
+	tt.Equal(err.(*TracedError).String(), vPlus)
+	tt.Contains(vPlus, "errors.TestErrors_Format")
+	tt.Contains(vPlus, "errors/errors_test.go:")
 
 	vSharp := fmt.Sprintf("%#v", err)
-	testarossa.Equal(t, err.(*TracedError).String(), vSharp)
-	testarossa.Contains(t, vSharp, "errors.TestErrors_Format")
-	testarossa.Contains(t, vSharp, "errors/errors_test.go:")
+	tt.Equal(err.(*TracedError).String(), vSharp)
+	tt.Contains(vSharp, "errors.TestErrors_Format")
+	tt.Contains(vSharp, "errors/errors_test.go:")
 }
 
 func TestErrors_Is(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := Trace(os.ErrNotExist)
-	testarossa.True(t, Is(err, os.ErrNotExist))
+	tt.True(Is(err, os.ErrNotExist))
 }
 
 func TestErrors_Join(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	e1 := stderrors.New("E1")
 	e2 := Newc(400, "E2")
@@ -179,47 +190,50 @@ func TestErrors_Join(t *testing.T) {
 	e4b := stderrors.New("E4b")
 	e4 := Join(e4a, e4b)
 	j := Join(e1, e2, nil, e3, e4)
-	testarossa.True(t, Is(j, e1))
-	testarossa.True(t, Is(j, e2))
-	testarossa.True(t, Is(j, e3))
-	testarossa.True(t, Is(j, e4))
-	testarossa.True(t, Is(j, e4a))
-	testarossa.True(t, Is(j, e4b))
+	tt.True(Is(j, e1))
+	tt.True(Is(j, e2))
+	tt.True(Is(j, e3))
+	tt.True(Is(j, e4))
+	tt.True(Is(j, e4a))
+	tt.True(Is(j, e4b))
 	jj, ok := j.(*TracedError)
-	if testarossa.True(t, ok) {
-		testarossa.Len(t, jj.stack, 1)
-		testarossa.Equal(t, 500, jj.StatusCode)
+	if tt.True(ok) {
+		tt.Len(jj.stack, 1)
+		tt.Equal(500, jj.StatusCode)
 	}
 
-	testarossa.Nil(t, Join(nil, nil))
-	testarossa.Equal(t, e3, Join(e3, nil))
+	tt.Nil(Join(nil, nil))
+	tt.Equal(e3, Join(e3, nil))
 }
 
 func TestErrors_String(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	err := Newc(400, "Oops!")
 	err = Trace(err)
 	s := err.(*TracedError).String()
-	testarossa.Contains(t, s, "Oops!")
-	testarossa.Contains(t, s, "[400]")
-	testarossa.Contains(t, s, "/fabric/errors/errors_test.go:")
+	tt.Contains(s, "Oops!")
+	tt.Contains(s, "[400]")
+	tt.Contains(s, "/fabric/errors/errors_test.go:")
 	firstDash := strings.Index(s, "-")
-	testarossa.True(t, firstDash > 0)
+	tt.True(firstDash > 0)
 	secondDash := strings.Index(s[firstDash+1:], "-")
-	testarossa.True(t, secondDash > 0)
+	tt.True(secondDash > 0)
 }
 
 func TestErrors_Unwrap(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	stdErr := stderrors.New("Oops")
 	err := Trace(stdErr)
-	testarossa.Equal(t, stdErr, Unwrap(err))
+	tt.Equal(stdErr, Unwrap(err))
 }
 
 func TestErrors_TraceFull(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	stdErr := stderrors.New("Oops")
 	err := Trace(stdErr)
@@ -227,40 +241,41 @@ func TestErrors_TraceFull(t *testing.T) {
 	errUp1 := TraceUp(stdErr, 1)
 	errFull := TraceFull(stdErr, 0)
 
-	testarossa.Len(t, err.(*TracedError).stack, 1)
+	tt.Len(err.(*TracedError).stack, 1)
 
-	testarossa.Len(t, errUp0.(*TracedError).stack, 1)
-	testarossa.Len(t, errUp1.(*TracedError).stack, 1)
-	testarossa.NotEqual(t, errUp0.(*TracedError).stack[0].Function, errUp1.(*TracedError).stack[0].Function)
+	tt.Len(errUp0.(*TracedError).stack, 1)
+	tt.Len(errUp1.(*TracedError).stack, 1)
+	tt.NotEqual(errUp0.(*TracedError).stack[0].Function, errUp1.(*TracedError).stack[0].Function)
 
-	testarossa.True(t, len(errFull.(*TracedError).stack) > 1)
-	testarossa.Equal(t, errUp0.(*TracedError).stack[0].Function, errFull.(*TracedError).stack[0].Function)
-	testarossa.Equal(t, errUp1.(*TracedError).stack[0].Function, errFull.(*TracedError).stack[1].Function)
+	tt.True(len(errFull.(*TracedError).stack) > 1)
+	tt.Equal(errUp0.(*TracedError).stack[0].Function, errFull.(*TracedError).stack[0].Function)
+	tt.Equal(errUp1.(*TracedError).stack[0].Function, errFull.(*TracedError).stack[1].Function)
 }
 
 func TestErrors_CatchPanic(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	// String
 	err := CatchPanic(func() error {
 		panic("message")
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "message", err.Error())
+	tt.Error(err)
+	tt.Equal("message", err.Error())
 
 	// Error
 	err = CatchPanic(func() error {
 		panic(New("panic"))
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "panic", err.Error())
+	tt.Error(err)
+	tt.Equal("panic", err.Error())
 
 	// Number
 	err = CatchPanic(func() error {
 		panic(5)
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "5", err.Error())
+	tt.Error(err)
+	tt.Equal("5", err.Error())
 
 	// Division by zero
 	err = CatchPanic(func() error {
@@ -270,8 +285,8 @@ func TestErrors_CatchPanic(t *testing.T) {
 		i++
 		return nil
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "runtime error: integer divide by zero", err.Error())
+	tt.Error(err)
+	tt.Equal("runtime error: integer divide by zero", err.Error())
 
 	// Nil map
 	err = CatchPanic(func() error {
@@ -282,13 +297,13 @@ func TestErrors_CatchPanic(t *testing.T) {
 		x[5] = 6
 		return nil
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "assignment to entry in nil map", err.Error())
+	tt.Error(err)
+	tt.Equal("assignment to entry in nil map", err.Error())
 
 	// Standard error
 	err = CatchPanic(func() error {
 		return New("standard")
 	})
-	testarossa.Error(t, err)
-	testarossa.Equal(t, "standard", err.Error())
+	tt.Error(err)
+	tt.Equal("standard", err.Error())
 }

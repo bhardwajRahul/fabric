@@ -27,16 +27,18 @@ import (
 
 func TestConnector_HostAndID(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	con := NewConnector()
-	testarossa.Equal(t, "", con.Hostname())
-	testarossa.NotEqual(t, "", con.ID())
+	tt.Equal("", con.Hostname())
+	tt.NotEqual("", con.ID())
 	con.SetHostname("example.com")
-	testarossa.Equal(t, "example.com", con.Hostname())
+	tt.Equal("example.com", con.Hostname())
 }
 
 func TestConnector_BadHostname(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	con := NewConnector()
 	badHosts := []string{
@@ -50,41 +52,43 @@ func TestConnector_BadHostname(t *testing.T) {
 	}
 	for _, s := range badHosts {
 		err := con.SetHostname(s)
-		testarossa.Error(t, err)
+		tt.Error(err)
 	}
 }
 
 func TestConnector_Plane(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	randomPlane := rand.AlphaNum64(12)
 
 	// Before starting
 	con := New("plane.connector")
-	testarossa.Equal(t, "", con.Plane())
+	tt.Equal("", con.Plane())
 	err := con.SetPlane("bad.plane.name")
-	testarossa.Error(t, err)
+	tt.Error(err)
 	err = con.SetPlane(randomPlane)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, randomPlane, con.Plane())
+	tt.NoError(err)
+	tt.Equal(randomPlane, con.Plane())
 	err = con.SetPlane("")
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "", con.Plane())
+	tt.NoError(err)
+	tt.Equal("", con.Plane())
 
 	// After starting
 	con = New("plane.connector")
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
-	testarossa.NotEqual(t, "", con.Plane())
-	testarossa.NotEqual(t, "microbus", con.Plane())
-	testarossa.True(t, regexp.MustCompile(`\w{12,}`).MatchString(con.Plane())) // Hash of test name
+	tt.NotEqual("", con.Plane())
+	tt.NotEqual("microbus", con.Plane())
+	tt.True(regexp.MustCompile(`\w{12,}`).MatchString(con.Plane())) // Hash of test name
 	err = con.SetPlane("123plane456")
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestConnector_PlaneEnv(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	// Bad plane name
 	env.Push("MICROBUS_PLANE", "bad.plane.name")
@@ -92,7 +96,7 @@ func TestConnector_PlaneEnv(t *testing.T) {
 
 	con := New("plane.env.connector")
 	err := con.Startup()
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// Good plane name
 	randomPlane := rand.AlphaNum64(12)
@@ -100,39 +104,41 @@ func TestConnector_PlaneEnv(t *testing.T) {
 	defer env.Pop("MICROBUS_PLANE")
 
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
-	testarossa.Equal(t, randomPlane, con.Plane())
+	tt.Equal(randomPlane, con.Plane())
 }
 
 func TestConnector_Deployment(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	// Before starting
 	con := New("deployment.connector")
-	testarossa.Equal(t, "", con.Deployment())
+	tt.Equal("", con.Deployment())
 	err := con.SetDeployment("NOGOOD")
-	testarossa.Error(t, err)
+	tt.Error(err)
 	err = con.SetDeployment("lAb")
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, LAB, con.Deployment())
+	tt.NoError(err)
+	tt.Equal(LAB, con.Deployment())
 	err = con.SetDeployment("")
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "", con.Deployment())
+	tt.NoError(err)
+	tt.Equal("", con.Deployment())
 
 	// After starting
 	con = New("deployment.connector")
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
-	testarossa.Equal(t, TESTING, con.Deployment())
+	tt.Equal(TESTING, con.Deployment())
 	err = con.SetDeployment(LAB)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestConnector_DeploymentEnv(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	con := New("deployment.env.connector")
 
@@ -140,31 +146,32 @@ func TestConnector_DeploymentEnv(t *testing.T) {
 	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	err := con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
-	testarossa.Equal(t, LAB, con.Deployment())
+	tt.Equal(LAB, con.Deployment())
 }
 
 func TestConnector_Version(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	// Before starting
 	con := New("version.connector")
 	err := con.SetVersion(-1)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	err = con.SetVersion(123)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, 123, con.Version())
+	tt.NoError(err)
+	tt.Equal(123, con.Version())
 	err = con.SetVersion(0)
-	testarossa.NoError(t, err)
-	testarossa.Zero(t, con.Version())
+	tt.NoError(err)
+	tt.Zero(con.Version())
 
 	// After starting
 	con = New("version.connector")
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 	err = con.SetVersion(123)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }

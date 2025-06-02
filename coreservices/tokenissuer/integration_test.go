@@ -58,6 +58,7 @@ func Terminate() (err error) {
 
 func TestTokenissuer_IssueToken(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	Svc.SetAuthTokenTTL(time.Hour)
@@ -75,23 +76,23 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 
 	token, _ := jwt.Parse(signedJWT, nil)
 	mc := token.Claims.(jwt.MapClaims)
-	testarossa.True(t, mc.VerifyIssuer(issClaim, true))
-	testarossa.Equal(t, issClaim, mc["iss"])
-	testarossa.NotNil(t, mc["iat"])
-	testarossa.NotNil(t, mc["exp"])
-	testarossa.NotNil(t, mc["roles"])
-	testarossa.Equal(t, "harry@hogwarts.edu", mc["sub"])
-	testarossa.Nil(t, mc["foo"])
+	tt.True(mc.VerifyIssuer(issClaim, true))
+	tt.Equal(issClaim, mc["iss"])
+	tt.NotNil(mc["iat"])
+	tt.NotNil(mc["exp"])
+	tt.NotNil(mc["roles"])
+	tt.Equal("harry@hogwarts.edu", mc["sub"])
+	tt.Nil(mc["foo"])
 
 	// A tampered token should get rejected
 	parts := strings.Split(signedJWT, ".")
 	claims, err := base64.RawStdEncoding.DecodeString(parts[1])
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	claims = bytes.ReplaceAll(claims, []byte("harry@hogwarts.edu"), []byte("dumbledore@hogwarts.edu"))
 	parts[1] = base64.RawStdEncoding.EncodeToString(claims)
 	tamperedToken, _ := jwt.Parse(strings.Join(parts, "."), nil)
-	if testarossa.NotNil(t, tamperedToken) {
-		testarossa.NotEqual(t, "", tamperedToken.Raw)
+	if tt.NotNil(tamperedToken) {
+		tt.NotEqual("", tamperedToken.Raw)
 	}
 	ValidateToken(t, ctx, tamperedToken.Raw).
 		Expect(nil, false)
@@ -119,6 +120,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 
 func TestTokenissuer_DevOnlySecretKey(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	ctx := Context()
 
@@ -135,7 +137,7 @@ func TestTokenissuer_DevOnlySecretKey(t *testing.T) {
 
 	token, _ := jwt.Parse(signedJWT, nil)
 	mc := token.Claims.(jwt.MapClaims)
-	testarossa.True(t, mc.VerifyIssuer(issClaim, true))
+	tt.True(mc.VerifyIssuer(issClaim, true))
 }
 
 func TestTokenissuer_ValidateToken(t *testing.T) {

@@ -170,7 +170,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			if !methodHasBody(ep.Method) || httpRequestBodyExists {
 				// IN are explodable query arguments
 				inType := reflect.TypeOf(ep.InputArgs)
-				for i := 0; i < inType.NumField(); i++ {
+				for i := range inType.NumField() {
 					field := inType.Field(i)
 					name := fieldName(field)
 					if name == "" || name == "httpRequestBody" {

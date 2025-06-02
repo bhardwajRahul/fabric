@@ -65,6 +65,7 @@ func Terminate() (err error) {
 
 func TestBrowser_Browse(t *testing.T) {
 	t.Parallel()
+
 	/*
 		BrowseGet(t, ctx, "").
 			BodyContains(value).

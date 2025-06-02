@@ -65,6 +65,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the eventsource.example microservice.
@@ -81,11 +82,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the eventsource.example microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the eventsource.example microservice.
@@ -102,10 +110,17 @@ func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastTrigger is an interface to trigger the events of the eventsource.example microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastTrigger creates a new multicast trigger of the eventsource.example microservice.
@@ -119,6 +134,12 @@ func NewMulticastTrigger(caller service.Publisher) *MulticastTrigger {
 // ForHost replaces the default hostname of this trigger.
 func (_c *MulticastTrigger) ForHost(host string) *MulticastTrigger {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this trigger.
+func (_c *MulticastTrigger) WithOptions(opts ...pub.Option) *MulticastTrigger {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -185,6 +206,7 @@ func (_c *MulticastClient) Register(ctx context.Context, email string) <-chan *R
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *RegisterResponse, cap(_ch))
@@ -226,6 +248,7 @@ func (_c *Client) Register(ctx context.Context, email string) (allowed bool, err
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -285,6 +308,7 @@ func (_c *MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *OnAllowRegisterResponse, cap(_ch))
@@ -381,6 +405,7 @@ func (_c *MulticastTrigger) OnRegistered(ctx context.Context, email string) <-ch
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *OnRegisteredResponse, cap(_ch))

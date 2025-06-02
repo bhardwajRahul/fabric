@@ -64,9 +64,9 @@ func (e *TracedError) String() string {
 // MarshalJSON marshals the error to JSON.
 func (e *TracedError) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		Error      string   `json:"error,omitempty"`
-		Stack      []*trace `json:"stack,omitempty"`
-		StatusCode int      `json:"statusCode,omitempty"`
+		Error      string   `json:"error,omitzero"`
+		Stack      []*trace `json:"stack,omitzero"`
+		StatusCode int      `json:"statusCode,omitzero"`
 	}{
 		Error:      e.error.Error(),
 		Stack:      e.stack,
@@ -79,7 +79,7 @@ func (e *TracedError) UnmarshalJSON(data []byte) error {
 	j := &struct {
 		Error      string   `json:"error"`
 		Stack      []*trace `json:"stack"`
-		StatusCode int      `json:"statusCode,omitempty"`
+		StatusCode int      `json:"statusCode,omitzero"`
 	}{}
 	err := json.Unmarshal(data, &j)
 	if err != nil {

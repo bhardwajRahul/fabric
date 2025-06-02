@@ -29,7 +29,7 @@ A `service.yaml` template is generated. We'll fill it in next.
 
 ### Step 2: Service Definition
 
-Open `service.yaml`. This is your starting point and where you declare the structure of the microservice. First, name the service in the `general:` section:
+Open `service.yaml`. This is your starting point and where you declare the structure of the microservice. First, name the service in the general section:
 
 ```yaml
 general:
@@ -37,7 +37,7 @@ general:
   description: Wordly is a word guessing game.
 ```
 
-`Wordly` is a simple game and it requires a single endpoint `/play`. We'll use a `web` handler because we want to create an HTML interface.
+`Wordly` is a simple game and it requires a single endpoint `/play`. We'll use a web handler because we want to create an HTML interface.
 
 ```yaml
 webs:
@@ -167,21 +167,21 @@ for _, g := range game.guesses {
     secret := []rune(game.secretWord)
     word := []rune(g)
     colors := make([]string, 5)
-    for i := 0; i < 5; i++ {
+    for i := range 5 {
         colors[i] = "grey"
     }
-    for i := 0; i < 5; i++ {
+    for i := range 5 {
         if word[i] == secret[i] {
             colors[i] = "green"
             word[i] = 0
             secret[i] = 0
         }
     }
-    for i := 0; i < 5; i++ {
+    for i := range 5 {
         if word[i] == 0 {
             continue
         }
-        for j := 0; j < 5; j++ {
+        for j := range 5 {
             if secret[j] == 0 {
                 continue
             }
@@ -194,7 +194,7 @@ for _, g := range game.guesses {
         }
     }
     word = []rune(g)
-    for i := 0; i < 5; i++ {
+    for i := range 5 {
         page.WriteString(`<div style="background:` + colors[i] + `;color:white;`)
         page.WriteString(`display:inline-block;font-size:24pt;width:32pt;text-align:center;">`)
         page.WriteRune(word[i])
@@ -277,13 +277,13 @@ wordly.example:
 
 This microservice is far from being polished. Try the following on your own:
 
-* Add a title to the top of the page
-* Add instructions that mention how many guesses the player has left
-* Add a UI element (link or button) to enable the player to start a new game
-* Give a cleaner error message to the user on an invalid guess
-* Do not print the guessing form if the player exhausted all of their guesses
-* Do not accept guesses after the player identified the secret word
-* Accept guesses only if they are themselves valid words
-* Print the secret word when the player fails to guess it
-* Support 4, 6 and 7 letter words
-* The microservice stores state in local memory which will break when a second replica is added to the app and requests are load-balanced. Use the [distributed cache](../structure/dlru.md) to work around that
+- Add a title to the top of the page
+- Add instructions that mention how many guesses the player has left
+- Add a UI element (link or button) to enable the player to start a new game
+- Give a cleaner error message to the user on an invalid guess
+- Do not print the guessing form if the player exhausted all of their guesses
+- Do not accept guesses after the player identified the secret word
+- Accept guesses only if they are themselves valid words
+- Print the secret word when the player fails to guess it
+- Support 4, 6 and 7 letter words
+- The microservice stores state in local memory which will break when a second replica is added to the app and requests are load-balanced. Use the [distributed cache](../structure/dlru.md) to work around that

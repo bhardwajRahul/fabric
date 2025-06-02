@@ -26,7 +26,7 @@ import (
 	"github.com/microbus-io/fabric/service"
 )
 
-// Logger returns a middleware that logs requests.
+// Logger returns a middleware that logs the incoming requests and error responses.
 func Logger(logger service.Logger) Middleware {
 	pathAndQuery := func(r *http.Request, maxLen int) string {
 		s := r.URL.Path

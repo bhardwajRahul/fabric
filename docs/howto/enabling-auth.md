@@ -57,7 +57,7 @@ functions:
   path: :444/...
 ```
 
-`IssueToken` generates a JWT given a set of claims. The token issuer core microservice puts all claims in the JWT and returns its signed representation. A custom implementation that does not want to expose the claims to the user may store the claims in a database and include in the token only an identifier that can later be used to retrieve them. A token issuer should set the `validator` claim of the JWT with its hostname as means to inform the authorization [middleware](../structure/coreservices-httpingress.md#middleware) who to call to validate the token.
+`IssueToken` generates a JWT given a set of claims. The token issuer core microservice puts all claims in the JWT and returns its signed representation. A custom implementation that does not want to expose the claims to the user may store the claims in a database and include in the token only an identifier that can later be used to retrieve them. A token issuer should set the `validator` claim of the JWT with its hostname as means to inform the authorization [middleware](../structure/coreservices-httpingress-middleware.md) who to call to validate the token.
 
 ```json
 {
@@ -81,7 +81,7 @@ app.Add(
 
 ### Step 3: Middleware
 
-The authorization [middleware](../structure/coreservices-httpingress.md#middleware) looks for a JWT in the `Authorization: Bearer` header or in a cookie named `Authorization`. It contacts the token issuer microservice named in the `validator` claim to validate the token and obtain the actor associated with it. The actor is then propagated downstream to the target microservice and the rest of the call stack thereafter. 
+The authorization [middleware](../structure/coreservices-httpingress-middleware.md) looks for a JWT in the `Authorization: Bearer` header or in a cookie named `Authorization`. It contacts the token issuer microservice named in the `validator` claim to validate the token and obtain the actor associated with it. The actor is then propagated downstream to the target microservice and the rest of the call stack thereafter. 
 
 If your custom token issuer does not set the `validator` claim or if you want to look for the token in different request headers, you may change the middleware accordingly when initializing the [HTTP ingress proxy](../structure/coreservices-httpingress.md).
 

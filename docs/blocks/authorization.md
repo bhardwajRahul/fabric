@@ -8,13 +8,13 @@ Multiple components work together to form the authentication and authorization f
 
 To get started, the client submits credentials to an authenticator microservice. In the simplest form, credentials are a username and a password obtained from the user via a web form. If the credentials are valid, a [JWT](https://jwt.io/introduction) token is issued and returned back to the client.
 
-`Microbus` does not include authenticators out of the box. The [login example](../structure/examples-login.md) microservice demonstrates how such a microservice may look like when the client is a browser. A `Set-Cookie` response header returns the JWT to the browser, which in turn sends it back with all consecutive requests in the `Cookie` request header. The cookie is named `Authorization` to allow the authorization [middleware](../structure/coreservices-httpingress.md#middleware) to easily locate it.
+`Microbus` does not include authenticators out of the box. The [login example](../structure/examples-login.md) microservice demonstrates how such a microservice may look like when the client is a browser. A `Set-Cookie` response header returns the JWT to the browser, which in turn sends it back with all consecutive requests in the `Cookie` request header. The cookie is named `Authorization` to allow the authorization [middleware](../structure/coreservices-httpingress-middleware.md) to easily locate it.
 
 The login example microservice utilizes the [token issuer](../structure/coreservices-tokenissuer.md) core microservice to issue and validate JWTs. It is possible to replace the token issuer core microservice with a [custom token validator](../howto/enabling-auth.md#step-2-token-issuer-and-validator).
 
 ### Flow 2: Authorization
 
-Now that the client is in possession of a JWT, it's expected to be included in the header of consecutive requests. The authorization [middleware](../structure/coreservices-httpingress.md#middleware) examines the HTTP request headers for a JWT in the `Authorization: Bearer` header or in a `Cookie` named `Authorization`. It identifies the appropriate token issuer microservice by examining the `validator` claim and validates the token with the issuer to get the actor associated with it. The actor is then propagated downstream to the target microservice and the rest of the call stack thereafter.
+Now that the client is in possession of a JWT, it's expected to be included in the header of consecutive requests. The authorization [middleware](../structure/coreservices-httpingress-middleware.md) examines the HTTP request headers for a JWT in the `Authorization: Bearer` header or in a `Cookie` named `Authorization`. It identifies the appropriate token issuer microservice by examining the `validator` claim and validates the token with the issuer to get the actor associated with it. The actor is then propagated downstream to the target microservice and the rest of the call stack thereafter.
 
 ```http
 Cookie: Authorization=<JWT>
@@ -33,7 +33,7 @@ functions:
 
 ### Flow 3: Redirect
 
-By default, `401 Unauthorized` and `403 Forbidden` errors are returned to the client in the form of an HTTP status code accompanied by an error message. The error page redirect [middleware](../structure/coreservices-httpingress.md#middleware) can improve user experience by redirecting to a more user-friendly page. Redirection is contingent upon the `Sec-Fetch-Mode` and `Sec-Fetch-Dest` request headers indicating that the user is using a browser to navigate to a new document, thus avoiding interfering with requests from single-page applications.
+By default, `401 Unauthorized` and `403 Forbidden` errors are returned to the client in the form of an HTTP status code accompanied by an error message. The error page redirect [middleware](../structure/coreservices-httpingress-middleware.md) can improve user experience by redirecting to a more user-friendly page. Redirection is contingent upon the `Sec-Fetch-Mode` and `Sec-Fetch-Dest` request headers indicating that the user is using a browser to navigate to a new document, thus avoiding interfering with requests from single-page applications.
 
 ```http
 Sec-Fetch-Mode: navigate

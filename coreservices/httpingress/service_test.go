@@ -24,6 +24,9 @@ import (
 )
 
 func TestHttpingress_ResolveInternalURL(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	portMappings := map[string]string{
 		"8080:*": "*",
 		"443:*":  "443",
@@ -60,11 +63,11 @@ func TestHttpingress_ResolveInternalURL(t *testing.T) {
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		x, err := url.Parse(testCases[i])
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		u, err := url.Parse(testCases[i+1])
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		ru, err := resolveInternalURL(x, portMappings)
-		testarossa.NoError(t, err)
-		testarossa.Equal(t, u, ru)
+		tt.NoError(err)
+		tt.Equal(u, ru)
 	}
 }

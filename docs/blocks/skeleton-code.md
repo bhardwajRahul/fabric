@@ -89,6 +89,7 @@ A skeleton test is created in `integration_test.go` for each testable web handle
 ```go
 func TestMyService_FuncHandler(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	/*
 		FuncHandler(t, ctx, id).
 			Expect(ok).

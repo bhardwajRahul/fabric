@@ -25,6 +25,9 @@ import (
 )
 
 func TestErrorPageRedirect_Redirect(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
 	r.Header.Set("Sec-Fetch-Mode", "navigate")
@@ -34,12 +37,15 @@ func TestErrorPageRedirect_Redirect(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return nil
 	})(w, r)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, w.StatusCode(), http.StatusTemporaryRedirect)
-	testarossa.Equal(t, w.Header().Get("Location"), "/login")
+	tt.NoError(err)
+	tt.Equal(w.StatusCode(), http.StatusTemporaryRedirect)
+	tt.Equal(w.Header().Get("Location"), "/login")
 }
 
 func TestErrorPageRedirect_NoBrowserHeaders(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
 	mw := ErrorPageRedirect(http.StatusUnauthorized, "/login")
@@ -47,11 +53,14 @@ func TestErrorPageRedirect_NoBrowserHeaders(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return nil
 	})(w, r)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, w.StatusCode(), http.StatusUnauthorized)
+	tt.NoError(err)
+	tt.Equal(w.StatusCode(), http.StatusUnauthorized)
 }
 
 func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
 	r.Header.Set("Sec-Fetch-Mode", "navigate")
@@ -61,6 +70,6 @@ func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		return nil
 	})(w, r)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, w.StatusCode(), http.StatusBadRequest)
+	tt.NoError(err)
+	tt.Equal(w.StatusCode(), http.StatusBadRequest)
 }

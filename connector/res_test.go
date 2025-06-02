@@ -29,28 +29,30 @@ import (
 
 func TestConnector_ReadResFile(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	// Create the microservices
 	con := New("read.res.file.connector")
 	con.SetResFSDir("testdata")
 
-	testarossa.Equal(t, "<html>{{ . }}</html>\n", string(con.MustReadResFile("res.txt")))
-	testarossa.Equal(t, "<html>{{ . }}</html>\n", con.MustReadResTextFile("res.txt"))
+	tt.Equal("<html>{{ . }}</html>\n", string(con.MustReadResFile("res.txt")))
+	tt.Equal("<html>{{ . }}</html>\n", con.MustReadResTextFile("res.txt"))
 
-	testarossa.Nil(t, con.MustReadResFile("nothing.txt"))
-	testarossa.Equal(t, "", con.MustReadResTextFile("nothing.txt"))
+	tt.Nil(con.MustReadResFile("nothing.txt"))
+	tt.Equal("", con.MustReadResTextFile("nothing.txt"))
 
 	v, err := con.ExecuteResTemplate("res.txt", "<body></body>")
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "<html><body></body></html>\n", v)
+	tt.NoError(err)
+	tt.Equal("<html><body></body></html>\n", v)
 
 	v, err = con.ExecuteResTemplate("res.html", "<body></body>")
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "<html>"+html.EscapeString("<body></body>")+"</html>\n", v)
+	tt.NoError(err)
+	tt.Equal("<html>"+html.EscapeString("<body></body>")+"</html>\n", v)
 }
 
 func TestConnector_LoadResString(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -67,10 +69,10 @@ func TestConnector_LoadResString(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer beta.Shutdown()
 
 	// Send message and validate the correct language
@@ -86,10 +88,10 @@ func TestConnector_LoadResString(t *testing.T) {
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		response, err := alpha.Request(ctx, pub.GET("https://beta.load.res.string.connector/localized"), pub.Header("Accept-Language", testCases[i]))
-		if testarossa.NoError(t, err) {
+		if tt.NoError(err) {
 			body, err := io.ReadAll(response.Body)
-			if testarossa.NoError(t, err) {
-				testarossa.Equal(t, testCases[i+1], string(body))
+			if tt.NoError(err) {
+				tt.Equal(testCases[i+1], string(body))
 			}
 		}
 	}

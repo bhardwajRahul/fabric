@@ -26,6 +26,7 @@ import (
 
 func TestCodegen_PrinterWriters(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
@@ -35,27 +36,28 @@ func TestCodegen_PrinterWriters(t *testing.T) {
 		errWriter: &errBuf,
 	}
 
-	testarossa.NotContains(t, outBuf.String(), "Hello")
+	tt.NotContains(outBuf.String(), "Hello")
 	p.Debug("Hello")
-	testarossa.Contains(t, outBuf.String(), "Hello")
-	testarossa.Len(t, errBuf.Bytes(), 0)
+	tt.Contains(outBuf.String(), "Hello")
+	tt.Len(errBuf.Bytes(), 0)
 	outBuf.Reset()
 
-	testarossa.NotContains(t, outBuf.String(), "Hello")
+	tt.NotContains(outBuf.String(), "Hello")
 	p.Info("Hello")
-	testarossa.Contains(t, outBuf.String(), "Hello")
-	testarossa.Len(t, errBuf.Bytes(), 0)
+	tt.Contains(outBuf.String(), "Hello")
+	tt.Len(errBuf.Bytes(), 0)
 	outBuf.Reset()
 
-	testarossa.NotContains(t, errBuf.String(), "Hello")
+	tt.NotContains(errBuf.String(), "Hello")
 	p.Error("Hello")
-	testarossa.Contains(t, errBuf.String(), "Hello")
-	testarossa.Len(t, outBuf.Bytes(), 0)
+	tt.Contains(errBuf.String(), "Hello")
+	tt.Len(outBuf.Bytes(), 0)
 	errBuf.Reset()
 }
 
 func TestCodegen_Verbose(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
@@ -73,16 +75,17 @@ func TestCodegen_Verbose(t *testing.T) {
 	p.Info("[Info Succinct]")
 	p.Error("[Error Succinct]")
 
-	testarossa.Contains(t, outBuf.String(), "[Debug Verbose]")
-	testarossa.Contains(t, outBuf.String(), "[Info Verbose]")
-	testarossa.Contains(t, errBuf.String(), "[Error Verbose]")
-	testarossa.NotContains(t, outBuf.String(), "[Debug Succinct]")
-	testarossa.Contains(t, outBuf.String(), "[Info Succinct]")
-	testarossa.Contains(t, errBuf.String(), "[Error Succinct]")
+	tt.Contains(outBuf.String(), "[Debug Verbose]")
+	tt.Contains(outBuf.String(), "[Info Verbose]")
+	tt.Contains(errBuf.String(), "[Error Verbose]")
+	tt.NotContains(outBuf.String(), "[Debug Succinct]")
+	tt.Contains(outBuf.String(), "[Info Succinct]")
+	tt.Contains(errBuf.String(), "[Error Succinct]")
 }
 
 func TestCodegen_Indent(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var outBuf bytes.Buffer
 	var errBuf bytes.Buffer
@@ -101,8 +104,8 @@ func TestCodegen_Indent(t *testing.T) {
 	p.Info("0")
 
 	lines := strings.Split(outBuf.String(), "\n")
-	for i := 0; i < len(lines)-1; i++ {
+	for i := range len(lines) - 1 {
 		line := lines[i]
-		testarossa.FailIf(t, line != "0" && line != "  1" && line != "    2", "Incorrect indentation", line)
+		tt.False(line != "0" && line != "  1" && line != "    2", "Incorrect indentation", line)
 	}
 }

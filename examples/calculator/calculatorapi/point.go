@@ -18,6 +18,6 @@ package calculatorapi
 
 // Point is a 2D (X,Y) coordinate.
 type Point struct {
-	X float64 `json:"x,omitempty" jsonschema:"description=X coordinate,example=6"`
-	Y float64 `json:"y,omitempty" jsonschema:"description=Y coordinate,example=8"`
+	X float64 `json:"x,omitzero" jsonschema:"description=X coordinate,example=6"`
+	Y float64 `json:"y,omitzero" jsonschema:"description=Y coordinate,example=8"`
 }

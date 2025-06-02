@@ -23,12 +23,15 @@ import (
 )
 
 func TestHttpx_QArgs(t *testing.T) {
-	testarossa.Equal(t, "b=true&i=123&s=String", QArgs{
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	tt.Equal("b=true&i=123&s=String", QArgs{
 		"s": "String",
 		"i": 123,
 		"b": true,
 	}.Encode())
-	testarossa.Equal(t, "b=true&i=123&s=String", QArgs{
+	tt.Equal("b=true&i=123&s=String", QArgs{
 		"s": "String",
 		"i": 123,
 		"b": true,
@@ -39,7 +42,7 @@ func TestHttpx_QArgs(t *testing.T) {
 		"i": 123,
 		"b": true,
 	}.URLValues()
-	testarossa.SliceEqual(t, []string{"String"}, urlValues["s"])
-	testarossa.SliceEqual(t, []string{"123"}, urlValues["i"])
-	testarossa.SliceEqual(t, []string{"true"}, urlValues["b"])
+	tt.Equal([]string{"String"}, urlValues["s"])
+	tt.Equal([]string{"123"}, urlValues["i"])
+	tt.Equal([]string{"true"}, urlValues["b"])
 }

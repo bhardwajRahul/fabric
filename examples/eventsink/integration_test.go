@@ -49,6 +49,7 @@ func Terminate() (err error) {
 
 func TestEventsink_Registered(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		Registered(t, ctx).
 			Expect(emails).
@@ -56,18 +57,18 @@ func TestEventsink_Registered(t *testing.T) {
 	*/
 	ctx := Context()
 	registered, err := Registered(t, ctx).Get()
-	testarossa.NoError(t, err)
-	testarossa.SliceNotContains(t, registered, "jose@example.com")
-	testarossa.SliceNotContains(t, registered, "maria@example.com")
-	testarossa.SliceNotContains(t, registered, "lee@example.com")
+	tt.NoError(err)
+	tt.NotContains(registered, "jose@example.com")
+	tt.NotContains(registered, "maria@example.com")
+	tt.NotContains(registered, "lee@example.com")
 	OnRegistered(t, ctx, "jose@example.com").NoError()
 	OnRegistered(t, ctx, "maria@example.com").NoError()
 	OnRegistered(t, ctx, "lee@example.com").NoError()
 	registered, err = Registered(t, ctx).Get()
-	testarossa.NoError(t, err)
-	testarossa.SliceContains(t, registered, "jose@example.com")
-	testarossa.SliceContains(t, registered, "maria@example.com")
-	testarossa.SliceContains(t, registered, "lee@example.com")
+	tt.NoError(err)
+	tt.Contains(registered, "jose@example.com")
+	tt.Contains(registered, "maria@example.com")
+	tt.Contains(registered, "lee@example.com")
 }
 
 func TestEventsink_OnAllowRegister(t *testing.T) {

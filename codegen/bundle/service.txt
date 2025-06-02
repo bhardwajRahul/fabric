@@ -1,4 +1,4 @@
-package {{ .PackageSuffix }}
+package {{ .PackagePathSuffix }}
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/microbus-io/fabric/errors"
 
-	"{{ .Package }}/intermediate"
-	"{{ .Package }}/{{ .PackageSuffix }}api"
+	"{{ .PackageDir }}/intermediate"
+	"{{ .PackageDir }}/{{ .PackageDirSuffix }}api"
 )
 
 var (
@@ -16,7 +16,7 @@ var (
 	_ *http.Request
 	_ time.Duration
 	_ *errors.TracedError
-	_ *{{ .PackageSuffix }}api.Client
+	_ *{{ .PackagePathSuffix }}api.Client
 )
 
 /*

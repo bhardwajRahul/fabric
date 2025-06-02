@@ -58,6 +58,7 @@ func Terminate() (err error) {
 
 func TestMetrics_Collect(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 	Collect_Get(t, ctx, "").
@@ -80,13 +81,13 @@ func TestMetrics_Collect(t *testing.T) {
 	con2 := connector.New("two.collect")
 
 	err := App.AddAndStartup(con1, con2)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con1.Shutdown()
 	defer con2.Shutdown()
 
 	// Make a request to the service
 	_, err = con1.GET(ctx, "https://one.collect/ten")
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	// Interact with the cache
 	con1.DistribCache().Store(ctx, "A", []byte("1234567890"))
@@ -97,9 +98,9 @@ func TestMetrics_Collect(t *testing.T) {
 	for {
 		tc := Collect_Get(t, ctx, "")
 		res, err := tc.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		body, err := io.ReadAll(res.Body)
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 		if bytes.Contains(body, []byte("metrics.core")) &&
 			bytes.Contains(body, []byte("one.collect")) &&
 			bytes.Contains(body, []byte("two.collect")) {
@@ -235,19 +236,20 @@ func TestMetrics_Collect(t *testing.T) {
 
 func TestMetrics_GZip(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	r, _ := http.NewRequest("GET", "", nil)
 	r.Header.Set("Accept-Encoding", "gzip")
 	Collect(t, r).
 		Assert(func(t *testing.T, res *http.Response, err error) {
-			testarossa.NoError(t, err)
-			testarossa.Equal(t, "gzip", res.Header.Get("Content-Encoding"))
+			tt.NoError(err)
+			tt.Equal("gzip", res.Header.Get("Content-Encoding"))
 			unzipper, err := gzip.NewReader(res.Body)
-			testarossa.NoError(t, err)
+			tt.NoError(err)
 			body, err := io.ReadAll(unzipper)
 			unzipper.Close()
-			testarossa.NoError(t, err)
-			testarossa.True(t, bytes.Contains(body, []byte("microbus_log_messages")))
+			tt.NoError(err)
+			tt.True(bytes.Contains(body, []byte("microbus_log_messages")))
 		})
 }
 

@@ -64,6 +64,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the smtp.ingress.core microservice.
@@ -80,11 +81,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the smtp.ingress.core microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the smtp.ingress.core microservice.
@@ -101,10 +109,17 @@ func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastTrigger is an interface to trigger the events of the smtp.ingress.core microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastTrigger creates a new multicast trigger of the smtp.ingress.core microservice.
@@ -118,6 +133,12 @@ func NewMulticastTrigger(caller service.Publisher) *MulticastTrigger {
 // ForHost replaces the default hostname of this trigger.
 func (_c *MulticastTrigger) ForHost(host string) *MulticastTrigger {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this trigger.
+func (_c *MulticastTrigger) WithOptions(opts ...pub.Option) *MulticastTrigger {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -182,6 +203,7 @@ func (_c *MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Em
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *OnIncomingEmailResponse, cap(_ch))

@@ -28,6 +28,7 @@ import (
 
 func TestCodeGen_FullGeneration(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	serviceYaml := `
 general:
@@ -95,21 +96,21 @@ metrics:
 	os.Mkdir(dir, os.ModePerm)
 	defer os.RemoveAll(dir)
 	err := os.WriteFile(filepath.Join(dir, "service.yaml"), []byte(serviceYaml), 0666)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	// Generate
 	gen := NewGenerator()
 	gen.WorkDir = dir
 	err = gen.Run()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	// Validate
 	fileContains := func(fileName string, terms ...string) {
 		b, err := os.ReadFile(filepath.Join(dir, fileName))
-		testarossa.NoError(t, err, "%s", fileName)
+		tt.NoError(err, "%s", fileName)
 		body := string(b)
 		for _, term := range terms {
-			testarossa.Contains(t, body, term, "%s does not contain '%s'", fileName, term)
+			tt.Contains(body, term, "%s does not contain '%s'", fileName, term)
 		}
 	}
 
@@ -142,8 +143,8 @@ metrics:
 		":1234/distance",
 		"svc.DescribeCounter",
 		"svc.DescribeGauge",
-		"fabric_"+strings.ToLower(dir)+"_metric1",
-		"fabric_"+strings.ToLower(dir)+"_metric2",
+		"fabric_"+strings.ToLower(dir)+"_metric_1",
+		"fabric_"+strings.ToLower(dir)+"_metric_2",
 		"OnObserveMetric2(ctx context.Context",
 		"AddMetric1",
 		"RecordMetric2",
@@ -166,14 +167,14 @@ metrics:
 	)
 
 	ver, err := gen.currentVersion()
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, 1, ver.Version)
+	tt.NoError(err)
+	tt.Equal(1, ver.Version)
 
 	// Second run should be a no op
 	err = gen.Run()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	ver, err = gen.currentVersion()
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, 1, ver.Version)
+	tt.NoError(err)
+	tt.Equal(1, ver.Version)
 }

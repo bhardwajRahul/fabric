@@ -19,7 +19,6 @@ package connector
 import (
 	"context"
 	stderrors "errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -29,15 +28,16 @@ import (
 
 func TestConnector_Log(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 	stderror := stderrors.New("error")
 
 	con := New("log.connector")
-	testarossa.False(t, con.IsStarted())
+	tt.False(con.IsStarted())
 
 	// No-op when logger is nil, no logs to observe
-	testarossa.Nil(t, con.logger)
+	tt.Nil(con.logger)
 	con.LogDebug(ctx, "This is a log debug message", "someStr", "some string")
 	con.LogInfo(ctx, "This is a log info message", "someStr", "some string")
 	con.LogWarn(ctx, "This is a log warn message", "error", stderror, "someStr", "some string")
@@ -45,11 +45,11 @@ func TestConnector_Log(t *testing.T) {
 
 	// Start service to initialize logger
 	err := con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
 	// Logger initialized, it can now be observed
-	testarossa.NotNil(t, con.logger)
+	tt.NotNil(con.logger)
 
 	// Observe the logs to assert expected values
 	var buf strings.Builder
@@ -63,9 +63,8 @@ func TestConnector_Log(t *testing.T) {
 	con.LogError(ctx, "This is a log error message", "error", stderror, "someStr", "some string")
 
 	bufStr := buf.String()
-	fmt.Println(bufStr)
-	testarossa.Contains(t, bufStr, `level=INFO msg="This is a log info message"`)
-	testarossa.Contains(t, bufStr, `level=WARN msg="This is a log warn message"`)
-	testarossa.Contains(t, bufStr, `level=ERROR msg="This is a log error message"`)
-	testarossa.NotContains(t, bufStr, `level=DEBUG msg="This is a log debug message"`)
+	tt.Contains(bufStr, `level=INFO msg="This is a log info message"`)
+	tt.Contains(bufStr, `level=WARN msg="This is a log warn message"`)
+	tt.Contains(bufStr, `level=ERROR msg="This is a log error message"`)
+	tt.NotContains(bufStr, `level=DEBUG msg="This is a log debug message"`)
 }

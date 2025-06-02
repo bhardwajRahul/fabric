@@ -67,6 +67,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the calculator.example microservice.
@@ -83,11 +84,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the calculator.example microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the calculator.example microservice.
@@ -101,6 +109,12 @@ func NewMulticastClient(caller service.Publisher) *MulticastClient {
 // ForHost replaces the default hostname of this client.
 func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -165,6 +179,7 @@ func (_c *MulticastClient) Arithmetic(ctx context.Context, x int, op string, y i
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *ArithmeticResponse, cap(_ch))
@@ -214,6 +229,7 @@ func (_c *Client) Arithmetic(ctx context.Context, x int, op string, y int) (xEch
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -283,6 +299,7 @@ func (_c *MulticastClient) Square(ctx context.Context, x int) <-chan *SquareResp
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *SquareResponse, cap(_ch))
@@ -328,6 +345,7 @@ func (_c *Client) Square(ctx context.Context, x int) (xEcho int, result int, err
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -391,6 +409,7 @@ func (_c *MulticastClient) Distance(ctx context.Context, p1 Point, p2 Point) <-c
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *DistanceResponse, cap(_ch))
@@ -435,6 +454,7 @@ func (_c *Client) Distance(ctx context.Context, p1 Point, p2 Point) (d float64, 
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace

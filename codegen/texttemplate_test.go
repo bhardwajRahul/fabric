@@ -27,6 +27,7 @@ import (
 
 func TestCodegen_CapitalizeIdentifier(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	testCases := map[string]string{
 		"fooBar":     "FooBar",
@@ -40,54 +41,55 @@ func TestCodegen_CapitalizeIdentifier(t *testing.T) {
 		"xId":        "XId",
 	}
 	for id, expected := range testCases {
-		testarossa.Equal(t, expected, capitalizeIdentifier(id))
+		tt.Equal(expected, capitalizeIdentifier(id))
 	}
 }
 
 func TestCodegen_TextTemplate(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	_, err := LoadTemplate("doesn't.exist")
-	testarossa.Error(t, err)
+	tt.Error(err)
 
-	tt, err := LoadTemplate("service.txt")
-	testarossa.NoError(t, err)
+	tmpl, err := LoadTemplate("service.txt")
+	tt.NoError(err)
 
 	var x struct{}
-	_, err = tt.Execute(&x)
-	testarossa.Error(t, err)
+	_, err = tmpl.Execute(&x)
+	tt.Error(err)
 
 	specs := &spec.Service{
-		Package: "testing/text/template",
+		PackagePath: "testing/text/template",
 		General: spec.General{
 			Host:        "example.com",
 			Description: "Example",
 		},
 	}
-	rendered, err := tt.Execute(specs)
+	rendered, err := tmpl.Execute(specs)
 	n := len(rendered)
-	testarossa.NoError(t, err)
-	testarossa.Contains(t, string(rendered), specs.PackageSuffix())
-	testarossa.Contains(t, string(rendered), specs.General.Host)
+	tt.NoError(err)
+	tt.Contains(string(rendered), specs.PackagePathSuffix())
+	tt.Contains(string(rendered), specs.General.Host)
 
 	fileName := "testing-" + rand.AlphaNum32(12)
 	defer os.Remove(fileName)
 
-	err = tt.AppendTo(fileName, specs)
-	testarossa.NoError(t, err)
+	err = tmpl.AppendTo(fileName, specs)
+	tt.NoError(err)
 	onDisk, err := os.ReadFile(fileName)
-	testarossa.NoError(t, err)
-	testarossa.SliceEqual(t, rendered, onDisk)
+	tt.NoError(err)
+	tt.Equal(rendered, onDisk)
 
-	err = tt.AppendTo(fileName, specs)
-	testarossa.NoError(t, err)
+	err = tmpl.AppendTo(fileName, specs)
+	tt.NoError(err)
 	onDisk, err = os.ReadFile(fileName)
-	testarossa.NoError(t, err)
-	testarossa.Len(t, onDisk, n*2)
+	tt.NoError(err)
+	tt.Len(onDisk, n*2)
 
-	err = tt.Overwrite(fileName, specs)
-	testarossa.NoError(t, err)
+	err = tmpl.Overwrite(fileName, specs)
+	tt.NoError(err)
 	onDisk, err = os.ReadFile(fileName)
-	testarossa.NoError(t, err)
-	testarossa.SliceEqual(t, rendered, onDisk)
+	tt.NoError(err)
+	tt.Equal(rendered, onDisk)
 }

@@ -220,7 +220,7 @@ func (s Span) TraceID() string {
 func (s Span) Attributes() map[string]string {
 	m := map[string]string{}
 	attributes := reflect.ValueOf(s.internal).Elem().FieldByName("attributes")
-	for i := 0; i < attributes.Len(); i++ {
+	for i := range attributes.Len() {
 		k := attributes.Index(i).FieldByName("Key").String()
 		v := attributes.Index(i).FieldByName("Value").FieldByName("stringly").String()
 		if v == "" {

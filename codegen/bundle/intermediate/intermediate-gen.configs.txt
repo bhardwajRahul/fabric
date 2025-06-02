@@ -44,10 +44,11 @@ func (svc *Intermediate) {{ .Name }}() ({{ .Out "name type" }}) {
 
 /*
 Set{{ .Name }} sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 {{ .Description }}
 */
 func (svc *Intermediate) Set{{ .Name }}({{ .Out "name type" }}) error {
-	return svc.SetConfig("{{ .Name }}", fmt.Sprintf("%v", {{ (index .Signature.OutputArgs 0).Name }}))
+	return svc.SetConfig("{{ .Name }}", utils.AnyToString({{ (index .Signature.OutputArgs 0).Name }}))
 }
 {{ end }}

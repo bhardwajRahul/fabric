@@ -70,6 +70,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the configurator.core microservice.
@@ -86,11 +87,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the configurator.core microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the configurator.core microservice.
@@ -104,6 +112,12 @@ func NewMulticastClient(caller service.Publisher) *MulticastClient {
 // ForHost replaces the default hostname of this client.
 func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -150,6 +164,7 @@ func (_c *MulticastClient) Values(ctx context.Context, names []string) <-chan *V
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *ValuesResponse, cap(_ch))
@@ -191,6 +206,7 @@ func (_c *Client) Values(ctx context.Context, names []string) (values map[string
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -245,6 +261,7 @@ func (_c *MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse 
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *RefreshResponse, cap(_ch))
@@ -285,6 +302,7 @@ func (_c *Client) Refresh(ctx context.Context) (err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -343,6 +361,7 @@ func (_c *MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, va
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *SyncRepoResponse, cap(_ch))
@@ -386,6 +405,7 @@ func (_c *Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -443,6 +463,7 @@ func (_c *MulticastClient) Values443(ctx context.Context, names []string) <-chan
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *Values443Response, cap(_ch))
@@ -484,6 +505,7 @@ func (_c *Client) Values443(ctx context.Context, names []string) (values map[str
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -537,6 +559,7 @@ func (_c *MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Res
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *Refresh443Response, cap(_ch))
@@ -576,6 +599,7 @@ func (_c *Client) Refresh443(ctx context.Context) (err error) {
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace
@@ -634,6 +658,7 @@ func (_c *MulticastClient) Sync443(ctx context.Context, timestamp time.Time, val
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *Sync443Response, cap(_ch))
@@ -677,6 +702,7 @@ func (_c *Client) Sync443(ctx context.Context, timestamp time.Time, values map[s
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace

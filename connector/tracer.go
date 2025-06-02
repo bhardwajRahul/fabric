@@ -133,7 +133,7 @@ func (c *Connector) termTracer(ctx context.Context) (err error) {
 func (c *Connector) StartSpan(ctx context.Context, spanName string, opts ...trc.Option) (context.Context, trc.Span) {
 	if c.tracer != nil {
 		options := make([]trace.SpanStartOption, len(opts))
-		for i := 0; i < len(opts); i++ {
+		for i := range opts {
 			options[i] = opts[i]
 		}
 		ctx, span := c.tracer.Start(ctx, spanName, options...)

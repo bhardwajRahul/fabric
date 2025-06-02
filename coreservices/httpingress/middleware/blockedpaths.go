@@ -23,7 +23,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 )
 
-// BlockedPaths returns a middleware that returns a 404 error for paths matching the predicate
+// BlockedPaths returns a middleware that returns a 404 error for requests with paths matching the predicate.
 // The path passed to the matcher is the full path of the URL, without query arguments.
 func BlockedPaths(isBlocked func(path string) bool) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {

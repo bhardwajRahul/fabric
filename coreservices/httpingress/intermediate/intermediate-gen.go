@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ httpingressapi.Client
 )
@@ -317,12 +319,13 @@ func (svc *Intermediate) TimeBudget() (budget time.Duration) {
 
 /*
 SetTimeBudget sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 TimeBudget specifies the timeout for handling a request, after it has been read.
 A value of 0 or less indicates no time budget.
 */
 func (svc *Intermediate) SetTimeBudget(budget time.Duration) error {
-	return svc.SetConfig("TimeBudget", fmt.Sprintf("%v", budget))
+	return svc.SetConfig("TimeBudget", utils.AnyToString(budget))
 }
 
 /*
@@ -335,11 +338,12 @@ func (svc *Intermediate) Ports() (port string) {
 
 /*
 SetPorts sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Ports is a comma-separated list of HTTP ports on which to listen for requests.
 */
 func (svc *Intermediate) SetPorts(port string) error {
-	return svc.SetConfig("Ports", fmt.Sprintf("%v", port))
+	return svc.SetConfig("Ports", utils.AnyToString(port))
 }
 
 /*
@@ -353,11 +357,12 @@ func (svc *Intermediate) RequestMemoryLimit() (megaBytes int) {
 
 /*
 SetRequestMemoryLimit sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
 */
 func (svc *Intermediate) SetRequestMemoryLimit(megaBytes int) error {
-	return svc.SetConfig("RequestMemoryLimit", fmt.Sprintf("%v", megaBytes))
+	return svc.SetConfig("RequestMemoryLimit", utils.AnyToString(megaBytes))
 }
 
 /*
@@ -371,12 +376,13 @@ func (svc *Intermediate) AllowedOrigins() (origins string) {
 
 /*
 SetAllowedOrigins sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
 The * origin can be used to allow CORS request from all origins.
 */
 func (svc *Intermediate) SetAllowedOrigins(origins string) error {
-	return svc.SetConfig("AllowedOrigins", fmt.Sprintf("%v", origins))
+	return svc.SetConfig("AllowedOrigins", utils.AnyToString(origins))
 }
 
 /*
@@ -396,6 +402,7 @@ func (svc *Intermediate) PortMappings() (mappings string) {
 
 /*
 SetPortMappings sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
 HTTP port, y is the requested NATS port, and z is the port to serve.
@@ -407,7 +414,7 @@ The default mapping grants access to all internal ports via HTTP port 8080 but r
 HTTP ports 443 and 80 to only internal port 443.
 */
 func (svc *Intermediate) SetPortMappings(mappings string) error {
-	return svc.SetConfig("PortMappings", fmt.Sprintf("%v", mappings))
+	return svc.SetConfig("PortMappings", utils.AnyToString(mappings))
 }
 
 /*
@@ -421,11 +428,12 @@ func (svc *Intermediate) ReadTimeout() (timeout time.Duration) {
 
 /*
 SetReadTimeout sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 ReadTimeout specifies the timeout for fully reading a request.
 */
 func (svc *Intermediate) SetReadTimeout(timeout time.Duration) error {
-	return svc.SetConfig("ReadTimeout", fmt.Sprintf("%v", timeout))
+	return svc.SetConfig("ReadTimeout", utils.AnyToString(timeout))
 }
 
 /*
@@ -439,11 +447,12 @@ func (svc *Intermediate) WriteTimeout() (timeout time.Duration) {
 
 /*
 SetWriteTimeout sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 WriteTimeout specifies the timeout for fully writing the response to a request.
 */
 func (svc *Intermediate) SetWriteTimeout(timeout time.Duration) error {
-	return svc.SetConfig("WriteTimeout", fmt.Sprintf("%v", timeout))
+	return svc.SetConfig("WriteTimeout", utils.AnyToString(timeout))
 }
 
 /*
@@ -457,11 +466,12 @@ func (svc *Intermediate) ReadHeaderTimeout() (timeout time.Duration) {
 
 /*
 SetReadHeaderTimeout sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
 */
 func (svc *Intermediate) SetReadHeaderTimeout(timeout time.Duration) error {
-	return svc.SetConfig("ReadHeaderTimeout", fmt.Sprintf("%v", timeout))
+	return svc.SetConfig("ReadHeaderTimeout", utils.AnyToString(timeout))
 }
 
 /*
@@ -476,11 +486,12 @@ func (svc *Intermediate) BlockedPaths() (blockedPaths string) {
 
 /*
 SetBlockedPaths sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 A newline-separated list of paths or extensions to block with a 404.
 Paths should not include any arguments and are matched exactly.
 Extensions are specified with "*.ext" and are matched against the extension of the path only.
 */
 func (svc *Intermediate) SetBlockedPaths(blockedPaths string) error {
-	return svc.SetConfig("BlockedPaths", fmt.Sprintf("%v", blockedPaths))
+	return svc.SetConfig("BlockedPaths", utils.AnyToString(blockedPaths))
 }

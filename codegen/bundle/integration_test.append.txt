@@ -1,4 +1,4 @@
-{{- $pkg := CapitalizeIdentifier .PackageSuffix }}
+{{- $pkg := CapitalizeIdentifier .PackagePathSuffix }}
 {{- range (JoinHandlers .Functions .Sinks) }}{{- if not .Exists }}
 {{- $t := .Signature.TestingT }}
 func Test{{ $pkg }}_{{ .Name }}(t *testing.T) {

@@ -17,13 +17,29 @@ limitations under the License.
 package connector
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/microbus-io/fabric/env"
+)
+
+const (
+	Gray    = "\033[38;2;128;128;128m" // #808080
+	Magenta = "\033[38;2;197;134;192m" // #c586c0
+	Yellow  = "\033[38;2;215;186;125m" // #d7ba7d
+	Orange  = "\033[38;2;206;145;120m" // #ce9178
+	Green   = "\033[38;2;106;153;85m"  // #6A9955
+	Cyan    = "\033[38;2;156;220;254m" // #9cdcfe
+	Red     = "\033[38;2;244;71;71m"   // #f44747
+	White   = "\033[38;2;212;212;212m" // #d4d4d4
+	Blue    = "\033[38;2;86;159;214m"  // #569cd6
+	Reset   = "\033[0m"
 )
 
 /*
@@ -116,8 +132,14 @@ func (c *Connector) LogWarn(ctx context.Context, msg string, args ...any) {
 	if c.deployment == LOCAL || c.deployment == TESTING {
 		for _, f := range args {
 			if err, ok := f.(error); ok {
+				color := ""
+				reset := ""
+				if c.deployment == LOCAL {
+					color = Red
+					reset = Reset
+				}
 				sep := strings.Repeat("~", 120)
-				fmt.Fprintf(os.Stderr, "%s\n%+v\n%s\n", "\u25bc"+sep+"\u25bc", err, "\u25b2"+sep+"\u25b2")
+				fmt.Fprintf(os.Stderr, "%s%s\n%+v\n%s%s\n", color, "\u25bc"+sep+"\u25bc", err, "\u25b2"+sep+"\u25b2", reset)
 				break
 			}
 		}
@@ -156,8 +178,14 @@ func (c *Connector) LogError(ctx context.Context, msg string, args ...any) {
 	if c.deployment == LOCAL || c.deployment == TESTING {
 		for _, f := range args {
 			if err, ok := f.(error); ok {
+				color := ""
+				reset := ""
+				if c.deployment == LOCAL {
+					color = Red
+					reset = Reset
+				}
 				sep := strings.Repeat("~", 120)
-				fmt.Fprintf(os.Stderr, "%s\n%+v\n%s\n", "\u25bc"+sep+"\u25bc", err, "\u25b2"+sep+"\u25b2")
+				fmt.Fprintf(os.Stderr, "%s%s\n%+v\n%s%s\n", color, "\u25bc"+sep+"\u25bc", err, "\u25b2"+sep+"\u25b2", reset)
 				break
 			}
 		}
@@ -177,17 +205,20 @@ func (c *Connector) initLogger() (err error) {
 	env := c.Deployment()
 
 	var handler slog.Handler
-	if env == LOCAL || env == TESTING {
+	switch env {
+	case LOCAL:
+		handler = &localLogHandler{}
+	case TESTING:
 		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: false,
 			Level:     slog.LevelDebug,
 		})
-	} else if env == LAB {
+	case LAB:
 		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: false,
 			Level:     slog.LevelDebug,
 		})
-	} else {
+	default:
 		// Default PROD config
 		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			AddSource: false,
@@ -204,3 +235,128 @@ func (c *Connector) initLogger() (err error) {
 	)
 	return nil
 }
+
+// localLogHandler applies custom logging in the LOCAL deployment.
+type localLogHandler struct {
+	attrs   []slog.Attr
+	bufPool sync.Pool
+}
+
+func (h *localLogHandler) Enabled(ctx context.Context, _ slog.Level) bool {
+	return true
+}
+
+func (h *localLogHandler) Handle(ctx context.Context, rec slog.Record) error {
+	var ptrBuf *[]byte
+	pooled := h.bufPool.Get()
+	if pooled == nil {
+		buf := make([]byte, 0, 384)
+		ptrBuf = &buf
+	} else {
+		ptrBuf = pooled.(*[]byte)
+	}
+	w := bytes.NewBuffer(*ptrBuf)
+
+	w.WriteString(Gray)
+
+	// Timestamp
+	if !rec.Time.IsZero() {
+		w.WriteString(rec.Time.Format("15:04:05.000 "))
+	}
+
+	// Level
+	switch rec.Level {
+	case slog.LevelDebug:
+		w.WriteString(White)
+		w.WriteString("DBUG")
+	case slog.LevelInfo:
+		w.WriteString(White)
+		w.WriteString("INFO")
+	case slog.LevelWarn:
+		w.WriteString(Yellow)
+		w.WriteString("WARN")
+	case slog.LevelError:
+		w.WriteString(Red)
+		w.WriteString("ERR!")
+	default:
+		w.WriteString(White)
+		lvl := rec.Level.String()
+		if len(lvl) > 4 {
+			lvl = lvl[:4]
+		}
+		fmt.Fprintf(w, "%-4s", lvl)
+	}
+
+	// Service
+	service := ""
+	for _, a := range h.attrs {
+		if a.Key == "service" {
+			service = a.Value.String()
+			break
+		}
+	}
+	const maxlen = 20
+	if len([]rune(service)) > maxlen {
+		service = string([]rune(service)[:maxlen-1]) + "\u2026"
+	}
+	w.WriteString(Magenta)
+	fmt.Fprintf(w, " %-*s", maxlen, service)
+
+	// Message
+	w.WriteString(Cyan)
+	fmt.Fprintf(w, " %-30s ", rec.Message)
+
+	// Attributes
+	allZeros := func(s string) bool {
+		for _, r := range s {
+			if r != '0' {
+				return false
+			}
+		}
+		return true
+	}
+	rec.Attrs(func(a slog.Attr) bool {
+		if a.Key == "trace" && allZeros(a.Value.String()) {
+			return true
+		}
+		w.WriteString(" ")
+		w.WriteString(Blue)
+		w.WriteString(a.Key)
+		w.WriteString(Gray)
+		w.WriteString("=")
+		orig := a.Value.String()
+		quoted := strconv.Quote(orig)
+		quoted = quoted[1 : len(quoted)-1]
+		if quoted != orig {
+			w.WriteString(Gray)
+			w.WriteString(`"`)
+			w.WriteString(White)
+			w.WriteString(quoted)
+			w.WriteString(Gray)
+			w.WriteString(`"`)
+		} else {
+			w.WriteString(White)
+			w.WriteString(orig)
+		}
+		return true
+	})
+
+	w.WriteString(Reset)
+	w.WriteString("\n")
+
+	os.Stderr.Write(w.Bytes())
+	h.bufPool.Put(ptrBuf)
+	return nil
+}
+
+func (h *localLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &localLogHandler{
+		attrs: append(h.attrs, attrs...),
+	}
+}
+
+func (h *localLogHandler) WithGroup(name string) slog.Handler {
+	return h
+}
+
+var _ slog.Handler = &localLogHandler{}

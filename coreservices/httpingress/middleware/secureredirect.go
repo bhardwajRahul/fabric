@@ -23,7 +23,7 @@ import (
 	"github.com/microbus-io/fabric/connector"
 )
 
-// SecureRedirect returns a middleware that redirects HTTP on port 80 to port 443, if one is available.
+// SecureRedirect returns a middleware that redirects requests from HTTP port :80 to HTTPS port :443, if appropriate.
 func SecureRedirect(isSecurePort443 func() bool) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {

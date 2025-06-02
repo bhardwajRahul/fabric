@@ -27,7 +27,12 @@ func (_c *Client) {{ .Name }}_Get(ctx context.Context, url string) (res *http.Re
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -51,7 +56,12 @@ func (_c *MulticastClient) {{ .Name }}_Get(ctx context.Context, url string) <-ch
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -73,7 +83,14 @@ func (_c *Client) {{ .Name }}_Post(ctx context.Context, url string, contentType 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -100,7 +117,14 @@ func (_c *MulticastClient) {{ .Name }}_Post(ctx context.Context, url string, con
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 {{- else if .MethodWithBody }}
@@ -121,7 +145,14 @@ func (_c *Client) {{ .Name }}(ctx context.Context, url string, contentType strin
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method(`{{ .Method }}`), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method(`{{ .Method }}`),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -146,7 +177,14 @@ func (_c *MulticastClient) {{ .Name }}(ctx context.Context, url string, contentT
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(`{{ .Method }}`), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(`{{ .Method }}`),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 {{- else }}
@@ -164,7 +202,12 @@ func (_c *Client) {{ .Name }}(ctx context.Context, url string) (res *http.Respon
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method(`{{ .Method }}`), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method(`{{ .Method }}`),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -186,7 +229,12 @@ func (_c *MulticastClient) {{ .Name }}(ctx context.Context, url string) <-chan *
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(`{{ .Method }}`), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(`{{ .Method }}`),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 {{- end }}
@@ -220,7 +268,14 @@ func (_c *Client) {{ .Name }}{{ if ne .Method "ANY" }}_Do{{ end }}(r *http.Reque
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -257,6 +312,13 @@ func (_c *MulticastClient) {{ .Name }}{{ if ne .Method "ANY" }}_Do{{ end }}(ctx 
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 {{ end }}

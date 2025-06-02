@@ -10,7 +10,7 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
 
-	"{{ .Package }}/{{ .PackageSuffix }}api"
+	"{{ .PackageDir }}/{{ .PackageDirSuffix }}api"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 	_ *http.Request
 	_ time.Duration
 	_ *errors.TracedError
-	_ {{ .PackageSuffix }}api.Client
+	_ {{ .PackagePathSuffix }}api.Client
 )
 
 // Mock is a mockable version of the {{ .General.Host }} microservice, allowing functions, event sinks and web handlers to be mocked.

@@ -173,7 +173,7 @@ func (tc *LoginTestCase) BodyContains(value any) *LoginTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -200,7 +200,7 @@ func (tc *LoginTestCase) BodyNotContains(value any) *LoginTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -652,13 +652,12 @@ func Login_Get(t *testing.T, ctx context.Context, url string) *LoginTestCase {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := http.NewRequest("GET", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
@@ -695,13 +694,12 @@ func Login_Post(t *testing.T, ctx context.Context, url string, contentType strin
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest("POST", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -758,6 +756,7 @@ func Login(t *testing.T, r *http.Request) *LoginTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -812,7 +811,7 @@ func (tc *LogoutTestCase) BodyContains(value any) *LogoutTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -839,7 +838,7 @@ func (tc *LogoutTestCase) BodyNotContains(value any) *LogoutTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -1289,13 +1288,12 @@ func Logout_Get(t *testing.T, ctx context.Context, url string) *LogoutTestCase {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := http.NewRequest("GET", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
@@ -1330,13 +1328,12 @@ func Logout_Post(t *testing.T, ctx context.Context, url string, contentType stri
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest("POST", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -1391,6 +1388,7 @@ func Logout(t *testing.T, r *http.Request) *LogoutTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -1445,7 +1443,7 @@ func (tc *WelcomeTestCase) BodyContains(value any) *WelcomeTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -1472,7 +1470,7 @@ func (tc *WelcomeTestCase) BodyNotContains(value any) *WelcomeTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -1923,13 +1921,12 @@ func Welcome_Get(t *testing.T, ctx context.Context, url string) *WelcomeTestCase
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := http.NewRequest("GET", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
@@ -1965,13 +1962,12 @@ func Welcome_Post(t *testing.T, ctx context.Context, url string, contentType str
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest("POST", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -2027,6 +2023,7 @@ func Welcome(t *testing.T, r *http.Request) *WelcomeTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -2081,7 +2078,7 @@ func (tc *AdminOnlyTestCase) BodyContains(value any) *AdminOnlyTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -2108,7 +2105,7 @@ func (tc *AdminOnlyTestCase) BodyNotContains(value any) *AdminOnlyTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -2558,13 +2555,12 @@ func AdminOnly_Get(t *testing.T, ctx context.Context, url string) *AdminOnlyTest
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := http.NewRequest("GET", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
@@ -2599,13 +2595,12 @@ func AdminOnly_Post(t *testing.T, ctx context.Context, url string, contentType s
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest("POST", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -2660,6 +2655,7 @@ func AdminOnly(t *testing.T, r *http.Request) *AdminOnlyTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -2714,7 +2710,7 @@ func (tc *ManagerOnlyTestCase) BodyContains(value any) *ManagerOnlyTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -2741,7 +2737,7 @@ func (tc *ManagerOnlyTestCase) BodyNotContains(value any) *ManagerOnlyTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -3191,13 +3187,12 @@ func ManagerOnly_Get(t *testing.T, ctx context.Context, url string) *ManagerOnly
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := http.NewRequest("GET", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
@@ -3232,13 +3227,12 @@ func ManagerOnly_Post(t *testing.T, ctx context.Context, url string, contentType
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest("POST", url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -3293,6 +3287,7 @@ func ManagerOnly(t *testing.T, r *http.Request) *ManagerOnlyTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {

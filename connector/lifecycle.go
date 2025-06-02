@@ -239,7 +239,7 @@ func (c *Connector) Startup() (err error) {
 
 	// Call the callback functions in order
 	c.onStartupCalled = true
-	for i := 0; i < len(c.onStartup); i++ {
+	for i := range c.onStartup {
 		err = errors.CatchPanic(func() error {
 			return c.onStartup[i](ctx)
 		})
@@ -431,7 +431,7 @@ func (c *Connector) Go(ctx context.Context, f func(ctx context.Context) (err err
 		return errors.New("not started")
 	}
 	atomic.AddInt32(&c.pendingOps, 1)
-	subCtx := frame.ContextWithFrameOf(c.lifetimeCtx, ctx)             // Copy the frame headers
+	subCtx := frame.ContextWithFrameOf(c.lifetimeCtx, ctx)             // Copy the original frame headers
 	subCtx = trace.ContextWithSpan(subCtx, trace.SpanFromContext(ctx)) // Copy the tracing context
 	subCtx, span := c.StartSpan(subCtx, "Goroutine", trc.Consumer())
 
@@ -517,7 +517,7 @@ func determineCloudLocality(cloudProvider string) (locality string, err error) {
 	if cloudProvider == "GCP" {
 		// az == projects/415104041262/zones/us-east1-a
 		_, az, _ = strings.Cut(az, "/zones/") // us-east1-a
-		for i := 0; i < len(az); i++ {
+		for i := range az {
 			if az[i] >= '0' && az[i] <= '9' {
 				az = az[:i] + "-" + az[i:] // us-east-1-a
 				break
@@ -526,7 +526,7 @@ func determineCloudLocality(cloudProvider string) (locality string, err error) {
 	}
 
 	parts := strings.Split(az, "-") // [us, east, 1, a]
-	for i := 0; i < len(parts)/2; i++ {
+	for i := range len(parts) / 2 {
 		parts[i], parts[len(parts)-1-i] = parts[len(parts)-1-i], parts[i]
 	} // [a, 1, east, us]
 	return strings.Join(parts, "."), nil // a.1.east.us

@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ directoryapi.Client
 )
@@ -267,11 +269,12 @@ func (svc *Intermediate) SQL() (dsn string) {
 
 /*
 SetSQL sets the value of the configuration property.
+This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 SQL is the connection string to the database.
 */
 func (svc *Intermediate) SetSQL(dsn string) error {
-	return svc.SetConfig("SQL", fmt.Sprintf("%v", dsn))
+	return svc.SetConfig("SQL", utils.AnyToString(dsn))
 }
 
 // doCreate handles marshaling for the Create function.

@@ -115,7 +115,7 @@ func InsertPathArguments(u string, values QArgs) string {
 			parts[i] = fmt.Sprintf("path%d", argIndex)
 		}
 		if v, ok := values[parts[i]]; ok {
-			parts[i] = url.PathEscape(fmt.Sprintf("%v", v))
+			parts[i] = url.PathEscape(utils.AnyToString(v))
 		} else {
 			parts[i] = ""
 		}
@@ -153,7 +153,7 @@ func FillPathArguments(u string) (resolved string, err error) {
 		if vv, ok := query[parts[i]]; ok && len(vv) > 0 {
 			delete(query, parts[i])
 			v := vv[len(vv)-1]
-			parts[i] = url.PathEscape(fmt.Sprintf("%v", v))
+			parts[i] = url.PathEscape(utils.AnyToString(v))
 			if greedy {
 				// Allow slashes in greedy arguments
 				parts[i] = strings.ReplaceAll(parts[i], "%2F", "/")

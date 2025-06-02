@@ -24,6 +24,7 @@ import (
 
 func TestCfg_ValidateValue(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	good := []string{
 		"str", "lorem ipsum",
@@ -111,15 +112,16 @@ func TestCfg_ValidateValue(t *testing.T) {
 	}
 
 	for i := 0; i < len(good); i += 2 {
-		testarossa.True(t, Validate(good[i], good[i+1]), "%v %v", good[i], good[i+1])
+		tt.True(Validate(good[i], good[i+1]), "%v %v", good[i], good[i+1])
 	}
 	for i := 0; i < len(bad); i += 2 {
-		testarossa.False(t, Validate(bad[i], bad[i+1]), "%v %v", bad[i], bad[i+1])
+		tt.False(Validate(bad[i], bad[i+1]), "%v %v", bad[i], bad[i+1])
 	}
 }
 
 func TestCfg_CheckRule(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	checks := map[string]bool{
 		"str":        true,  // No regexp
@@ -160,12 +162,13 @@ func TestCfg_CheckRule(t *testing.T) {
 		"json anything": false, // Spec not allowed
 	}
 	for r, ok := range checks {
-		testarossa.Equal(t, ok, checkRule(r), "%v", r)
+		tt.Equal(ok, checkRule(r), "%v", r)
 	}
 }
 
 func TestCfg_NormalizedType(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	checks := map[string]string{
 		"":         "str",
@@ -192,6 +195,6 @@ func TestCfg_NormalizedType(t *testing.T) {
 	}
 	for in, exp := range checks {
 		norm, _ := normalizedType(in)
-		testarossa.Equal(t, exp, norm)
+		tt.Equal(exp, norm)
 	}
 }

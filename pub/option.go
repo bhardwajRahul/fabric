@@ -19,7 +19,6 @@ package pub
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -190,7 +189,7 @@ func QueryArg(name string, value any) Option {
 		if len(req.queryArgs) > 0 {
 			req.queryArgs += "&"
 		}
-		v := fmt.Sprintf("%v", value)
+		v := utils.AnyToString(value)
 		req.queryArgs += url.QueryEscape(name) + "=" + url.QueryEscape(v)
 		if req.URL != "" {
 			u, err := httpx.ParseURL(req.URL)
@@ -291,7 +290,7 @@ func Multicast() Option {
 
 // Noop does nothing.
 func Noop() Option {
-	return func(r *Request) error {
+	return func(_ *Request) error {
 		return nil
 	}
 }
@@ -309,6 +308,19 @@ func Actor(actor any) Option {
 			req.Header.Set(frame.HeaderActor, value)
 		} else {
 			req.Header.Del(frame.HeaderActor)
+		}
+		return nil
+	}
+}
+
+// Options is a meta-option that applies a list of options in order.
+func Options(opts ...Option) Option {
+	return func(req *Request) error {
+		for _, opt := range opts {
+			err := opt(req)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		return nil
 	}

@@ -173,7 +173,7 @@ func (tc *MakeRequestTestCase) BodyContains(value any) *MakeRequestTestCase {
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.Contains(tc.t, string(body), vv)
 		}
 	}
@@ -200,7 +200,7 @@ func (tc *MakeRequestTestCase) BodyNotContains(value any) *MakeRequestTestCase {
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
-			vv := fmt.Sprintf("%v", v)
+			vv := utils.AnyToString(v)
 			testarossa.NotContains(tc.t, string(body), vv)
 		}
 	}
@@ -651,13 +651,12 @@ func MakeRequest(t *testing.T, ctx context.Context, url string, contentType stri
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	r, err := httpx.NewRequest(`POST`, url, nil)
+	ctx = frame.CloneContext(ctx)
+	r, err := httpx.NewRequestWithContext(ctx, `POST`, url, nil)
 	if err != nil {
 		tc.err = errors.Trace(err)
 		return tc
 	}
-	ctx = frame.CloneContext(ctx)
-	r = r.WithContext(ctx)
 	r.Header = frame.Of(ctx).Header()
 	err = httpx.SetRequestBody(r, body)
 	if err != nil {
@@ -719,6 +718,7 @@ func MakeRequest_Do(t *testing.T, r *http.Request) *MakeRequestTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
+	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {

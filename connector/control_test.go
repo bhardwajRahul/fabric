@@ -26,6 +26,7 @@ import (
 
 func TestConnector_Ping(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -34,24 +35,24 @@ func TestConnector_Ping(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
 	// Send messages
 	for r := range con.Publish(ctx, pub.GET("https://ping.connector:888/ping")) {
 		_, err := r.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 	}
 	for r := range con.Publish(ctx, pub.GET("https://"+con.id+".ping.connector:888/ping")) {
 		_, err := r.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 	}
 	for r := range con.Publish(ctx, pub.GET("https://all:888/ping")) {
 		_, err := r.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 	}
 	for r := range con.Publish(ctx, pub.GET("https://"+con.id+".all:888/ping")) {
 		_, err := r.Get()
-		testarossa.NoError(t, err)
+		tt.NoError(err)
 	}
 }

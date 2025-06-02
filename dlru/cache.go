@@ -404,7 +404,7 @@ func (c *Cache) rescue(ctx context.Context) {
 	var rescued int64
 	t0 := time.Now()
 	concurrent := runtime.NumCPU() * 4
-	for i := 0; i < concurrent; i++ {
+	for range concurrent {
 		wg.Add(1)
 		go func() {
 			for kv := range rescueQueue {

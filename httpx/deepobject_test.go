@@ -25,18 +25,21 @@ import (
 )
 
 func TestHttpx_DeepObject(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
 	type Point struct {
 		X int
 		Y int
 	}
 	type Doc struct {
 		I       int       `json:"i"`
-		Zero    int       `json:"z,omitempty"`
+		Zero    int       `json:"z,omitzero"`
 		B       bool      `json:"b"`
 		F       float32   `json:"f"`
 		S       string    `json:"s"`
 		Pt      Point     `json:"pt"`
-		Empty   *Point    `json:"e,omitempty"`
+		Empty   *Point    `json:"e,omitzero"`
 		Null    *Point    `json:"n"`
 		Special string    `json:"sp"`
 		T       time.Time `json:"t"`
@@ -53,26 +56,27 @@ func TestHttpx_DeepObject(t *testing.T) {
 		T:       time.Date(2001, 10, 1, 12, 0, 0, 0, time.UTC),
 	}
 	values, err := EncodeDeepObject(d1)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "5", values.Get("i"))
-		testarossa.Equal(t, "true", values.Get("b"))
-		testarossa.Equal(t, "5.67", values.Get("f"))
-		testarossa.Equal(t, "Hello", values.Get("s"))
-		testarossa.Equal(t, "Q&A", values.Get("sp"))
-		testarossa.Equal(t, "3", values.Get("pt[X]"))
-		testarossa.Equal(t, "4", values.Get("pt[Y]"))
-		testarossa.Equal(t, "2001-10-01T12:00:00Z", values.Get("t"))
+	if tt.NoError(err) {
+		tt.Equal("5", values.Get("i"))
+		tt.Equal("true", values.Get("b"))
+		tt.Equal("5.67", values.Get("f"))
+		tt.Equal("Hello", values.Get("s"))
+		tt.Equal("Q&A", values.Get("sp"))
+		tt.Equal("3", values.Get("pt[X]"))
+		tt.Equal("4", values.Get("pt[Y]"))
+		tt.Equal("2001-10-01T12:00:00Z", values.Get("t"))
 	}
 
 	var d2 Doc
 	err = DecodeDeepObject(values, &d2)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, d1, d2)
+	if tt.NoError(err) {
+		tt.Equal(d1, d2)
 	}
 }
 
 func TestHttpx_DeepObjectRequestPath(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var data struct {
 		X struct {
@@ -88,20 +92,21 @@ func TestHttpx_DeepObjectRequestPath(t *testing.T) {
 		E string
 	}
 	r, err := http.NewRequest("GET", `/path?x.a=5&x[b]=3&x.y.c=1&x[y][d]=2&s=str&b=true&e=`, nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	err = DecodeDeepObject(r.URL.Query(), &data)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, 5, data.X.A)
-	testarossa.Equal(t, 3, data.X.B)
-	testarossa.Equal(t, 1, data.X.Y.C)
-	testarossa.Equal(t, 2, data.X.Y.D)
-	testarossa.Equal(t, "str", data.S)
-	testarossa.Equal(t, true, data.B)
-	testarossa.Equal(t, "", data.E)
+	tt.NoError(err)
+	tt.Equal(5, data.X.A)
+	tt.Equal(3, data.X.B)
+	tt.Equal(1, data.X.Y.C)
+	tt.Equal(2, data.X.Y.D)
+	tt.Equal("str", data.S)
+	tt.Equal(true, data.B)
+	tt.Equal("", data.E)
 }
 
 func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	data := struct {
 		S string  `json:"s"`
@@ -112,41 +117,41 @@ func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 
 	// Into string
 	err := decodeOne("s", "hello", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "hello", data.S)
+	if tt.NoError(err) {
+		tt.Equal("hello", data.S)
 	}
 	err = decodeOne("s", `"hello"`, &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "hello", data.S)
+	if tt.NoError(err) {
+		tt.Equal("hello", data.S)
 	}
 	err = decodeOne("s", "5", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "5", data.S)
+	if tt.NoError(err) {
+		tt.Equal("5", data.S)
 	}
 
 	// Into int
 	err = decodeOne("i", "5", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, 5, data.I)
+	if tt.NoError(err) {
+		tt.Equal(5, data.I)
 	}
 
 	// Into float64
 	err = decodeOne("f", "5", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, 5.0, data.F)
+	if tt.NoError(err) {
+		tt.Equal(5.0, data.F)
 	}
 	err = decodeOne("f", "5.6", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, 5.6, data.F)
+	if tt.NoError(err) {
+		tt.Equal(5.6, data.F)
 	}
 
 	// Into bool
 	err = decodeOne("b", "true", &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, true, data.B)
+	if tt.NoError(err) {
+		tt.Equal(true, data.B)
 	}
 	err = decodeOne("b", `"true"`, &data)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, true, data.B)
+	if tt.NoError(err) {
+		tt.Equal(true, data.B)
 	}
 }

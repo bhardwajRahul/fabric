@@ -45,6 +45,7 @@ func validator(ctx context.Context, token string) (actor any, valid bool, err er
 
 func TestAuthorization_Validation(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	mw := Authorization(validator)
 
@@ -58,8 +59,8 @@ func TestAuthorization_Validation(t *testing.T) {
 		received, _ = frame.Of(r).IfActor(`sub=="foo@example.com"`)
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.True(t, received)
+	if tt.NoError(err) {
+		tt.True(received)
 	}
 
 	// Invalid token
@@ -72,13 +73,14 @@ func TestAuthorization_Validation(t *testing.T) {
 		received = r.Header.Get(frame.HeaderActor) != ""
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.False(t, received)
+	if tt.NoError(err) {
+		tt.False(received)
 	}
 }
 
 func TestAuthorization_IncorrectSignature(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "foo@example.com", "ok": true})
 	incorrectlySignedToken, _ := token.SignedString([]byte("incorrect-signature"))
@@ -94,13 +96,14 @@ func TestAuthorization_IncorrectSignature(t *testing.T) {
 		received = r.Header.Get(frame.HeaderActor) != ""
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.False(t, received)
+	if tt.NoError(err) {
+		tt.False(received)
 	}
 }
 
 func TestAuthorization_Order(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	actor := struct {
 		Sub string `json:"sub"`
@@ -125,25 +128,26 @@ func TestAuthorization_Order(t *testing.T) {
 		frame.Of(r).ParseActor(&actor)
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "cookie", actor.By)
+	if tt.NoError(err) {
+		tt.Equal("cookie", actor.By)
 	}
 
 	// Authorization: Bearer
 	w = httpx.NewResponseRecorder()
 	r.Header.Set("Authorization", "Bearer "+newSignedToken(jwt.MapClaims{"sub": "foo@example.com", "by": "header", "ok": true}))
-	testarossa.Contains(t, r.Header.Get("Cookie"), "Authorization") // Cookie is still there but overridden by header
+	tt.Contains(r.Header.Get("Cookie"), "Authorization") // Cookie is still there but overridden by header
 	err = mw(func(w http.ResponseWriter, r *http.Request) (err error) {
 		frame.Of(r).ParseActor(&actor)
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, "header", actor.By)
+	if tt.NoError(err) {
+		tt.Equal("header", actor.By)
 	}
 }
 
 func TestAuthorization_MalformedJWT(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	validatorCalled := false
 	mw := Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
@@ -161,14 +165,15 @@ func TestAuthorization_MalformedJWT(t *testing.T) {
 		received = r.Header.Get(frame.HeaderActor) != ""
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.True(t, validatorCalled)
-		testarossa.False(t, received)
+	if tt.NoError(err) {
+		tt.True(validatorCalled)
+		tt.False(received)
 	}
 }
 
 func TestAuthorization_NoJWT(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	validatorCalled := false
 	mw := Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
@@ -185,8 +190,8 @@ func TestAuthorization_NoJWT(t *testing.T) {
 		received = r.Header.Get(frame.HeaderActor) != ""
 		return nil
 	})(w, r)
-	if testarossa.NoError(t, err) {
-		testarossa.False(t, received)
-		testarossa.False(t, validatorCalled)
+	if tt.NoError(err) {
+		tt.False(received)
+		tt.False(validatorCalled)
 	}
 }

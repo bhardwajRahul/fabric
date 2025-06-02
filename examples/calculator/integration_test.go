@@ -49,6 +49,7 @@ func Terminate() (err error) {
 
 func TestCalculator_Arithmetic(t *testing.T) {
 	t.Parallel()
+
 	/*
 		Arithmetic(t, ctx, x, op, y).
 			Expect(xEcho, opEcho, yEcho, result).
@@ -67,6 +68,7 @@ func TestCalculator_Arithmetic(t *testing.T) {
 
 func TestCalculator_Square(t *testing.T) {
 	t.Parallel()
+
 	/*
 		Square(t, ctx, x).
 			Expect(xEcho, result).
@@ -80,6 +82,7 @@ func TestCalculator_Square(t *testing.T) {
 
 func TestCalculator_Distance(t *testing.T) {
 	t.Parallel()
+
 	/*
 		Distance(t, ctx, p1, p2).
 			Expect(td).
@@ -93,6 +96,7 @@ func TestCalculator_Distance(t *testing.T) {
 
 func TestCalculator_OnObserveSumOperations(t *testing.T) {
 	t.Parallel()
+
 	/*
 		ctx := Context()
 		OnObserveSumOperations(t, ctx).NoError()

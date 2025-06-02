@@ -269,7 +269,7 @@ func (c *Connector) DescribeHistogram(name string, desc string, bucketBounds []f
 		return c.captureInitErr(errors.New("empty buckets"))
 	}
 	sort.Float64s(bucketBounds)
-	for i := 0; i < len(bucketBounds)-1; i++ {
+	for i := range len(bucketBounds) - 1 {
 		if bucketBounds[i+1] <= bucketBounds[i] {
 			return c.captureInitErr(errors.New("buckets must be defined in ascending order"))
 		}

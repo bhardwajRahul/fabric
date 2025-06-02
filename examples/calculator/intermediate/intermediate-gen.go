@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ var (
 	_ *openapi.Service
 	_ service.Service
 	_ sub.Option
+	_ utils.SyncMap[string, string]
 	_ yaml.Encoder
 	_ calculatorapi.Client
 )
@@ -339,11 +341,11 @@ AddUsedOperators adds to the value of the counter metric.
 UsedOperators tracks the types of the arithmetic operators used.
 */
 func (svc *Intermediate) AddUsedOperators(ctx context.Context, num int, op string) error {
-	xnum := float64(num)
-	xop := op
+	_num := float64(num)
+	_op := utils.AnyToString(op)
 	return svc.AddCounter(ctx, "fabric_calculator_used_operators",
-		xnum,
-		`op`, xop)
+		_num,
+		`op`, _op)
 }
 
 /*
@@ -353,9 +355,9 @@ UsedOperators tracks the types of the arithmetic operators used.
 Deprecated: Use AddUsedOperators
 */
 func (svc *Intermediate) IncrementUsedOperators(num int, op string) error {
-	xnum := float64(num)
-	xop := op
-	return svc.IncrementMetric("fabric_calculator_used_operators", xnum, xop)
+	_num := float64(num)
+	_op := utils.AnyToString(op)
+	return svc.IncrementMetric("fabric_calculator_used_operators", _num, _op)
 }
 
 /*
@@ -363,11 +365,11 @@ RecordSumOperations records the current value of the gauge metric.
 SumOperations tracks the total sum of the results of all operators.
 */
 func (svc *Intermediate) RecordSumOperations(ctx context.Context, sum int, op string) error {
-	xsum := float64(sum)
-	xop := op
+	_sum := float64(sum)
+	_op := utils.AnyToString(op)
 	return svc.RecordGauge(ctx, "fabric_calculator_sum_operations",
-		xsum,
-		`op`, xop)
+		_sum,
+		`op`, _op)
 }
 
 /*
@@ -377,9 +379,9 @@ SumOperations tracks the total sum of the results of all operators.
 Deprecated: Use RecordSumOperations
 */
 func (svc *Intermediate) ObserveSumOperations(sum int, op string) error {
-	xsum := float64(sum)
-	xop := op
-	return svc.ObserveMetric("fabric_calculator_sum_operations", xsum, xop)
+	_sum := float64(sum)
+	_op := utils.AnyToString(op)
+	return svc.ObserveMetric("fabric_calculator_sum_operations", _sum, _op)
 }
 
 /*
@@ -389,7 +391,7 @@ SumOperations tracks the total sum of the results of all operators.
 Deprecated: Use RecordSumOperations
 */
 func (svc *Intermediate) IncrementSumOperations(sum int, op string) error {
-	xsum := float64(sum)
-	xop := op
-	return svc.IncrementMetric("fabric_calculator_sum_operations", xsum, xop)
+	_sum := float64(sum)
+	_op := utils.AnyToString(op)
+	return svc.IncrementMetric("fabric_calculator_sum_operations", _sum, _op)
 }

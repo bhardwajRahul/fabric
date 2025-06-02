@@ -17,10 +17,10 @@ limitations under the License.
 package smtpingress
 
 import (
-	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/microbus-io/fabric/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -85,7 +85,7 @@ func (h logHook) Fire(e *logrus.Entry) error {
 			fields = append(fields, slog.Time(n, vv))
 
 		default:
-			s := fmt.Sprintf("%v", v)
+			s := utils.AnyToString(v)
 			fields = append(fields, slog.String(n, s))
 		}
 	}

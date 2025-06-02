@@ -69,6 +69,7 @@ var (
 type Client struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewClient creates a new unicast client to the login.example microservice.
@@ -85,11 +86,18 @@ func (_c *Client) ForHost(host string) *Client {
 	return _c
 }
 
+// WithOptions applies options to requests made by this client.
+func (_c *Client) WithOptions(opts ...pub.Option) *Client {
+	_c.opts = append(_c.opts, opts...)
+	return _c
+}
+
 // MulticastClient is an interface to calling the endpoints of the login.example microservice.
 // This advanced version is for multicast calls.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
+	opts []pub.Option
 }
 
 // NewMulticastClient creates a new multicast client to the login.example microservice.
@@ -103,6 +111,12 @@ func NewMulticastClient(caller service.Publisher) *MulticastClient {
 // ForHost replaces the default hostname of this client.
 func (_c *MulticastClient) ForHost(host string) *MulticastClient {
 	_c.host = host
+	return _c
+}
+
+// WithOptions applies options to requests made by this client.
+func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
+	_c.opts = append(_c.opts, opts...)
 	return _c
 }
 
@@ -132,7 +146,12 @@ func (_c *Client) Login_Get(ctx context.Context, url string) (res *http.Response
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -158,7 +177,12 @@ func (_c *MulticastClient) Login_Get(ctx context.Context, url string) <-chan *pu
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -182,7 +206,14 @@ func (_c *Client) Login_Post(ctx context.Context, url string, contentType string
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -211,7 +242,14 @@ func (_c *MulticastClient) Login_Post(ctx context.Context, url string, contentTy
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -236,7 +274,14 @@ func (_c *Client) Login(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -266,7 +311,14 @@ func (_c *MulticastClient) Login(ctx context.Context, r *http.Request) <-chan *p
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -285,7 +337,12 @@ func (_c *Client) Logout_Get(ctx context.Context, url string) (res *http.Respons
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -309,7 +366,12 @@ func (_c *MulticastClient) Logout_Get(ctx context.Context, url string) <-chan *p
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -331,7 +393,14 @@ func (_c *Client) Logout_Post(ctx context.Context, url string, contentType strin
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -358,7 +427,14 @@ func (_c *MulticastClient) Logout_Post(ctx context.Context, url string, contentT
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -381,7 +457,14 @@ func (_c *Client) Logout(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -409,7 +492,14 @@ func (_c *MulticastClient) Logout(ctx context.Context, r *http.Request) <-chan *
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -429,7 +519,12 @@ func (_c *Client) Welcome_Get(ctx context.Context, url string) (res *http.Respon
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -454,7 +549,12 @@ func (_c *MulticastClient) Welcome_Get(ctx context.Context, url string) <-chan *
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -477,7 +577,14 @@ func (_c *Client) Welcome_Post(ctx context.Context, url string, contentType stri
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -505,7 +612,14 @@ func (_c *MulticastClient) Welcome_Post(ctx context.Context, url string, content
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -529,7 +643,14 @@ func (_c *Client) Welcome(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -558,7 +679,14 @@ func (_c *MulticastClient) Welcome(ctx context.Context, r *http.Request) <-chan 
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -577,7 +705,12 @@ func (_c *Client) AdminOnly_Get(ctx context.Context, url string) (res *http.Resp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -601,7 +734,12 @@ func (_c *MulticastClient) AdminOnly_Get(ctx context.Context, url string) <-chan
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -623,7 +761,14 @@ func (_c *Client) AdminOnly_Post(ctx context.Context, url string, contentType st
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -650,7 +795,14 @@ func (_c *MulticastClient) AdminOnly_Post(ctx context.Context, url string, conte
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -673,7 +825,14 @@ func (_c *Client) AdminOnly(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -701,7 +860,14 @@ func (_c *MulticastClient) AdminOnly(ctx context.Context, r *http.Request) <-cha
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -720,7 +886,12 @@ func (_c *Client) ManagerOnly_Get(ctx context.Context, url string) (res *http.Re
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("GET"), pub.URL(url))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -744,7 +915,12 @@ func (_c *MulticastClient) ManagerOnly_Get(ctx context.Context, url string) <-ch
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("GET"), pub.URL(url))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(url),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -766,7 +942,14 @@ func (_c *Client) ManagerOnly_Post(ctx context.Context, url string, contentType 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -793,7 +976,14 @@ func (_c *MulticastClient) ManagerOnly_Post(ctx context.Context, url string, con
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method("POST"), pub.URL(url), pub.ContentType(contentType), pub.Body(body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("POST"),
+		pub.URL(url),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
 }
 
 /*
@@ -816,7 +1006,14 @@ func (_c *Client) ManagerOnly(r *http.Request) (res *http.Response, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	res, err = _c.svc.Request(r.Context(), pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	res, err = _c.svc.Request(
+		r.Context(),
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 	if err != nil {
 		return nil, err // No trace
 	}
@@ -844,5 +1041,12 @@ func (_c *MulticastClient) ManagerOnly(ctx context.Context, r *http.Request) <-c
 	if err != nil {
 		return _c.errChan(errors.Trace(err))
 	}
-	return _c.svc.Publish(ctx, pub.Method(r.Method), pub.URL(url), pub.CopyHeaders(r.Header), pub.Body(r.Body))
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(r.Method),
+		pub.URL(url),
+		pub.CopyHeaders(r.Header),
+		pub.Body(r.Body),
+		pub.Options(_c.opts...),
+	)
 }

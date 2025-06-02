@@ -96,6 +96,7 @@ func openAPIValue(path string) any {
 
 func TestTester_StringCut(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		StringCut(t, ctx, s, sep).
@@ -112,12 +113,12 @@ func TestTester_StringCut(t *testing.T) {
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/string-cut?s=Foo+Bar&Sep=+"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.StringCutOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, "Foo", out.Before)
-		testarossa.Equal(t, "Bar", out.After)
-		testarossa.Equal(t, true, out.Found)
+		tt.Equal("Foo", out.Before)
+		tt.Equal("Bar", out.After)
+		tt.Equal(true, out.Found)
 	}
 
 	// --- OpenAPI ---
@@ -125,22 +126,23 @@ func TestTester_StringCut(t *testing.T) {
 	// Input arguments
 	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|s|type"))
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|sep|type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|s|type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|sep|type"))
 	// Output argument
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|2XX"))
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|4XX"))
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|5XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|2XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|4XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|5XX"))
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|before|type"))
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|after|type"))
-	testarossa.Equal(t, "boolean", openAPIValue(schemaRef+"properties|found|type"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|before|type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|after|type"))
+	tt.Equal("boolean", openAPIValue(schemaRef+"properties|found|type"))
 }
 
 func TestTester_PointDistance(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		PointDistance(t, ctx, p1, p2).
@@ -156,48 +158,49 @@ func TestTester_PointDistance(t *testing.T) {
 		Expect(5)
 	PointDistance(t, ctx, testerapi.XYCoord{X: 1.5, Y: 1.6}, &testerapi.XYCoord{X: 2.5, Y: 2.6}).
 		Assert(func(t *testing.T, d float64, err error) {
-			testarossa.True(t, d >= math.Sqrt(2.0)-.01 && d <= math.Sqrt(2.0)+.01)
+			tt.True(d >= math.Sqrt(2.0)-.01 && d <= math.Sqrt(2.0)+.01)
 		})
 	PointDistance(t, ctx, testerapi.XYCoord{X: 6.1, Y: 7.6}, &testerapi.XYCoord{X: 6.1, Y: 7.6}).
 		Expect(0)
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/point-distance?p1.x=1&p1.y=1&p2.x=4&p2.y=5"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.PointDistanceOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, 5.0, out.D)
+		tt.Equal(5.0, out.D)
 	}
 	_, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/point-distance?p1.x=1&p1.y=1&p2.x=4&p2.y=5"))
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/point-distance|get|"
 	// Input argument p1 refers to XYCoors with its own x and y
-	testarossa.Equal(t, "p1", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "query", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("p1", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("query", openAPIValue(basePath+"parameters|0|in"))
 	schemaRef := openAPIValue(basePath + "parameters|0|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|y|type"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|y|type"))
 	// Input argument p2 refers to XYCoors with its own x and y
-	testarossa.Equal(t, "p2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "query", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("p2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("query", openAPIValue(basePath+"parameters|1|in"))
 	schemaRef = openAPIValue(basePath + "parameters|1|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|y|type"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|y|type"))
 	// Output argument d is an int
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|d|type"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|d|type"))
 }
 
 func TestTester_EchoAnything(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		EchoAnything(t, ctx, x).
@@ -221,21 +224,21 @@ func TestTester_EchoAnything(t *testing.T) {
 	}{
 		testerapi.XYCoord{X: 1, Y: 2},
 	}))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out struct {
 			Echoed testerapi.XYCoord `json:"echoed"`
 		}
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, 1.0, out.Echoed.X)
-		testarossa.Equal(t, 2.0, out.Echoed.Y)
+		tt.Equal(1.0, out.Echoed.X)
+		tt.Equal(2.0, out.Echoed.Y)
 	}
 	res, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/echo-anything?original=hello"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out struct {
 			Echoed string `json:"echoed"`
 		}
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, "hello", out.Echoed)
+		tt.Equal("hello", out.Echoed)
 	}
 
 	// --- OpenAPI ---
@@ -243,17 +246,18 @@ func TestTester_EchoAnything(t *testing.T) {
 	// Input argument should exist but have no type
 	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.NotNil(t, openAPIValue(schemaRef+"properties|original"))
-	testarossa.Nil(t, openAPIValue(schemaRef+"properties|original|type"))
+	tt.NotNil(openAPIValue(schemaRef + "properties|original"))
+	tt.Nil(openAPIValue(schemaRef + "properties|original|type"))
 	// Output argument should exist but have no type
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.NotNil(t, openAPIValue(schemaRef+"properties|echoed"))
-	testarossa.Nil(t, openAPIValue(schemaRef+"properties|echoed|type"))
+	tt.NotNil(openAPIValue(schemaRef + "properties|echoed"))
+	tt.Nil(openAPIValue(schemaRef + "properties|echoed|type"))
 }
 
 func TestTester_ShiftPoint(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		ShiftPoint(t, ctx, p, x, y).
@@ -277,18 +281,18 @@ func TestTester_ShiftPoint(t *testing.T) {
 				Y: 6,
 			},
 		}))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.ShiftPointOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, 15.0, out.Shifted.X)
-		testarossa.Equal(t, 16.0, out.Shifted.Y)
+		tt.Equal(15.0, out.Shifted.X)
+		tt.Equal(16.0, out.Shifted.Y)
 	}
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/shift-point?x=10&y=10&p.x=5&p.y=6"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.ShiftPointOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, 15.0, out.Shifted.X)
-		testarossa.Equal(t, 16.0, out.Shifted.Y)
+		tt.Equal(15.0, out.Shifted.X)
+		tt.Equal(16.0, out.Shifted.Y)
 	}
 
 	// --- OpenAPI ---
@@ -296,25 +300,26 @@ func TestTester_ShiftPoint(t *testing.T) {
 	// Input arguments x and y are ints
 	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|y|type"))
 	// Input argument p refers to XYCoors with its own x and y
 	schemaRef = openAPIValue(schemaRef + "properties|p|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|y|type"))
 	// Output argument shifted also refers to XYCoors
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
 	schemaRef = openAPIValue(schemaRef + "properties|shifted|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(schemaRef+"properties|y|type"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(schemaRef+"properties|y|type"))
 }
 
 func TestTester_SubArrayRange(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		SubArrayRange(t, ctx, httpRequestBody, min, max).
@@ -328,35 +333,36 @@ func TestTester_SubArrayRange(t *testing.T) {
 		Expect([]int{2, 3, 4}, http.StatusAccepted) // Sum is returned because calling directly
 
 	sub, status, err := testerapi.NewClient(Svc).SubArrayRange(ctx, []int{1, 2, 3, 4, 5, 6}, 2, 4)
-	if testarossa.NoError(t, err) {
-		testarossa.SliceEqual(t, sub, []int{2, 3, 4})
-		testarossa.Equal(t, http.StatusAccepted, status)
+	if tt.NoError(err) {
+		tt.Equal(sub, []int{2, 3, 4})
+		tt.Equal(http.StatusAccepted, status)
 	}
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/sub-array-range/{max}|post|"
 	// Argument pushed to query because of httpRequestBody
-	testarossa.Equal(t, "min", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "query", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("min", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("query", openAPIValue(basePath+"parameters|0|in"))
 	// Argument indicated in path
-	testarossa.Equal(t, "max", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("max", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
 	// httpRequestBody should not be listed as an argument
-	testarossa.Len(t, openAPIValue(basePath+"parameters").([]any), 2)
+	tt.Len(openAPIValue(basePath+"parameters").([]any), 2)
 	// --- Requests --- schema is an array
 	schemaRef := openAPIValue(basePath + "requestBody|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "array", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "integer", openAPIValue(schemaRef+"items|type"))
+	tt.Equal("array", openAPIValue(schemaRef+"type"))
+	tt.Equal("integer", openAPIValue(schemaRef+"items|type"))
 	// Response schema is an array
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "array", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "integer", openAPIValue(schemaRef+"items|type"))
+	tt.Equal("array", openAPIValue(schemaRef+"type"))
+	tt.Equal("integer", openAPIValue(schemaRef+"items|type"))
 }
 
 func TestTester_WebPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		httpReq, _ := http.NewRequestWithContext(ctx, method, "?arg=val", body)
@@ -392,21 +398,22 @@ func TestTester_WebPathArguments(t *testing.T) {
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/web-path-arguments/fixed/{named}/{path2}/{suffix+}|get|"
 	// named
-	testarossa.Equal(t, "named", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|0|schema|type"))
+	tt.Equal("named", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|0|schema|type"))
 	// path2
-	testarossa.Equal(t, "path2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|1|schema|type"))
+	tt.Equal("path2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|1|schema|type"))
 	// suffix
-	testarossa.Equal(t, "suffix+", openAPIValue(basePath+"parameters|2|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|2|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|2|schema|type"))
+	tt.Equal("suffix+", openAPIValue(basePath+"parameters|2|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|2|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|2|schema|type"))
 }
 
 func TestTester_FunctionPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		FunctionPathArguments(t, ctx, named, path2, suffix).
@@ -425,60 +432,61 @@ func TestTester_FunctionPathArguments(t *testing.T) {
 
 	// --- Client ---
 	joined, err := testerapi.NewClient(Svc).FunctionPathArguments(ctx, "1", "2", "3/4")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, joined, "1 2 3/4")
+	if tt.NoError(err) {
+		tt.Equal(joined, "1 2 3/4")
 	}
 	joined, err = testerapi.NewClient(Svc).FunctionPathArguments(ctx, "", "", "")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, joined, "  ")
+	if tt.NoError(err) {
+		tt.Equal(joined, "  ")
 	}
 	joined, err = testerapi.NewClient(Svc).FunctionPathArguments(ctx, "[a&b$c]", "[d&e$f]", "[g&h/i]")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, joined, "[a&b$c] [d&e$f] [g&h/i]")
+	if tt.NoError(err) {
+		tt.Equal(joined, "[a&b$c] [d&e$f] [g&h/i]")
 	}
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/function-path-arguments/fixed/1/2/3/4"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.FunctionPathArgumentsOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, `1 2 3/4`, out.Joined)
+		tt.Equal(`1 2 3/4`, out.Joined)
 	}
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/function-path-arguments/fixed///"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.FunctionPathArgumentsOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, `  `, out.Joined)
+		tt.Equal(`  `, out.Joined)
 	}
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/function-path-arguments/fixed/[a&b$c]/[d&e$f]/[g&h/i]"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.FunctionPathArgumentsOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, `[a&b$c] [d&e$f] [g&h/i]`, out.Joined)
+		tt.Equal(`[a&b$c] [d&e$f] [g&h/i]`, out.Joined)
 	}
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/function-path-arguments/fixed/{named}/{path2}/{suffix+}|get|"
 	// named
-	testarossa.Equal(t, "named", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|0|schema|type"))
+	tt.Equal("named", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|0|schema|type"))
 	// path2
-	testarossa.Equal(t, "path2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|1|schema|type"))
+	tt.Equal("path2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|1|schema|type"))
 	// suffix
-	testarossa.Equal(t, "suffix+", openAPIValue(basePath+"parameters|2|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|2|in"))
-	testarossa.Equal(t, "string", openAPIValue(basePath+"parameters|2|schema|type"))
+	tt.Equal("suffix+", openAPIValue(basePath+"parameters|2|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|2|in"))
+	tt.Equal("string", openAPIValue(basePath+"parameters|2|schema|type"))
 	// Response
 	schemaRef := openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|joined|type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|joined|type"))
 }
 
 func TestTester_NonStringPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		NonStringPathArguments(t, ctx, named, path2, suffix).
@@ -493,36 +501,37 @@ func TestTester_NonStringPathArguments(t *testing.T) {
 
 	// --- Requests ---
 	_, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/non-string-path-arguments/fixed/1.5/true/0.75"))
-	testarossa.ErrorContains(t, err, "json")
+	tt.Contains(err, "json")
 	_, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/non-string-path-arguments/fixed/1/x/0.75"))
-	testarossa.ErrorContains(t, err, "invalid character")
+	tt.Contains(err, "invalid character")
 	_, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/non-string-path-arguments/fixed/1/true/x"))
-	testarossa.ErrorContains(t, err, "invalid character")
+	tt.Contains(err, "invalid character")
 	_, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/non-string-path-arguments/fixed/1/true/0.75"))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/non-string-path-arguments/fixed/{named}/{path2}/{suffix+}|get|"
 	// named
-	testarossa.Equal(t, "named", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
-	testarossa.Equal(t, "integer", openAPIValue(basePath+"parameters|0|schema|type"))
+	tt.Equal("named", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("integer", openAPIValue(basePath+"parameters|0|schema|type"))
 	// path2
-	testarossa.Equal(t, "path2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
-	testarossa.Equal(t, "boolean", openAPIValue(basePath+"parameters|1|schema|type"))
+	tt.Equal("path2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("boolean", openAPIValue(basePath+"parameters|1|schema|type"))
 	// suffix
-	testarossa.Equal(t, "suffix+", openAPIValue(basePath+"parameters|2|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|2|in"))
-	testarossa.Equal(t, "number", openAPIValue(basePath+"parameters|2|schema|type"))
+	tt.Equal("suffix+", openAPIValue(basePath+"parameters|2|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|2|in"))
+	tt.Equal("number", openAPIValue(basePath+"parameters|2|schema|type"))
 	// Response
 	schemaRef := openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|joined|type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|joined|type"))
 }
 
 func TestTester_UnnamedFunctionPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		UnnamedFunctionPathArguments(t, ctx, path1, path2, path3).
@@ -533,22 +542,23 @@ func TestTester_UnnamedFunctionPathArguments(t *testing.T) {
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/unnamed-function-path-arguments/x123/foo/y345/bar/z1/z2/z3"))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	body, _ := io.ReadAll(res.Body)
-	testarossa.Contains(t, string(body), "x123 y345 z1/z2/z3")
+	tt.Contains(string(body), "x123 y345 z1/z2/z3")
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/unnamed-function-path-arguments/{path1}/foo/{path2}/bar/{path3+}|get|"
-	testarossa.Equal(t, "path1", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
-	testarossa.Equal(t, "path2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
-	testarossa.Equal(t, "path3+", openAPIValue(basePath+"parameters|2|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|2|in"))
+	tt.Equal("path1", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("path2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("path3+", openAPIValue(basePath+"parameters|2|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|2|in"))
 }
 
 func TestTester_UnnamedWebPathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		httpReq, _ := http.NewRequestWithContext(ctx, method, "?arg=val", body)
@@ -560,22 +570,23 @@ func TestTester_UnnamedWebPathArguments(t *testing.T) {
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/unnamed-web-path-arguments/x123/foo/y345/bar/z1/z2/z3"))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	body, _ := io.ReadAll(res.Body)
-	testarossa.Contains(t, string(body), "x123 y345 z1/z2/z3")
+	tt.Contains(string(body), "x123 y345 z1/z2/z3")
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/unnamed-web-path-arguments/{path1}/foo/{path2}/bar/{path3+}|get|"
-	testarossa.Equal(t, "path1", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
-	testarossa.Equal(t, "path2", openAPIValue(basePath+"parameters|1|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|1|in"))
-	testarossa.Equal(t, "path3+", openAPIValue(basePath+"parameters|2|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|2|in"))
+	tt.Equal("path1", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("path2", openAPIValue(basePath+"parameters|1|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|1|in"))
+	tt.Equal("path3+", openAPIValue(basePath+"parameters|2|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|2|in"))
 }
 
 func TestTester_SumTwoIntegers(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		SumTwoIntegers(t, ctx, x, y).
@@ -592,18 +603,19 @@ func TestTester_SumTwoIntegers(t *testing.T) {
 
 	// --- Requests ---
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/sum-two-integers?x=73&y=83"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		// The status code is not returned in the body but only through the status code field of the response
-		testarossa.Equal(t, http.StatusAccepted, res.StatusCode)
+		tt.Equal(http.StatusAccepted, res.StatusCode)
 		body, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(body), "156")
-		testarossa.NotContains(t, "httpStatusCode", string(body))
-		testarossa.NotContains(t, strconv.Itoa(http.StatusAccepted), string(body))
+		tt.Contains(string(body), "156")
+		tt.NotContains("httpStatusCode", string(body))
+		tt.NotContains(strconv.Itoa(http.StatusAccepted), string(body))
 	}
 }
 
 func TestTester_Echo(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		Echo_Get(t, ctx, "").BodyContains(value)
@@ -640,23 +652,51 @@ func TestTester_Echo(t *testing.T) {
 		pub.Body("HEAVY PAYLOAD"),
 		pub.ContentType("text/plain"),
 	)
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		body, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(body), "PATCH /")
-		testarossa.Contains(t, string(body), "alpha=111&beta=222")
-		testarossa.Contains(t, string(body), "Content-Type: text/plain")
-		testarossa.Contains(t, string(body), "HEAVY PAYLOAD")
+		tt.Contains(string(body), "PATCH /")
+		tt.Contains(string(body), "alpha=111&beta=222")
+		tt.Contains(string(body), "Content-Type: text/plain")
+		tt.Contains(string(body), "HEAVY PAYLOAD")
+	}
+
+	// --- Client ---
+
+	r, err := http.NewRequestWithContext(ctx, "PATCH", "https://"+Hostname+"/echo", strings.NewReader("Lorem ipsum"))
+	r.Header.Add("Foo", "Bar")
+	tt.NoError(err)
+	res, err = testerapi.NewClient(Svc).Echo(r)
+	if tt.NoError(err) {
+		body, _ := io.ReadAll(res.Body)
+		tt.Contains(string(body), "PATCH /")
+		tt.Contains(string(body), "Lorem ipsum")
+		tt.Contains(string(body), "Foo: Bar")
+	}
+	res, err = testerapi.NewClient(Svc).WithOptions(
+		pub.Method("POST"),
+		pub.Body("Dolor sit amet"),
+		pub.Header("Foo", "Baz"),
+	).Echo(r)
+	if tt.NoError(err) {
+		body, _ := io.ReadAll(res.Body)
+		tt.NotContains(string(body), "PATCH /")
+		tt.NotContains(string(body), "Lorem ipsum")
+		tt.NotContains(string(body), "Foo: Bar")
+		tt.Contains(string(body), "POST /")
+		tt.Contains(string(body), "Dolor sit amet")
+		tt.Contains(string(body), "Foo: Baz")
 	}
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/echo|get|"
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|2XX"))
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|4XX"))
-	testarossa.NotNil(t, openAPIValue(basePath+"responses|5XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|2XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|4XX"))
+	tt.NotNil(openAPIValue(basePath + "responses|5XX"))
 }
 
 func TestTester_MultiValueHeaders(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		MultiValueHeaders_Get(t, ctx, "").BodyContains(value)
@@ -672,16 +712,17 @@ func TestTester_MultiValueHeaders(t *testing.T) {
 	httpReq.Header.Add("Multi-In", "In1")
 	httpReq.Header.Add("Multi-In", "In2")
 	res, _ := MultiValueHeaders(t, httpReq).NoError().Get()
-	testarossa.Len(t, res.Header["Multi-Out"], 2)
+	tt.Len(res.Header["Multi-Out"], 2)
 	httpReq, _ = http.NewRequestWithContext(ctx, "POST", "", strings.NewReader("Payload"))
 	httpReq.Header.Add("Multi-In", "In1")
 	httpReq.Header.Add("Multi-In", "In2")
 	res, _ = MultiValueHeaders(t, httpReq).NoError().Get()
-	testarossa.Len(t, res.Header["Multi-Out"], 2)
+	tt.Len(res.Header["Multi-Out"], 2)
 }
 
 func TestTester_PathArgumentsPriority(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		PathArgumentsPriority(t, ctx, foo).
@@ -699,45 +740,46 @@ func TestTester_PathArgumentsPriority(t *testing.T) {
 	// --- Requests ---
 	// Argument in the path should take priority over that in the query
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/path-arguments-priority/BAR?foo=XYZ"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "BAR")
-		testarossa.NotContains(t, string(b), "XYZ")
+		tt.Contains(string(b), "BAR")
+		tt.NotContains(string(b), "XYZ")
 	}
 
 	// If argument is not provided in the path, take from the query
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/path-arguments-priority/{foo}?foo=BAR"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "BAR")
+		tt.Contains(string(b), "BAR")
 	}
 
 	// Argument in the path should take priority over that in the body
 	res, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/path-arguments-priority/BAR"), pub.Body(`{"foo":"XYZ"}`))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "BAR")
-		testarossa.NotContains(t, string(b), "XYZ")
+		tt.Contains(string(b), "BAR")
+		tt.NotContains(string(b), "XYZ")
 	}
 
 	// If argument is not provided in the path, take from the body
 	res, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/path-arguments-priority/{foo}"), pub.Body(`{"foo":"BAR"}`))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "BAR")
+		tt.Contains(string(b), "BAR")
 	}
 
 	// If argument is not provided in the path, take from the query over the body
 	res, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/path-arguments-priority/{foo}?foo=BAR"), pub.Body(`{"foo":"XYZ"}`))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "BAR")
-		testarossa.NotContains(t, string(b), "XYZ")
+		tt.Contains(string(b), "BAR")
+		tt.NotContains(string(b), "XYZ")
 	}
 }
 
 func TestTester_DirectoryServer(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		DirectoryServer(t, ctx, "").BodyContains(value)
@@ -765,45 +807,46 @@ func TestTester_DirectoryServer(t *testing.T) {
 
 	// --- Client ---
 	res, err := testerapi.NewClient(Svc).DirectoryServer(ctx, "1.txt")
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "111")
+		tt.Contains(string(b), "111")
 	}
 	res, err = testerapi.NewClient(Svc).DirectoryServer(ctx, "sub/2.txt")
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "222")
+		tt.Contains(string(b), "222")
 	}
 	_, err = testerapi.NewClient(Svc).DirectoryServer(ctx, "../3.txt")
-	testarossa.Error(t, err)
+	tt.Error(err)
 	httpReq, _ = http.NewRequestWithContext(ctx, "POST", "1.txt", strings.NewReader("Payload"))
 	_, err = testerapi.NewClient(Svc).DirectoryServer_Do(httpReq)
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// --- Requests ---
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/directory-server/1.txt"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "111")
+		tt.Contains(string(b), "111")
 	}
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/directory-server/sub/2.txt"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Contains(t, string(b), "222")
+		tt.Contains(string(b), "222")
 	}
 	_, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/directory-server/../3.txt"))
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = Svc.Request(ctx, pub.POST("https://"+Hostname+"/directory-server/1.txt"))
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/directory-server/{filename+}|get|"
-	testarossa.Equal(t, "filename+", openAPIValue(basePath+"parameters|0|name"))
-	testarossa.Equal(t, "path", openAPIValue(basePath+"parameters|0|in"))
+	tt.Equal("filename+", openAPIValue(basePath+"parameters|0|name"))
+	tt.Equal("path", openAPIValue(basePath+"parameters|0|in"))
 }
 
 func TestTester_LinesIntersection(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		LinesIntersection(t, ctx, l1, l2).
@@ -850,8 +893,8 @@ func TestTester_LinesIntersection(t *testing.T) {
 			Start: testerapi.XYCoord{X: 0, Y: 0},
 			End:   testerapi.XYCoord{X: 10, Y: 10},
 		})
-	if testarossa.NoError(t, err) {
-		testarossa.True(t, b)
+	if tt.NoError(err) {
+		tt.True(b)
 	}
 	b, err = testerapi.NewClient(Svc).LinesIntersection(ctx,
 		testerapi.XYLine{
@@ -861,8 +904,8 @@ func TestTester_LinesIntersection(t *testing.T) {
 			Start: testerapi.XYCoord{X: 1, Y: 1},
 			End:   testerapi.XYCoord{X: 10, Y: 10},
 		})
-	if testarossa.NoError(t, err) {
-		testarossa.False(t, b)
+	if tt.NoError(err) {
+		tt.False(b)
 	}
 
 	// --- Requests ---
@@ -878,10 +921,10 @@ func TestTester_LinesIntersection(t *testing.T) {
 				End:   testerapi.XYCoord{X: 10, Y: 10},
 			},
 		}))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.LinesIntersectionOut
 		json.NewDecoder(res.Body).Decode(&out)
-		testarossa.Equal(t, out.B, true)
+		tt.Equal(out.B, true)
 	}
 
 	// --- OpenAPI ---
@@ -893,32 +936,33 @@ func TestTester_LinesIntersection(t *testing.T) {
 	l1SchemaRef = strings.ReplaceAll(l1SchemaRef, "/", "|")[2:] + "|"
 	startSchemaRef := openAPIValue(l1SchemaRef + "properties|start|$ref").(string)
 	startSchemaRef = strings.ReplaceAll(startSchemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(startSchemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(startSchemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(startSchemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(startSchemaRef+"properties|y|type"))
 	endSchemaRef := openAPIValue(l1SchemaRef + "properties|start|$ref").(string)
 	endSchemaRef = strings.ReplaceAll(endSchemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(endSchemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(endSchemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(endSchemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(endSchemaRef+"properties|y|type"))
 
 	l2SchemaRef := openAPIValue(schemaRef + "properties|l1|$ref").(string)
 	l2SchemaRef = strings.ReplaceAll(l2SchemaRef, "/", "|")[2:] + "|"
 	startSchemaRef = openAPIValue(l2SchemaRef + "properties|start|$ref").(string)
 	startSchemaRef = strings.ReplaceAll(startSchemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(startSchemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(startSchemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(startSchemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(startSchemaRef+"properties|y|type"))
 	endSchemaRef = openAPIValue(l2SchemaRef + "properties|start|$ref").(string)
 	endSchemaRef = strings.ReplaceAll(endSchemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "number", openAPIValue(endSchemaRef+"properties|x|type"))
-	testarossa.Equal(t, "number", openAPIValue(endSchemaRef+"properties|y|type"))
+	tt.Equal("number", openAPIValue(endSchemaRef+"properties|x|type"))
+	tt.Equal("number", openAPIValue(endSchemaRef+"properties|y|type"))
 
 	// Output argument is a boolean
 	schemaRef = openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "boolean", openAPIValue(schemaRef+"properties|b|type"))
+	tt.Equal("boolean", openAPIValue(schemaRef+"properties|b|type"))
 }
 
 func TestTester_OnDiscoveredSink(t *testing.T) {
 	t.Parallel()
+
 	/*
 		ctx := Context()
 		OnDiscoveredSink(t, ctx, p, n).
@@ -936,6 +980,8 @@ func TestTester_OnDiscoveredSink(t *testing.T) {
 
 func TestTester_OnDiscovered(t *testing.T) {
 	// No parallel: event sinks might clash across tests
+	tt := testarossa.For(t)
+
 	/*
 		ctx := Context()
 		tc := OnDiscovered(t).
@@ -951,9 +997,9 @@ func TestTester_OnDiscovered(t *testing.T) {
 		Expect(testerapi.XYCoord{X: 5, Y: -6}, 3).
 		Return(testerapi.XYCoord{X: 5, Y: -6}, 4, nil)
 	q, m, err := (<-testerapi.NewMulticastTrigger(Svc).OnDiscovered(ctx, testerapi.XYCoord{X: 5, Y: -6}, 3)).Get()
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, testerapi.XYCoord{X: 5, Y: -6}, q)
-		testarossa.Equal(t, 4, m)
+	if tt.NoError(err) {
+		tt.Equal(testerapi.XYCoord{X: 5, Y: -6}, q)
+		tt.Equal(4, m)
 	}
 	tc.Wait()
 
@@ -962,9 +1008,9 @@ func TestTester_OnDiscovered(t *testing.T) {
 		Return(testerapi.XYCoord{X: -5, Y: 6}, -2, nil)
 	go func() { // Async
 		q, m, err := (<-testerapi.NewMulticastTrigger(Svc).OnDiscovered(ctx, testerapi.XYCoord{X: 5, Y: -6}, -3)).Get()
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, testerapi.XYCoord{X: -5, Y: 6}, q)
-			testarossa.Equal(t, -2, m)
+		if tt.NoError(err) {
+			tt.Equal(testerapi.XYCoord{X: -5, Y: 6}, q)
+			tt.Equal(-2, m)
 		}
 	}()
 	tc.Wait()
@@ -976,23 +1022,24 @@ func TestTester_OnDiscovered(t *testing.T) {
 		P: testerapi.XYCoord{X: 5, Y: -6},
 		N: -3,
 	}))
-	testarossa.Nil(t, res) // Wrong HTTP method
+	tt.Nil(res) // Wrong HTTP method
 	res = <-Svc.Publish(ctx, pub.POST("https://"+Hostname+":417/on-discovered"), pub.Body(&testerapi.OnDiscoveredIn{
 		P: testerapi.XYCoord{X: 5, Y: -6},
 		N: -3,
 	}))
 	httpRes, err := res.Get()
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.OnDiscoveredOut
 		json.NewDecoder(httpRes.Body).Decode(&out)
-		testarossa.Equal(t, testerapi.XYCoord{X: -5, Y: 6}, out.Q)
-		testarossa.Equal(t, -2, out.M)
+		tt.Equal(testerapi.XYCoord{X: -5, Y: 6}, out.Q)
+		tt.Equal(-2, out.M)
 	}
 	tc.Wait()
 }
 
 func TestTester_Hello(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		Hello_Get(t, ctx, "").BodyContains(value)
@@ -1034,25 +1081,26 @@ func TestTester_Hello(t *testing.T) {
 	// --- Request ---
 	ctx = Context()
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/hello"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Equal(t, "Hello", string(b))
+		tt.Equal("Hello", string(b))
 	}
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/hello"), pub.Header("Accept-Language", "it"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Equal(t, "Salve", string(b))
+		tt.Equal("Salve", string(b))
 	}
 	frame.Of(ctx).SetLanguages("it")
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/hello"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		b, _ := io.ReadAll(res.Body)
-		testarossa.Equal(t, "Salve", string(b))
+		tt.Equal("Salve", string(b))
 	}
 }
 
 func TestTester_WhatTimeIsIt(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 	/*
 		ctx := Context()
 		WhatTimeIsIt(t, ctx).
@@ -1064,7 +1112,7 @@ func TestTester_WhatTimeIsIt(t *testing.T) {
 
 	// --- Test cases ---
 	withinRange := func(t *testing.T, tm, left, right time.Time) {
-		testarossa.True(t, !tm.Before(left) && !tm.After(right))
+		tt.True(!tm.Before(left) && !tm.After(right))
 	}
 	tm, _ := WhatTimeIsIt(t, ctx).NoError().Get()
 	withinRange(t, tm, realNow.Add(-time.Second), realNow.Add(time.Second))
@@ -1080,26 +1128,26 @@ func TestTester_WhatTimeIsIt(t *testing.T) {
 	// --- Client ---
 	ctx = Context()
 	tm, err := testerapi.NewClient(Svc).WhatTimeIsIt(ctx)
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		withinRange(t, tm, realNow.Add(-time.Second), realNow.Add(time.Second))
 	}
 	frame.Of(ctx).SetClockShift(time.Hour)
 	tm, err = testerapi.NewClient(Svc).WhatTimeIsIt(ctx)
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		withinRange(t, tm, realNow.Add(time.Hour-time.Second), realNow.Add(time.Hour+time.Second))
 	}
 
 	// --- Request ---
 	ctx = Context()
 	res, err := Svc.Request(ctx, pub.GET("https://"+Hostname+"/what-time-is-it"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.WhatTimeIsItOut
 		json.NewDecoder(res.Body).Decode(&out)
 		withinRange(t, out.T, realNow.Add(-time.Second), realNow.Add(time.Second))
 	}
 	frame.Of(ctx).SetClockShift(time.Hour)
 	res, err = Svc.Request(ctx, pub.GET("https://"+Hostname+"/what-time-is-it"))
-	if testarossa.NoError(t, err) {
+	if tt.NoError(err) {
 		var out testerapi.WhatTimeIsItOut
 		json.NewDecoder(res.Body).Decode(&out)
 		withinRange(t, tm, realNow.Add(time.Hour-time.Second), realNow.Add(time.Hour+time.Second))
@@ -1110,46 +1158,47 @@ func TestTester_WhatTimeIsIt(t *testing.T) {
 	// Output argument
 	schemaRef := openAPIValue(basePath + "responses|2XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	testarossa.Equal(t, "object", openAPIValue(schemaRef+"type"))
-	testarossa.Equal(t, "string", openAPIValue(schemaRef+"properties|t|type"))
-	testarossa.Equal(t, "date-time", openAPIValue(schemaRef+"properties|t|format"))
+	tt.Equal("object", openAPIValue(schemaRef+"type"))
+	tt.Equal("string", openAPIValue(schemaRef+"properties|t|type"))
+	tt.Equal("date-time", openAPIValue(schemaRef+"properties|t|format"))
 }
 
 func TestTester_AuthzRequired(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	ctx := Context()
 
 	// Without auth token
 	err := testerapi.NewClient(Svc).AuthzRequired(ctx)
-	if testarossa.Error(t, err) {
-		testarossa.Equal(t, http.StatusUnauthorized, errors.StatusCode(err))
+	if tt.Error(err) {
+		tt.Equal(http.StatusUnauthorized, errors.StatusCode(err))
 	}
 
 	// With insufficient role
 	frame.Of(ctx).SetActor(jwt.MapClaims{"roles": "d"})
 	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
-	if testarossa.Error(t, err) {
-		testarossa.Equal(t, http.StatusForbidden, errors.StatusCode(err))
+	if tt.Error(err) {
+		tt.Equal(http.StatusForbidden, errors.StatusCode(err))
 	}
 
 	// With sufficient roles
 	frame.Of(ctx).SetActor(jwt.MapClaims{"roles": "ac"})
 	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	frame.Of(ctx).SetActor(jwt.MapClaims{"scopes": "r"})
 	err = testerapi.NewClient(Svc).AuthzRequired(ctx)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	// --- OpenAPI ---
 	basePath := "paths|/" + Hostname + ":443/authz-required|post|"
-	testarossa.Equal(t, []any{}, openAPIValue(basePath+"security|0|http_bearer_jwt"))
-	testarossa.Contains(t, openAPIValue(basePath+"responses|403|description").(string), `roles=~"(a|b|c)" || scopes=~"r"`)
+	tt.Equal([]any{}, openAPIValue(basePath+"security|0|http_bearer_jwt"))
+	tt.Contains(openAPIValue(basePath+"responses|403|description").(string), `roles=~"(a|b|c)" || scopes=~"r"`)
 	securitySchemePath := "components|securitySchemes|http_bearer_jwt|"
-	testarossa.Equal(t, "http", openAPIValue(securitySchemePath+"type"))
-	testarossa.Equal(t, "bearer", openAPIValue(securitySchemePath+"scheme"))
-	testarossa.Equal(t, "JWT", openAPIValue(securitySchemePath+"bearerFormat"))
+	tt.Equal("http", openAPIValue(securitySchemePath+"type"))
+	tt.Equal("bearer", openAPIValue(securitySchemePath+"scheme"))
+	tt.Equal("JWT", openAPIValue(securitySchemePath+"bearerFormat"))
 }
 
 func TestTester_OnceAMinute(t *testing.T) {

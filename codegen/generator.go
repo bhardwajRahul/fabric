@@ -18,6 +18,7 @@ package main
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,6 +37,7 @@ type Generator struct {
 	ProjectDir  string
 	ModulePath  string
 	PackagePath string
+	PackageDir  string
 	Printer     IndentPrinter
 	Specs       *spec.Service
 }
@@ -116,8 +118,9 @@ func (gen *Generator) Run() error {
 			return errors.Trace(err)
 		}
 		gen.Specs = &spec.Service{
-			Module:  gen.ModulePath,
-			Package: gen.PackagePath, // Must be set before parsing
+			ModulePath:  gen.ModulePath,
+			PackagePath: gen.PackagePath, // Must be set before parsing
+			PackageDir:  gen.PackageDir,
 		}
 		err = yaml.Unmarshal(b, gen.Specs)
 		if err != nil {
@@ -211,9 +214,46 @@ func (gen *Generator) identifyPackage() error {
 	}
 	gen.ModulePath = string(subMatches[1])
 
+	// Identify the package name from one of the .go files
+	packageNames, err := gen.scanFiles(
+		gen.WorkDir,
+		func(file fs.DirEntry) bool {
+			return file.Name() == "doc.go" || file.Name() == "service.go"
+		},
+		`package ([A-Za-z][a-zA-Z0-9_]*)[\n\r]`, // package name
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(packageNames) == 0 {
+		packageNames, err = gen.scanFiles(
+			gen.WorkDir,
+			func(file fs.DirEntry) bool {
+				return strings.HasSuffix(file.Name(), ".go") &&
+					!strings.HasSuffix(file.Name(), "_test.go") &&
+					!strings.HasSuffix(file.Name(), "-gen.go")
+			},
+			`package ([A-Za-z][a-zA-Z0-9_]*)[\n\r]`, // package name
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	packageName := ""
+	for k := range packageNames {
+		if !strings.HasSuffix(k, "_test") {
+			packageName = k
+			break
+		}
+	}
+	if packageName == "" {
+		packageName = filepath.Base(gen.WorkDir)
+	}
+
 	subPath := strings.TrimPrefix(gen.WorkDir, gen.ProjectDir)
-	pkg := strings.ReplaceAll(filepath.Join(gen.ModulePath, subPath), "\\", "/")
-	gen.PackagePath = pkg
+	gen.PackageDir = filepath.Join(gen.ModulePath, subPath)
+	subPath = filepath.Dir(subPath) + "/" + packageName
+	gen.PackagePath = filepath.Join(gen.ModulePath, subPath)
 	return nil
 }
 

@@ -26,6 +26,7 @@ import (
 
 func TestEnv_FileOverridesOS(t *testing.T) {
 	// No parallel
+	tt := testarossa.For(t)
 
 	os.Chdir("testdata")
 	defer os.Chdir("..")
@@ -33,29 +34,29 @@ func TestEnv_FileOverridesOS(t *testing.T) {
 	// File overrides OS
 	os.Setenv("X5981245X", "InOS")
 	defer os.Unsetenv("X5981245X")
-	testarossa.Equal(t, "InOS", os.Getenv("X5981245X"))
-	testarossa.Equal(t, "InFile", Get("X5981245X"))
+	tt.Equal("InOS", os.Getenv("X5981245X"))
+	tt.Equal("InFile", Get("X5981245X"))
 
 	// Case sensitive keys
-	testarossa.Equal(t, "infile", Get("x5981245x"))
-	testarossa.NotEqual(t, Get("X5981245X"), os.Getenv("x5981245x"))
+	tt.Equal("infile", Get("x5981245x"))
+	tt.NotEqual(Get("X5981245X"), os.Getenv("x5981245x"))
 
 	// Push/pop
 	Push("X5981245X", "Pushed")
-	testarossa.Equal(t, "Pushed", Get("X5981245X"))
+	tt.Equal("Pushed", Get("X5981245X"))
 	Pop("X5981245X")
-	testarossa.Equal(t, "InFile", Get("X5981245X"))
+	tt.Equal("InFile", Get("X5981245X"))
 	err := errors.CatchPanic(func() error {
 		Pop("X5981245X")
 		return nil
 	})
-	testarossa.Error(t, err)
+	tt.Error(err)
 
 	// Lookup
 	_, ok := Lookup("X5981245X")
-	testarossa.True(t, ok)
+	tt.True(ok)
 	_, ok = Lookup("x5981245x")
-	testarossa.True(t, ok)
+	tt.True(ok)
 	_, ok = Lookup("Y5981245Y")
-	testarossa.False(t, ok)
+	tt.False(ok)
 }

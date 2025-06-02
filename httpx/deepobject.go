@@ -18,7 +18,6 @@ package httpx
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -75,7 +74,7 @@ func encodeOne(prefix string, obj any, values url.Values) {
 		if obj == nil {
 			val = "null"
 		} else {
-			val = fmt.Sprintf("%v", fieldObj)
+			val = utils.AnyToString(fieldObj)
 		}
 	}
 	values.Set(prefix, val)

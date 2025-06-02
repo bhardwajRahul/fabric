@@ -20,16 +20,16 @@ import "strings"
 
 // Type is a complex type used in a function.
 type Type struct {
-	Name    string
-	Exists  bool
-	Package string
+	Name        string
+	Exists      bool
+	PackagePath string
 }
 
-// PackageSuffix returns only the last portion of the full package path.
-func (t *Type) PackageSuffix() string {
-	p := strings.LastIndex(t.Package, "/")
+// PackagePathSuffix returns only the last portion of the full package path.
+func (t *Type) PackagePathSuffix() string {
+	p := strings.LastIndex(t.PackagePath, "/")
 	if p < 0 {
-		return t.Package
+		return t.PackagePath
 	}
-	return t.Package[p+1:]
+	return t.PackagePath[p+1:]
 }

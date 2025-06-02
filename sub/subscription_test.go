@@ -24,6 +24,7 @@ import (
 
 func TestSub_NewSub(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	type testCase struct {
 		spec         string
@@ -49,15 +50,16 @@ func TestSub_NewSub(t *testing.T) {
 
 	for _, tc := range testCases {
 		s, err := NewSub("GET", "www.example.com", tc.spec, nil)
-		testarossa.NoError(t, err)
-		testarossa.Equal(t, tc.expectedHost, s.Host)
-		testarossa.Equal(t, tc.expectedPort, s.Port)
-		testarossa.Equal(t, tc.expectedPath, s.Path)
+		tt.NoError(err)
+		tt.Equal(tc.expectedHost, s.Host)
+		tt.Equal(tc.expectedPort, s.Port)
+		tt.Equal(tc.expectedPath, s.Path)
 	}
 }
 
 func TestSub_InvalidPort(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	badSpecs := []string{
 		":x/path",
@@ -65,12 +67,13 @@ func TestSub_InvalidPort(t *testing.T) {
 	}
 	for _, s := range badSpecs {
 		_, err := NewSub("GET", "www.example.com", s, nil)
-		testarossa.Error(t, err)
+		tt.Error(err)
 	}
 }
 
 func TestSub_Method(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	badSpecs := []string{
 		"123",
@@ -82,7 +85,7 @@ func TestSub_Method(t *testing.T) {
 	}
 	for _, s := range badSpecs {
 		_, err := NewSub(s, "www.example.com", "/", nil)
-		testarossa.Error(t, err)
+		tt.Error(err)
 	}
 
 	okSpecs := []string{
@@ -93,87 +96,90 @@ func TestSub_Method(t *testing.T) {
 	}
 	for i := 0; i < len(okSpecs); i += 2 {
 		sub, err := NewSub(okSpecs[i], "www.example.com", "/", nil)
-		if testarossa.NoError(t, err) {
-			testarossa.Equal(t, okSpecs[i+1], sub.Method)
+		if tt.NoError(err) {
+			tt.Equal(okSpecs[i+1], sub.Method)
 		}
 	}
 }
 
 func TestSub_Apply(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	s, err := NewSub("GET", "www.example.com", "/path", nil)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "www.example.com", s.Queue)
-	testarossa.Equal(t, "GET", s.Method)
+	tt.NoError(err)
+	tt.Equal("www.example.com", s.Queue)
+	tt.Equal("GET", s.Method)
 
 	s.Apply(NoQueue())
-	testarossa.Equal(t, "", s.Queue)
+	tt.Equal("", s.Queue)
 	s.Apply(Queue("foo"))
-	testarossa.Equal(t, "foo", s.Queue)
+	tt.Equal("foo", s.Queue)
 	s.Apply(DefaultQueue())
-	testarossa.Equal(t, "www.example.com", s.Queue)
+	tt.Equal("www.example.com", s.Queue)
 	s.Apply(Pervasive())
-	testarossa.Equal(t, "", s.Queue)
+	tt.Equal("", s.Queue)
 	s.Apply(LoadBalanced())
-	testarossa.Equal(t, "www.example.com", s.Queue)
+	tt.Equal("www.example.com", s.Queue)
 
 	err = s.Apply(Queue("$$$"))
-	testarossa.Error(t, err)
+	tt.Error(err)
 }
 
 func TestSub_Canonical(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	s, err := NewSub("GET", "www.example.com", ":567/path", nil)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "www.example.com:567/path", s.Canonical())
+	tt.NoError(err)
+	tt.Equal("www.example.com:567/path", s.Canonical())
 
 	s, err = NewSub("GET", "www.example.com", "/path", nil)
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "www.example.com:443/path", s.Canonical()) // default port 443
+	tt.NoError(err)
+	tt.Equal("www.example.com:443/path", s.Canonical()) // default port 443
 
 	s, err = NewSub("GET", "www.example.com", "http://zzz.example.com/path", nil) // http
-	testarossa.NoError(t, err)
-	testarossa.Equal(t, "zzz.example.com:80/path", s.Canonical()) // default port 80 for http
+	tt.NoError(err)
+	tt.Equal("zzz.example.com:80/path", s.Canonical()) // default port 80 for http
 }
 
 func TestSub_PathArguments(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	_, err := NewSub("GET", "www.example.com", ":567/path/{named}/{suffix+}", nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{}/{+}", nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{}", nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{+}", nil)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{x}x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/x{+}", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/}/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/x}/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{x/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/}{/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{{}/x", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@}", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@+}", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{+}/{}", nil)
-	testarossa.Error(t, err)
+	tt.Error(err)
 }

@@ -24,6 +24,7 @@ import (
 
 func TestRepository_LoadYAML(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	y := `
 # Comments should be ok
@@ -49,7 +50,7 @@ all:
 
 	var r repository
 	err := r.LoadYAML([]byte(y))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	cases := map[string]string{
 		"aaa":       "111",
@@ -61,8 +62,8 @@ all:
 	}
 	for name, expected := range cases {
 		value, ok := r.Value("www.example.com", name)
-		testarossa.True(t, ok)
-		testarossa.Equal(t, expected, value)
+		tt.True(ok)
+		tt.Equal(expected, value)
 	}
 
 	cases = map[string]string{
@@ -74,18 +75,19 @@ all:
 	}
 	for name, expected := range cases {
 		value, ok := r.Value("EXAMPLE.com", name)
-		testarossa.True(t, ok)
-		testarossa.Equal(t, expected, value)
+		tt.True(ok)
+		tt.Equal(expected, value)
 	}
 
 	_, ok := r.Value("www.EXAMPLE.com", "foo")
-	testarossa.False(t, ok)
+	tt.False(ok)
 	_, ok = r.Value("example.com", "multiLINE")
-	testarossa.False(t, ok)
+	tt.False(ok)
 }
 
 func TestRepository_Equals(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	var r repository
 	err := r.LoadYAML([]byte(`
@@ -99,7 +101,7 @@ com:
 all:
   ddd: 444
 `))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	var rr repository
 	err = rr.LoadYAML([]byte(`
@@ -114,10 +116,10 @@ all:
 www.example.com:
   aaa: 111
 `))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
-	testarossa.True(t, r.Equals(&rr))
-	testarossa.True(t, rr.Equals(&r))
+	tt.True(r.Equals(&rr))
+	tt.True(rr.Equals(&r))
 
 	var rrr repository
 	err = rrr.LoadYAML([]byte(`
@@ -131,8 +133,8 @@ all:
 www.example.com:
   aaa: 111
 `))
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
-	testarossa.False(t, r.Equals(&rrr))
-	testarossa.False(t, rrr.Equals(&r))
+	tt.False(r.Equals(&rrr))
+	tt.False(rrr.Equals(&r))
 }

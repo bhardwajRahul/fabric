@@ -22,8 +22,8 @@ import (
 	"github.com/microbus-io/fabric/connector"
 )
 
-// Group returns a middleware that chains the nested middleware together and executes them sequentially in order.
-// It can be used in conjunction with the [OnRoute] middleware to apply a group of middleware to a specific route.
+// Group returns a middleware that nested middleware together and is often used in conjunction
+// with the `OnRoute` middleware to apply a group of middleware to a specific route.
 func Group(nested ...Middleware) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		handler := next

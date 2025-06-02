@@ -74,6 +74,7 @@ func (_c *Multicast
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 
 	_res := make(chan *{{ .Name }}Response, cap(_ch))
@@ -140,6 +141,7 @@ func (_c *Client) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ 
 		pub.URL(_url),
 		pub.Query(_query),
 		pub.Body(_body),
+		pub.Options(_c.opts...),
 	)
 	if _err != nil {
 		err = _err // No trace

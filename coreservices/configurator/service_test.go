@@ -31,18 +31,19 @@ import (
 
 func TestConfigurator_ManyMicroservices(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	plane := rand.AlphaNum64(12)
 
 	configSvc := NewService()
-	configSvc.SetDeployment(connector.LOCAL)
+	configSvc.SetDeployment(connector.LAB)
 	configSvc.SetPlane(plane)
 	services := []service.Service{}
 	n := 16
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for range n {
 		con := connector.New("many.microservices.configurator")
-		con.SetDeployment(connector.LOCAL)
+		con.SetDeployment(connector.LAB)
 		con.SetPlane(plane)
 		con.DefineConfig("foo", cfg.DefaultValue("bar"))
 		con.DefineConfig("moo")
@@ -60,12 +61,12 @@ func TestConfigurator_ManyMicroservices(t *testing.T) {
 	app.Add(configSvc)
 	app.Add(services...)
 	err := app.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer app.Shutdown()
 
 	for i := 1; i < len(services); i++ {
-		testarossa.Equal(t, "bar", services[i].(*connector.Connector).Config("foo"))
-		testarossa.Equal(t, "", services[i].(*connector.Connector).Config("moo"))
+		tt.Equal("bar", services[i].(*connector.Connector).Config("foo"))
+		tt.Equal("", services[i].(*connector.Connector).Config("moo"))
 	}
 
 	// Load new values
@@ -74,16 +75,16 @@ many.microservices.configurator:
   foo: baz
   moo: cow
 `)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	wg.Add(n)
 	err = configSvc.Refresh(configSvc.Lifetime())
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	wg.Wait()
 
-	for i := 0; i < len(services); i++ {
-		testarossa.Equal(t, "baz", services[i].(*connector.Connector).Config("foo"))
-		testarossa.Equal(t, "cow", services[i].(*connector.Connector).Config("moo"))
+	for i := range services {
+		tt.Equal("baz", services[i].(*connector.Connector).Config("foo"))
+		tt.Equal("cow", services[i].(*connector.Connector).Config("moo"))
 	}
 
 	// Restore foo to use the default value
@@ -92,48 +93,49 @@ many.microservices.configurator:
   foo:
   moo: cow
 `)
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	wg.Add(n)
 	err = configSvc.Refresh(configSvc.Lifetime())
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	wg.Wait()
 
-	for i := 0; i < len(services); i++ {
-		testarossa.Equal(t, "bar", services[i].(*connector.Connector).Config("foo"))
-		testarossa.Equal(t, "cow", services[i].(*connector.Connector).Config("moo"))
+	for i := range services {
+		tt.Equal("bar", services[i].(*connector.Connector).Config("foo"))
+		tt.Equal("cow", services[i].(*connector.Connector).Config("moo"))
 	}
 }
 
 func TestConfigurator_Callback(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	plane := rand.AlphaNum64(12)
 
 	configSvc := NewService()
-	configSvc.SetDeployment(connector.LOCAL)
+	configSvc.SetDeployment(connector.LAB)
 	configSvc.SetPlane(plane)
 
 	con := connector.New("callback.configurator")
-	con.SetDeployment(connector.LOCAL)
+	con.SetDeployment(connector.LAB)
 	con.SetPlane(plane)
 	con.DefineConfig("foo", cfg.DefaultValue("bar"))
 	var wg sync.WaitGroup
 	err := con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
-		testarossa.True(t, changed("foo"))
+		tt.True(changed("foo"))
 		wg.Done()
 		return nil
 	})
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 
 	err = configSvc.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer configSvc.Shutdown()
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
-	testarossa.Equal(t, "bar", con.Config("foo"))
+	tt.Equal("bar", con.Config("foo"))
 
 	configSvc.loadYAML(`
 callback.configurator:
@@ -143,64 +145,65 @@ callback.configurator:
 	// Force a refresh
 	wg.Add(1)
 	err = configSvc.Refresh(configSvc.Lifetime())
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	wg.Wait()
 
-	testarossa.Equal(t, "baz", con.Config("foo"))
+	tt.Equal("baz", con.Config("foo"))
 }
 
 func TestConfigurator_PeerSync(t *testing.T) {
 	t.Parallel()
+	tt := testarossa.For(t)
 
 	plane := rand.AlphaNum64(12)
 
 	// Start the first peer
 	config1 := NewService()
-	config1.SetDeployment(connector.LOCAL)
+	config1.SetDeployment(connector.LAB)
 	config1.SetPlane(plane)
 	config1.loadYAML(`
 www.example.com:
   Foo: Bar
 `)
 	err := config1.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer config1.Shutdown()
 
 	val, ok := config1.repo.Value("www.example.com", "Foo")
-	testarossa.True(t, ok)
-	testarossa.Equal(t, "Bar", val)
+	tt.True(ok)
+	tt.Equal("Bar", val)
 
 	// Start the microservice
 	con := connector.New("www.example.com")
-	con.SetDeployment(connector.LOCAL)
+	con.SetDeployment(connector.LAB)
 	con.SetPlane(plane)
 	con.DefineConfig("Foo")
 
 	err = con.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer con.Shutdown()
 
-	testarossa.Equal(t, "Bar", con.Config("Foo"))
+	tt.Equal("Bar", con.Config("Foo"))
 
 	// Start the second peer
 	config2 := NewService()
-	config2.SetDeployment(connector.LOCAL)
+	config2.SetDeployment(connector.LAB)
 	config2.SetPlane(plane)
 	config2.loadYAML(`
 www.example.com:
   Foo: Baz
 `)
 	err = config2.Startup()
-	testarossa.NoError(t, err)
+	tt.NoError(err)
 	defer config2.Shutdown()
 
 	val, ok = config2.repo.Value("www.example.com", "Foo")
-	testarossa.True(t, ok)
-	testarossa.Equal(t, "Baz", val)
+	tt.True(ok)
+	tt.Equal("Baz", val)
 
 	val, ok = config1.repo.Value("www.example.com", "Foo")
-	testarossa.True(t, ok)
-	testarossa.Equal(t, "Baz", val, "First peer should have been updated")
+	tt.True(ok)
+	tt.Equal("Baz", val, "First peer should have been updated")
 
-	testarossa.Equal(t, "Baz", con.Config("Foo"), "Microservice should have been updated")
+	tt.Equal("Baz", con.Config("Foo"), "Microservice should have been updated")
 }

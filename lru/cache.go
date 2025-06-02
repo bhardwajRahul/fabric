@@ -356,37 +356,3 @@ func (c *Cache[K, V]) ToMap() map[K]V {
 	c.lock.Unlock()
 	return m
 }
-
-// cohesion is used for testing purposes only.
-func (c *Cache[K, V]) cohesion() bool {
-	a := []K{}
-	count := 0
-	for nd := c.newest; nd != nil; nd = nd.older {
-		a = append(a, nd.key)
-		if c.lookup[nd.key] != nd {
-			return false
-		}
-		count++
-		if count > 1000000 {
-			return false
-		}
-	}
-	if len(a) != len(c.lookup) {
-		return false
-	}
-	count = 0
-	for nd := c.oldest; nd != nil; nd = nd.newer {
-		if len(a) == 0 {
-			return false
-		}
-		if a[len(a)-1] != nd.key {
-			return false
-		}
-		a = a[:len(a)-1]
-		count++
-		if count > 1000000 {
-			return false
-		}
-	}
-	return true
-}
