@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"unicode"
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
@@ -72,9 +72,9 @@ func ErrorPrinter(deployment func() string) Middleware {
 				} else {
 					printedError.Err = tracedError.Err
 				}
-				// Redact underscored properties
+				// Redact lowercase properties
 				for k, v := range tracedError.Properties {
-					if !strings.HasPrefix(k, "_") {
+					if k != "" && unicode.IsUpper([]rune(k)[0]) {
 						printedError.Properties[k] = v
 					}
 				}
