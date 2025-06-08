@@ -166,7 +166,7 @@ func (svc *Service) startHTTPServers(ctx context.Context) (err error) {
 		}
 		portInt, err := strconv.Atoi(port)
 		if err != nil || (portInt < 1 || portInt > 65535) {
-			err = errors.Newf("invalid port '%s'", port)
+			err = errors.New("invalid port '%s'", port)
 			svc.LogError(ctx, "Starting HTTP listener",
 				"port", portInt,
 				"error", err,
@@ -346,11 +346,11 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	u, err := resolveInternalURL(r.URL, svc.portMappings)
 	if err != nil {
 		// Ignore requests to invalid internal hostnames, such as via https://example.com/%3Fterms=1 or https://example.com/.env
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	// Disallow requests to control plane port 888
 	if u.Port() == "888" {
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	internalURL := u.String()
 
@@ -399,7 +399,7 @@ func (svc *Service) readRequestBody(r *http.Request) (body []byte, err error) {
 	if r.ContentLength > 0 {
 		used := atomic.LoadInt64(&svc.reqMemoryUsed)
 		if used+r.ContentLength > limit {
-			return nil, errors.Newc(http.StatusRequestEntityTooLarge, "insufficient memory")
+			return nil, errors.New("insufficient memory", http.StatusRequestEntityTooLarge)
 		}
 	}
 	bufSize := r.ContentLength
@@ -428,7 +428,7 @@ func (svc *Service) readRequestBody(r *http.Request) (body []byte, err error) {
 		used := atomic.AddInt64(&svc.reqMemoryUsed, int64(n))
 		if used > limit {
 			atomic.AddInt64(&svc.reqMemoryUsed, -int64(nn))
-			return nil, errors.Newc(http.StatusRequestEntityTooLarge, "insufficient memory")
+			return nil, errors.New("insufficient memory", http.StatusRequestEntityTooLarge)
 		}
 		result.Write(buf[:n])
 	}

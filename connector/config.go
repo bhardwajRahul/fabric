@@ -57,7 +57,7 @@ func (c *Connector) DefineConfig(name string, options ...cfg.Option) error {
 	defer c.configLock.Unlock()
 
 	if _, ok := c.configs[utils.ToKebabCase(name)]; ok {
-		return c.captureInitErr(errors.Newf("config '%s' is already defined", name))
+		return c.captureInitErr(errors.New("config '%s' is already defined", name))
 	}
 	c.configs[utils.ToKebabCase(name)] = config
 	return nil
@@ -82,7 +82,7 @@ func (c *Connector) Config(name string) (value string) {
 // Configuration property names are case-insensitive.
 func (c *Connector) SetConfig(name string, value any) error {
 	if c.IsStarted() && c.Deployment() != TESTING {
-		return errors.Newf("setting value of config property '%s' is not allowed outside a %s deployment", name, TESTING)
+		return errors.New("setting value of config property '%s' is not allowed outside a %s deployment", name, TESTING)
 	}
 	c.configLock.Lock()
 	config, ok := c.configs[utils.ToKebabCase(name)]
@@ -92,7 +92,7 @@ func (c *Connector) SetConfig(name string, value any) error {
 	}
 	v := utils.AnyToString(value)
 	if !cfg.Validate(config.Validation, v) {
-		return c.captureInitErr(errors.Newf("invalid value '%s' for config property '%s'", v, name))
+		return c.captureInitErr(errors.New("invalid value '%s' for config property '%s'", v, name))
 	}
 	origValue := config.Value
 	config.Value = v
@@ -217,7 +217,7 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 		}
 		if !cfg.Validate(config.Validation, valueToSet) {
 			c.configLock.Unlock()
-			return errors.Newf("value '%s' of config '%s' doesn't validate against rule '%s'", printableConfigValue(valueToSet, config.Secret), config.Name, config.Validation)
+			return errors.New("value '%s' of config '%s' doesn't validate against rule '%s'", printableConfigValue(valueToSet, config.Secret), config.Name, config.Validation)
 		}
 		if valueToSet != config.Value {
 			changed[utils.ToKebabCase(config.Name)] = true

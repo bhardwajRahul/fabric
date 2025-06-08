@@ -33,7 +33,7 @@ var (
 // Hostnames must contain only alphanumeric characters, hyphens, underscores and dot separators.
 func ValidateHostname(hostname string) error {
 	if !hostnameValidator.MatchString(strings.ToLower(hostname)) {
-		return errors.Newf("invalid hostname '%s'", hostname)
+		return errors.New("invalid hostname '%s'", hostname)
 	}
 	return nil
 }
@@ -42,7 +42,7 @@ func ValidateHostname(hostname string) error {
 // Config names must start with a letter and contain only alphanumeric characters, hyphens or underscores.
 func ValidateConfigName(name string) error {
 	if !configValidator.MatchString(strings.ToLower(name)) {
-		return errors.Newf("invalid config name '%s'", name)
+		return errors.New("invalid config name '%s'", name)
 	}
 	return nil
 }
@@ -51,7 +51,7 @@ func ValidateConfigName(name string) error {
 // Ticker names must start with a letter and contain only alphanumeric characters, hyphens or underscores.
 func ValidateTickerName(name string) error {
 	if !tickerValidator.MatchString(strings.ToLower(name)) {
-		return errors.Newf("invalid ticker name '%s'", name)
+		return errors.New("invalid ticker name '%s'", name)
 	}
 	return nil
 }

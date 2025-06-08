@@ -48,7 +48,7 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 		return nil
 	}
 	if interval <= 0 {
-		return c.captureInitErr(errors.Newf("non-positive interval '%v'", interval))
+		return c.captureInitErr(errors.New("non-positive interval '%v'", interval))
 	}
 	name = utils.ToKebabCase(name)
 
@@ -56,7 +56,7 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 	_, ok := c.tickers[name]
 	if ok {
 		c.tickersLock.Unlock()
-		return c.captureInitErr(errors.Newf("ticker '%s' is already started", name))
+		return c.captureInitErr(errors.New("ticker '%s' is already started", name))
 	}
 	c.tickers[name] = &tickerCallback{
 		Name:     name,
@@ -86,7 +86,7 @@ func (c *Connector) StopTicker(name string) error {
 	job, ok := c.tickers[name]
 	if !ok {
 		c.tickersLock.Unlock()
-		return errors.Newf("unknown ticker '%s'", name)
+		return errors.New("unknown ticker '%s'", name)
 	}
 	if job.Ticker != nil {
 		job.Ticker.Stop()

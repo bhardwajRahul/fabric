@@ -501,7 +501,7 @@ func determineCloudLocality(cloudProvider string) (locality string, err error) {
 		return "", errors.Trace(err)
 	}
 	if res.StatusCode != http.StatusOK {
-		return "", errors.Newf("determining %s AZ", strings.ToUpper(cloudProvider))
+		return "", errors.New("determining %s AZ", strings.ToUpper(cloudProvider))
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

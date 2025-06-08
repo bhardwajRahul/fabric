@@ -66,10 +66,10 @@ func (st *DefragRequest) Integrated() (integrated *http.Request, err error) {
 	for i := 1; i <= int(maxIndex); i++ {
 		fragment, ok := st.fragments.Load(i)
 		if !ok || fragment == nil {
-			return nil, errors.Newf("missing fragment %d", i)
+			return nil, errors.New("missing fragment %d", i)
 		}
 		if fragment.Body == nil {
-			return nil, errors.Newf("missing body of fragment %d", i)
+			return nil, errors.New("missing body of fragment %d", i)
 		}
 		bodies = append(bodies, fragment.Body)
 		len, err := strconv.ParseInt(fragment.Header.Get("Content-Length"), 10, 64)

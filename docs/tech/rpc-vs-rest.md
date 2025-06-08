@@ -182,7 +182,7 @@ func (svc *Service) Read(ctx context.Context, id int) (obj *Object, err error) {
     err = row.Scan(&obj.Foo, &obj.Count, &obj.Etc)
     if err != nil {
         if errors.Is(sql.ErrNoRows) {
-            return Object{}, errors.Newcf(http.StatusNotFound, "object %v not found", id)
+            return Object{}, errors.New("object %v not found", id, http.StatusNotFound)
         }
         return nil, errors.Trace(err)
     }

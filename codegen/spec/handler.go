@@ -105,19 +105,19 @@ func (h *Handler) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // validate validates the data after unmarshaling.
 func (h *Handler) validate() error {
 	if h.Queue != "default" && h.Queue != "none" {
-		return errors.Newf("invalid queue '%s' in '%s'", h.Queue, h.Name())
+		return errors.New("invalid queue '%s' in '%s'", h.Queue, h.Name())
 	}
 	if h.Kind != "counter" && h.Kind != "gauge" && h.Kind != "histogram" {
-		return errors.Newf("invalid metric kind '%s' in '%s'", h.Kind, h.Name())
+		return errors.New("invalid metric kind '%s' in '%s'", h.Kind, h.Name())
 	}
 	if h.Method != "" && !methodValidator.MatchString(h.Method) {
-		return errors.Newf("invalid method '%s'", h.Method)
+		return errors.New("invalid method '%s'", h.Method)
 	}
 	if strings.Contains(h.Path, "`") {
-		return errors.Newf("backtick not allowed in path '%s' in '%s'", h.Path, h.Name())
+		return errors.New("backtick not allowed in path '%s' in '%s'", h.Path, h.Name())
 	}
 	if strings.Contains(h.Actor, "`") {
-		return errors.Newf("backtick not allowed in actor '%s' in '%s'", h.Actor, h.Name())
+		return errors.New("backtick not allowed in actor '%s' in '%s'", h.Actor, h.Name())
 	}
 	u, err := httpx.ParseURL(httpx.JoinHostAndPath("hostname", h.Path))
 	if err != nil {
@@ -127,27 +127,27 @@ func (h *Handler) validate() error {
 	for i := range parts {
 		open := strings.Index(parts[i], "{")
 		if open > 0 {
-			return errors.Newf("path argument '%s' in '%s' must span entire section", parts[i], h.Name())
+			return errors.New("path argument '%s' in '%s' must span entire section", parts[i], h.Name())
 		}
 		close := strings.LastIndex(parts[i], "}")
 		if open == -1 && close == -1 {
 			continue
 		}
 		if close <= open || open == -1 {
-			return errors.Newf("malformed path argument '%s' in '%s'", parts[i], h.Name())
+			return errors.New("malformed path argument '%s' in '%s'", parts[i], h.Name())
 		}
 		if close < len(parts[i])-1 {
-			return errors.Newf("path argument '%s' in '%s' must span entire section", parts[i], h.Name())
+			return errors.New("path argument '%s' in '%s' must span entire section", parts[i], h.Name())
 		}
 		name := parts[i]
 		name = strings.TrimPrefix(name, "{")
 		name = strings.TrimSuffix(name, "}")
 		if strings.HasSuffix(name, "+") && i != len(parts)-1 {
-			return errors.Newf("greedy path argument '%s' in '%s' must end path", parts[i], h.Name())
+			return errors.New("greedy path argument '%s' in '%s' must end path", parts[i], h.Name())
 		}
 		name = strings.TrimSuffix(name, "+")
 		if name != "" && !utils.IsLowerCaseIdentifier(name) {
-			return errors.Newf("name of path argument '%s' in '%s' must be an identifier", parts[i], h.Name())
+			return errors.New("name of path argument '%s' in '%s' must be an identifier", parts[i], h.Name())
 		}
 	}
 	if h.Validation != "" {
@@ -172,10 +172,10 @@ func (h *Handler) validate() error {
 			h.Method = "POST"
 		}
 		if h.Method == "ANY" {
-			return errors.Newf("invalid method '%s'", h.Method)
+			return errors.New("invalid method '%s'", h.Method)
 		}
 		if u.Port() == "0" {
-			return errors.Newf("invalid port '%s'", u.Port())
+			return errors.New("invalid port '%s'", u.Port())
 		}
 	} else {
 		if h.Method == "" {
@@ -200,51 +200,51 @@ func (h *Handler) validate() error {
 	switch h.Type {
 	case "web":
 		if len(h.Signature.InputArgs) != 0 || len(h.Signature.OutputArgs) != 0 {
-			return errors.Newf("arguments or return values not allowed in '%s'", h.Signature.OrigString)
+			return errors.New("arguments or return values not allowed in '%s'", h.Signature.OrigString)
 		}
 	case "config":
 		if len(h.Signature.InputArgs) != 0 {
-			return errors.Newf("arguments not allowed in '%s'", h.Signature.OrigString)
+			return errors.New("arguments not allowed in '%s'", h.Signature.OrigString)
 		}
 		if len(h.Signature.OutputArgs) != 1 {
-			return errors.Newf("single return value expected in '%s'", h.Signature.OrigString)
+			return errors.New("single return value expected in '%s'", h.Signature.OrigString)
 		}
 		t := h.Signature.OutputArgs[0].Type
 		if t != "string" && t != "int" && t != "bool" && t != "time.Duration" && t != "float64" {
-			return errors.Newf("invalid return type '%s' in '%s'", t, h.Signature.OrigString)
+			return errors.New("invalid return type '%s' in '%s'", t, h.Signature.OrigString)
 		}
 	case "ticker":
 		if len(h.Signature.InputArgs) != 0 || len(h.Signature.OutputArgs) != 0 {
-			return errors.Newf("arguments or return values not allowed in '%s'", h.Signature.OrigString)
+			return errors.New("arguments or return values not allowed in '%s'", h.Signature.OrigString)
 		}
 		if h.Interval <= 0 {
-			return errors.Newf("non-positive interval '%v' in '%s'", h.Interval, h.Name())
+			return errors.New("non-positive interval '%v' in '%s'", h.Interval, h.Name())
 		}
 	case "function", "event", "sink":
 		if h.Actor != "" {
 			_, err = utils.EvaluateBoolExp(h.Actor, nil)
 			if err != nil {
-				return errors.Newf("invalid boolean expression '%s' in actor", h.Actor)
+				return errors.New("invalid boolean expression '%s' in actor", h.Actor)
 			}
 		}
 		for _, arg := range h.Signature.InputArgs {
 			if !h.MethodWithBody() && arg.Name == "httpRequestBody" {
-				return errors.Newf("cannot use '%s' in '%s' because method '%s' has no body", arg.Name, h.Signature.OrigString, h.Method)
+				return errors.New("cannot use '%s' in '%s' because method '%s' has no body", arg.Name, h.Signature.OrigString, h.Method)
 			}
 		}
 	case "metric":
 		if len(h.Signature.OutputArgs) != 0 {
-			return errors.Newf("return values not allowed in '%s'", h.Signature.OrigString)
+			return errors.New("return values not allowed in '%s'", h.Signature.OrigString)
 		}
 		if len(h.Signature.InputArgs) == 0 {
-			return errors.Newf("at least one argument expected in '%s'", h.Signature.OrigString)
+			return errors.New("at least one argument expected in '%s'", h.Signature.OrigString)
 		}
 		if h.Kind == "histogram" && len(h.Buckets) < 1 {
-			return errors.Newf("at least one bucket is required in '%s'", h.Signature.OrigString)
+			return errors.New("at least one bucket is required in '%s'", h.Signature.OrigString)
 		}
 		t := h.Signature.InputArgs[0].Type
 		if t != "int" && t != "time.Duration" && t != "float64" {
-			return errors.Newf("first argument is of a non-numeric type '%s' in '%s'", t, h.Signature.OrigString)
+			return errors.New("first argument is of a non-numeric type '%s' in '%s'", t, h.Signature.OrigString)
 		}
 	}
 
@@ -252,21 +252,21 @@ func (h *Handler) validate() error {
 	if h.Type == "sink" {
 		match, _ := regexp.MatchString(`^[a-z][a-zA-Z0-9\.\-]*(/[a-z][a-zA-Z0-9\.\-]*)*$`, h.Source)
 		if !match {
-			return errors.Newf("invalid source '%s' in '%s'", h.Source, h.Name())
+			return errors.New("invalid source '%s' in '%s'", h.Source, h.Name())
 		}
 		if h.ForHost != "" {
 			err := utils.ValidateHostname(h.ForHost)
 			if err != nil {
-				return errors.Newf("invalid hostname '%s' in '%s'", h.ForHost, h.Name())
+				return errors.New("invalid hostname '%s' in '%s'", h.ForHost, h.Name())
 			}
 		}
 		if !startsWithOn.MatchString(h.Event) {
-			return errors.Newf("event name '%s' must start with 'On' in '%s'", h.Event, h.Name())
+			return errors.New("event name '%s' must start with 'On' in '%s'", h.Event, h.Name())
 		}
 	}
 	if h.Type == "sink" || h.Type == "event" {
 		if !startsWithOn.MatchString(h.Name()) {
-			return errors.Newf("function name must start with 'On' in '%s'", h.Signature.OrigString)
+			return errors.New("function name must start with 'On' in '%s'", h.Signature.OrigString)
 		}
 	}
 

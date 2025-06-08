@@ -205,6 +205,7 @@ func TestUtils_BoolExp(t *testing.T) {
 		"foo=~'(bar|not)'",
 		"foo!~'baz'",
 		"foo!~'....'",
+		"roles.guest || foo=~'b'",
 
 		// Array
 		"roles.admin",
@@ -274,6 +275,7 @@ func TestUtils_BoolExp(t *testing.T) {
 		"foo!~'(bar|not)'",
 		"foo=~'baz'",
 		"foo=~'....'",
+		"roles.admin && foo=~'x'",
 
 		// Array
 		"roles.user",

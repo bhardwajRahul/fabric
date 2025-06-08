@@ -695,7 +695,7 @@ func MakeRequest_Do(t *testing.T, r *http.Request) *MakeRequestTestCase {
 		}
 	}
 	if r.Method != `POST` {
-		tc.err = errors.Newc(http.StatusNotFound, "")
+		tc.err = errors.New("", http.StatusNotFound)
 		return tc
 	}
 	url, err := httpx.ResolveURL(httpegressapi.URLOfMakeRequest, r.URL.String())

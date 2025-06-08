@@ -191,7 +191,7 @@ func evaluateBoolExp(boolExp string, flattenedSymbols map[string]any) (bool, err
 			}
 			matched, err := regexp.MatchString(ys, xs)
 			if err != nil {
-				return false, errors.Newf("invalid regexp '%s'", y)
+				return false, errors.New("invalid regexp '%s'", y)
 			}
 			return matched, nil
 		case "!~": // negative regexp
@@ -205,7 +205,7 @@ func evaluateBoolExp(boolExp string, flattenedSymbols map[string]any) (bool, err
 			}
 			matched, err := regexp.MatchString(ys, xs)
 			if err != nil {
-				return false, errors.Newf("invalid regexp '%s'", y)
+				return false, errors.New("invalid regexp '%s'", y)
 			}
 			return !matched, nil
 		case "<":
@@ -227,7 +227,7 @@ func evaluateBoolExp(boolExp string, flattenedSymbols map[string]any) (bool, err
 		// Verify it's an identifier x.y.z
 		matched := identifierRegexp.MatchString(boolExp)
 		if !matched {
-			return false, errors.Newf("invalid identifier '%s'", boolExp)
+			return false, errors.New("invalid identifier '%s'", boolExp)
 		}
 	}
 	b, ok := v.(bool)

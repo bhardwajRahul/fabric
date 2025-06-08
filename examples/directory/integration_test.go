@@ -144,7 +144,7 @@ func TestDirectory_Create(t *testing.T) {
 		})
 
 	Create(t, ctx, person).
-		Error("Duplicate")
+		Error("duplicate")
 }
 
 func TestDirectory_Load(t *testing.T) {

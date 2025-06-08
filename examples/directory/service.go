@@ -101,7 +101,7 @@ func (svc *Service) Create(ctx context.Context, httpRequestBody *directoryapi.Pe
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
-		return 0, errors.Tracec(http.StatusBadRequest, err)
+		return 0, errors.Trace(err, http.StatusBadRequest)
 	}
 
 	if svc.db == nil {
@@ -110,11 +110,11 @@ func (svc *Service) Create(ctx context.Context, httpRequestBody *directoryapi.Pe
 		defer mux.Unlock()
 		_, ok := indexByKey[person.Key]
 		if ok {
-			return 0, errors.Newc(http.StatusBadRequest, "Duplicate key")
+			return 0, errors.New("duplicate key", http.StatusBadRequest)
 		}
 		_, ok = indexByEmail[strings.ToLower(person.Email)]
 		if ok {
-			return 0, errors.Newc(http.StatusBadRequest, "Duplicate key")
+			return 0, errors.New("duplicate key", http.StatusBadRequest)
 		}
 		nextKey++
 		person.Key = directoryapi.PersonKey(nextKey)
@@ -145,7 +145,7 @@ func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, http
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
-		return errors.Tracec(http.StatusBadRequest, err)
+		return errors.Trace(err, http.StatusBadRequest)
 	}
 
 	if svc.db == nil {
@@ -154,7 +154,7 @@ func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, http
 		defer mux.Unlock()
 		existing, ok := indexByKey[key]
 		if !ok {
-			return errors.Newc(http.StatusNotFound, "")
+			return errors.New("", http.StatusNotFound)
 		}
 		delete(indexByKey, existing.Key)
 		delete(indexByEmail, strings.ToLower(existing.Email))
@@ -195,7 +195,7 @@ func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpR
 		if ok {
 			return loaded, nil
 		} else {
-			return nil, errors.Newc(http.StatusNotFound, "")
+			return nil, errors.New("", http.StatusNotFound)
 		}
 	}
 
@@ -207,7 +207,7 @@ func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpR
 	}
 	err = row.Scan(&person.FirstName, &person.LastName, &person.Email, &person.Birthday)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -225,7 +225,7 @@ func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err
 		defer mux.Unlock()
 		existing, ok := indexByKey[key]
 		if !ok {
-			return errors.Newc(http.StatusNotFound, "")
+			return errors.New("", http.StatusNotFound)
 		}
 		delete(indexByKey, existing.Key)
 		delete(indexByEmail, strings.ToLower(existing.Email))
@@ -243,7 +243,7 @@ func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err
 	if affected > 0 {
 		return nil
 	} else {
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 }
 
@@ -259,7 +259,7 @@ func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponse
 		if ok {
 			return loaded, nil
 		} else {
-			return nil, errors.Newc(http.StatusNotFound, "")
+			return nil, errors.New("", http.StatusNotFound)
 		}
 	}
 
@@ -271,7 +271,7 @@ func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponse
 	}
 	err = row.Scan(&person.Key, &person.FirstName, &person.LastName, &person.Birthday)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -319,7 +319,7 @@ func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) {
 	ctx := r.Context()
 	err = r.ParseForm()
 	if err != nil {
-		return errors.Tracec(http.StatusBadRequest, err)
+		return errors.Trace(err, http.StatusBadRequest)
 	}
 
 	data := struct {

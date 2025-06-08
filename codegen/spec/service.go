@@ -137,7 +137,7 @@ func (s *Service) validate() error {
 	for _, h := range s.AllHandlers() {
 		lowerCase := strings.ToLower(h.Name())
 		if handlerNames[lowerCase] {
-			return errors.Newf("duplicate handler name '%s'", h.Name())
+			return errors.New("duplicate handler name '%s'", h.Name())
 		}
 		handlerNames[lowerCase] = true
 	}

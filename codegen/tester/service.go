@@ -53,7 +53,7 @@ type Service struct {
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
-		return errors.Newf("service disallowed in '%s' deployment", svc.Deployment())
+		return errors.New("service disallowed in '%s' deployment", svc.Deployment())
 	}
 	return nil
 }
@@ -209,7 +209,7 @@ func (svc *Service) DirectoryServer(w http.ResponseWriter, r *http.Request) (err
 	_, path, _ := strings.Cut(r.URL.Path, "/directory-server/")
 	path, _ = url.JoinPath("static", path)
 	if !strings.HasPrefix(path, "static/") {
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	err = svc.ServeResFile(path, w, r)
 	if err != nil {

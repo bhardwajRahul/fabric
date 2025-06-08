@@ -201,7 +201,7 @@ func (svc *Service) publishSync(ctx context.Context) error {
 // loadYAML loads a config.yaml into the repo. For testing purposes only.
 func (svc *Service) loadYAML(configYAML string) error {
 	if svc.Deployment() == connector.PROD {
-		return errors.Newf("disallowed in %s deployment", connector.PROD)
+		return errors.New("disallowed in %s deployment", connector.PROD)
 	}
 	svc.lock.Lock()
 	if svc.repo == nil {
@@ -219,7 +219,7 @@ Values443 is deprecated.
 func (svc *Service) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {
 		// Disallow external requests
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	svc.LogWarn(ctx, "Port 443 is deprecated")
 	return svc.Values(ctx, names)
@@ -231,7 +231,7 @@ Refresh443 is deprecated.
 func (svc *Service) Refresh443(ctx context.Context) (err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {
 		// Disallow external requests
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	svc.LogWarn(ctx, "Port 443 is deprecated")
 	return svc.Refresh(ctx)
@@ -243,7 +243,7 @@ Sync443 is deprecated.
 func (svc *Service) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {
 		// Disallow external requests
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	svc.LogWarn(ctx, "Port 443 is deprecated")
 	return svc.SyncRepo(ctx, timestamp, values)

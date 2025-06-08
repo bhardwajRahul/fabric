@@ -137,7 +137,7 @@ The proxied request is expected to be posted in the body of the request in binar
 		w.WriteHeader(http.StatusNotFound)
 		return nil
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")

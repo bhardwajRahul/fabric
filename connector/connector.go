@@ -169,7 +169,7 @@ func (c *Connector) SetHostname(hostname string) error {
 	hn := strings.ToLower(hostname)
 	if hn == "all" || strings.HasSuffix(hn, ".all") {
 		// The hostname "all" is reserved to refer to all microservices
-		return c.captureInitErr(errors.Newf("disallowed hostname '%s'", hostname))
+		return c.captureInitErr(errors.New("disallowed hostname '%s'", hostname))
 	}
 	c.hostname = hostname
 	return nil
@@ -198,7 +198,7 @@ func (c *Connector) SetVersion(version int) error {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	if version < 0 {
-		return c.captureInitErr(errors.Newf("negative version '%d'", version))
+		return c.captureInitErr(errors.New("negative version '%d'", version))
 	}
 	c.version = version
 	return nil
@@ -241,7 +241,7 @@ func (c *Connector) SetDeployment(deployment string) error {
 	}
 	deployment = strings.ToUpper(deployment)
 	if deployment != "" && deployment != PROD && deployment != LAB && deployment != LOCAL && deployment != TESTING {
-		return c.captureInitErr(errors.Newf("invalid deployment '%s'", deployment))
+		return c.captureInitErr(errors.New("invalid deployment '%s'", deployment))
 	}
 	c.deployment = deployment
 	return nil
@@ -266,7 +266,7 @@ func (c *Connector) SetPlane(plane string) error {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	if match, _ := regexp.MatchString(`^[0-9a-zA-Z]*$`, plane); !match {
-		return c.captureInitErr(errors.Newf("invalid plane: %s", plane))
+		return c.captureInitErr(errors.New("invalid plane: %s", plane))
 	}
 	c.plane = plane
 	return nil

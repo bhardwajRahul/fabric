@@ -44,7 +44,7 @@ func (grp group) Startup(ctx context.Context) error {
 		go func(s service.Service, delay time.Duration) {
 			defer wg.Done()
 			time.Sleep(delay)
-			err := errors.Newf("'%s' failed to start", s.Hostname())
+			err := errors.New("'%s' failed to start", s.Hostname())
 			var tryAfter time.Duration
 			for {
 				select {

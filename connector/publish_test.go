@@ -70,6 +70,50 @@ func TestConnector_Echo(t *testing.T) {
 	tt.Equal([]byte("Hello"), body)
 }
 
+func TestConnector_Error(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	ctx := context.Background()
+
+	// Create the microservices
+	alpha := New("alpha.error.connector")
+
+	beta := New("beta.error.connector")
+	beta.Subscribe("GET", "err", func(w http.ResponseWriter, r *http.Request) error {
+		return errors.New("pattern %s %d", "XYZ", 123,
+			http.StatusBadRequest,
+			errors.New("original error"),
+			"int", 888,
+			"str", "ABC",
+			"bool", true,
+			"dur", time.Second,
+			"time", time.Now(),
+		)
+	})
+
+	// Startup the microservices
+	err := alpha.Startup()
+	tt.NoError(err)
+	defer alpha.Shutdown()
+	err = beta.Startup()
+	tt.NoError(err)
+	defer beta.Shutdown()
+
+	// Send message and validate that the error is received as sent
+	_, err = alpha.GET(ctx, "https://beta.error.connector/err")
+	tt.Error(err)
+	tracedErr := errors.Convert(err)
+	tt.Equal("pattern XYZ 123: original error", tracedErr.Error())
+	tt.Equal(http.StatusBadRequest, tracedErr.StatusCode)
+	tt.Equal(888.0, tracedErr.Properties["int"])
+	tt.Equal("ABC", tracedErr.Properties["str"])
+	tt.Equal(true, tracedErr.Properties["bool"])
+	tt.Equal(float64(time.Second), tracedErr.Properties["dur"])
+	_, parseErr := time.Parse(time.RFC3339, tracedErr.Properties["time"].(string))
+	tt.NoError(parseErr)
+}
+
 func BenchmarkConnector_EchoSerial(b *testing.B) {
 	ctx := context.Background()
 

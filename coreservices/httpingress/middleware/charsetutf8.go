@@ -18,22 +18,22 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 )
 
-// BlockedPaths returns a middleware that returns a 404 error for requests with paths matching the predicate.
-// The path passed to the matcher is the full path of the URL, without query arguments.
-func BlockedPaths(isBlocked func(path string) bool) Middleware {
+// CharsetUTF8 returns a middleware that augments the Content-Type header of text/* and application/json with the UTF-8 charset.
+func CharsetUTF8() Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
-		notFound := errors.New("", http.StatusNotFound)
-		return func(w http.ResponseWriter, r *http.Request) error {
-			if isBlocked(r.URL.Path) {
-				w.WriteHeader(http.StatusNotFound)
-				return notFound
+		return func(w http.ResponseWriter, r *http.Request) (err error) {
+			err = next(w, r)
+			contentType := strings.ToLower(w.Header().Get("Content-Type"))
+			if contentType == "application/json" ||
+				(strings.HasPrefix(contentType, "text/") && !strings.Contains(contentType, ";")) {
+				w.Header().Set("Content-Type", w.Header().Get("Content-Type")+"; charset=utf-8")
 			}
-			return next(w, r) // No trace
+			return err // No trace
 		}
 	}
 }

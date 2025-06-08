@@ -36,7 +36,7 @@ func Description(description string) Option {
 func DefaultValue(defaultValue string) Option {
 	return func(c *Config) error {
 		if c.Validation != "" && defaultValue != "" && !Validate(c.Validation, defaultValue) {
-			return errors.Newf("default value '%s' of config '%s' doesn't validate against rule '%s'", defaultValue, c.Name, c.Validation)
+			return errors.New("default value '%s' of config '%s' doesn't validate against rule '%s'", defaultValue, c.Name, c.Validation)
 		}
 		c.DefaultValue = defaultValue
 		return nil
@@ -69,10 +69,10 @@ Whereas the following types are synonymous:
 func Validation(validation string) Option {
 	return func(c *Config) error {
 		if !checkRule(validation) {
-			return errors.Newf("invalid validation rule '%s' for config '%s'", validation, c.Name)
+			return errors.New("invalid validation rule '%s' for config '%s'", validation, c.Name)
 		}
 		if c.DefaultValue != "" && !Validate(validation, c.DefaultValue) {
-			return errors.Newf("default value '%s' of config '%s' doesn't validate against rule '%s'", c.DefaultValue, c.Name, validation)
+			return errors.New("default value '%s' of config '%s' doesn't validate against rule '%s'", c.DefaultValue, c.Name, validation)
 		}
 		c.Validation = validation
 		return nil

@@ -32,7 +32,7 @@ func Cors(isAllowed func(origin string) bool) Middleware {
 			if origin != "" {
 				// Block disallowed origins
 				if !isAllowed(origin) {
-					return errors.Newcf(http.StatusForbidden, "disallowed origin '%s'", origin)
+					return errors.New("disallowed origin '%s'", origin, http.StatusForbidden)
 				}
 				// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
 				w.Header().Set("Access-Control-Allow-Origin", origin)

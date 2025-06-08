@@ -17,8 +17,10 @@ limitations under the License.
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
@@ -29,45 +31,62 @@ import (
 // ErrorPrinter returns a middleware that outputs any error to the response body.
 // It should typically be the first middleware.
 // Error details and stack trace are only printed on localhost.
-func ErrorPrinter() Middleware {
+func ErrorPrinter(deployment func() string) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {
-			err = next(w, r) // No trace
-			if err == nil {
-				return nil
+			ww := httpx.NewResponseRecorder()
+			downstreamErr := next(ww, r) // No trace
+			if downstreamErr == nil {
+				err = httpx.Copy(w, ww.Result())
+				return errors.Trace(err)
 			}
-			// Headers
-			w.Header().Set("Content-Type", "text/plain")
-			w.Header().Set("Cache-Control", "no-store")
+			tracedError := errors.Convert(downstreamErr)
+
 			// Status code
-			statusCode := errors.StatusCode(err)
+			statusCode := tracedError.StatusCode
 			if statusCode <= 0 || statusCode >= 1000 {
 				statusCode = http.StatusInternalServerError
 			}
-			w.WriteHeader(statusCode)
-			// Error message with trace ID
-			traceID := ""
+			// Enrich with trace ID
 			span := trace.SpanFromContext(r.Context())
 			if span != nil {
-				traceID = span.SpanContext().TraceID().String()
-			}
-			if ww, ok := w.(*httpx.ResponseRecorder); ok { // Always true
-				ww.ClearBody()
-			}
-			if httpx.IsLocalhostAddress(r) {
-				w.Write([]byte(fmt.Sprintf("%+v", err)))
-				if traceID != "" {
-					w.Write([]byte("\n\n{trace/"))
-					w.Write([]byte(traceID))
-					w.Write([]byte("}"))
+				traceID := span.SpanContext().TraceID().String()
+				if tracedError.Properties == nil {
+					tracedError.Properties = map[string]any{}
 				}
+				tracedError.Properties["trace"] = traceID
+			}
+			local := deployment() == connector.LOCAL
+			var printedError *errors.TracedError
+			if local {
+				printedError = tracedError
 			} else {
-				w.Write([]byte(http.StatusText(statusCode) + " " + traceID))
-				if traceID != "" {
-					w.Write([]byte(" {trace/"))
-					w.Write([]byte(traceID))
-					w.Write([]byte("}"))
+				printedError = &errors.TracedError{
+					StatusCode: statusCode,
+					Stack:      nil, // Redact stack trace
+					Properties: make(map[string]any, len(tracedError.Properties)),
 				}
+				// Only reveal 4xx errors to external users
+				if statusCode < 400 || statusCode >= 500 {
+					printedError.Err = fmt.Errorf("internal server error")
+				} else {
+					printedError.Err = tracedError.Err
+				}
+				// Redact underscored properties
+				for k, v := range tracedError.Properties {
+					if !strings.HasPrefix(k, "_") {
+						printedError.Properties[k] = v
+					}
+				}
+			}
+			encoder := json.NewEncoder(w)
+			encoder.SetIndent("", "  ")
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(statusCode)
+			err = encoder.Encode(printedError)
+			if err != nil {
+				return errors.Trace(err)
 			}
 			return nil
 		}

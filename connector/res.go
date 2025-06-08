@@ -88,7 +88,7 @@ func (c *Connector) MustReadResTextFile(name string) string {
 func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Request) error {
 	b, err := c.resourcesFS.ReadFile(name)
 	if err != nil {
-		return errors.Newc(http.StatusNotFound, "")
+		return errors.New("", http.StatusNotFound)
 	}
 	hash := sha256.New()
 	hash.Write(b)
@@ -218,7 +218,7 @@ func (c *Connector) LoadResString(ctx context.Context, stringKey string) (string
 	}
 	txl := c.stringBundle[strings.ToLower(stringKey)]
 	if txl == nil {
-		return "", errors.Newf("no string matches the key '%s'", stringKey)
+		return "", errors.New("no string matches the key '%s'", stringKey)
 	}
 	// da, en-gb;q=0.8, en;q=0.7
 	full := frame.Of(ctx).Header().Get("Accept-Language")

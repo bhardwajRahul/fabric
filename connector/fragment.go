@@ -40,7 +40,7 @@ func (c *Connector) defragRequest(r *http.Request) (integrated *http.Request, er
 	if !ok {
 		if fragmentIndex != 1 {
 			// Most likely caused after a timeout, but can also happen if initial chunk has wrong index
-			return nil, errors.Newc(http.StatusRequestTimeout, "defrag timeout")
+			return nil, errors.New("defrag timeout", http.StatusRequestTimeout)
 		}
 		defragger = httpx.NewDefragRequest()
 		c.requestDefrags.Store(fragKey, defragger)
@@ -92,7 +92,7 @@ func (c *Connector) defragResponse(r *http.Response) (integrated *http.Response,
 	if !ok {
 		if fragmentIndex != 1 {
 			// Most likely caused after a timeout, but can also happen if initial chunk has wrong index
-			return nil, errors.Newc(http.StatusRequestTimeout, "defrag timeout")
+			return nil, errors.New("defrag timeout", http.StatusRequestTimeout)
 		}
 		defragger = httpx.NewDefragResponse()
 		c.responseDefrags.Store(fragKey, defragger)

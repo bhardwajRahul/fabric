@@ -29,6 +29,7 @@ import (
 
 // Middleware names
 const (
+	CharsetUTF8     = "CharsetUTF8"
 	ErrorPrinter    = "ErrorPrinter"
 	BlockedPaths    = "BlockedPaths"
 	Logger          = "Logger"
@@ -50,7 +51,10 @@ const (
 func (svc *Service) defaultMiddleware() *middleware.Chain {
 	// Warning: renaming or removing middleware is a breaking change because the names are used as location markers
 	m := &middleware.Chain{}
-	m.Append(ErrorPrinter, middleware.ErrorPrinter())
+	m.Append(CharsetUTF8, middleware.CharsetUTF8())
+	m.Append(ErrorPrinter, middleware.ErrorPrinter(func() string {
+		return svc.Deployment()
+	}))
 	m.Append(BlockedPaths, middleware.BlockedPaths(func(path string) bool {
 		if svc.blockedPaths[path] {
 			return true

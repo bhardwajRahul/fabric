@@ -78,7 +78,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 
 	// Check if there's enough time budget
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkHop {
-		err := errors.Newc(http.StatusRequestTimeout, "timeout")
+		err := errors.New("timeout", http.StatusRequestTimeout)
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
@@ -87,7 +87,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	inboundFrame := frame.Of(ctx)
 	depth := inboundFrame.CallDepth()
 	if depth >= c.maxCallDepth {
-		err := errors.Newc(http.StatusLoopDetected, "call depth overflow")
+		err := errors.New("call depth overflow", http.StatusLoopDetected)
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
@@ -455,7 +455,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 				"msg", msgID,
 				"subject", subject,
 			)
-			err = errors.Newc(http.StatusRequestTimeout, "timeout")
+			err = errors.New("timeout", http.StatusRequestTimeout)
 			output = append(output, pub.NewErrorResponse(err))
 			c.postRequestData.Store("timeout:"+msgID, subject)
 			_ = c.AddCounter(
@@ -498,7 +498,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 						"subject", subject,
 					)
 				} else {
-					err = errors.Newc(http.StatusNotFound, "ack timeout")
+					err = errors.New("ack timeout", http.StatusNotFound)
 					output = append(output, pub.NewErrorResponse(err))
 					_ = c.AddCounter(
 						ctx,

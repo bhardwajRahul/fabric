@@ -54,7 +54,7 @@ func NewMock() *Mock {
 // OnStartup makes sure that the mock is not executed in a non-dev environment.
 func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
-		return errors.Newf("mocking disallowed in '%s' deployment", svc.Deployment())
+		return errors.New("mocking disallowed in '%s' deployment", svc.Deployment())
 	}
 	return nil
 }

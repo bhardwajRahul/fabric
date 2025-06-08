@@ -930,7 +930,7 @@ func (_c *Client) BusPNG_Do(r *http.Request) (res *http.Response, err error) {
 		}
 	}
 	if r.Method != `GET` {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	url, err := httpx.ResolveURL(URLOfBusPNG, r.URL.String())
 	if err != nil {
@@ -970,7 +970,7 @@ func (_c *MulticastClient) BusPNG_Do(ctx context.Context, r *http.Request) <-cha
 		}
 	}
 	if r.Method != `GET` {
-		return _c.errChan(errors.Newc(http.StatusNotFound, ""))
+		return _c.errChan(errors.New("", http.StatusNotFound))
 	}
 	url, err := httpx.ResolveURL(URLOfBusPNG, r.URL.String())
 	if err != nil {

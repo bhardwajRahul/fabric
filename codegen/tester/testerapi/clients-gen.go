@@ -796,7 +796,7 @@ func (_c *Client) UnnamedWebPathArguments_Do(r *http.Request) (res *http.Respons
 		}
 	}
 	if r.Method != `GET` {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	url, err := httpx.ResolveURL(URLOfUnnamedWebPathArguments, r.URL.String())
 	if err != nil {
@@ -836,7 +836,7 @@ func (_c *MulticastClient) UnnamedWebPathArguments_Do(ctx context.Context, r *ht
 		}
 	}
 	if r.Method != `GET` {
-		return _c.errChan(errors.Newc(http.StatusNotFound, ""))
+		return _c.errChan(errors.New("", http.StatusNotFound))
 	}
 	url, err := httpx.ResolveURL(URLOfUnnamedWebPathArguments, r.URL.String())
 	if err != nil {
@@ -920,7 +920,7 @@ func (_c *Client) DirectoryServer_Do(r *http.Request) (res *http.Response, err e
 		}
 	}
 	if r.Method != `GET` {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	url, err := httpx.ResolveURL(URLOfDirectoryServer, r.URL.String())
 	if err != nil {
@@ -960,7 +960,7 @@ func (_c *MulticastClient) DirectoryServer_Do(ctx context.Context, r *http.Reque
 		}
 	}
 	if r.Method != `GET` {
-		return _c.errChan(errors.Newc(http.StatusNotFound, ""))
+		return _c.errChan(errors.New("", http.StatusNotFound))
 	}
 	url, err := httpx.ResolveURL(URLOfDirectoryServer, r.URL.String())
 	if err != nil {

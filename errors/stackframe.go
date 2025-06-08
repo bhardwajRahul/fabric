@@ -20,14 +20,14 @@ import (
 	"fmt"
 )
 
-// trace is a single stack trace location
-type trace struct {
-	File     string `json:"file"`
+// StackFrame is a single stack location.
+type StackFrame struct {
 	Function string `json:"function"`
+	File     string `json:"file"`
 	Line     int    `json:"line"`
 }
 
-// String returns a string representation of the trace
-func (t *trace) String() string {
+// String returns a string representation of the stack frame.
+func (t *StackFrame) String() string {
 	return fmt.Sprintf("- %s\n  %s:%d", t.Function, t.File, t.Line)
 }

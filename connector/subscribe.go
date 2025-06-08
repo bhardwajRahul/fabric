@@ -329,7 +329,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	// Time budget
 	budget := frame.Of(httpReq).TimeBudget()
 	if budget > 0 && budget <= c.networkHop {
-		return errors.Newc(http.StatusRequestTimeout, "timeout")
+		return errors.New("timeout", http.StatusRequestTimeout)
 	}
 
 	// Integrate fragments together
@@ -378,13 +378,13 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	// Check actor constraints
 	if s.Actor != "" {
 		if httpReq.Header.Get(frame.HeaderActor) == "" {
-			handlerErr = errors.Newc(http.StatusUnauthorized, "")
+			handlerErr = errors.New("", http.StatusUnauthorized)
 		} else {
 			satisfied, err := frame.Of(httpReq).IfActor(s.Actor)
 			if err != nil {
 				handlerErr = errors.Trace(err)
 			} else if !satisfied {
-				handlerErr = errors.Newc(http.StatusForbidden, "")
+				handlerErr = errors.New("", http.StatusForbidden)
 			}
 		}
 	}
@@ -473,11 +473,12 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	frame.Of(httpResponse).SetFromID(c.id)
 	frame.Of(httpResponse).SetFromVersion(c.version)
 	frame.Of(httpResponse).SetQueue(queue)
-	frame.Of(httpResponse).SetOpCode(frame.OpCodeResponse)
-	frame.Of(httpResponse).SetLocality(c.locality)
 	if handlerErr != nil {
 		frame.Of(httpResponse).SetOpCode(frame.OpCodeError)
+	} else {
+		frame.Of(httpResponse).SetOpCode(frame.OpCodeResponse)
 	}
+	frame.Of(httpResponse).SetLocality(c.locality)
 
 	// OpenTelemetry: record the status code
 	if handlerErr == nil {

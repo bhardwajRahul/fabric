@@ -18,12 +18,12 @@ limitations under the License.
 
 package tokenissuer
 
-const Version = 77
-const SourceCodeSHA256 = "a27860be1599a9d69abb7987bdbe48e2bf5379f92ca42595e8a3c95a8b8bbae2"
-const Timestamp = "2025-06-01T01:05:31.759907Z"
+const Version = 80
+const SourceCodeSHA256 = "5299601b3de253c679cd907df317dc9e9b95c2e80691d07e8e45f517647d0b23"
+const Timestamp = "2025-06-08T01:35:59.890181Z"
 
 /* {
-	"ver": 77,
-	"sha256": "a27860be1599a9d69abb7987bdbe48e2bf5379f92ca42595e8a3c95a8b8bbae2",
-	"ts": "2025-06-01T01:05:31.759907Z"
+	"ver": 80,
+	"sha256": "5299601b3de253c679cd907df317dc9e9b95c2e80691d07e8e45f517647d0b23",
+	"ts": "2025-06-08T01:35:59.890181Z"
 } */

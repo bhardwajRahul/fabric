@@ -13,7 +13,7 @@ Remember that `Microbus` add an error error value to the standard Go web handler
 Middlewares are chained together. Each receives the request after it was processed by the preceding (upstream) middleware, passing it along to the `next` (downstream) middleware. And conversely, each receives the response from the next (downstream) middleware, and passes it back to the preceding (upstream) middleware. Both the request and the response may be modified by the middleware.
 
 The HTTP ingress core microservice keeps the chain of middleware in a `middleware.Chain` construct that can be accessed via its `Middleware` method.
-Each middleware in the chain is addressable by its name and can be replaced, removed or used as an insertion point. The chain is initialized with reasonable defaults: `ErrorPrinter` -> `BlockedPaths` -> `Logger` -> `Enter` -> `SecureRedirect` -> `CORS` -> `XForward` -> `InternalHeaders` -> `RootPath` -> `Timeout` -> `Authorization` -> `Ready` -> `CacheControl` -> `Compress` -> `DefaultFavIcon`.
+Each middleware in the chain is addressable by its name and can be replaced, removed or used as an insertion point. The chain is initialized with reasonable defaults: `CharsetUTF8` -> `ErrorPrinter` -> `BlockedPaths` -> `Logger` -> `Enter` -> `SecureRedirect` -> `CORS` -> `XForward` -> `InternalHeaders` -> `RootPath` -> `Timeout` -> `Authorization` -> `Ready` -> `CacheControl` -> `Compress` -> `DefaultFavIcon`.
 
 `Enter` is a noop marker that indicates that the request was accepted. Middleware after this point typically manipulate the request headers. Similarly, `Ready` is a noop marker that indicates that the request is ready to be processed. Middleware after this point typically manipulate the response headers or body. Both markers can be used as insertion points.
 
@@ -25,6 +25,7 @@ The following middlewares are available in the `middleware` package:
 validates it with its issuer, and associates the corresponding actor with the request
 - `BlockedPaths` filters incoming requests based on their URL path. The default setting blocks common patterns that are obviously trying to probe the server for vulnerabilities
 - `CacheControl` sets the Cache-Control header if not otherwise specified
+- `CharsetUTF8` appends `; charset=utf-8` to the `Content-Type` header of textual responses
 - `Compress` compresses textual responses using brotli, gzip or deflate
 - `CORS` responds to the CORS origin OPTION request and blocks requests from disallowed origins
 - `DefaultFavIcon` responds to `/favicon.ico`, if the app does not

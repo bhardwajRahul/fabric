@@ -35,7 +35,7 @@ func Queue(queue string) Option {
 			return errors.Trace(err)
 		}
 		if !match {
-			return errors.Newf("invalid queue name '%s'", queue)
+			return errors.New("invalid queue name '%s'", queue)
 		}
 		sub.Queue = queue
 		return nil

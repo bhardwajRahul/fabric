@@ -3216,7 +3216,7 @@ func BusPNG_Do(t *testing.T, r *http.Request) *BusPNGTestCase {
 		}
 	}
 	if r.Method != `GET` {
-		tc.err = errors.Newc(http.StatusNotFound, "")
+		tc.err = errors.New("", http.StatusNotFound)
 		return tc
 	}
 	url, err := httpx.ResolveURL(helloapi.URLOfBusPNG, r.URL.String())

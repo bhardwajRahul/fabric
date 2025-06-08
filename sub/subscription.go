@@ -82,33 +82,33 @@ func NewSub(method string, defaultHost string, path string, handler HTTPHandler,
 	}
 	method = strings.ToUpper(method)
 	if !methodValidator.MatchString(method) {
-		return nil, errors.Newf("invalid method '%s'", method)
+		return nil, errors.New("invalid method '%s'", method)
 	}
 	parts := strings.Split(u.Path, "/")
 	for i := range parts {
 		open := strings.Index(parts[i], "{")
 		if open > 0 {
-			return nil, errors.Newf("path argument '%s' must span entire section", parts[i])
+			return nil, errors.New("path argument '%s' must span entire section", parts[i])
 		}
 		close := strings.LastIndex(parts[i], "}")
 		if open == -1 && close == -1 {
 			continue
 		}
 		if close <= open || open == -1 {
-			return nil, errors.Newf("malformed path argument '%s'", parts[i])
+			return nil, errors.New("malformed path argument '%s'", parts[i])
 		}
 		if close < len(parts[i])-1 {
-			return nil, errors.Newf("path argument '%s' must span entire section", parts[i])
+			return nil, errors.New("path argument '%s' must span entire section", parts[i])
 		}
 		name := parts[i]
 		name = strings.TrimPrefix(name, "{")
 		name = strings.TrimSuffix(name, "}")
 		if strings.HasSuffix(name, "+") && i != len(parts)-1 {
-			return nil, errors.Newf("greedy path argument '%s' must end path", parts[i])
+			return nil, errors.New("greedy path argument '%s' must end path", parts[i])
 		}
 		name = strings.TrimSuffix(name, "+")
 		if name != "" && !utils.IsLowerCaseIdentifier(name) {
-			return nil, errors.Newf("name of path argument '%s' must be an identifier", parts[i])
+			return nil, errors.New("name of path argument '%s' must be an identifier", parts[i])
 		}
 	}
 	sub := &Subscription{

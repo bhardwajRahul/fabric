@@ -277,7 +277,7 @@ func (c *Connector) DescribeHistogram(name string, desc string, bucketBounds []f
 	c.metricLock.Lock()
 	defer c.metricLock.Unlock()
 	if _, ok := c.metricInstruments[name]; ok {
-		return c.captureInitErr(errors.Newf("metric '%s' already defined", name))
+		return c.captureInitErr(errors.New("metric '%s' already defined", name))
 	}
 	c.metricInstruments[name] = &metricInstrument{
 		Kind:        "histogram",
@@ -293,7 +293,7 @@ func (c *Connector) DescribeCounter(name string, desc string) (err error) {
 	c.metricLock.Lock()
 	defer c.metricLock.Unlock()
 	if _, ok := c.metricInstruments[name]; ok {
-		return c.captureInitErr(errors.Newf("metric '%s' already defined", name))
+		return c.captureInitErr(errors.New("metric '%s' already defined", name))
 	}
 	c.metricInstruments[name] = &metricInstrument{
 		Kind:        "counter",
@@ -308,7 +308,7 @@ func (c *Connector) DescribeGauge(name string, desc string) (err error) {
 	c.metricLock.Lock()
 	defer c.metricLock.Unlock()
 	if _, ok := c.metricInstruments[name]; ok {
-		return c.captureInitErr(errors.Newf("metric '%s' already defined", name))
+		return c.captureInitErr(errors.New("metric '%s' already defined", name))
 	}
 	c.metricInstruments[name] = &metricInstrument{
 		Kind:        "gauge",
@@ -354,7 +354,7 @@ func (c *Connector) AddCounter(ctx context.Context, name string, val float64, at
 		return nil
 	}
 	if val < 0 {
-		return errors.Newf("counter '%s' can't be subtracted from", name)
+		return errors.New("counter '%s' can't be subtracted from", name)
 	}
 	c.metricLock.RLock()
 	m, ok := c.metricInstruments[name]
@@ -371,10 +371,10 @@ func (c *Connector) AddCounter(ctx context.Context, name string, val float64, at
 		return errors.Trace(err)
 	}
 	if !ok {
-		return errors.Newf("unknown metric '%s'", name)
+		return errors.New("unknown metric '%s'", name)
 	}
 	if m.Counter == nil {
-		return errors.Newf("metric '%s' is not a counter", name)
+		return errors.New("metric '%s' is not a counter", name)
 	}
 	attributes = append(attributes,
 		"plane", c.Plane(),
@@ -412,10 +412,10 @@ func (c *Connector) RecordGauge(ctx context.Context, name string, val float64, a
 		return errors.Trace(err)
 	}
 	if !ok {
-		return errors.Newf("unknown metric '%s'", name)
+		return errors.New("unknown metric '%s'", name)
 	}
 	if m.Gauge == nil {
-		return errors.Newf("metric '%s' is not a gauge", name)
+		return errors.New("metric '%s' is not a gauge", name)
 	}
 	attributes = append(attributes,
 		"plane", c.Plane(),
@@ -454,10 +454,10 @@ func (c *Connector) RecordHistogram(ctx context.Context, name string, val float6
 		return errors.Trace(err)
 	}
 	if !ok {
-		return errors.Newf("unknown metric '%s'", name)
+		return errors.New("unknown metric '%s'", name)
 	}
 	if m.Histogram == nil {
-		return errors.Newf("metric '%s' is not a histogram", name)
+		return errors.New("metric '%s' is not a histogram", name)
 	}
 	attributes = append(attributes,
 		"plane", c.Plane(),
@@ -476,13 +476,13 @@ func (c *Connector) RecordHistogram(ctx context.Context, name string, val float6
 
 func attributesToKV(attributes []any) ([]attribute.KeyValue, error) {
 	if len(attributes)%2 != 0 {
-		return nil, errors.Newf("uneven number of attributes")
+		return nil, errors.New("uneven number of attributes")
 	}
 	kvAttributes := []attribute.KeyValue{}
 	for i := 0; i < len(attributes); i += 2 {
 		k, ok := attributes[i].(string)
 		if !ok {
-			return nil, errors.Newf("expected string for attribute name, found '%s'", attributes[i])
+			return nil, errors.New("expected string for attribute name, found '%s'", attributes[i])
 		}
 		switch v := attributes[i+1].(type) {
 		case string:
@@ -603,7 +603,7 @@ func (c *Connector) IncrementMetric(name string, val float64, labels ...string) 
 	m, ok := c.metricInstruments[name]
 	c.metricLock.RUnlock()
 	if !ok {
-		return errors.Newf("unknown metric '%s'", name)
+		return errors.New("unknown metric '%s'", name)
 	}
 	attrs := make([]any, 0, len(labels)*2)
 	for i := range labels {
@@ -621,7 +621,7 @@ func (c *Connector) IncrementMetric(name string, val float64, labels ...string) 
 		m.GaugeValLock.Unlock()
 		err = c.RecordGauge(c.Lifetime(), name, newVal, attrs...)
 	} else {
-		return errors.Newf("metric '%s' cannot be incremented", name)
+		return errors.New("metric '%s' cannot be incremented", name)
 	}
 	return errors.Trace(err)
 }
@@ -638,7 +638,7 @@ func (c *Connector) ObserveMetric(name string, val float64, labels ...string) (e
 	m, ok := c.metricInstruments[name]
 	c.metricLock.RUnlock()
 	if !ok {
-		return errors.Newf("unknown metric '%s'", name)
+		return errors.New("unknown metric '%s'", name)
 	}
 	attrs := make([]any, 0, len(labels)*2)
 	for i := range labels {
@@ -652,7 +652,7 @@ func (c *Connector) ObserveMetric(name string, val float64, labels ...string) (e
 	} else if m.Histogram != nil {
 		err = c.RecordHistogram(c.Lifetime(), name, val, attrs...)
 	} else {
-		return errors.Newf("metric '%s' cannot be observed", name)
+		return errors.New("metric '%s' cannot be observed", name)
 	}
 	return errors.Trace(err)
 }

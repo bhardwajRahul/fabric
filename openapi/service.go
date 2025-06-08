@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/invopop/jsonschema"
+	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/httpx"
 )
 
@@ -67,6 +68,11 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			doc.Servers[0].URL = s.RemoteURI[:p+1]
 		}
 	}
+
+	// Error schema
+	errorType := reflect.TypeOf(errors.StreamedError{})
+	errorSchema := jsonschema.ReflectFromType(errorType)
+	resolveRefs(doc, errorSchema, "error")
 
 	for _, ep := range s.Endpoints {
 		var op *oapiOperation
@@ -267,14 +273,22 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			op.Responses["401"] = &oapiResponse{
 				Description: "Unauthorized",
 				Content: map[string]*oapiMediaType{
-					"text/plain": {},
+					"application/json": {
+						Schema: &jsonschema.Schema{
+							Ref: "#/components/schemas/error_" + errorType.Name(),
+						},
+					},
 				},
 			}
 			if ep.Actor != "" {
 				op.Responses["403"] = &oapiResponse{
 					Description: "Forbidden; token required with: " + ep.Actor,
 					Content: map[string]*oapiMediaType{
-						"text/plain": {},
+						"application/json": {
+							Schema: &jsonschema.Schema{
+								Ref: "#/components/schemas/error_" + errorType.Name(),
+							},
+						},
 					},
 				}
 			}
@@ -283,13 +297,21 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 		op.Responses["4XX"] = &oapiResponse{
 			Description: "User error",
 			Content: map[string]*oapiMediaType{
-				"text/plain": {},
+				"application/json": {
+					Schema: &jsonschema.Schema{
+						Ref: "#/components/schemas/error_" + errorType.Name(),
+					},
+				},
 			},
 		}
 		op.Responses["5XX"] = &oapiResponse{
 			Description: "Server error",
 			Content: map[string]*oapiMediaType{
-				"text/plain": {},
+				"application/json": {
+					Schema: &jsonschema.Schema{
+						Ref: "#/components/schemas/error_" + errorType.Name(),
+					},
+				},
 			},
 		}
 
@@ -359,25 +381,27 @@ func fieldName(field reflect.StructField) string {
 
 // resolveRefs recursively resolves all type references in the schema and moves them to the component section of the OpenAPI document.
 func resolveRefs(doc oapiDoc, schema *jsonschema.Schema, endpoint string) {
-	// Move $defs into the components section of the document
-	// #/$defs/ABC ===> #/components/schemas/ENDPOINT_ABC
+	if strings.HasPrefix(schema.Ref, "#/$defs/") {
+		// Move $defs into the components section of the document
+		// #/$defs/ABC ===> #/components/schemas/ENDPOINT_ABC
+		schema.Ref = "#/components/schemas/" + endpoint + "_" + schema.Ref[8:]
+	}
+	if schema.Ref == "" && schema.Type == "" {
+		// Type "any"
+		schema.Examples = []any{
+			struct{}{},
+		}
+	}
+	// Recurse on nested schemas
 	for defKey, defSchema := range schema.Definitions {
 		doc.Components.Schemas[endpoint+"_"+defKey] = defSchema
-		// Recurse on nested schemas
 		resolveRefs(doc, defSchema, endpoint)
 	}
-	// Resolve all $def references to the components section of the document
-	for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-		if strings.HasPrefix(pair.Value.Ref, "#/$defs/") {
-			// #/$defs/ABC ===> #/components/schemas/ENDPOINT_ABC
-			pair.Value.Ref = "#/components/schemas/" + endpoint + "_" + pair.Value.Ref[8:]
-		}
-		if pair.Value.Ref == "" && pair.Value.Type == "" {
-			// Type "any"
-			pair.Value.Examples = []any{
-				struct{}{},
-			}
-		}
+	for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() { // Properties of a struct
+		resolveRefs(doc, pair.Value, endpoint)
+	}
+	if schema.Items != nil { // Items of an array
+		resolveRefs(doc, schema.Items, endpoint)
 	}
 	schema.Definitions = nil
 	schema.Version = "" // Avoid rendering the $schema property

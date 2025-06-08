@@ -73,7 +73,7 @@ func ResolveURL(base string, relative string) (resolved string, err error) {
 // ParseURL returns a canonical version of the parsed URL with the scheme and port filled in if omitted.
 func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	if strings.Contains(rawURL, "`") {
-		return nil, errors.Newf("backtick not allowed in URL '%s'", rawURL)
+		return nil, errors.New("backtick not allowed in URL '%s'", rawURL)
 	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil {

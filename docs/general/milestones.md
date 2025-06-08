@@ -274,3 +274,11 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Restrict `SetConfig` and `ResetConfig` to `TESTING` deployments only
 - Allow hyphens and underscores in config and ticker names
 - Handle non-standard paths and package names in code generation
+
+[Milestone 34](https://github.com/microbus-io/fabric/tree/milestone/34):
+
+- Write errors to HTTP response as JSON, not text
+- Property bag for errors
+- Smart variadic versions of `errors.New` and `errors.Trace`
+- Improved error printer middleware
+- Charset UTF-8 middleware

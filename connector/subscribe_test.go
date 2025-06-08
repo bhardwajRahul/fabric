@@ -207,7 +207,7 @@ func TestConnector_ErrorAndPanic(t *testing.T) {
 	// Create the microservice
 	con := New("error.and.panic.connector")
 	con.Subscribe("GET", "usererr", func(w http.ResponseWriter, r *http.Request) error {
-		return errors.Newc(http.StatusBadRequest, "bad input")
+		return errors.New("bad input", http.StatusBadRequest)
 	})
 	con.Subscribe("GET", "err", func(w http.ResponseWriter, r *http.Request) error {
 		return errors.New("it's bad")

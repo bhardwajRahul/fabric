@@ -47,13 +47,13 @@ func (arg *Argument) EndType() string {
 // validate validates the data after unmarshaling.
 func (arg *Argument) validate() error {
 	if arg.Name == "ctx" || arg.Type == "context.Context" {
-		return errors.Newf("context type not allowed")
+		return errors.New("context type not allowed")
 	}
 	if arg.Name == "err" || arg.Type == "error" {
-		return errors.Newf("error type not allowed")
+		return errors.New("error type not allowed")
 	}
 	if !utils.IsLowerCaseIdentifier(arg.Name) {
-		return errors.Newf("name '%s' must start with lowercase", arg.Name)
+		return errors.New("name '%s' must start with lowercase", arg.Name)
 	}
 	if arg.Name == "testingT" {
 		return errors.New("name 'testingT' is reserved")
@@ -71,14 +71,14 @@ func (arg *Argument) validate() error {
 		}
 		if strings.HasPrefix(t, "map[") {
 			if !strings.HasPrefix(t, "map[string]") {
-				return errors.Newf("map keys must be strings in '%s'", arg.Type)
+				return errors.New("map keys must be strings in '%s'", arg.Type)
 			}
 			t = strings.TrimPrefix(t, "map[string]")
 			continue
 		}
 		t = strings.TrimPrefix(t, "time.")
 		if strings.Contains(t, ".") {
-			return errors.Newf("dot notation not allowed in type '%s'", arg.Type)
+			return errors.New("dot notation not allowed in type '%s'", arg.Type)
 		}
 
 		switch {
@@ -101,7 +101,7 @@ func (arg *Argument) validate() error {
 		case t == "byte" || t == "bool" || t == "string" || t == "any":
 			// Nothing
 		case utils.IsLowerCaseIdentifier(t):
-			return errors.Newf("unknown primitive type '%s'", t)
+			return errors.New("unknown primitive type '%s'", t)
 		}
 
 		break

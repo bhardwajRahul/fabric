@@ -28,13 +28,14 @@ import (
 
 func TestDirectory_Versioning(t *testing.T) {
 	t.Parallel()
+tt := testarossa.For(t)
 	
 	hash, err := utils.SourceCodeSHA256(".")
-	if testarossa.NoError(t, err) {
-		testarossa.Equal(t, hash, SourceCodeSHA256, "SourceCodeSHA256 is not up to date")
+	if tt.NoError(err) {
+		tt.Equal(hash, SourceCodeSHA256, "SourceCodeSHA256 is not up to date")
 	}
 	buf, err := os.ReadFile("version-gen.go")
-	if testarossa.NoError(t, err) {
-		testarossa.Contains(t, string(buf), hash, "SHA256 in version-gen.go is not up to date")
+	if tt.NoError(err) {
+		tt.Contains(string(buf), hash, "SHA256 in version-gen.go is not up to date")
 	}
 }

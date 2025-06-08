@@ -60,7 +60,7 @@ func (sig *Signature) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				arg = strings.TrimSpace(arg)
 				space := strings.Index(arg, " ")
 				if space < 0 {
-					return errors.Newf("invalid argument '%s'", arg)
+					return errors.New("invalid argument '%s'", arg)
 				}
 				sig.InputArgs = append(sig.InputArgs, &Argument{
 					Name: strings.TrimSpace(arg[:space]),
@@ -84,7 +84,7 @@ func (sig *Signature) UnmarshalYAML(unmarshal func(interface{}) error) error {
 					arg = strings.TrimSpace(arg)
 					space := strings.Index(arg, " ")
 					if space < 0 {
-						return errors.Newf("invalid argument '%s'", arg)
+						return errors.New("invalid argument '%s'", arg)
 					}
 					sig.OutputArgs = append(sig.OutputArgs, &Argument{
 						Name: strings.TrimSpace(arg[:space]),
@@ -106,25 +106,25 @@ func (sig *Signature) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // validate validates the data after unmarshaling.
 func (sig *Signature) validate() error {
 	if !utils.IsUpperCaseIdentifier(sig.Name) {
-		return errors.Newf("handler '%s' must start with uppercase in '%s'", sig.Name, sig.OrigString)
+		return errors.New("handler '%s' must start with uppercase in '%s'", sig.Name, sig.OrigString)
 	}
 	if strings.HasPrefix(sig.Name, "Mock") {
-		return errors.Newf("handler '%s' must not start with 'Mock' in '%s'", sig.Name, sig.OrigString)
+		return errors.New("handler '%s' must not start with 'Mock' in '%s'", sig.Name, sig.OrigString)
 	}
 	if strings.HasPrefix(sig.Name, "Test") {
-		return errors.Newf("handler '%s' must not start with 'Test' in '%s'", sig.Name, sig.OrigString)
+		return errors.New("handler '%s' must not start with 'Test' in '%s'", sig.Name, sig.OrigString)
 	}
 
 	dedup := map[string]bool{}
 	for _, arg := range sig.InputArgs {
 		if dedup[arg.Name] {
-			return errors.Newf("duplicate arg name '%s' in '%s'", arg.Name, sig.OrigString)
+			return errors.New("duplicate arg name '%s' in '%s'", arg.Name, sig.OrigString)
 		}
 		dedup[arg.Name] = true
 	}
 	for _, arg := range sig.OutputArgs {
 		if dedup[arg.Name] {
-			return errors.Newf("duplicate arg name '%s' in '%s'", arg.Name, sig.OrigString)
+			return errors.New("duplicate arg name '%s' in '%s'", arg.Name, sig.OrigString)
 		}
 		dedup[arg.Name] = true
 	}
@@ -135,13 +135,13 @@ func (sig *Signature) validate() error {
 	for _, arg := range allArgs {
 		err := arg.validate()
 		if err != nil {
-			return errors.Newf("%s in '%s'", err.Error(), sig.OrigString)
+			return errors.New("%s in '%s'", err.Error(), sig.OrigString)
 		}
 	}
 
 	for _, arg := range sig.InputArgs {
 		if arg.Name == "httpResponseBody" || arg.Name == "httpStatusCode" {
-			return errors.Newf("'%s' in '%s' can only be an output argument", arg.Name, sig.OrigString)
+			return errors.New("'%s' in '%s' can only be an output argument", arg.Name, sig.OrigString)
 		}
 	}
 	hasResponseBody := false
@@ -153,14 +153,14 @@ func (sig *Signature) validate() error {
 			hasStandard = true
 		}
 		if arg.Name == "httpRequestBody" {
-			return errors.Newf("'%s' in '%s' can only be an input argument", arg.Name, sig.OrigString)
+			return errors.New("'%s' in '%s' can only be an input argument", arg.Name, sig.OrigString)
 		}
 		if arg.Name == "httpStatusCode" && arg.Type != "int" {
-			return errors.Newf("'%s' in '%s' must be of type int", arg.Name, sig.OrigString)
+			return errors.New("'%s' in '%s' must be of type int", arg.Name, sig.OrigString)
 		}
 	}
 	if hasResponseBody && hasStandard {
-		return errors.Newf("cannot return other arguments along with 'httpResponseBody' in '%s'", sig.OrigString)
+		return errors.New("cannot return other arguments along with 'httpResponseBody' in '%s'", sig.OrigString)
 	}
 	return nil
 }

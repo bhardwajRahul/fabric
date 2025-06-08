@@ -201,7 +201,7 @@ func (_c *Client) MakeRequest_Do(r *http.Request) (res *http.Response, err error
 		}
 	}
 	if r.Method != `POST` {
-		return nil, errors.Newc(http.StatusNotFound, "")
+		return nil, errors.New("", http.StatusNotFound)
 	}
 	url, err := httpx.ResolveURL(URLOfMakeRequest, r.URL.String())
 	if err != nil {
@@ -242,7 +242,7 @@ func (_c *MulticastClient) MakeRequest_Do(ctx context.Context, r *http.Request) 
 		}
 	}
 	if r.Method != `POST` {
-		return _c.errChan(errors.Newc(http.StatusNotFound, ""))
+		return _c.errChan(errors.New("", http.StatusNotFound))
 	}
 	url, err := httpx.ResolveURL(URLOfMakeRequest, r.URL.String())
 	if err != nil {

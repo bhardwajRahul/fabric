@@ -169,7 +169,7 @@ func (c *Cache) stop(ctx context.Context) error {
 func (c *Cache) handleAll(w http.ResponseWriter, r *http.Request) error {
 	// Ignore messages from other hosts
 	if frame.Of(r).FromHost() != c.svc.Hostname() {
-		return errors.Newf("foreign host '%s'", frame.Of(r).FromHost())
+		return errors.New("foreign host '%s'", frame.Of(r).FromHost())
 	}
 	switch r.URL.Query().Get("do") {
 	case "load":
@@ -187,7 +187,7 @@ func (c *Cache) handleAll(w http.ResponseWriter, r *http.Request) error {
 	case "len":
 		return c.handleLen(w, r)
 	default:
-		return errors.Newf("invalid action '%s'", r.URL.Query().Get("do"))
+		return errors.New("invalid action '%s'", r.URL.Query().Get("do"))
 	}
 }
 

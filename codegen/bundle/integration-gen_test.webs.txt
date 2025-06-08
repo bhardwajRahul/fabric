@@ -695,7 +695,7 @@ func {{ .Name }}{{ if ne .Method "ANY" }}_Do{{ end }}(t *testing.T, r *http.Requ
 	}
 	{{- if ne .Method "ANY" }}
 	if r.Method != `{{ .Method }}` {
-		tc.err = errors.Newc(http.StatusNotFound, "")
+		tc.err = errors.New("", http.StatusNotFound)
 		return tc
 	}
 	{{- end }}
