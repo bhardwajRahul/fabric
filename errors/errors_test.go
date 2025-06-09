@@ -156,12 +156,25 @@ func TestErrors_New(t *testing.T) {
 	tracedErr = errors.Convert(err)
 	tt.Equal(7, tracedErr.StatusCode)
 
+	// Unnamed properties
 	err = errors.New("message", time.Second, false)
 	tt.Error(err)
 	tracedErr = errors.Convert(err)
 	tt.Len(tracedErr.Properties, 2)
 	tt.Equal(time.Second, tracedErr.Properties["unnamed1"])
 	tt.Equal(false, tracedErr.Properties["unnamed2"])
+
+	// Not enough args for pattern
+	err = errors.New("pattern %s %d", "XYZ")
+	tt.Error(err)
+	tt.Contains(err, "pattern XYZ")
+
+	// Double percent sign
+	err = errors.New("pattern %s 100%%d", "XYZ", 400)
+	tt.Error(err)
+	tt.Equal("pattern XYZ 100%d", err.Error())
+	tracedErr = errors.Convert(err)
+	tt.Equal(400, tracedErr.StatusCode)
 }
 
 func TestErrors_Trace(t *testing.T) {

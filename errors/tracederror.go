@@ -81,6 +81,7 @@ An unnamed integer is interpreted to be an HTTP status code to associate with th
 */
 func New(pattern string, a ...any) error {
 	pctArgs := strings.Count(pattern, `%`) - 2*strings.Count(pattern, `%%`)
+	pctArgs = min(pctArgs, len(a))
 	msg := fmt.Sprintf(pattern, a[:pctArgs]...)
 	err := &TracedError{}
 	i := pctArgs
