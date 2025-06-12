@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"unicode"
 	"unsafe"
 )
@@ -133,13 +132,6 @@ func LooksLikeJWT(token string) bool {
 	return true
 }
 
-var base64DecoderPool = sync.Pool{
-	New: func() any {
-		buf := make([]byte, 4096)
-		return &buf
-	},
-}
-
 // StringClaimFromJWT extracts a claim from a JWT with minimal memory allocations without fully parsing it.
 // The claim must be a string, i.e. appear as "name":"value" in the claim part.
 func StringClaimFromJWT(token string, name string) (value string, ok bool) {
@@ -151,19 +143,9 @@ func StringClaimFromJWT(token string, name string) (value string, ok bool) {
 	if dot1 < 0 || dot2 <= dot1 {
 		return "", false
 	}
-	encoded := UnsafeStringToBytes(token[dot1+1 : dot2])
-	buf := base64DecoderPool.Get().(*[]byte)
-	defer base64DecoderPool.Put(buf)
-	decoded := *buf
-	n, err := base64.RawURLEncoding.Decode(decoded, encoded)
+	decoded, err := base64.RawURLEncoding.DecodeString(token[dot1+1 : dot2])
 	if err != nil {
 		return "", false
-	}
-	if n == len(decoded) {
-		decoded, err = base64.RawURLEncoding.DecodeString(token[dot1+1 : dot2])
-		if err != nil {
-			return "", false
-		}
 	}
 	nameAsBytes := UnsafeStringToBytes(name)
 	p := bytes.Index(decoded, nameAsBytes)
