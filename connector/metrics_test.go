@@ -17,8 +17,12 @@ limitations under the License.
 package connector
 
 import (
+	"io"
+	"net/http"
+	"sync/atomic"
 	"testing"
 
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -87,7 +91,10 @@ func TestConnector_DefineMetrics(t *testing.T) {
 }
 
 func TestConnector_ObserveMetrics(t *testing.T) {
-	t.Parallel()
+	// No parallel
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
+
 	tt := testarossa.For(t)
 	ctx := t.Context()
 
@@ -159,7 +166,10 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 }
 
 func TestConnector_StandardMetrics(t *testing.T) {
-	t.Parallel()
+	// No parallel
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
+
 	tt := testarossa.For(t)
 
 	con := New("standard.metrics.connector")
@@ -204,5 +214,70 @@ func TestConnector_InferUnit(t *testing.T) {
 	for _, tc := range testCases {
 		unit := con.inferMetricUnit(tc.name, tc.desc)
 		tt.Equal(tc.unit, unit, "Expected %s, got %s, for %s", tc.unit, unit, tc.name)
+	}
+}
+
+func TestConnector_MetricExporters(t *testing.T) {
+	// No parallel
+	tt := testarossa.For(t)
+
+	// Create the web server
+	var counter atomic.Int32
+	httpServer := &http.Server{
+		Addr: ":5555",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			counter.Add(1)
+			io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+	go httpServer.ListenAndServe()
+	defer httpServer.Close()
+
+	// Both Prometheus and OTel exporters
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:5555")
+
+	con := New("metric.exporters.connector")
+	err := con.Startup()
+	tt.NoError(err)
+	err = con.Shutdown()
+	tt.NoError(err)
+	tt.Equal(2, int(counter.Load()))
+
+	// Only Prometheus exporter
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+	con = New("metric.exporters.connector")
+	err = con.Startup()
+	tt.NoError(err)
+	err = con.Shutdown()
+	tt.NoError(err)
+
+	// Only OTel exporter
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:5555")
+
+	con = New("metric.exporters.connector")
+	err = con.Startup()
+	tt.NoError(err)
+	err = con.Shutdown()
+	tt.NoError(err)
+	tt.Equal(4, int(counter.Load()))
+
+	// No exporters
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+	con = New("metric.exporters.connector")
+	err = con.Startup()
+	tt.NoError(err)
+	err = con.Shutdown()
+	tt.NoError(err)
+
+	for range 4 {
+		env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
+		env.Pop("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
 }

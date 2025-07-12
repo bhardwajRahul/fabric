@@ -22,6 +22,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/microbus-io/fabric/rand"
@@ -79,11 +82,22 @@ func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 	}
 
 	// Defragment
+	var countInt atomic.Int32
 	defrag := NewDefragRequest()
+	var wg sync.WaitGroup
 	for _, r := range fragReqs {
-		err := defrag.Add(r)
-		tt.NoError(err)
+		wg.Add(1)
+		go func() {
+			final, err := defrag.Add(r)
+			tt.NoError(err)
+			if final {
+				countInt.Add(1)
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
+	tt.Equal(int32(1), countInt.Load())
 	intReq, err := defrag.Integrated()
 	tt.NoError(err)
 	tt.NotNil(intReq)
@@ -160,11 +174,22 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 	}
 
 	// Defragment
+	var countInt atomic.Int32
 	defrag := NewDefragResponse()
+	var wg sync.WaitGroup
 	for _, r := range fragRess {
-		err := defrag.Add(r)
-		tt.NoError(err)
+		wg.Add(1)
+		go func() {
+			final, err := defrag.Add(r)
+			tt.NoError(err)
+			if final {
+				countInt.Add(1)
+			}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
+	tt.Equal(int32(1), countInt.Load())
 	intRes, err := defrag.Integrated()
 	tt.NoError(err)
 	tt.NotNil(intRes)
@@ -208,7 +233,7 @@ func TestHttpx_DefragRequestNoContentLen(t *testing.T) {
 		r, _ := frag.Fragment(i)
 		r.Header.Del("Content-Length")
 		r.ContentLength = -1
-		err := defrag.Add(r)
+		_, err := defrag.Add(r)
 		tt.NoError(err)
 	}
 	intReq, err := defrag.Integrated()
@@ -251,7 +276,7 @@ func TestHttpx_DefragResponseNoContentLen(t *testing.T) {
 		r, _ := frag.Fragment(i)
 		r.Header.Del("Content-Length")
 		r.ContentLength = -1
-		err := defrag.Add(r)
+		_, err := defrag.Add(r)
 		tt.NoError(err)
 	}
 	intRes, err := defrag.Integrated()
@@ -262,4 +287,25 @@ func TestHttpx_DefragResponseNoContentLen(t *testing.T) {
 	intBody, err := io.ReadAll(intRes.Body)
 	tt.NoError(err)
 	tt.Equal(body, intBody)
+}
+
+func TestHttpx_FragRequestZero(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	r, err := http.NewRequest("POST", "/", strings.NewReader("hello"))
+	tt.NoError(err)
+	_, err = NewFragRequest(r, 0)
+	tt.Contains(err, "non-positive")
+}
+
+func TestHttpx_FragResponseZero(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	rec := NewResponseRecorder()
+	rec.Write([]byte("hello"))
+	r := rec.Result()
+	_, err := NewFragResponse(r, 0)
+	tt.Contains(err, "non-positive")
 }

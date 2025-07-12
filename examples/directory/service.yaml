@@ -72,11 +72,11 @@ configs:
 # actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 functions:
-  - signature: Create(httpRequestBody *Person) (key PersonKey)
+  - signature: Create(httpRequestBody Person) (key PersonKey)
     description: Create registers the person in the directory.
     method: POST
     path: /persons
-  - signature: Load(key PersonKey) (httpResponseBody *Person)
+  - signature: Load(key PersonKey) (httpResponseBody Person)
     description: Load looks up a person in the directory.
     method: GET
     path: /persons/key/{key}
@@ -84,11 +84,11 @@ functions:
     description: Delete removes a person from the directory.
     method: DELETE
     path: /persons/key/{key}
-  - signature: Update(key PersonKey, httpRequestBody *Person)
+  - signature: Update(key PersonKey, httpRequestBody Person)
     description: Update updates the person's data in the directory.
     method: PUT
     path: /persons/key/{key}
-  - signature: LoadByEmail(email string) (httpResponseBody *Person)
+  - signature: LoadByEmail(email string) (httpResponseBody Person)
     description: LoadByEmail looks up a person in the directory by their email.
     method: GET
     path: /persons/email/{email}

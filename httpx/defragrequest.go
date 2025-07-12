@@ -20,25 +20,28 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/utils"
 )
 
 // DefragRequest merges together multiple fragments back into a single HTTP request
 type DefragRequest struct {
-	fragments    utils.SyncMap[int, *http.Request]
-	maxIndex     atomic.Int32
-	count        atomic.Int32
+	fragments    map[int]*http.Request
+	maxIndex     int
+	arrived      int
 	lastActivity atomic.Int64
+	mux          sync.Mutex
 }
 
 // NewDefragRequest creates a new request integrator.
 func NewDefragRequest() *DefragRequest {
-	st := &DefragRequest{}
+	st := &DefragRequest{
+		fragments: map[int]*http.Request{},
+	}
 	st.lastActivity.Store(time.Now().UnixMilli())
 	return st
 }
@@ -48,23 +51,19 @@ func (st *DefragRequest) LastActivity() time.Duration {
 	return time.Duration(time.Now().UnixMilli()-st.lastActivity.Load()) * time.Millisecond
 }
 
-// Integrated indicates if all the fragments have been collected and if so returns them as a single HTTP request.
+// Integrated returns all the fragments have been collected as a single HTTP request.
 func (st *DefragRequest) Integrated() (integrated *http.Request, err error) {
-	maxIndex := st.maxIndex.Load()
-	if maxIndex == 1 {
-		onlyFrag, _ := st.fragments.Load(1)
-		return onlyFrag, nil
-	}
-	if maxIndex == 0 || st.count.Load() != maxIndex {
+	st.mux.Lock()
+	defer st.mux.Unlock()
+	if st.arrived == 0 || st.arrived != st.maxIndex {
 		return nil, nil
 	}
-
 	// Serialize the bodies of all fragments
 	bodies := []io.Reader{}
 	var contentLength int64
 	contentLengthOK := true
-	for i := 1; i <= int(maxIndex); i++ {
-		fragment, ok := st.fragments.Load(i)
+	for i := 1; i <= int(st.maxIndex); i++ {
+		fragment, ok := st.fragments[i]
 		if !ok || fragment == nil {
 			return nil, errors.New("missing fragment %d", i)
 		}
@@ -81,7 +80,7 @@ func (st *DefragRequest) Integrated() (integrated *http.Request, err error) {
 	integratedBody := io.MultiReader(bodies...)
 
 	// Set the integrated body on the first fragment
-	firstFragment, ok := st.fragments.Load(1)
+	firstFragment, ok := st.fragments[1]
 	if !ok || firstFragment == nil {
 		return nil, errors.New("missing first fragment")
 	}
@@ -94,11 +93,17 @@ func (st *DefragRequest) Integrated() (integrated *http.Request, err error) {
 }
 
 // Add a fragment to be integrated.
-func (st *DefragRequest) Add(r *http.Request) error {
+// The integrated request is returned if this was the last fragment.
+func (st *DefragRequest) Add(r *http.Request) (final bool, err error) {
 	index, max := frame.Of(r).Fragment()
-	st.maxIndex.Store(int32(max))
-	st.fragments.Store(index, r)
-	st.count.Add(1)
+	st.mux.Lock()
+	st.fragments[index] = r
+	st.maxIndex = max
+	st.arrived++
 	st.lastActivity.Store(time.Now().UnixMilli())
-	return nil
+	if st.arrived == st.maxIndex {
+		final = true
+	}
+	st.mux.Unlock()
+	return final, errors.Trace(err)
 }

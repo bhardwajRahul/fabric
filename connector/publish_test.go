@@ -17,19 +17,20 @@ limitations under the License.
 package connector
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/mem"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/sub"
@@ -116,83 +117,191 @@ func TestConnector_Error(t *testing.T) {
 
 func BenchmarkConnector_EchoSerial(b *testing.B) {
 	ctx := context.Background()
+	tt := testarossa.For(b)
 
 	// Create the microservice
 	alpha := New("alpha.echo.serial.connector")
 	var echoCount atomic.Int32
+	var errCount atomic.Int32
 	alpha.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
 		echoCount.Add(1)
-		body, _ := io.ReadAll(r.Body)
-		w.Write(body)
+		sz := 32 << 10
+		if r.ContentLength > 0 {
+			sz = int(r.ContentLength)
+		}
+		block := mem.Alloc(sz)
+		for {
+			n, err := io.ReadFull(r.Body, block[:sz])
+			if n == 0 || err == io.EOF {
+				break
+			}
+			if err != nil {
+				errCount.Add(1)
+			}
+			w.Write(block[:n])
+		}
+		mem.Free(block)
+		r.Body.Close()
 		return nil
 	})
 
 	beta := New("beta.echo.serial.connector")
 
-	// Startup the microservice
-	alpha.Startup()
-	defer alpha.Shutdown()
-	beta.Startup()
-	defer beta.Shutdown()
-
-	// The bottleneck is waiting on the network i/o
-	var errCount int
-	b.ResetTimer()
-	for b.Loop() {
-		_, err := beta.POST(ctx, "https://alpha.echo.serial.connector/echo", []byte("Hello"))
-		if err != nil {
-			errCount++
+	for _, sc := range []int{1, 0} {
+		env.Push("MICROBUS_SHORT_CIRCUIT", strconv.Itoa(sc))
+		defer env.Pop("MICROBUS_SHORT_CIRCUIT")
+		scDesc := "ShortCircuit"
+		if sc == 0 {
+			scDesc = "NATS"
 		}
-	}
-	b.StopTimer()
-	testarossa.Equal(b, 0, errCount)
-	testarossa.Equal(b, int32(b.N), echoCount.Load())
+		b.Run(scDesc, func(b *testing.B) {
+			// Startup the microservice
+			err := alpha.Startup()
+			tt.NoError(err)
+			err = beta.Startup()
+			tt.NoError(err)
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=12117
-	// 94226 ns/op (10612 ops/sec)
-	// 19672 B/op
-	// 277 allocs/op
+			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+					errCount.Store(0)
+					echoCount.Store(0)
+					var payload []byte
+					if kb > 0 {
+						payload = []byte(rand.AlphaNum64(kb << 10))
+					}
+					b.ResetTimer()
+					for b.Loop() {
+						res, err := beta.POST(ctx, "https://alpha.echo.serial.connector/echo", payload)
+						if err != nil {
+							errCount.Add(1)
+						}
+						if res != nil && res.Body != nil {
+							buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+							io.Copy(buf, res.Body)
+							mem.Free(buf.Bytes())
+						}
+					}
+					b.StopTimer()
+					testarossa.Zero(b, errCount.Load())
+					testarossa.Equal(b, b.N, int(echoCount.Load()))
+				})
+			}
+
+			alpha.Shutdown()
+			beta.Shutdown()
+		})
+	}
+
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_EchoSerial/ShortCircuit/0KB-10     	   96007	     11909 ns/op	    8232 B/op	     140 allocs/op
+	// BenchmarkConnector_EchoSerial/ShortCircuit/1KB-10     	   94502	     12669 ns/op	    9481 B/op	     152 allocs/op
+	// BenchmarkConnector_EchoSerial/ShortCircuit/16KB-10    	   72182	     16890 ns/op	   27124 B/op	     152 allocs/op
+	// BenchmarkConnector_EchoSerial/ShortCircuit/256KB-10   	   20193	     59984 ns/op	  303974 B/op	     154 allocs/op
+	// BenchmarkConnector_EchoSerial/ShortCircuit/960KB-10   	    9333	    110925 ns/op	 1094017 B/op	     155 allocs/op
+	// BenchmarkConnector_EchoSerial/NATS/0KB-10             	    9336	    124917 ns/op	   15056 B/op	     233 allocs/op
+	// BenchmarkConnector_EchoSerial/NATS/1KB-10             	    9142	    126795 ns/op	   18707 B/op	     247 allocs/op
+	// BenchmarkConnector_EchoSerial/NATS/16KB-10            	    7446	    162489 ns/op	   81983 B/op	     250 allocs/op
+	// BenchmarkConnector_EchoSerial/NATS/256KB-10           	    2427	    497678 ns/op	 1253900 B/op	     261 allocs/op
+	// BenchmarkConnector_EchoSerial/NATS/960KB-10           	    1002	   1175914 ns/op	 3858598 B/op	     267 allocs/op
 }
 
 func BenchmarkConnector_EchoSerialHTTP(b *testing.B) {
+	tt := testarossa.For(b)
+
 	// Create the web server
 	var echoCount atomic.Int32
+	var errCount atomic.Int32
 	httpServer := &http.Server{
 		Addr: ":5555",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			echoCount.Add(1)
-			body, _ := io.ReadAll(r.Body)
+			body, err := io.ReadAll(r.Body)
+			r.Body.Close()
+			if err != nil {
+				errCount.Add(1)
+			}
 			w.Write(body)
 		}),
 	}
 	go httpServer.ListenAndServe()
 	defer httpServer.Close()
 
-	// The bottleneck is waiting on the network i/o
-	var errCount int
-	b.ResetTimer()
-	for b.Loop() {
-		res, err := http.Post("http://localhost:5555/", "", strings.NewReader("Hello"))
-		if err != nil {
-			errCount++
-		}
-		if res != nil && res.Body != nil {
-			res.Body.Close()
-		}
+	for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+		b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+			errCount.Store(0)
+			echoCount.Store(0)
+			payload := []byte(rand.AlphaNum64(kb << 10))
+			b.ResetTimer()
+			for b.Loop() {
+				var payloadReader io.Reader
+				if kb > 0 {
+					payloadReader = bytes.NewReader(payload)
+				}
+				res, err := http.Post("http://127.0.0.1:5555/", "", payloadReader)
+				if err != nil {
+					errCount.Add(1)
+				}
+				if res != nil && res.Body != nil {
+					buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+					io.Copy(buf, res.Body)
+					mem.Free(buf.Bytes())
+					res.Body.Close()
+				}
+			}
+			b.StopTimer()
+			tt.Zero(errCount.Load())
+			tt.Equal(b.N, int(echoCount.Load()))
+		})
 	}
-	b.StopTimer()
-	testarossa.Equal(b, 0, errCount)
-	testarossa.Equal(b, int32(b.N), echoCount.Load())
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=5540
-	// 261968 ns/op (3817 ops/sec) = approx 1/3 vs via messaging bus
-	// 26667 B/op
-	// 173 allocs/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_EchoSerialHTTP/0KB-10         	   29139	     39602 ns/op	    6002 B/op	      62 allocs/op
+	// BenchmarkConnector_EchoSerialHTTP/1KB-10         	   27632	     43538 ns/op	   12467 B/op	      84 allocs/op
+	// BenchmarkConnector_EchoSerialHTTP/16KB-10        	   10000	    101181 ns/op	  156075 B/op	     111 allocs/op
+	// BenchmarkConnector_EchoSerialHTTP/256KB-10       	    2814	    424454 ns/op	 2307765 B/op	     140 allocs/op
+	// BenchmarkConnector_EchoSerialHTTP/960KB-10       	    1328	    905384 ns/op	 7419094 B/op	     155 allocs/op
 }
 
 func BenchmarkConnector_SerialChain(b *testing.B) {
+	for _, sc := range []int{1, 0} {
+		env.Push("MICROBUS_SHORT_CIRCUIT", strconv.Itoa(sc))
+		defer env.Pop("MICROBUS_SHORT_CIRCUIT")
+		scDesc := "ShortCircuit"
+		if sc == 0 {
+			scDesc = "NATS"
+		}
+		b.Run(scDesc, func(b *testing.B) {
+			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+					serialChain(b, kb<<10)
+				})
+			}
+		})
+	}
+
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_SerialChain/ShortCircuit/0KB-10     	    8552	    138005 ns/op	   78370 B/op	    1438 allocs/op
+	// BenchmarkConnector_SerialChain/ShortCircuit/1KB-10     	    7393	    161923 ns/op	  124542 B/op	    1504 allocs/op
+	// BenchmarkConnector_SerialChain/ShortCircuit/16KB-10    	    3991	    299136 ns/op	  823003 B/op	    1517 allocs/op
+	// BenchmarkConnector_SerialChain/ShortCircuit/256KB-10   	     958	   1053469 ns/op	11707859 B/op	    1543 allocs/op
+	// BenchmarkConnector_SerialChain/ShortCircuit/960KB-10   	     710	   1465405 ns/op	12669310 B/op	    1513 allocs/op
+	// BenchmarkConnector_SerialChain/NATS/0KB-10             	     915	   1300616 ns/op	  156600 B/op	    2420 allocs/op
+	// BenchmarkConnector_SerialChain/NATS/1KB-10             	     752	   1350357 ns/op	  213458 B/op	    2541 allocs/op
+	// BenchmarkConnector_SerialChain/NATS/16KB-10            	     542	   1943614 ns/op	 1224985 B/op	    2631 allocs/op
+	// BenchmarkConnector_SerialChain/NATS/256KB-10           	     177	   5752736 ns/op	17261974 B/op	    2741 allocs/op
+	// BenchmarkConnector_SerialChain/NATS/960KB-10           	      61	  18121212 ns/op	57571406 B/op	    4227 allocs/op
+}
+
+func serialChain(b *testing.B, payloadSize int) {
 	ctx := context.Background()
 
 	// Create the microservice
@@ -205,13 +314,21 @@ func BenchmarkConnector_SerialChain(b *testing.B) {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			body, _ := io.ReadAll(res.Body)
-			w.Write(body)
+			if res.Body != nil {
+				buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+				io.Copy(buf, res.Body)
+				w.Write(buf.Bytes())
+				mem.Free(buf.Bytes())
+			}
 		} else {
 			// Echo back the request
 			echoCount.Add(1)
-			body, _ := io.ReadAll(r.Body)
-			w.Write(body)
+			if r.Body != nil {
+				buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+				io.Copy(buf, r.Body)
+				w.Write(buf.Bytes())
+				mem.Free(buf.Bytes())
+			}
 		}
 		return nil
 	})
@@ -220,76 +337,110 @@ func BenchmarkConnector_SerialChain(b *testing.B) {
 	con.Startup()
 	defer con.Shutdown()
 
-	// The bottleneck is waiting on the network i/o
-	var errCount int
+	var errCount atomic.Int32
+	echoCount.Store(0)
+	payload := []byte(rand.AlphaNum64(payloadSize))
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := con.POST(ctx, "https://serial.chain.connector/echo", []byte("Hello"))
+		res, err := con.POST(ctx, "https://serial.chain.connector/echo", payload)
 		if err != nil {
-			errCount++
+			errCount.Add(1)
+		}
+		if res != nil && res.Body != nil {
+			buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+			io.Copy(buf, res.Body)
+			mem.Free(buf.Bytes())
 		}
 	}
 	b.StopTimer()
-	testarossa.Equal(b, 0, errCount)
-	testarossa.Equal(b, int32(b.N), echoCount.Load())
-
-	// On 2021 MacBook M1 Pro 16":
-	// N=1174
-	// 988411 ns/op (1012 ops/sec)
-	// 247735 B/op
-	// 3013 allocs/op
+	testarossa.Zero(b, errCount.Load())
+	testarossa.Equal(b, b.N, int(echoCount.Load()))
 }
 
-func BenchmarkConnector_EchoParallelMax(b *testing.B) {
-	echoParallel(b, b.N)
+func BenchmarkConnector_EchoParallelNATS(b *testing.B) {
+	env.Push("MICROBUS_SHORT_CIRCUIT", "0")
+	defer env.Pop("MICROBUS_SHORT_CIRCUIT")
+	for _, concurrency := range []int{100, 1000, 10000} {
+		b.Run(strconv.Itoa(concurrency), func(b *testing.B) {
+			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+					echoParallel(b, concurrency, kb<<10)
+				})
+			}
+		})
+	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=91160 concurrent
-	// 12577 ns/op (79510 ops/sec) = approx 8x that of serial
-	// 19347 B/op
-	// 280 allocs/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_EchoParallelNATS/100/0KB-10     	   59695	     19347 ns/op	   14232 B/op	     242 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/100/1KB-10     	   49276	     20920 ns/op	   17872 B/op	     249 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/100/16KB-10    	   35426	     30551 ns/op	   72559 B/op	     250 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/100/256KB-10   	    6244	    183513 ns/op	  898301 B/op	     250 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/100/960KB-10   	    1514	    722379 ns/op	 3117985 B/op	     250 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/1000/0KB-10    	  110432	     10726 ns/op	   14044 B/op	     242 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/1000/1KB-10    	   88454	     11390 ns/op	   17444 B/op	     249 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/1000/16KB-10   	   59472	     19346 ns/op	   70074 B/op	     249 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/1000/256KB-10  	    5665	    195763 ns/op	  918751 B/op	     249 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/1000/960KB-10  	    1594	    866156 ns/op	 3619096 B/op	     251 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/10000/0KB-10   	  120158	      9422 ns/op	   14046 B/op	     242 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/10000/1KB-10   	  110713	     10119 ns/op	   17623 B/op	     249 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/10000/16KB-10  	   56052	     21480 ns/op	   72994 B/op	     250 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/10000/256KB-10 	    5626	    288611 ns/op	 1304787 B/op	     252 allocs/op
+	// BenchmarkConnector_EchoParallelNATS/10000/960KB-10 	    1402	    741374 ns/op	 3914731 B/op	     252 allocs/op
 }
 
-func BenchmarkConnector_EchoParallel100(b *testing.B) {
-	echoParallel(b, 100)
+func BenchmarkConnector_EchoParallelShortCircuit(b *testing.B) {
+	env.Push("MICROBUS_SHORT_CIRCUIT", "1")
+	defer env.Pop("MICROBUS_SHORT_CIRCUIT")
+	for _, concurrency := range []int{100, 1000, 10000} {
+		b.Run(strconv.Itoa(concurrency), func(b *testing.B) {
+			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+					echoParallel(b, concurrency, kb<<10)
+				})
+			}
+		})
+	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=58006
-	// 19499 ns/op (51284 ops/sec) = approx 5x that of serial
-	// 19314 B/op
-	// 277 allocs/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_EchoParallelShortCircuit/100/0KB-10     	  137668	      8848 ns/op	    8461 B/op	     150 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/100/1KB-10     	   91471	     11961 ns/op	   15931 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/100/16KB-10    	   55020	     19815 ns/op	  125466 B/op	     162 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/100/256KB-10   	   24858	     41754 ns/op	 1852003 B/op	     162 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/100/960KB-10   	   30968	     36537 ns/op	 1051782 B/op	     155 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/1000/0KB-10    	  180338	      6565 ns/op	    8423 B/op	     150 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/1000/1KB-10    	  153175	      7736 ns/op	   15857 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/1000/16KB-10   	   77114	     14116 ns/op	  125330 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/1000/256KB-10  	   32976	     33442 ns/op	 1851825 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/1000/960KB-10  	   43832	     27346 ns/op	 1013508 B/op	     155 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/10000/0KB-10   	  181414	      6494 ns/op	    8451 B/op	     150 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/10000/1KB-10   	  150331	      7381 ns/op	   15875 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/10000/16KB-10  	   76665	     14356 ns/op	  125368 B/op	     161 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/10000/256KB-10 	   23038	     48433 ns/op	 1852014 B/op	     163 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/10000/960KB-10 	   36306	     32730 ns/op	 1007266 B/op	     156 allocs/op
 }
 
-func BenchmarkConnector_EchoParallel1K(b *testing.B) {
-	echoParallel(b, 1000)
-
-	// On 2021 MacBook M1 Pro 16":
-	// N=94744
-	// 12102 ns/op (82630 ops/sec) = approx 8x that of serial
-	// 19451 B/op
-	// 278 allocs/op
-}
-
-func BenchmarkConnector_EchoParallel10K(b *testing.B) {
-	echoParallel(b, 10000)
-
-	// On 2021 MacBook M1 Pro 16":
-	// N=107904
-	// 10575 ns/op (94562 ops/sec) = approx 9x that of serial
-	// 19412 B/op
-	// 278 allocs/op
-}
-
-func echoParallel(b *testing.B, concurrency int) {
+func echoParallel(b *testing.B, concurrency int, payloadSize int) {
 	ctx := context.Background()
+	if concurrency <= 0 || concurrency > b.N {
+		concurrency = b.N
+	}
 
 	// Create the microservice
 	alpha := New("alpha.echo.parallel.connector")
 	var echoCount atomic.Int32
-	alpha.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
+	var errCount atomic.Int32
+	alpha.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
 		echoCount.Add(1)
-		body, _ := io.ReadAll(r.Body)
-		w.Write(body)
+		buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+		io.Copy(buf, r.Body)
+		w.Write(buf.Bytes())
+		mem.Free(buf.Bytes())
 		return nil
 	})
 
@@ -302,10 +453,13 @@ func echoParallel(b *testing.B, concurrency int) {
 	beta.Startup()
 	defer beta.Shutdown()
 
+	var payload []byte
+	if payloadSize > 0 {
+		payload = []byte(rand.AlphaNum64(payloadSize))
+	}
 	var wg sync.WaitGroup
 	wg.Add(b.N)
 	b.ResetTimer()
-	var errCount atomic.Int32
 	for i := range concurrency {
 		tot := b.N / concurrency
 		if i < b.N%concurrency {
@@ -313,9 +467,16 @@ func echoParallel(b *testing.B, concurrency int) {
 		} // do remainder
 		go func() {
 			for range tot {
-				_, err := beta.POST(ctx, "https://alpha.echo.parallel.connector/echo", []byte("Hello"))
+				var err error
+				var res *http.Response
+				res, err = beta.POST(ctx, "https://alpha.echo.parallel.connector/echo", payload)
 				if err != nil {
 					errCount.Add(1)
+				}
+				if res != nil && res.Body != nil {
+					buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+					io.Copy(buf, res.Body)
+					mem.Free(buf.Bytes())
 				}
 				wg.Done()
 			}
@@ -323,38 +484,65 @@ func echoParallel(b *testing.B, concurrency int) {
 	}
 	wg.Wait()
 	b.StopTimer()
-	testarossa.Equal(b, int32(0), errCount.Load())
-	testarossa.Equal(b, int32(b.N), echoCount.Load())
+	testarossa.Zero(b, errCount.Load())
+	testarossa.Equal(b, b.N, int(echoCount.Load()))
 }
 
-func BenchmarkConnector_EchoParallelHTTP100(b *testing.B) {
-	echoParallelHTTP(b, 100)
+func BenchmarkConnector_EchoParallelHTTP(b *testing.B) {
+	for _, concurrency := range []int{100, 1000} {
+		b.Run(strconv.Itoa(concurrency), func(b *testing.B) {
+			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
+				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
+					echoParallelHTTP(b, concurrency, kb<<10)
+				})
+			}
+		})
+	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=18675
-	// 183849 ns/op (5439 ops/sec) = approx 1/10 vs via messaging bus
-	// 20136 B/op
-	// 156 allocs/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_EchoParallelHTTP/100/0KB-10     	   39246	     70404 ns/op	   10326 B/op	      87 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/100/1KB-10     	    1731	    735920 ns/op	   22520 B/op	     179 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/100/16KB-10    	    1590	    809513 ns/op	   37576 B/op	     184 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/100/256KB-10   	    1228	   1027616 ns/op	   57610 B/op	     185 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/100/960KB-10   	     990	   1031351 ns/op	   59558 B/op	     199 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/1000/0KB-10    	    1249	    828319 ns/op	   21197 B/op	     141 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/1000/1KB-10    	   18120	    193431 ns/op	   21159 B/op	     171 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/1000/16KB-10   	   17271	    202879 ns/op	   34985 B/op	     175 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/1000/256KB-10  	    1176	    932505 ns/op	   70952 B/op	     187 allocs/op
+	// BenchmarkConnector_EchoParallelHTTP/1000/960KB-10  	    1027	   1063508 ns/op	  161415 B/op	     204 allocs/op
 }
 
-func echoParallelHTTP(b *testing.B, concurrency int) {
+func echoParallelHTTP(b *testing.B, concurrency int, payloadSize int) {
+	ctx := context.Background()
+	if concurrency <= 0 || concurrency > b.N {
+		concurrency = b.N
+	}
 	// Create the web server
 	var echoCount atomic.Int32
+	var errCount atomic.Int32
 	httpServer := &http.Server{
 		Addr: ":5555",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			echoCount.Add(1)
-			body, _ := io.ReadAll(r.Body)
-			w.Write(body)
+			if r.Body != nil {
+				buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+				io.Copy(buf, r.Body)
+				w.Write(buf.Bytes())
+				mem.Free(buf.Bytes())
+				r.Body.Close()
+			}
 		}),
 	}
 	go httpServer.ListenAndServe()
-	defer httpServer.Close()
+	defer httpServer.Shutdown(ctx)
 
+	payload := []byte(rand.AlphaNum64(payloadSize))
 	var wg sync.WaitGroup
 	wg.Add(b.N)
 	b.ResetTimer()
-	var errCount atomic.Int32
 	for i := range concurrency {
 		tot := b.N / concurrency
 		if i < b.N%concurrency {
@@ -362,11 +550,20 @@ func echoParallelHTTP(b *testing.B, concurrency int) {
 		} // do remainder
 		go func() {
 			for range tot {
-				res, err := http.Post("http://localhost:5555/", "", strings.NewReader("Hello"))
+				var err error
+				var res *http.Response
+				if payloadSize > 0 {
+					res, err = http.Post("http://127.0.0.1:5555/", "", bytes.NewReader(payload))
+				} else {
+					res, err = http.Get("http://127.0.0.1:5555/")
+				}
 				if err != nil {
 					errCount.Add(1)
 				}
 				if res != nil && res.Body != nil {
+					buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+					io.Copy(buf, res.Body)
+					mem.Free(buf.Bytes())
 					res.Body.Close()
 				}
 				wg.Done()
@@ -375,11 +572,12 @@ func echoParallelHTTP(b *testing.B, concurrency int) {
 	}
 	wg.Wait()
 	b.StopTimer()
-	testarossa.Equal(b, int32(0), errCount.Load())
-	testarossa.Equal(b, int32(b.N), echoCount.Load())
+	testarossa.Zero(b, errCount.Load())
+	testarossa.Equal(b, b.N, int(echoCount.Load()))
 }
 
 func TestConnector_EchoParallelCapacity(t *testing.T) {
+	// No parallel
 	t.Skip() // Dependent on strength of CPU running the test
 	tt := testarossa.For(t)
 
@@ -419,21 +617,23 @@ func TestConnector_EchoParallelCapacity(t *testing.T) {
 			if int32(tts) > currentMax {
 				maxTime.Store(int32(tts))
 			}
-			_, err := beta.POST(ctx, "https://alpha.echo.parallel.capacity.connector/echo", []byte("Hello"))
+			res, err := beta.POST(ctx, "https://alpha.echo.parallel.capacity.connector/echo", []byte("Hello"))
 			if err != nil {
 				errCount.Add(1)
+			}
+			if res != nil && res.Body != nil {
+				io.ReadAll(res.Body)
+				res.Body.Close()
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
+	avgTime := totalTime.Load() / int64(n)
 	tt.Zero(errCount.Load())
 	tt.Equal(int32(n), echoCount.Load())
-
-	fmt.Printf("errs %d\n", errCount.Load())
-	fmt.Printf("echo %d\n", echoCount.Load())
-	fmt.Printf("avg time to start %d\n", totalTime.Load()/int64(n))
-	fmt.Printf("max time to start %d\n", maxTime.Load())
+	tt.True(avgTime <= 250, avgTime)                // 250ms
+	tt.True(maxTime.Load() <= 1000, maxTime.Load()) // 1 sec
 
 	// On 2021 MacBook M1 Pro 16":
 	// n=10000 avg=56 max=133
@@ -515,8 +715,8 @@ func TestConnector_LoadBalancing(t *testing.T) {
 
 	// The requests should be more or less evenly distributed among the server microservices
 	tt.Equal(int32(256), count1+count2)
-	tt.True(count1 > 64)
-	tt.True(count2 > 64)
+	tt.True(count1 > 64, count1)
+	tt.True(count2 > 64, count2)
 }
 
 func TestConnector_Concurrent(t *testing.T) {
@@ -995,7 +1195,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 
 	ctx := context.Background()
 	randomPlane := rand.AlphaNum64(12)
-	N := 128
+	N := 256
 
 	// Create the client microservice
 	client := New("client.mass.multicast.connector")
@@ -1052,36 +1252,6 @@ func TestConnector_MassMulticast(t *testing.T) {
 	dur := time.Since(t0)
 	tt.True(dur >= cons[0].ackTimeout && dur <= cons[0].ackTimeout+time.Second)
 	tt.Equal(N, countOKs)
-}
-
-func BenchmarkConnector_NATSDirectPublishing(b *testing.B) {
-	con := New("nats.direct.publishing.connector")
-
-	err := con.Startup()
-	testarossa.NoError(b, err)
-	defer con.Shutdown()
-
-	body := make([]byte, 512*1024)
-	b.ResetTimer()
-	for b.Loop() {
-		con.natsConn.Publish("somewhere", body)
-	}
-	b.StopTimer()
-
-	// On 2021 MacBook M1 Pro 16":
-	// 128B: 82 ns/op
-	// 256B: 104 ns/op
-	// 512B: 153 ns/op
-	// 1KB: 247 ns/op
-	// 2KB: 410 ns/op
-	// 4KB: 746 ns/op
-	// 8KB: 1480 ns/op
-	// 16KB: 2666 ns/op
-	// 32KB: 5474 ns/op
-	// 64KB: 9173 ns/op
-	// 128KB: 16307 ns/op
-	// 256KB: 32700 ns/op
-	// 512KB: 63429 ns/op
 }
 
 func TestConnector_KnownResponders(t *testing.T) {
@@ -1263,7 +1433,7 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 		pub.GET("https://channel.capacity.connector/multicast"),
 		pub.Unicast(),
 	)
-	tt.True(time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond)
+	tt.True(time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond, time.Since(t0))
 	tt.Equal(1, int(responses.Load()))
 	tt.Len(ch, 1)
 	tt.Equal(1, cap(ch))

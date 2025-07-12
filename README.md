@@ -162,6 +162,7 @@ Build your microservices on top of a `Connector` construct and use its simple AP
 * [Ack or fail fast](./docs/blocks/ack-or-fail.md)
 * [Locality-aware routing](./docs/blocks/locality-aware-routing.md)
 * [Connectivity liveness check](./docs/blocks/connectivity-liveness-test.md)
+* [Short-circuit](./docs/tech/short-circuit.md)
 
 ### Precision Observability
 * [Structured logging](./docs/blocks/logging.md)
@@ -230,6 +231,7 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [Client stubs](./docs/blocks/client-stubs.md) - Client stubs facilitate calling downstream microservices
 * [Ports](./docs/tech/ports.md) - Ports can be external or internal
 * [Authorization](./docs/blocks/authorization.md) - Control access to microservices based on the actor associated with the request
+* [Short-circuit](./docs/tech/short-circuit.md) - An in-memory transport that speeds up service-to-service calls by a factor of 10
 
 ### Design Choices
 

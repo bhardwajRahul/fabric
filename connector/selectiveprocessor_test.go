@@ -294,10 +294,12 @@ func BenchmarkConnector_TracingOnEnd(b *testing.B) {
 	for i := range b.N {
 		arr[i].End()
 	}
-	// N=5078120
-	// 301.4 ns/op
-	// 400 B/op
-	// 2 allocs/op
+
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_TracingOnEnd-10    	 5657827	       277.3 ns/op	     432 B/op	       2 allocs/op
 }
 
 func TestConnector_DuplicateSelect(t *testing.T) {

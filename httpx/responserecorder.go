@@ -37,14 +37,14 @@ type ResponseRecorder struct {
 // The recorder is modifiable even after the body was written because it keeps the entire response in memory.
 func NewResponseRecorder() *ResponseRecorder {
 	return &ResponseRecorder{
-		header:     make(http.Header, 32),
+		header:     make(http.Header),
 		statusCode: http.StatusOK,
 	}
 }
 
 // Clear resets all headers, body and status code.
 func (rr *ResponseRecorder) Clear() {
-	rr.header = make(http.Header, 32)
+	rr.header = make(http.Header)
 	rr.statusCode = http.StatusOK
 	rr.body = nil
 }
@@ -56,7 +56,7 @@ func (rr *ResponseRecorder) ClearBody() {
 
 // ClearHeader resets the headers.
 func (rr *ResponseRecorder) ClearHeader() {
-	rr.header = make(http.Header, 32)
+	rr.header = make(http.Header)
 }
 
 // Header enables setting headers.

@@ -21,10 +21,13 @@ import (
 	"encoding"
 	"encoding/base64"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
 	"unsafe"
+
+	"github.com/microbus-io/fabric/mem"
 )
 
 var reUpperCaseIdentifier = regexp.MustCompile(`^[A-Z][a-zA-Z0-9]*$`)
@@ -143,10 +146,15 @@ func StringClaimFromJWT(token string, name string) (value string, ok bool) {
 	if dot1 < 0 || dot2 <= dot1 {
 		return "", false
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(token[dot1+1 : dot2])
+	tokenBytes := UnsafeStringToBytes(token[dot1+1 : dot2])
+	block := mem.Alloc(len(tokenBytes))
+	defer mem.Free(block)
+	decoded := block[:len(tokenBytes)]
+	n, err := base64.RawURLEncoding.Decode(decoded, tokenBytes)
 	if err != nil {
 		return "", false
 	}
+	decoded = decoded[:n]
 	nameAsBytes := UnsafeStringToBytes(name)
 	p := bytes.Index(decoded, nameAsBytes)
 	if p < 0 || p > len(decoded)-5 {
@@ -181,16 +189,20 @@ func UnsafeBytesToString(b []byte) string {
 // AnyToString returns the string representation of the object.
 // It looks for a TextMarshaler or Stringer interfaces first before defaulting to fmt.Sprintf.
 func AnyToString(o any) string {
+	isNil := func(obj any) bool {
+		defer func() { recover() }()
+		return obj == nil || reflect.ValueOf(obj).IsNil()
+	}
 	if s, ok := o.(string); ok {
 		return s
 	}
-	if tm, ok := o.(encoding.TextMarshaler); ok {
+	if tm, ok := o.(encoding.TextMarshaler); ok && !isNil(tm) {
 		txt, err := tm.MarshalText()
 		if err == nil {
 			return UnsafeBytesToString(txt)
 		}
 	}
-	if s, ok := o.(fmt.Stringer); ok {
+	if s, ok := o.(fmt.Stringer); ok && !isNil(s) {
 		return s.String()
 	}
 	return fmt.Sprintf("%v", o)

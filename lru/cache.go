@@ -203,8 +203,14 @@ func (c *Cache[K, V]) load(key K, opts cacheOptions) (value V, ok bool) {
 }
 
 // LoadOrStore looks up an element in the cache.
-// If the element is not found, the new value is stored and returned instead.
+// If the element is not found, the new value is stored instead.
 func (c *Cache[K, V]) LoadOrStore(key K, newValue V, options ...Option) (value V, found bool) {
+	return c.LoadOrStoreFunc(key, func() V { return newValue }, options...)
+}
+
+// LoadOrStoreFunc looks up an element in the cache.
+// If the element is not found, the new value is created and stored instead.
+func (c *Cache[K, V]) LoadOrStoreFunc(key K, newValue func() V, options ...Option) (value V, found bool) {
 	opts := cacheOptions{
 		Weight: 1,
 		Bump:   true,
@@ -216,8 +222,8 @@ func (c *Cache[K, V]) LoadOrStore(key K, newValue V, options ...Option) (value V
 	c.lock.Lock()
 	value, found = c.load(key, opts)
 	if !found {
-		c.store(key, newValue, opts)
-		value = newValue
+		value = newValue()
+		c.store(key, value, opts)
 	}
 	c.lock.Unlock()
 	return value, found

@@ -19,24 +19,35 @@ package connector
 import (
 	"fmt"
 	"strings"
+
+	"github.com/microbus-io/fabric/utils"
 )
 
 // reverseHostname reverses the order of the segments in the hostname.
 // www.example.com becomes com.example.www
 func reverseHostname(hostname string) string {
-	var sb strings.Builder
-	sb.Grow(len(hostname))
-	for {
-		p := strings.LastIndex(hostname, ".")
-		if p < 0 {
-			sb.WriteString(hostname)
-			break
+	reverse := func(x []byte) {
+		n := len(x)
+		for i := range n / 2 {
+			x[i], x[n-i-1] = x[n-i-1], x[i]
 		}
-		sb.WriteString(hostname[p+1:])
-		sb.WriteRune('.')
-		hostname = hostname[:p]
 	}
-	return sb.String()
+	hostnameBytes := utils.UnsafeStringToBytes(hostname)
+	buf := make([]byte, len(hostnameBytes))
+	copy(buf, hostnameBytes)
+	s := 0
+	for i := range len(buf) {
+		if buf[i] == '.' {
+			reverse(buf[s:i])
+			s = i + 1
+		}
+	}
+	if s == 0 {
+		return hostname
+	}
+	reverse(buf[s:])
+	reverse(buf)
+	return utils.UnsafeBytesToString(buf)
 }
 
 // subjectOfResponse is the NATS subject where a microservice subscribes to receive responses.

@@ -31,6 +31,7 @@ import (
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
+	"github.com/microbus-io/fabric/env"
 )
 
 var (
@@ -57,13 +58,15 @@ func Terminate() (err error) {
 }
 
 func TestMetrics_Collect(t *testing.T) {
-	t.Parallel()
+	// No parallel
 	tt := testarossa.For(t)
-
 	ctx := Context()
+
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
+
 	Collect_Get(t, ctx, "").
-		// Only the metrics service should be detected
-		BodyContains("metrics.core").
+		BodyNotContains("metrics.core"). // metrics.core was started before MICROBUS_PROMETHEUS_EXPORTER was set
 		BodyNotContains("one.collect").
 		BodyNotContains("two.collect")
 
@@ -95,18 +98,17 @@ func TestMetrics_Collect(t *testing.T) {
 	con1.DistribCache().Load(ctx, "B")
 
 	// Loop until the new services are discovered
-	for {
+	for range 10 {
 		tc := Collect_Get(t, ctx, "")
 		res, err := tc.Get()
 		tt.NoError(err)
 		body, err := io.ReadAll(res.Body)
 		tt.NoError(err)
-		if bytes.Contains(body, []byte("metrics.core")) &&
-			bytes.Contains(body, []byte("one.collect")) &&
+		if bytes.Contains(body, []byte("one.collect")) &&
 			bytes.Contains(body, []byte("two.collect")) {
 			break
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	re := func(name string, value string, attrs ...string) string {
@@ -131,8 +133,8 @@ func TestMetrics_Collect(t *testing.T) {
 	}
 
 	Collect_Get(t, ctx, "").
-		// All three services should be detected
-		BodyContains("metrics.core").
+		// The two services should be detected
+		BodyNotContains("metrics.core"). // metrics.core was started before MICROBUS_PROMETHEUS_EXPORTER was set
 		BodyContains("one.collect").
 		BodyContains("two.collect").
 		// The startup callback should take between 100ms and 500ms
@@ -235,8 +237,16 @@ func TestMetrics_Collect(t *testing.T) {
 }
 
 func TestMetrics_GZip(t *testing.T) {
-	t.Parallel()
+	// No parallel
 	tt := testarossa.For(t)
+
+	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
+	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
+
+	con := connector.New("gzip")
+	err := App.AddAndStartup(con)
+	tt.NoError(err)
+	defer con.Shutdown()
 
 	r, _ := http.NewRequest("GET", "", nil)
 	r.Header.Set("Accept-Encoding", "gzip")
@@ -249,7 +259,7 @@ func TestMetrics_GZip(t *testing.T) {
 			body, err := io.ReadAll(unzipper)
 			unzipper.Close()
 			tt.NoError(err)
-			tt.True(bytes.Contains(body, []byte("microbus_log_messages")))
+			tt.Contains(string(body), "microbus_log_messages")
 		})
 }
 

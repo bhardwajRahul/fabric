@@ -185,7 +185,7 @@ func (tc *CreateTestCase) Get() (key directoryapi.PersonKey, err error) {
 }
 
 // Create executes the function and returns a corresponding test case.
-func Create(t *testing.T, ctx context.Context, httpRequestBody *directoryapi.Person) *CreateTestCase {
+func Create(t *testing.T, ctx context.Context, httpRequestBody directoryapi.Person) *CreateTestCase {
 	tc := &CreateTestCase{_t: t}
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -200,12 +200,12 @@ func Create(t *testing.T, ctx context.Context, httpRequestBody *directoryapi.Per
 type LoadTestCase struct {
 	_t *testing.T
 	_dur time.Duration
-	httpResponseBody *directoryapi.Person
+	httpResponseBody directoryapi.Person
 	err error
 }
 
 // Expect asserts no error and exact return values.
-func (_tc *LoadTestCase) Expect(httpResponseBody *directoryapi.Person) *LoadTestCase {
+func (_tc *LoadTestCase) Expect(httpResponseBody directoryapi.Person) *LoadTestCase {
 	if testarossa.NoError(_tc._t, _tc.err) {
 		testarossa.Equal(_tc._t, httpResponseBody, _tc.httpResponseBody)
 	}
@@ -241,13 +241,13 @@ func (tc *LoadTestCase) CompletedIn(threshold time.Duration) *LoadTestCase {
 }
 
 // Assert asserts using a provided function.
-func (tc *LoadTestCase) Assert(asserter func(t *testing.T, httpResponseBody *directoryapi.Person, err error)) *LoadTestCase {
+func (tc *LoadTestCase) Assert(asserter func(t *testing.T, httpResponseBody directoryapi.Person, err error)) *LoadTestCase {
 	asserter(tc._t, tc.httpResponseBody, tc.err)
 	return tc
 }
 
 // Get returns the result of executing Load.
-func (tc *LoadTestCase) Get() (httpResponseBody *directoryapi.Person, err error) {
+func (tc *LoadTestCase) Get() (httpResponseBody directoryapi.Person, err error) {
 	return tc.httpResponseBody, tc.err
 }
 
@@ -380,7 +380,7 @@ func (tc *UpdateTestCase) Get() (err error) {
 }
 
 // Update executes the function and returns a corresponding test case.
-func Update(t *testing.T, ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) *UpdateTestCase {
+func Update(t *testing.T, ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) *UpdateTestCase {
 	tc := &UpdateTestCase{_t: t}
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -395,12 +395,12 @@ func Update(t *testing.T, ctx context.Context, key directoryapi.PersonKey, httpR
 type LoadByEmailTestCase struct {
 	_t *testing.T
 	_dur time.Duration
-	httpResponseBody *directoryapi.Person
+	httpResponseBody directoryapi.Person
 	err error
 }
 
 // Expect asserts no error and exact return values.
-func (_tc *LoadByEmailTestCase) Expect(httpResponseBody *directoryapi.Person) *LoadByEmailTestCase {
+func (_tc *LoadByEmailTestCase) Expect(httpResponseBody directoryapi.Person) *LoadByEmailTestCase {
 	if testarossa.NoError(_tc._t, _tc.err) {
 		testarossa.Equal(_tc._t, httpResponseBody, _tc.httpResponseBody)
 	}
@@ -436,13 +436,13 @@ func (tc *LoadByEmailTestCase) CompletedIn(threshold time.Duration) *LoadByEmail
 }
 
 // Assert asserts using a provided function.
-func (tc *LoadByEmailTestCase) Assert(asserter func(t *testing.T, httpResponseBody *directoryapi.Person, err error)) *LoadByEmailTestCase {
+func (tc *LoadByEmailTestCase) Assert(asserter func(t *testing.T, httpResponseBody directoryapi.Person, err error)) *LoadByEmailTestCase {
 	asserter(tc._t, tc.httpResponseBody, tc.err)
 	return tc
 }
 
 // Get returns the result of executing LoadByEmail.
-func (tc *LoadByEmailTestCase) Get() (httpResponseBody *directoryapi.Person, err error) {
+func (tc *LoadByEmailTestCase) Get() (httpResponseBody directoryapi.Person, err error) {
 	return tc.httpResponseBody, tc.err
 }
 
@@ -553,6 +553,9 @@ func (tc *WebUITestCase) StatusCode(statusCode int) *WebUITestCase {
 func (tc *WebUITestCase) BodyContains(value any) *WebUITestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -565,7 +568,7 @@ func (tc *WebUITestCase) BodyContains(value any) *WebUITestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -580,6 +583,9 @@ func (tc *WebUITestCase) BodyContains(value any) *WebUITestCase {
 func (tc *WebUITestCase) BodyNotContains(value any) *WebUITestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -592,7 +598,7 @@ func (tc *WebUITestCase) BodyNotContains(value any) *WebUITestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -1146,7 +1152,6 @@ func WebUI(t *testing.T, r *http.Request) *WebUITestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {

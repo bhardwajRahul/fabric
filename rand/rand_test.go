@@ -27,7 +27,11 @@ func BenchmarkRand_AlphaNum64(b *testing.B) {
 	for b.Loop() {
 		AlphaNum64(16)
 	}
-	// On 2021 MacBook M1 Pro 16": 42 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/rand
+	// cpu: Apple M1 Pro
+	// BenchmarkRand_AlphaNum64-10    	41181684	        27.45 ns/op	      16 B/op	       1 allocs/op
 }
 
 func TestRand_AlphaNum64(t *testing.T) {

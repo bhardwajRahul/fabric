@@ -25,7 +25,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/dlru"
@@ -33,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/trc"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -202,21 +202,22 @@ func (c *Connector) Startup() (err error) {
 	c.LogInfo(ctx, "Startup")
 
 	// Connect to NATS
-	err = c.connectToNATS(ctx)
+	c.transportConn = &transport.Conn{}
+	err = c.transportConn.Open(context.Background(), c)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
 	}
 	c.started.Store(true)
 
-	c.maxFragmentSize = c.natsConn.MaxPayload() - 64*1024 // Up to 64K for headers
-	if c.maxFragmentSize < 64*1024 {
+	c.maxFragmentSize = c.transportConn.MaxPayload() - 64<<10 // Up to 64K for headers
+	if c.maxFragmentSize < 64<<10 {
 		err = errors.New("message size limit is too restrictive")
 		return err
 	}
 
 	// Subscribe to the response subject
-	c.natsResponseSub, err = c.natsConn.QueueSubscribe(subjectOfResponses(c.plane, c.hostname, c.id), c.id, c.onResponse)
+	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponses(c.plane, c.hostname, c.id), c.id, c.onResponse)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
@@ -304,11 +305,11 @@ func (c *Connector) Shutdown() (err error) {
 
 	// Drain pending operations (incoming requests, running tickers, goroutines)
 	totalDrainTime := time.Duration(0)
-	for atomic.LoadInt32(&c.pendingOps) > 0 && totalDrainTime < 8*time.Second { // 8 seconds
+	for c.pendingOps.Load() > 0 && totalDrainTime < 8*time.Second { // 8 seconds
 		time.Sleep(20 * time.Millisecond)
 		totalDrainTime += 20 * time.Millisecond
 	}
-	undrained := atomic.LoadInt32(&c.pendingOps)
+	undrained := c.pendingOps.Load()
 	if undrained > 0 {
 		c.LogInfo(ctx, "Stubborn pending operations",
 			"ops", int(undrained),
@@ -319,16 +320,15 @@ func (c *Connector) Shutdown() (err error) {
 	if c.ctxCancel != nil {
 		c.ctxCancel()
 		c.ctxCancel = nil
-		c.lifetimeCtx = context.Background()
 	}
 
 	// Drain pending operations again after cancelling the context
 	totalDrainTime = time.Duration(0)
-	for atomic.LoadInt32(&c.pendingOps) > 0 && totalDrainTime < 4*time.Second { // 4 seconds
+	for c.pendingOps.Load() > 0 && totalDrainTime < 4*time.Second { // 4 seconds
 		time.Sleep(20 * time.Millisecond)
 		totalDrainTime += 20 * time.Millisecond
 	}
-	undrained = atomic.LoadInt32(&c.pendingOps)
+	undrained = c.pendingOps.Load()
 	if undrained > 0 {
 		c.LogWarn(ctx, "Unable to drain pending operations",
 			"ops", int(undrained),
@@ -357,18 +357,18 @@ func (c *Connector) Shutdown() (err error) {
 	}
 
 	// Unsubscribe from the response subject
-	if c.natsResponseSub != nil {
-		err = c.natsResponseSub.Unsubscribe()
+	if c.responseSub != nil {
+		err = c.responseSub.Unsubscribe()
 		if err != nil {
 			lastErr = errors.Trace(err)
 		}
-		c.natsResponseSub = nil
+		c.responseSub = nil
 	}
 
 	// Disconnect from NATS
-	if c.natsConn != nil {
-		c.natsConn.Close()
-		c.natsConn = nil
+	if c.transportConn != nil {
+		c.transportConn.Close()
+		c.transportConn = nil
 	}
 
 	// Last chance to log an error
@@ -430,8 +430,8 @@ func (c *Connector) Go(ctx context.Context, f func(ctx context.Context) (err err
 	if !c.IsStarted() {
 		return errors.New("not started")
 	}
-	atomic.AddInt32(&c.pendingOps, 1)
-	subCtx := frame.ContextWithFrameOf(c.lifetimeCtx, ctx)             // Copy the original frame headers
+	c.pendingOps.Add(1)
+	subCtx := frame.ContextWithClonedFrameOf(c.Lifetime(), ctx)        // Copy the original frame headers
 	subCtx = trace.ContextWithSpan(subCtx, trace.SpanFromContext(ctx)) // Copy the tracing context
 	subCtx, span := c.StartSpan(subCtx, "Goroutine", trc.Consumer())
 
@@ -442,7 +442,7 @@ func (c *Connector) Go(ctx context.Context, f func(ctx context.Context) (err err
 		if err != nil {
 			c.LogError(subCtx, "Goroutine", "error", err)
 		}
-		atomic.AddInt32(&c.pendingOps, -1)
+		c.pendingOps.Add(-1)
 		span.End()
 	}()
 	return nil
@@ -457,11 +457,11 @@ func (c *Connector) Parallel(jobs ...func() (err error)) error {
 	errChan := make(chan error, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
-	atomic.AddInt32(&c.pendingOps, int32(n))
+	c.pendingOps.Add(int32(n))
 	for _, j := range jobs {
 		j := j
 		go func() {
-			defer atomic.AddInt32(&c.pendingOps, -1)
+			defer c.pendingOps.Add(-1)
 			defer wg.Done()
 			errChan <- errors.CatchPanic(j)
 		}()

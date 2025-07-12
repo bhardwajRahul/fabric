@@ -364,13 +364,13 @@ func (c *Cache) Close(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.rescue(ctx)
+	c.offload(ctx)
 	c.localCache.Clear()
 	return nil
 }
 
-// rescue distributes the elements in the cache to random peers.
-func (c *Cache) rescue(ctx context.Context) {
+// offload distributes the elements in the cache to random peers.
+func (c *Cache) offload(ctx context.Context) {
 	// Nothing to rescue
 	if c.localCache.Len() == 0 {
 		return
@@ -395,19 +395,19 @@ func (c *Cache) rescue(ctx context.Context) {
 		key string
 		val []byte
 	}
-	rescueQueue := make(chan *kv, len(elemMap))
+	queue := make(chan *kv, len(elemMap))
 	for k, v := range elemMap {
-		rescueQueue <- &kv{k, v}
+		queue <- &kv{k, v}
 	}
-	close(rescueQueue)
+	close(queue)
 	var wg sync.WaitGroup
-	var rescued int64
+	var offloaded atomic.Int64
 	t0 := time.Now()
 	concurrent := runtime.NumCPU() * 4
 	for range concurrent {
 		wg.Add(1)
 		go func() {
-			for kv := range rescueQueue {
+			for kv := range queue {
 				if time.Since(t0) >= 4*time.Second {
 					break
 				}
@@ -416,15 +416,15 @@ func (c *Cache) rescue(ctx context.Context) {
 				if err != nil {
 					break
 				}
-				atomic.AddInt64(&rescued, 1)
+				offloaded.Add(1)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
 	dur := time.Since(t0)
-	c.svc.LogDebug(ctx, "Rescued cache elements",
-		"count", rescued,
+	c.svc.LogDebug(ctx, "Offloaded cache elements",
+		"count", offloaded.Load(),
 		"in", dur,
 	)
 }

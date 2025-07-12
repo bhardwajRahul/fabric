@@ -97,7 +97,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Create registers the person in the directory.
 */
-func (svc *Service) Create(ctx context.Context, httpRequestBody *directoryapi.Person) (key directoryapi.PersonKey, err error) {
+func (svc *Service) Create(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error) {
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
@@ -118,8 +118,8 @@ func (svc *Service) Create(ctx context.Context, httpRequestBody *directoryapi.Pe
 		}
 		nextKey++
 		person.Key = directoryapi.PersonKey(nextKey)
-		indexByKey[person.Key] = person
-		indexByEmail[strings.ToLower(person.Email)] = person
+		indexByKey[person.Key] = &person
+		indexByEmail[strings.ToLower(person.Email)] = &person
 		return person.Key, nil
 	}
 
@@ -141,7 +141,7 @@ func (svc *Service) Create(ctx context.Context, httpRequestBody *directoryapi.Pe
 /*
 Update updates the person's data in the directory.
 */
-func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) (err error) {
+func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error) {
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
@@ -159,8 +159,8 @@ func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, http
 		delete(indexByKey, existing.Key)
 		delete(indexByEmail, strings.ToLower(existing.Email))
 		person.Key = key
-		indexByKey[key] = person
-		indexByEmail[strings.ToLower(person.Email)] = person
+		indexByKey[key] = &person
+		indexByEmail[strings.ToLower(person.Email)] = &person
 		return nil
 	}
 
@@ -186,31 +186,31 @@ func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, http
 /*
 Load looks up a person in the directory.
 */
-func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody *directoryapi.Person, err error) {
+func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error) {
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
 		defer mux.Unlock()
 		loaded, ok := indexByKey[key]
 		if ok {
-			return loaded, nil
+			return *loaded, nil
 		} else {
-			return nil, errors.New("", http.StatusNotFound)
+			return directoryapi.Person{}, errors.New("", http.StatusNotFound)
 		}
 	}
 
 	row := svc.db.QueryRowContext(ctx,
 		`SELECT first_name,last_name,email_address,birthday FROM directory_persons WHERE person_id=?`,
 		key)
-	person := &directoryapi.Person{
+	person := directoryapi.Person{
 		Key: key,
 	}
 	err = row.Scan(&person.FirstName, &person.LastName, &person.Email, &person.Birthday)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("", http.StatusNotFound)
+		return directoryapi.Person{}, errors.New("", http.StatusNotFound)
 	}
 	if err != nil {
-		return nil, errors.Trace(err)
+		return directoryapi.Person{}, errors.Trace(err)
 	}
 	return person, nil
 }
@@ -250,31 +250,31 @@ func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err
 /*
 LoadByEmail looks up a person in the directory by their email.
 */
-func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponseBody *directoryapi.Person, err error) {
+func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error) {
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
 		defer mux.Unlock()
 		loaded, ok := indexByEmail[strings.ToLower(email)]
 		if ok {
-			return loaded, nil
+			return *loaded, nil
 		} else {
-			return nil, errors.New("", http.StatusNotFound)
+			return directoryapi.Person{}, errors.New("", http.StatusNotFound)
 		}
 	}
 
 	row := svc.db.QueryRowContext(ctx,
 		`SELECT person_id,first_name,last_name,birthday FROM directory_persons WHERE email_address=?`,
 		email)
-	person := &directoryapi.Person{
+	person := directoryapi.Person{
 		Email: email,
 	}
 	err = row.Scan(&person.Key, &person.FirstName, &person.LastName, &person.Birthday)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("", http.StatusNotFound)
+		return directoryapi.Person{}, errors.New("", http.StatusNotFound)
 	}
 	if err != nil {
-		return nil, errors.Trace(err)
+		return directoryapi.Person{}, errors.Trace(err)
 	}
 	return person, nil
 }

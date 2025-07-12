@@ -39,6 +39,9 @@ func NewFragResponse(r *http.Response, fragmentSize int64) (*FragResponse, error
 	if r.Body == nil {
 		return &FragResponse{origResponse: r, noFrags: true}, nil
 	}
+	if fragmentSize <= 0 {
+		return nil, errors.New("non-positive fragment size")
+	}
 
 	result := &FragResponse{origResponse: r}
 

@@ -18,12 +18,12 @@ limitations under the License.
 
 package helloworld
 
-const Version = 45
+const Version = 49
 const SourceCodeSHA256 = "bef04c20e0d64c75a7c34e470c64b0b288b1f37bcba9336fc7fcccb4e5240c4f"
-const Timestamp = "2025-06-08T01:36:00.647397Z"
+const Timestamp = "2025-07-12T16:29:55.930172Z"
 
 /* {
-	"ver": 45,
+	"ver": 49,
 	"sha256": "bef04c20e0d64c75a7c34e470c64b0b288b1f37bcba9336fc7fcccb4e5240c4f",
-	"ts": "2025-06-08T01:36:00.647397Z"
+	"ts": "2025-07-12T16:29:55.930172Z"
 } */

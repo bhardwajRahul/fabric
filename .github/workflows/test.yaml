@@ -1,4 +1,6 @@
-name: "Test"
+# https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-go
+
+name: Test
 on:
   pull_request:
     types: [opened, reopened, edited]
@@ -9,10 +11,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: "Run tests"
+    name: Run tests
     steps:
       - uses: actions/checkout@v4
-      - name: Create NATS cluster
+      - name: Setup NATS server
         uses: onichandame/nats-action@master
         with:
           port: 4222
@@ -21,7 +23,11 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
           cache-dependency-path: go.sum
-      - name: "Show version"
+      - name: Go version
         run: go version
-      - name: "Run tests"
+      - name: Run tests (NATS only)
+        run: MICROBUS_SHORT_CIRCUIT=0 go test -count 1 -timeout 30s -cover ./...
+      - name: Run tests (short-circuit only)
         run: go test -count 1 -timeout 30s -cover ./...
+      - name: Run tests (NATS and short-circuit)
+        run: MICROBUS_NATS=nats://127.0.0.1:4222 go test -count 1 -timeout 30s -cover ./...

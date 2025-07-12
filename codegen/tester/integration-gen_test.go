@@ -1192,6 +1192,9 @@ func (tc *EchoTestCase) StatusCode(statusCode int) *EchoTestCase {
 func (tc *EchoTestCase) BodyContains(value any) *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -1204,7 +1207,7 @@ func (tc *EchoTestCase) BodyContains(value any) *EchoTestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -1219,6 +1222,9 @@ func (tc *EchoTestCase) BodyContains(value any) *EchoTestCase {
 func (tc *EchoTestCase) BodyNotContains(value any) *EchoTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -1231,7 +1237,7 @@ func (tc *EchoTestCase) BodyNotContains(value any) *EchoTestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -1785,7 +1791,6 @@ func Echo(t *testing.T, r *http.Request) *EchoTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -1824,6 +1829,9 @@ func (tc *MultiValueHeadersTestCase) StatusCode(statusCode int) *MultiValueHeade
 func (tc *MultiValueHeadersTestCase) BodyContains(value any) *MultiValueHeadersTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -1836,7 +1844,7 @@ func (tc *MultiValueHeadersTestCase) BodyContains(value any) *MultiValueHeadersT
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -1851,6 +1859,9 @@ func (tc *MultiValueHeadersTestCase) BodyContains(value any) *MultiValueHeadersT
 func (tc *MultiValueHeadersTestCase) BodyNotContains(value any) *MultiValueHeadersTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -1863,7 +1874,7 @@ func (tc *MultiValueHeadersTestCase) BodyNotContains(value any) *MultiValueHeade
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -2417,7 +2428,6 @@ func MultiValueHeaders(t *testing.T, r *http.Request) *MultiValueHeadersTestCase
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -2456,6 +2466,9 @@ func (tc *WebPathArgumentsTestCase) StatusCode(statusCode int) *WebPathArguments
 func (tc *WebPathArgumentsTestCase) BodyContains(value any) *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -2468,7 +2481,7 @@ func (tc *WebPathArgumentsTestCase) BodyContains(value any) *WebPathArgumentsTes
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -2483,6 +2496,9 @@ func (tc *WebPathArgumentsTestCase) BodyContains(value any) *WebPathArgumentsTes
 func (tc *WebPathArgumentsTestCase) BodyNotContains(value any) *WebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -2495,7 +2511,7 @@ func (tc *WebPathArgumentsTestCase) BodyNotContains(value any) *WebPathArguments
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -3049,7 +3065,6 @@ func WebPathArguments(t *testing.T, r *http.Request) *WebPathArgumentsTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -3088,6 +3103,9 @@ func (tc *UnnamedWebPathArgumentsTestCase) StatusCode(statusCode int) *UnnamedWe
 func (tc *UnnamedWebPathArgumentsTestCase) BodyContains(value any) *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -3100,7 +3118,7 @@ func (tc *UnnamedWebPathArgumentsTestCase) BodyContains(value any) *UnnamedWebPa
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -3115,6 +3133,9 @@ func (tc *UnnamedWebPathArgumentsTestCase) BodyContains(value any) *UnnamedWebPa
 func (tc *UnnamedWebPathArgumentsTestCase) BodyNotContains(value any) *UnnamedWebPathArgumentsTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -3127,7 +3148,7 @@ func (tc *UnnamedWebPathArgumentsTestCase) BodyNotContains(value any) *UnnamedWe
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -3636,7 +3657,6 @@ func UnnamedWebPathArguments_Do(t *testing.T, r *http.Request) *UnnamedWebPathAr
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -3675,6 +3695,9 @@ func (tc *DirectoryServerTestCase) StatusCode(statusCode int) *DirectoryServerTe
 func (tc *DirectoryServerTestCase) BodyContains(value any) *DirectoryServerTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -3687,7 +3710,7 @@ func (tc *DirectoryServerTestCase) BodyContains(value any) *DirectoryServerTestC
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -3702,6 +3725,9 @@ func (tc *DirectoryServerTestCase) BodyContains(value any) *DirectoryServerTestC
 func (tc *DirectoryServerTestCase) BodyNotContains(value any) *DirectoryServerTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -3714,7 +3740,7 @@ func (tc *DirectoryServerTestCase) BodyNotContains(value any) *DirectoryServerTe
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -4223,7 +4249,6 @@ func DirectoryServer_Do(t *testing.T, r *http.Request) *DirectoryServerTestCase 
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {
@@ -4262,6 +4287,9 @@ func (tc *HelloTestCase) StatusCode(statusCode int) *HelloTestCase {
 func (tc *HelloTestCase) BodyContains(value any) *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -4274,7 +4302,7 @@ func (tc *HelloTestCase) BodyContains(value any) *HelloTestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.True(tc.t, bytes.Contains(body, v), "%v does not contain %v", body, v)
+			testarossa.Contains(tc.t, body, v)
 		case string:
 			testarossa.Contains(tc.t, string(body), v)
 		default:
@@ -4289,6 +4317,9 @@ func (tc *HelloTestCase) BodyContains(value any) *HelloTestCase {
 func (tc *HelloTestCase) BodyNotContains(value any) *HelloTestCase {
 	if testarossa.NoError(tc.t, tc.err) {
 		var body []byte
+		if !testarossa.NotNil(tc.t, tc.res.Body) {
+			return tc
+		}
 		if br, ok := tc.res.Body.(*httpx.BodyReader); ok {
 			body = br.Bytes()
 		} else {
@@ -4301,7 +4332,7 @@ func (tc *HelloTestCase) BodyNotContains(value any) *HelloTestCase {
 		}
 		switch v := value.(type) {
 		case []byte:
-			testarossa.False(tc.t, bytes.Contains(body, v), "%v contains %v", body, v)
+			testarossa.NotContains(tc.t, body, v)
 		case string:
 			testarossa.NotContains(tc.t, string(body), v)
 		default:
@@ -4855,7 +4886,6 @@ func Hello(t *testing.T, r *http.Request) *HelloTestCase {
 	}
 	ctx := frame.ContextWithFrameOf(r.Context(), r.Header)
 	r = r.WithContext(ctx)
-	r.Header = frame.Of(ctx).Header()
 	w := httpx.NewResponseRecorder()
 	t0 := time.Now()
 	tc.err = errors.CatchPanic(func() error {

@@ -30,11 +30,12 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
 * [frame](../structure/frame.md) - A utility for type-safe manipulation of the HTTP control headers used by the framework
 * [httpx](../structure/httpx.md) - Various HTTP utilities
 * [lru](../structure/lru.md) - An LRU cache with limits on age and weight
+* [mem](../structure/mem.md) - An allocator of pooled memory blocks
 * [openapi](../structure/openapi.md) - OpenAPI document generator
 * [pub](../structure/pub.md) - Options for publishing requests over the bus
 * [rand](../structure/rand.md) - A utility for generating random numbers and identifiers
 * [service](../structure/service.md) - Interface definitions of microservices
 * [sub](../structure/sub.md) - Options for subscribing to handle requests over the bus
+* [transport](../structure/transport.md) - The communication substrate that microservices use to communicate with each other
 * [trc](../structure/trc.md) - Options for creating tracing spans
 * [utils](../structure/utils.md) - Miscellaneous utility classes and functions
-

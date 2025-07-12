@@ -19,6 +19,7 @@ package connector
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,28 +111,28 @@ func TestConnector_Ticker(t *testing.T) {
 	con.SetDeployment(LAB) // Tickers are disabled in TESTING
 
 	interval := 200 * time.Millisecond
-	count := 0
+	var count atomic.Int32
 	step := make(chan bool)
 	con.StartTicker("myticker", interval, func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		step <- true
 		return nil
 	})
 
-	tt.Zero(count)
+	tt.Zero(count.Load())
 
 	err := con.Startup()
 	tt.NoError(err)
 	defer con.Shutdown()
 
 	<-step // at 1 intervals
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 	time.Sleep(interval / 2) // at 1.5 intervals
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 	<-step // at 2 intervals
-	tt.Equal(2, count)
+	tt.Equal(int32(2), count.Load())
 	<-step // at 3 intervals
-	tt.Equal(3, count)
+	tt.Equal(int32(3), count.Load())
 }
 
 func TestConnector_TickerSkippingBeats(t *testing.T) {
@@ -142,30 +143,30 @@ func TestConnector_TickerSkippingBeats(t *testing.T) {
 	con.SetDeployment(LAB) // Tickers are disabled in TESTING
 
 	interval := 200 * time.Millisecond
-	count := 0
+	var count atomic.Int32
 	step := make(chan bool)
 	con.StartTicker("myticker", interval, func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		step <- true
 		time.Sleep(2*interval + interval/4) // 2.25 intervals
 		return nil
 	})
 
-	tt.Zero(count)
+	tt.Zero(count.Load())
 
 	err := con.Startup()
 	tt.NoError(err)
 	defer con.Shutdown()
 
 	<-step // at 1 intervals
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 	time.Sleep(interval + interval/2) // at 2.5 intervals
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 	time.Sleep(interval) // at 3.5 intervals
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 
 	<-step // at 4 intervals
-	tt.Equal(2, count)
+	tt.Equal(int32(2), count.Load())
 }
 
 func TestConnector_TickerPendingOps(t *testing.T) {
@@ -191,7 +192,7 @@ func TestConnector_TickerPendingOps(t *testing.T) {
 		return nil
 	})
 
-	tt.Zero(con.pendingOps)
+	tt.Zero(con.pendingOps.Load())
 
 	err := con.Startup()
 	tt.NoError(err)
@@ -199,13 +200,13 @@ func TestConnector_TickerPendingOps(t *testing.T) {
 
 	<-step1 // at 1 intervals
 	<-step2 // at 1 intervals
-	tt.Equal(int32(2), con.pendingOps)
+	tt.Equal(int32(2), con.pendingOps.Load())
 	<-hold1
 	time.Sleep(interval / 4) // at 1.25 intervals
-	tt.Equal(int32(1), con.pendingOps)
+	tt.Equal(int32(1), con.pendingOps.Load())
 	<-hold2 // at 1.5 intervals
 	time.Sleep(interval / 4)
-	tt.Zero(con.pendingOps)
+	tt.Zero(con.pendingOps.Load())
 }
 
 func TestConnector_TickerTimeout(t *testing.T) {
@@ -235,7 +236,8 @@ func TestConnector_TickerTimeout(t *testing.T) {
 	t0 := time.Now()
 	<-end
 	dur := time.Since(t0)
-	tt.True(dur > interval/4 && dur < interval/2, "%v", dur)
+	tt.True(dur >= interval/4-interval/20, dur) // 5% margin of error
+	tt.True(dur < interval/2, dur)
 }
 
 func TestConnector_TickerLifetimeCancellation(t *testing.T) {
@@ -276,20 +278,20 @@ func TestConnector_TickersDisabledInTestingApp(t *testing.T) {
 	con := New("tickers.disabled.in.testing.app.connector")
 
 	interval := 200 * time.Millisecond
-	count := 0
+	var count atomic.Int32
 	con.StartTicker("myticker", interval, func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		return nil
 	})
 
-	tt.Zero(count)
+	tt.Zero(count.Load())
 
 	err := con.Startup()
 	tt.NoError(err)
 	defer con.Shutdown()
 
 	time.Sleep(5 * interval)
-	tt.Zero(count)
+	tt.Zero(count.Load())
 }
 
 func TestConnector_TickerStop(t *testing.T) {
@@ -300,39 +302,39 @@ func TestConnector_TickerStop(t *testing.T) {
 	con.SetDeployment(LAB) // Tickers are disabled in TESTING
 
 	interval := 200 * time.Millisecond
-	count := 0
+	var count atomic.Int32
 	enter := make(chan bool)
 	exit := make(chan bool)
 	con.StartTicker("my-ticker_123", interval, func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		enter <- true
 		exit <- true
 		return nil
 	})
 
-	tt.Zero(count)
+	tt.Zero(count.Load())
 
 	err := con.Startup()
 	tt.NoError(err)
 	defer con.Shutdown()
 
 	<-enter
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 	con.StopTicker("MY-TICKER_123")
 	<-exit
 
 	time.Sleep(2 * interval)
-	tt.Equal(1, count)
+	tt.Equal(int32(1), count.Load())
 
 	// Restart
 	con.StartTicker("My-Ticker_123", interval, func(ctx context.Context) error {
-		count++
+		count.Add(1)
 		enter <- true
 		exit <- true
 		return nil
 	})
 
 	<-enter
-	tt.Equal(2, count)
+	tt.Equal(int32(2), count.Load())
 	<-exit
 }

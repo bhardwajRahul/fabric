@@ -23,12 +23,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/trc"
 	"github.com/microbus-io/testarossa"
 )
 
 func TestConnector_TraceRequestAttributes(t *testing.T) {
-	t.Parallel()
+	// No parallel
+	env.Push("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "nil")
+	defer env.Pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+
 	tt := testarossa.For(t)
 
 	ctx := context.Background()

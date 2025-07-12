@@ -31,15 +31,14 @@ import (
 	"github.com/microbus-io/fabric/lru"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/rand"
-	"github.com/nats-io/nats.go"
+	"github.com/microbus-io/fabric/transport"
 	"go.opentelemetry.io/otel/propagation"
 )
 
 // transferChan is intermediating between the publisher and the responses it receives.
 type transferChan struct {
-	Pushed int
-	C      chan *http.Response
-	Done   chan bool
+	C    chan *http.Response
+	Done chan bool
 }
 
 // GET makes a GET request.
@@ -209,6 +208,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	for name, value := range req.Header {
 		httpReq.Header[name] = value
 	}
+	httpReq.ContentLength = int64(req.ContentLength)
 	// Stop the http package from setting Go-http-client/1.1 as the user-agent
 	if len(httpReq.Header.Values("User-Agent")) == 0 {
 		httpReq.Header.Set("User-Agent", "")
@@ -260,14 +260,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	}
 	subject := subjectOfRequest(c.plane, httpReq.Method, httpReq.URL.Hostname(), port, httpReq.URL.Path)
 
-	var buf bytes.Buffer
 	frame.Of(httpReq).SetMessageID(msgID)
-	err = httpReq.WriteProxy(&buf)
-	if err != nil {
-		err = errors.Trace(err)
-		output = append(output, pub.NewErrorResponse(err))
-		return output
-	}
 
 	c.LogDebug(ctx, "Request",
 		"msg", msgID,
@@ -276,7 +269,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	)
 
 	publishTime := time.Now()
-	err = c.natsConn.Publish(subject, buf.Bytes())
+	if req.Multicast {
+		err = c.transportConn.Publish(subject, httpReq)
+	} else {
+		err = c.transportConn.Request(subject, httpReq)
+	}
 	if err != nil {
 		err = errors.Trace(err)
 		output = append(output, pub.NewErrorResponse(err))
@@ -324,6 +321,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	ackTimer := time.NewTimer(c.ackTimeout)
 	defer ackTimer.Stop()
 	ackTimerStart := time.Now()
+	fragmentsSent := map[string]bool{}
 	for {
 		select {
 		case response := <-awaitCh.C:
@@ -361,8 +359,9 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 					seenIDs[fromID] = frame.OpCodeAck
 				}
 
-				// Send additional fragments (if there are any) in a goroutine
-				if fragger.N() > 1 {
+				// Send additional fragments (if there are any) to all those who ack'ed
+				if fragger.N() > 1 && !fragmentsSent[fromID] {
+					fragmentsSent[fromID] = true
 					go func() {
 						for f := 2; f <= fragger.N(); f++ {
 							fragment, err := fragger.Fragment(f)
@@ -379,19 +378,12 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 							// Direct addressing
 							subject := subjectOfRequest(c.plane, fragment.Method, fromID+"."+fragment.URL.Hostname(), port, fragment.URL.Path)
 
-							var buf bytes.Buffer
 							frame.Of(fragment).SetMessageID(msgID)
-							err = fragment.WriteProxy(&buf)
-							if err != nil {
-								err = errors.Trace(err)
-								c.LogError(ctx, "Sending fragments",
-									"error", err,
-									"url", req.Canonical(),
-									"method", req.Method,
-								)
-								break
+							if req.Multicast {
+								err = c.transportConn.Publish(subject, fragment)
+							} else {
+								err = c.transportConn.Request(subject, fragment)
 							}
-							err = c.natsConn.Publish(subject, buf.Bytes())
 							if err != nil {
 								err = errors.Trace(err)
 								c.LogError(ctx, "Sending fragments",
@@ -527,64 +519,80 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 }
 
 // onResponse is called when a response to an outgoing request is received.
-func (c *Connector) onResponse(msg *nats.Msg) {
-	// Parse the response
-	response, err := http.ReadResponse(bufio.NewReaderSize(bytes.NewReader(msg.Data), 64), nil)
+func (c *Connector) onResponse(msg *transport.Msg) {
+	err := c.handleResponse(msg)
 	if err != nil {
 		err = errors.Trace(err)
-		c.LogError(c.lifetimeCtx, "Parsing response", "error", err)
-		return
+		c.LogError(c.Lifetime(), "Handling response", "error", err)
+	}
+}
+
+// onResponse is called when a response to an outgoing request is received.
+func (c *Connector) handleResponse(msg *transport.Msg) error {
+	var err error
+	response := msg.Response
+	if response == nil {
+		// Parse the response
+		response, err = http.ReadResponse(bufio.NewReaderSize(bytes.NewReader(msg.Data), 64), nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	if br, ok := response.Body.(*httpx.BodyReader); ok {
+		br.Reset()
 	}
 
 	// Integrate fragments together
 	response, err = c.defragResponse(response)
 	if err != nil {
-		err = errors.Trace(err)
-		c.LogError(c.lifetimeCtx, "Defragging response", "error", err)
-		return
+		return errors.Trace(err)
 	}
 	if response == nil {
 		// Not all fragments arrived yet
-		return
+		return nil
 	}
 
 	// Push it to the channel matching the message ID
 	msgID := frame.Of(response).MessageID()
 	ch, ok := c.reqs.Load(msgID)
-	if ok {
-		if ch.Pushed < cap(ch.C) {
-			// First cap(ch.C) messages can be pushed safely without blocking
-			ch.C <- response
-			ch.Pushed++
-		} else {
-			// More messages can block, so need to listen to the Done channel
-			select {
-			case ch.C <- response:
-				ch.Pushed++
-				return
-			case <-ch.Done:
-				// Message arrived after the channel was closed
-			}
-		}
+	if !ok {
+		return nil
 	}
 
-	// Handle message that arrive after the request is done.
-	opCode := frame.Of(response).OpCode()
-	if opCode != frame.OpCodeAck {
-		subject, ok := c.postRequestData.Load("multicast:"+msgID, lru.NoBump())
-		if ok {
-			c.knownResponders.Delete(subject)
-			c.postRequestData.Delete("multicast:" + msgID)
-		}
-		subject, ok = c.postRequestData.Load("timeout:"+msgID, lru.NoBump())
-		if ok {
-			c.LogInfo(c.lifetimeCtx, "Response received after timeout",
-				"msg", msgID,
-				"fromID", frame.Of(response).FromID(),
-				"fromHost", frame.Of(response).FromHost(),
-				"queue", frame.Of(response).Queue(),
-				"subject", subject,
-			)
-		}
+	// Try to push inline for when the channel has enough capacity
+	select {
+	case ch.C <- response:
+		return nil
+	default:
 	}
+	// If not enough capacity, spin up a non-blocking goroutine to push the message
+	// More messages can block, so need to listen to the Done channel
+	go func() {
+		select {
+		case ch.C <- response:
+			return
+		case <-ch.Done:
+			// Handle message that arrive after the request is done.
+			frm := frame.Of(response)
+			opCode := frm.OpCode()
+			if opCode != frame.OpCodeAck {
+				subject, ok := c.postRequestData.Load("multicast:"+msgID, lru.NoBump())
+				if ok {
+					c.knownResponders.Delete(subject)
+					c.postRequestData.Delete("multicast:" + msgID)
+				}
+				subject, ok = c.postRequestData.Load("timeout:"+msgID, lru.NoBump())
+				if ok {
+					c.LogInfo(c.Lifetime(), "Response received after timeout",
+						"msg", msgID,
+						"fromID", frm.FromID(),
+						"fromHost", frm.FromHost(),
+						"queue", frm.Queue(),
+						"subject", subject,
+					)
+				}
+			}
+		}
+	}()
+	return nil
 }

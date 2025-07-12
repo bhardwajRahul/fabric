@@ -251,21 +251,20 @@ func TestDLRU_Rescue(t *testing.T) {
 	}
 	close(numChan)
 	for range runtime.NumCPU() * 4 {
-		wg.Add(1)
-		go func() {
-			for i := range numChan {
+		for i := range numChan {
+			wg.Add(1)
+			go func() {
 				val, ok, err := betaLRU.Load(ctx, strconv.Itoa(i))
-				tt.NoError(err)
-				tt.True(ok)
-				tt.Equal(strconv.Itoa(i), string(val))
-
+				if tt.NoError(err) && tt.True(ok, i) {
+					tt.Equal(strconv.Itoa(i), string(val))
+				}
 				val, ok, err = gammaLRU.Load(ctx, strconv.Itoa(i))
-				tt.NoError(err)
-				tt.True(ok)
-				tt.Equal(strconv.Itoa(i), string(val))
-			}
-			wg.Done()
-		}()
+				if tt.NoError(err) && tt.True(ok, i) {
+					tt.Equal(strconv.Itoa(i), string(val))
+				}
+				wg.Done()
+			}()
+		}
 	}
 	wg.Wait()
 }
@@ -717,7 +716,11 @@ func BenchmarkDLRU_Store(b *testing.B) {
 	}
 	b.StopTimer()
 
-	// On 2021 MacBook M1 Pro 16": 193309 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/dlru
+	// cpu: Apple M1 Pro
+	// BenchmarkDLRU_Store-10    	    9290	    119185 ns/op	   17602 B/op	     300 allocs/op
 }
 
 func BenchmarkDLRU_Load(b *testing.B) {
@@ -745,7 +748,11 @@ func BenchmarkDLRU_Load(b *testing.B) {
 	}
 	b.StopTimer()
 
-	// On 2021 MacBook M1 Pro 16": 165499 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/dlru
+	// cpu: Apple M1 Pro
+	// BenchmarkDLRU_Load-10    	    9517	    116841 ns/op	   19462 B/op	     320 allocs/op
 }
 
 func BenchmarkDLRU_LoadNoConsistencyCheck(b *testing.B) {
@@ -773,7 +780,11 @@ func BenchmarkDLRU_LoadNoConsistencyCheck(b *testing.B) {
 	}
 	b.StopTimer()
 
-	// On 2021 MacBook M1 Pro 16": 78 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/dlru
+	// cpu: Apple M1 Pro
+	// BenchmarkDLRU_LoadNoConsistencyCheck-10    	 5620533	       190.4 ns/op	     120 B/op	       4 allocs/op
 }
 
 func TestDLRU_Interface(t *testing.T) {

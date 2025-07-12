@@ -77,11 +77,11 @@ var (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, httpRequestBody *directoryapi.Person) (key directoryapi.PersonKey, err error)
-	Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody *directoryapi.Person, err error)
+	Create(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error)
+	Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error)
 	Delete(ctx context.Context, key directoryapi.PersonKey) (err error)
-	Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) (err error)
-	LoadByEmail(ctx context.Context, email string) (httpResponseBody *directoryapi.Person, err error)
+	Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error)
+	LoadByEmail(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error)
 	List(ctx context.Context) (httpResponseBody []directoryapi.PersonKey, err error)
 	WebUI(w http.ResponseWriter, r *http.Request) (err error)
 }
@@ -148,10 +148,10 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Name:        `Create`,
 			Method:      `POST`,
 			Path:        `:443/persons`,
-			Summary:     `Create(httpRequestBody *Person) (key PersonKey)`,
+			Summary:     `Create(httpRequestBody Person) (key PersonKey)`,
 			Description: `Create registers the person in the directory.`,
 			InputArgs: struct {
-				HTTPRequestBody *directoryapi.Person `json:"httpRequestBody"`
+				HTTPRequestBody directoryapi.Person `json:"httpRequestBody"`
 			}{},
 			OutputArgs: struct {
 				Key directoryapi.PersonKey `json:"key"`
@@ -164,13 +164,13 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Name:        `Load`,
 			Method:      `GET`,
 			Path:        `:443/persons/key/{key}`,
-			Summary:     `Load(key PersonKey) (httpResponseBody *Person)`,
+			Summary:     `Load(key PersonKey) (httpResponseBody Person)`,
 			Description: `Load looks up a person in the directory.`,
 			InputArgs: struct {
 				Key directoryapi.PersonKey `json:"key"`
 			}{},
 			OutputArgs: struct {
-				HTTPResponseBody *directoryapi.Person `json:"httpResponseBody"`
+				HTTPResponseBody directoryapi.Person `json:"httpResponseBody"`
 			}{},
 		})
 	}
@@ -193,11 +193,11 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Name:        `Update`,
 			Method:      `PUT`,
 			Path:        `:443/persons/key/{key}`,
-			Summary:     `Update(key PersonKey, httpRequestBody *Person)`,
+			Summary:     `Update(key PersonKey, httpRequestBody Person)`,
 			Description: `Update updates the person's data in the directory.`,
 			InputArgs: struct {
 				Key directoryapi.PersonKey `json:"key"`
-				HTTPRequestBody *directoryapi.Person `json:"httpRequestBody"`
+				HTTPRequestBody directoryapi.Person `json:"httpRequestBody"`
 			}{},
 		})
 	}
@@ -207,13 +207,13 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 			Name:        `LoadByEmail`,
 			Method:      `GET`,
 			Path:        `:443/persons/email/{email}`,
-			Summary:     `LoadByEmail(email string) (httpResponseBody *Person)`,
+			Summary:     `LoadByEmail(email string) (httpResponseBody Person)`,
 			Description: `LoadByEmail looks up a person in the directory by their email.`,
 			InputArgs: struct {
 				Email string `json:"email"`
 			}{},
 			OutputArgs: struct {
-				HTTPResponseBody *directoryapi.Person `json:"httpResponseBody"`
+				HTTPResponseBody directoryapi.Person `json:"httpResponseBody"`
 			}{},
 		})
 	}

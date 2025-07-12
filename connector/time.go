@@ -19,7 +19,6 @@ package connector
 import (
 	"context"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/errors"
@@ -150,7 +149,7 @@ func (c *Connector) runTicker(job *tickerCallback) {
 			// OpenTelemetry: create a span for the callback
 			ctx, span := c.StartSpan(c.Lifetime(), job.Name, trc.Internal())
 
-			atomic.AddInt32(&c.pendingOps, 1)
+			c.pendingOps.Add(1)
 			startTime := time.Now()
 			err := errors.CatchPanic(func() error {
 				return job.Handler(ctx)
@@ -167,7 +166,7 @@ func (c *Connector) runTicker(job *tickerCallback) {
 				span.SetOK(http.StatusOK)
 			}
 			dur := time.Since(startTime)
-			atomic.AddInt32(&c.pendingOps, -1)
+			c.pendingOps.Add(-1)
 			_ = c.RecordHistogram(
 				ctx,
 				"microbus_callback_duration_seconds",

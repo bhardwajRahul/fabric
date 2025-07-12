@@ -20,7 +20,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -29,17 +28,16 @@ import (
 
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/dlru"
-	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/utils"
 
-	"github.com/nats-io/nats.go"
-	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -68,29 +66,29 @@ type Connector struct {
 	onShutdown      []service.ShutdownHandler
 	lifetimeCtx     context.Context
 	ctxCancel       context.CancelFunc
-	pendingOps      int32
+	pendingOps      atomic.Int32
 	onStartupCalled bool
 	initErr         error
 	startupTime     time.Time
 
-	metricsRegistry   *prometheus.Registry
 	metricsHandler    http.Handler
 	metricLock        sync.RWMutex
 	meterProvider     *sdkmetric.MeterProvider
 	meter             metric.Meter
 	metricInstruments map[string]*metricInstrument
 	onObserveMetrics  []service.ObserveMetricsHandler
+	metricCommonAttrs []attribute.KeyValue
 
 	traceProvider  *sdktrace.TracerProvider
 	tracer         trace.Tracer
 	traceProcessor *selectiveProcessor
 
-	natsConn        *nats.Conn
-	natsResponseSub *nats.Subscription
-	subs            map[string]*sub.Subscription
-	subsLock        sync.Mutex
-	started         atomic.Bool
-	plane           string
+	transportConn *transport.Conn
+	responseSub   *transport.Subscription
+	subs          map[string]*sub.Subscription
+	subsLock      sync.Mutex
+	started       atomic.Bool
+	plane         string
 
 	reqs             utils.SyncMap[string, *transferChan]
 	networkHop       time.Duration
@@ -99,8 +97,8 @@ type Connector struct {
 	multicastChanCap int
 	ackTimeout       time.Duration
 
-	requestDefrags  utils.SyncMap[string, *httpx.DefragRequest]
-	responseDefrags utils.SyncMap[string, *httpx.DefragResponse]
+	requestDefrags  *lru.Cache[string, *httpx.DefragRequest]
+	responseDefrags *lru.Cache[string, *httpx.DefragResponse]
 
 	knownResponders *lru.Cache[string, map[string]bool]
 	postRequestData *lru.Cache[string, string]
@@ -137,6 +135,9 @@ func NewConnector() *Connector {
 		localResponder:    lru.New[string, string](64<<10, 24*time.Hour),          // 64KB
 		multicastChanCap:  32,
 		metricInstruments: map[string]*metricInstrument{},
+		requestDefrags:    lru.New[string, *httpx.DefragRequest](1<<10, time.Minute),  // 1024 fragmented requests
+		responseDefrags:   lru.New[string, *httpx.DefragResponse](1<<10, time.Minute), // 1024 fragmented responses
+		maxFragmentSize:   1 << 20,                                                    // 1MB
 	}
 	c.SetResFSDir(".")
 	return c
@@ -292,74 +293,6 @@ func (c *Connector) SetLocality(locality string) error {
 // Locality returns the geographic locality of the microservice.
 func (c *Connector) Locality() string {
 	return c.locality
-}
-
-// connectToNATS connects to the NATS cluster based on settings in environment variables
-func (c *Connector) connectToNATS(ctx context.Context) error {
-	opts := []nats.Option{}
-
-	// Unique name to identify this connection
-	opts = append(opts, nats.Name(c.id+"."+c.hostname))
-
-	// URL
-	u := env.Get("MICROBUS_NATS")
-	if u == "" {
-		u = "nats://127.0.0.1:4222"
-	}
-
-	// Credentials
-	user := env.Get("MICROBUS_NATS_USER")
-	pw := env.Get("MICROBUS_NATS_PASSWORD")
-	token := env.Get("MICROBUS_NATS_TOKEN")
-	if user != "" && pw != "" {
-		opts = append(opts, nats.UserInfo(user, pw))
-	}
-	if token != "" {
-		opts = append(opts, nats.Token(token))
-	}
-
-	// Root CA and client certs
-	exists := func(fileName string) bool {
-		_, err := os.Stat(fileName)
-		return err == nil
-	}
-	if exists("ca.pem") {
-		opts = append(opts, nats.RootCAs("ca.pem"))
-	}
-	if exists("cert.pem") && exists("key.pem") {
-		opts = append(opts, nats.ClientCert("cert.pem", "key.pem"))
-	}
-
-	// Connect
-	cn, err := nats.Connect(u, opts...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// Log connection events
-	natsURL := cn.ConnectedUrl()
-	natsServerID := cn.ConnectedServerId()
-	c.LogInfo(ctx, "Connected to NATS",
-		"url", natsURL,
-		"server", natsServerID,
-	)
-	cn.SetDisconnectErrHandler(func(cn *nats.Conn, err error) {
-		c.LogInfo(c.lifetimeCtx, "Disconnected from NATS",
-			"url", natsURL,
-			"server", natsServerID,
-		)
-	})
-	cn.SetReconnectHandler(func(cn *nats.Conn) {
-		natsURL = cn.ConnectedUrl()
-		natsServerID = cn.ConnectedServerId()
-		c.LogInfo(c.lifetimeCtx, "Reconnected to NATS",
-			"url", natsURL,
-			"server", natsServerID,
-		)
-	})
-
-	c.natsConn = cn
-	return nil
 }
 
 // DistribCache is a cache that stores data among all peers of the microservice.

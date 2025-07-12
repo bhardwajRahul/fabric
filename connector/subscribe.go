@@ -24,16 +24,15 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/trc"
 
-	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -110,18 +109,34 @@ func (c *Connector) Unsubscribe(method string, path string) error {
 }
 
 // onRequest handles an incoming request. It acks it, then calls the handler to process it and responds to the caller.
-func (c *Connector) onRequest(msg *nats.Msg, s *sub.Subscription) {
+func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
+	c.pendingOps.Add(1)
+
+	if msg.Request == nil {
+		// Parse the request
+		httpReq, err := http.ReadRequest(bufio.NewReaderSize(bytes.NewReader(msg.Data), 64))
+		if err != nil {
+			c.pendingOps.Add(-1)
+			err = errors.Trace(err)
+			c.LogError(c.Lifetime(), "Parsing request", "error", err)
+			return
+		}
+		msg.Request = httpReq
+	}
+
 	err := c.ackRequest(msg, s)
 	if err != nil {
+		c.pendingOps.Add(-1)
 		err = errors.Trace(err)
-		c.LogError(c.lifetimeCtx, "Acking request", "error", err)
+		c.LogError(c.Lifetime(), "Acking request", "error", err)
 		return
 	}
 	go func() {
+		defer c.pendingOps.Add(-1)
 		err := c.handleRequest(msg, s)
 		if err != nil {
 			err = errors.Trace(err)
-			c.LogError(c.lifetimeCtx, "Processing request", "error", err)
+			c.LogError(c.Lifetime(), "Handling request", "error", err)
 		}
 	}()
 }
@@ -137,7 +152,7 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		return errors.Trace(err)
 	}
 	// Create the NATS subscriptions
-	handler := func(msg *nats.Msg) {
+	handler := func(msg *transport.Msg) {
 		c.onRequest(msg, s)
 	}
 	prefixes := []string{
@@ -151,14 +166,14 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		}
 	}
 	for _, prefix := range prefixes {
-		var natsSub *nats.Subscription
+		var natsSub *transport.Subscription
 		if prefix != "" {
 			prefix += "."
 		}
 		if s.Queue != "" {
-			natsSub, err = c.natsConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), s.Queue, handler)
+			natsSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), s.Queue, handler)
 		} else {
-			natsSub, err = c.natsConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), handler)
+			natsSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), handler)
 		}
 		if err != nil {
 			break
@@ -166,7 +181,7 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		s.Subs = append(s.Subs, natsSub)
 	}
 	if err != nil {
-		c.LogError(c.lifetimeCtx, "Activating sub",
+		c.LogError(c.Lifetime(), "Activating sub",
 			"error", err,
 			"url", s.Canonical(),
 			"method", s.Method,
@@ -174,7 +189,7 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		c.deactivateSub(s)
 		return errors.Trace(err)
 	}
-	// c.LogDebug(c.lifetimeCtx, "Sub activated",
+	// c.LogDebug(c.Lifetime(), "Sub activated",
 	// 	"url", s.Canonical(),
 	// 	"method", req.Method,
 	// )
@@ -198,14 +213,14 @@ func (c *Connector) deactivateSubs() error {
 // deactivateSub unsubscribes from NATS.
 func (c *Connector) deactivateSub(s *sub.Subscription) error {
 	var lastErr error
-	for _, natsSub := range s.Subs {
-		err := natsSub.Unsubscribe()
+	for _, sub := range s.Subs {
+		err := sub.Unsubscribe()
 		if err != nil {
 			lastErr = errors.Trace(err)
 		}
 	}
 	if lastErr != nil {
-		c.LogError(c.lifetimeCtx, "Deactivating sub",
+		c.LogError(c.Lifetime(), "Deactivating sub",
 			"error", lastErr,
 			"url", s.Canonical(),
 			"method", s.Method,
@@ -220,36 +235,33 @@ func (c *Connector) deactivateSub(s *sub.Subscription) error {
 }
 
 // ackRequest sends an ack response back to the caller.
-// Acks are sent as soon as a request is received to let the caller know it is
-// being processed
-func (c *Connector) ackRequest(msg *nats.Msg, s *sub.Subscription) error {
-	// Parse only the headers of the request
-	headerData := msg.Data
-	eoh := bytes.Index(headerData, []byte("\r\n\r\n"))
-	if eoh >= 0 {
-		headerData = headerData[:eoh+4]
-	}
-	httpReq, err := http.ReadRequest(bufio.NewReaderSize(bytes.NewReader(headerData), 64))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// Ack only the first fragment which will have index 1
-	fragmentIndex, fragmentMax := frame.Of(httpReq).Fragment()
-	if fragmentIndex > 1 {
-		return nil
+// Acks are sent as soon as a request is received to let the caller know it is being processed.
+func (c *Connector) ackRequest(msg *transport.Msg, s *sub.Subscription) (err error) {
+	httpReq := msg.Request
+	if httpReq == nil {
+		// Parse only the headers of the request
+		headerData := msg.Data
+		eoh := bytes.Index(headerData, []byte("\r\n\r\n"))
+		if eoh >= 0 {
+			headerData = headerData[:eoh+4]
+		}
+		httpReq, err = http.ReadRequest(bufio.NewReaderSize(bytes.NewReader(headerData), 64))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Get return address
-	fromHost := frame.Of(httpReq).FromHost()
+	frm := frame.Of(httpReq)
+	fromHost := frm.FromHost()
 	if fromHost == "" {
 		return errors.New("empty " + frame.HeaderFromHost + " header")
 	}
-	fromID := frame.Of(httpReq).FromID()
+	fromID := frm.FromID()
 	if fromID == "" {
 		return errors.New("empty " + frame.HeaderFromId + " header")
 	}
-	msgID := frame.Of(httpReq).MessageID()
+	msgID := frm.MessageID()
 	if msgID == "" {
 		return errors.New("empty " + frame.HeaderMsgId + " header")
 	}
@@ -257,58 +269,57 @@ func (c *Connector) ackRequest(msg *nats.Msg, s *sub.Subscription) error {
 	if queue == "" {
 		queue = c.id + "." + c.hostname
 	}
+	_, fragmentMax := frm.Fragment()
 
 	// Prepare and send the ack
-	var buf bytes.Buffer
-	buf.WriteString("HTTP/1.1 ")
+	httpRes := &http.Response{
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header: http.Header{
+			"Connection": []string{"close"},
+		},
+	}
+	frm = frame.Of(httpRes)
+	frm.SetOpCode(frame.OpCodeAck)
+	frm.SetFromHost(c.hostname)
+	frm.SetFromID(c.id)
+	frm.SetMessageID(msgID)
+	frm.SetQueue(queue)
+	frm.SetLocality(c.locality)
 	if fragmentMax > 1 {
-		buf.WriteString("100 Continue")
+		httpRes.StatusCode = http.StatusContinue
+		httpRes.Status = "100 Continue"
 	} else {
-		buf.WriteString("202 Accepted")
+		httpRes.StatusCode = http.StatusAccepted
+		httpRes.Status = "202 Accepted"
 	}
-	buf.WriteString("\r\nConnection: close")
-	header := map[string]string{
-		frame.HeaderOpCode:   frame.OpCodeAck,
-		frame.HeaderFromHost: c.hostname,
-		frame.HeaderFromId:   c.id,
-		frame.HeaderMsgId:    msgID,
-		frame.HeaderQueue:    queue,
-		frame.HeaderLocality: c.locality,
-	}
-	for k, v := range header {
-		if v != "" {
-			buf.WriteString("\r\n")
-			buf.WriteString(k)
-			buf.WriteString(": ")
-			buf.WriteString(v)
-		}
-	}
-	buf.WriteString("\r\n\r\n")
-
-	err = c.natsConn.Publish(subjectOfResponses(c.plane, fromHost, fromID), buf.Bytes())
+	err = c.transportConn.Response(subjectOfResponses(c.plane, fromHost, fromID), httpRes)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	return nil
 }
 
 // handleRequest is called when an incoming HTTP request is received.
-// The message is dispatched to the appropriate web handler and the response is serialized and sent back to the response channel of the sender
-func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
-	ctx := c.lifetimeCtx
+// The message is dispatched to the appropriate web handler and the response is serialized and sent back to the response channel of the sender.
+func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err error) {
+	ctx := c.Lifetime()
 
-	atomic.AddInt32(&c.pendingOps, 1)
-	defer atomic.AddInt32(&c.pendingOps, -1)
-
-	// Parse the request
-	httpReq, err := http.ReadRequest(bufio.NewReaderSize(bytes.NewReader(msg.Data), 64))
-	if err != nil {
-		return errors.Trace(err)
+	httpReq := msg.Request
+	if httpReq == nil {
+		// Parse the request
+		httpReq, err = http.ReadRequest(bufio.NewReaderSize(bytes.NewReader(msg.Data), 64))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	// Remove the default user-agent set by the http package
 	if httpReq.Header.Get("User-Agent") == "Go-http-client/1.1" {
 		httpReq.Header.Del("User-Agent")
+	}
+	if br, ok := httpReq.Body.(*httpx.BodyReader); ok {
+		br.Reset()
 	}
 
 	// Get the sender hostname and message ID
@@ -320,7 +331,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 		queue = c.id + "." + c.hostname
 	}
 
-	c.LogDebug(c.lifetimeCtx, "Handling",
+	c.LogDebug(c.Lifetime(), "Handling",
 		"msg", msgID,
 		"url", s.Canonical(),
 		"method", s.Method,
@@ -366,7 +377,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 	var handlerErr error
 
 	// Prepare the context
-	ctx = frame.ContextWithFrameOf(ctx, httpReq.Header)
+	ctx = frame.ContextWithClonedFrameOf(ctx, httpReq.Header)
 	cancel := func() {}
 	if budget > 0 {
 		// Set the context's timeout to the time budget reduced by a network hop
@@ -495,12 +506,7 @@ func (c *Connector) handleRequest(msg *nats.Msg, s *sub.Subscription) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		var buf bytes.Buffer
-		err = fragment.Write(&buf)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = c.natsConn.Publish(subjectOfResponses(c.plane, fromHost, fromId), buf.Bytes())
+		err = c.transportConn.Response(subjectOfResponses(c.plane, fromHost, fromId), fragment)
 		if err != nil {
 			return errors.Trace(err)
 		}

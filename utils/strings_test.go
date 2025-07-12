@@ -146,6 +146,11 @@ func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
 	for range b.N {
 		StringClaimFromJWT(token, "claim")
 	}
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/utils
+	// cpu: Apple M1 Pro
+	// BenchmarkUtil_StringClaimFromJWT-10    	 2037859	       575.3 ns/op	      40 B/op	       2 allocs/op
 }
 
 func TestUtil_AnyToString(t *testing.T) {

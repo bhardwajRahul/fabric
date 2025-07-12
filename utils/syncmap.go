@@ -58,6 +58,12 @@ func (sm *SyncMap[K, V]) Delete(key K) {
 // LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value. The loaded result is true if the value was loaded, false if stored.
 func (sm *SyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
+	return sm.LoadOrStoreFunc(key, func() V { return value })
+}
+
+// LoadOrStoreFunc returns the existing value for the key if present.
+// Otherwise, it stores and returns the given value. The loaded result is true if the value was loaded, false if stored.
+func (sm *SyncMap[K, V]) LoadOrStoreFunc(key K, value func() V) (actual V, loaded bool) {
 	sm.mux.Lock()
 	if sm.m == nil {
 		sm.m = make(map[K]V, 128)
@@ -67,7 +73,8 @@ func (sm *SyncMap[K, V]) LoadOrStore(key K, value V) (actual V, loaded bool) {
 		sm.mux.Unlock()
 		return actual, true
 	}
-	sm.m[key] = value
+	newValue := value()
+	sm.m[key] = newValue
 	sm.mux.Unlock()
-	return value, false
+	return newValue, false
 }

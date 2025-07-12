@@ -28,14 +28,15 @@ import (
 
 func TestHttpegress_Versioning(t *testing.T) {
 	t.Parallel()
-tt := testarossa.For(t)
-	
+	tt := testarossa.For(t)
 	hash, err := utils.SourceCodeSHA256(".")
 	if tt.NoError(err) {
-		tt.Equal(hash, SourceCodeSHA256, "SourceCodeSHA256 is not up to date")
+		if !tt.Equal(hash, SourceCodeSHA256, "SourceCodeSHA256 is not up to date, run 'go generate'") {
+			return
+		}
 	}
 	buf, err := os.ReadFile("version-gen.go")
 	if tt.NoError(err) {
-		tt.Contains(string(buf), hash, "SHA256 in version-gen.go is not up to date")
+		tt.Contains(string(buf), hash, "SHA256 in version-gen.go is not up to date, run 'go generate'")
 	}
 }

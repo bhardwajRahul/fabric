@@ -54,7 +54,7 @@ func TestDirectory_CRUD(t *testing.T) {
 	tt := testarossa.For(t)
 
 	ctx := Context()
-	person := &directoryapi.Person{
+	person := directoryapi.Person{
 		FirstName: "Harry",
 		LastName:  "Potter",
 		Email:     "harry.potter@hogwarts.edu.wiz",
@@ -86,7 +86,7 @@ func TestDirectory_CRUD(t *testing.T) {
 	LoadByEmail(t, ctx, person.Email).
 		Expect(person)
 
-	dupPerson := &directoryapi.Person{
+	dupPerson := directoryapi.Person{
 		FirstName: "Harry",
 		LastName:  "Potter",
 		Email:     "harry.potter@gryffindor.wiz",
@@ -109,7 +109,7 @@ func TestDirectory_Create(t *testing.T) {
 
 	ctx := Context()
 
-	person := &directoryapi.Person{
+	person := directoryapi.Person{
 		FirstName: "",
 		LastName:  "Riddle",
 		Email:     "tom.riddle@hogwarts.edu.wiz",
@@ -155,7 +155,7 @@ func TestDirectory_Update(t *testing.T) {
 	t.Parallel()
 
 	ctx := Context()
-	person := &directoryapi.Person{
+	person := directoryapi.Person{
 		FirstName: "Ron",
 		LastName:  "Weasley",
 		Email:     "ron.weasley@hogwarts.edu.wiz",

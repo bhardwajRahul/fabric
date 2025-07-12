@@ -36,6 +36,8 @@ import (
 	prototrace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
+var nilSpan = trc.NewSpan(nil)
+
 // initTracer initializes an OpenTelemetry tracer
 func (c *Connector) initTracer(ctx context.Context) (err error) {
 	if c.traceProvider != nil {
@@ -47,12 +49,18 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
 	// https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
 	// https://opentelemetry.io/docs/specs/otel/protocol/exporter/
+	var exp *otlptrace.Exporter
 	endpoint := env.Get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 	if endpoint == "" {
 		endpoint = env.Get("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
-	var exp *otlptrace.Exporter
-	if endpoint != "" {
+	if endpoint == "nil" {
+		// The nil client is used for testing of span creation
+		exp, err = otlptrace.New(ctx, &nilTraceClient{})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else if endpoint != "" {
 		protocol := env.Get("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
 		if protocol == "" {
 			protocol = env.Get("OTEL_EXPORTER_OTLP_PROTOCOL")
@@ -72,16 +80,7 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 
 	var sp sdktrace.SpanProcessor
 	switch c.deployment {
-	case LOCAL, TESTING:
-		if exp == nil {
-			// Use a nil client rather than return nil to allow for testing of span creation
-			exp, err = otlptrace.New(ctx, &nilTraceClient{})
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-		sp = sdktrace.NewBatchSpanProcessor(exp)
-	case LAB:
+	case LOCAL, TESTING, LAB:
 		if exp == nil {
 			return nil // Disables tracing without overhead
 		}
@@ -139,7 +138,7 @@ func (c *Connector) StartSpan(ctx context.Context, spanName string, opts ...trc.
 		ctx, span := c.tracer.Start(ctx, spanName, options...)
 		return ctx, trc.NewSpan(span)
 	} else {
-		return ctx, trc.NewSpan(nil)
+		return ctx, nilSpan
 	}
 }
 

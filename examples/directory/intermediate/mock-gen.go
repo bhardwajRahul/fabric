@@ -40,11 +40,11 @@ var (
 // Mock is a mockable version of the directory.example microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockCreate func(ctx context.Context, httpRequestBody *directoryapi.Person) (key directoryapi.PersonKey, err error)
-	mockLoad func(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody *directoryapi.Person, err error)
+	mockCreate func(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error)
+	mockLoad func(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error)
 	mockDelete func(ctx context.Context, key directoryapi.PersonKey) (err error)
-	mockUpdate func(ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) (err error)
-	mockLoadByEmail func(ctx context.Context, email string) (httpResponseBody *directoryapi.Person, err error)
+	mockUpdate func(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error)
+	mockLoadByEmail func(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error)
 	mockList func(ctx context.Context) (httpResponseBody []directoryapi.PersonKey, err error)
 	mockWebUI func(w http.ResponseWriter, r *http.Request) (err error)
 }
@@ -70,13 +70,13 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 }
 
 // MockCreate sets up a mock handler for the Create endpoint.
-func (svc *Mock) MockCreate(handler func(ctx context.Context, httpRequestBody *directoryapi.Person) (key directoryapi.PersonKey, err error)) *Mock {
+func (svc *Mock) MockCreate(handler func(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error)) *Mock {
 	svc.mockCreate = handler
 	return svc
 }
 
 // Create runs the mock handler set by MockCreate.
-func (svc *Mock) Create(ctx context.Context, httpRequestBody *directoryapi.Person) (key directoryapi.PersonKey, err error) {
+func (svc *Mock) Create(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error) {
 	if svc.mockCreate == nil {
 		err = errors.New("mocked endpoint 'Create' not implemented")
 		return
@@ -85,13 +85,13 @@ func (svc *Mock) Create(ctx context.Context, httpRequestBody *directoryapi.Perso
 }
 
 // MockLoad sets up a mock handler for the Load endpoint.
-func (svc *Mock) MockLoad(handler func(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody *directoryapi.Person, err error)) *Mock {
+func (svc *Mock) MockLoad(handler func(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error)) *Mock {
 	svc.mockLoad = handler
 	return svc
 }
 
 // Load runs the mock handler set by MockLoad.
-func (svc *Mock) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody *directoryapi.Person, err error) {
+func (svc *Mock) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error) {
 	if svc.mockLoad == nil {
 		err = errors.New("mocked endpoint 'Load' not implemented")
 		return
@@ -115,13 +115,13 @@ func (svc *Mock) Delete(ctx context.Context, key directoryapi.PersonKey) (err er
 }
 
 // MockUpdate sets up a mock handler for the Update endpoint.
-func (svc *Mock) MockUpdate(handler func(ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) (err error)) *Mock {
+func (svc *Mock) MockUpdate(handler func(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error)) *Mock {
 	svc.mockUpdate = handler
 	return svc
 }
 
 // Update runs the mock handler set by MockUpdate.
-func (svc *Mock) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody *directoryapi.Person) (err error) {
+func (svc *Mock) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error) {
 	if svc.mockUpdate == nil {
 		err = errors.New("mocked endpoint 'Update' not implemented")
 		return
@@ -130,13 +130,13 @@ func (svc *Mock) Update(ctx context.Context, key directoryapi.PersonKey, httpReq
 }
 
 // MockLoadByEmail sets up a mock handler for the LoadByEmail endpoint.
-func (svc *Mock) MockLoadByEmail(handler func(ctx context.Context, email string) (httpResponseBody *directoryapi.Person, err error)) *Mock {
+func (svc *Mock) MockLoadByEmail(handler func(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error)) *Mock {
 	svc.mockLoadByEmail = handler
 	return svc
 }
 
 // LoadByEmail runs the mock handler set by MockLoadByEmail.
-func (svc *Mock) LoadByEmail(ctx context.Context, email string) (httpResponseBody *directoryapi.Person, err error) {
+func (svc *Mock) LoadByEmail(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error) {
 	if svc.mockLoadByEmail == nil {
 		err = errors.New("mocked endpoint 'LoadByEmail' not implemented")
 		return

@@ -30,8 +30,8 @@ import (
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/testarossa"
-	"github.com/nats-io/nats.go"
 )
 
 func TestConnector_DirectorySubscription(t *testing.T) {
@@ -485,7 +485,7 @@ func TestConnector_SubPendingOps(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	tt.Zero(con.pendingOps)
+	tt.Zero(con.pendingOps.Load())
 
 	// First call
 	go func() {
@@ -493,7 +493,7 @@ func TestConnector_SubPendingOps(t *testing.T) {
 		end <- true
 	}()
 	<-start
-	tt.Equal(int32(1), con.pendingOps)
+	tt.Equal(int32(1), con.pendingOps.Load())
 
 	// Second call
 	go func() {
@@ -501,14 +501,14 @@ func TestConnector_SubPendingOps(t *testing.T) {
 		end <- true
 	}()
 	<-start
-	tt.Equal(int32(2), con.pendingOps)
+	tt.Equal(int32(2), con.pendingOps.Load())
 
 	<-hold
 	<-end
-	tt.Equal(int32(1), con.pendingOps)
+	tt.Equal(int32(1), con.pendingOps.Load())
 	<-hold
 	<-end
-	tt.Zero(con.pendingOps)
+	tt.Zero(con.pendingOps.Load())
 }
 
 func TestConnector_SubscriptionMethods(t *testing.T) {
@@ -679,16 +679,16 @@ func BenchmarkConnection_AckRequest(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		con.ackRequest(&nats.Msg{
+		con.ackRequest(&transport.Msg{
 			Data: msgData,
 		}, &sub.Subscription{})
 	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// N=271141
-	// 4412 ns/op (226654 ops/sec)
-	// 5917 B/op
-	// 26 allocs/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnection_AckRequest-10    	  202579	      5860 ns/op	    2508 B/op	      46 allocs/op
 }
 
 func TestConnector_PathArguments(t *testing.T) {

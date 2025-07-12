@@ -24,9 +24,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/microbus-io/fabric/env"
+	"github.com/microbus-io/fabric/mem"
 )
 
 const (
@@ -198,7 +198,7 @@ func (c *Connector) initLogger() (err error) {
 		return nil
 	}
 
-	if debug := env.Get("MICROBUS_LOG_DEBUG"); debug != "" {
+	if v := env.Get("MICROBUS_LOG_DEBUG"); v == "1" || strings.EqualFold(v, "true") {
 		c.logDebug = true
 	}
 
@@ -238,8 +238,7 @@ func (c *Connector) initLogger() (err error) {
 
 // localLogHandler applies custom logging in the LOCAL deployment.
 type localLogHandler struct {
-	attrs   []slog.Attr
-	bufPool sync.Pool
+	attrs []slog.Attr
 }
 
 func (h *localLogHandler) Enabled(ctx context.Context, _ slog.Level) bool {
@@ -247,15 +246,9 @@ func (h *localLogHandler) Enabled(ctx context.Context, _ slog.Level) bool {
 }
 
 func (h *localLogHandler) Handle(ctx context.Context, rec slog.Record) error {
-	var ptrBuf *[]byte
-	pooled := h.bufPool.Get()
-	if pooled == nil {
-		buf := make([]byte, 0, 384)
-		ptrBuf = &buf
-	} else {
-		ptrBuf = pooled.(*[]byte)
-	}
-	w := bytes.NewBuffer(*ptrBuf)
+	block := mem.Alloc(512)
+	defer mem.Free(block)
+	w := bytes.NewBuffer(block)
 
 	w.WriteString(Gray)
 
@@ -345,7 +338,6 @@ func (h *localLogHandler) Handle(ctx context.Context, rec slog.Record) error {
 	w.WriteString("\n")
 
 	os.Stderr.Write(w.Bytes())
-	h.bufPool.Put(ptrBuf)
 	return nil
 }
 

@@ -64,6 +64,7 @@ func SetRequestBody(r *http.Request, body any) error {
 			r.Header.Set("Content-Type", detected)
 		}
 		r.Header.Set("Content-Length", strconv.Itoa(len(v)))
+		r.ContentLength = int64(len(v))
 	case string:
 		b := []byte(v)
 		r.Body = NewBodyReader(b)
@@ -87,6 +88,7 @@ func SetRequestBody(r *http.Request, body any) error {
 			r.Header.Set("Content-Type", detected)
 		}
 		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		r.ContentLength = int64(len(b))
 	case url.Values:
 		b := []byte(v.Encode())
 		r.Body = NewBodyReader(b)
@@ -94,6 +96,7 @@ func SetRequestBody(r *http.Request, body any) error {
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		r.ContentLength = int64(len(b))
 	case QArgs:
 		b := []byte(v.Encode())
 		r.Body = NewBodyReader(b)
@@ -101,6 +104,7 @@ func SetRequestBody(r *http.Request, body any) error {
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		r.ContentLength = int64(len(b))
 	default:
 		j, err := json.Marshal(body)
 		if err != nil {
@@ -111,6 +115,7 @@ func SetRequestBody(r *http.Request, body any) error {
 			r.Header.Set("Content-Type", "application/json")
 		}
 		r.Header.Set("Content-Length", strconv.Itoa(len(j)))
+		r.ContentLength = int64(len(j))
 	}
 	return nil
 }

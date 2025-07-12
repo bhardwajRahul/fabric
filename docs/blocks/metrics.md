@@ -4,7 +4,7 @@ Observability is crucial when operating a SaaS system because it's not possible 
 
 `Microbus` supports both push and pull models:
 - To push metrics to an [OpenTelemetry](https://opentelemetry.io) collector, set the `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` [environment variable](../tech/envars.md#opentelemetry) appropriately
-- Alternatively, configure [Prometheus](https://prometheus.io) to scrape metrics from the [metrics](../structure/coreservices-metrics.md) core microservice
+- Alternatively, set the `MICROBUS_PROMETHEUS_EXPORTER` environment variable and configure [Prometheus](https://prometheus.io) to scrape metrics from the [metrics](../structure/coreservices-metrics.md) core microservice
 
 <img src="metrics-1.png" width="1158">
 

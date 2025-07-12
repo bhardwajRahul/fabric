@@ -24,27 +24,27 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/testarossa"
 )
 
 func TestConfigurator_ManyMicroservices(t *testing.T) {
-	t.Parallel()
+	// No parallel
+	env.Push("MICROBUS_PLANE", rand.AlphaNum64(12))
+	defer env.Pop("MICROBUS_PLANE")
+	env.Push("MICROBUS_DEPLOYMENT", connector.LAB)
+	defer env.Pop("MICROBUS_DEPLOYMENT")
+
 	tt := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
-
 	configSvc := NewService()
-	configSvc.SetDeployment(connector.LAB)
-	configSvc.SetPlane(plane)
 	services := []service.Service{}
 	n := 16
 	var wg sync.WaitGroup
 	for range n {
 		con := connector.New("many.microservices.configurator")
-		con.SetDeployment(connector.LAB)
-		con.SetPlane(plane)
 		con.DefineConfig("foo", cfg.DefaultValue("bar"))
 		con.DefineConfig("moo")
 		con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {

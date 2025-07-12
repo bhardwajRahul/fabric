@@ -313,7 +313,7 @@ func (_c *MulticastClient) WebUI(ctx context.Context, r *http.Request) <-chan *p
 
 // CreateIn are the input arguments of Create.
 type CreateIn struct {
-	HTTPRequestBody *Person `json:"-"`
+	HTTPRequestBody Person `json:"-"`
 }
 
 // CreateOut are the return values of Create.
@@ -338,7 +338,7 @@ func (_out *CreateResponse) Get() (key PersonKey, err error) {
 /*
 Create registers the person in the directory.
 */
-func (_c *MulticastClient) Create(ctx context.Context, httpRequestBody *Person) <-chan *CreateResponse {
+func (_c *MulticastClient) Create(ctx context.Context, httpRequestBody Person) <-chan *CreateResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
@@ -384,7 +384,7 @@ func (_c *MulticastClient) Create(ctx context.Context, httpRequestBody *Person) 
 /*
 Create registers the person in the directory.
 */
-func (_c *Client) Create(ctx context.Context, httpRequestBody *Person) (key PersonKey, err error) {
+func (_c *Client) Create(ctx context.Context, httpRequestBody Person) (key PersonKey, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -427,7 +427,7 @@ type LoadIn struct {
 
 // LoadOut are the return values of Load.
 type LoadOut struct {
-	HTTPResponseBody *Person `json:"httpResponseBody"`
+	HTTPResponseBody Person `json:"httpResponseBody"`
 }
 
 // LoadResponse is the response to Load.
@@ -438,7 +438,7 @@ type LoadResponse struct {
 }
 
 // Get retrieves the return values.
-func (_out *LoadResponse) Get() (httpResponseBody *Person, err error) {
+func (_out *LoadResponse) Get() (httpResponseBody Person, err error) {
 	httpResponseBody = _out.data.HTTPResponseBody
 	err = _out.err
 	return
@@ -494,7 +494,7 @@ func (_c *MulticastClient) Load(ctx context.Context, key PersonKey) <-chan *Load
 /*
 Load looks up a person in the directory.
 */
-func (_c *Client) Load(ctx context.Context, key PersonKey) (httpResponseBody *Person, err error) {
+func (_c *Client) Load(ctx context.Context, key PersonKey) (httpResponseBody Person, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons/key/{key}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -642,7 +642,7 @@ func (_c *Client) Delete(ctx context.Context, key PersonKey) (err error) {
 // UpdateIn are the input arguments of Update.
 type UpdateIn struct {
 	Key PersonKey `json:"key"`
-	HTTPRequestBody *Person `json:"-"`
+	HTTPRequestBody Person `json:"-"`
 }
 
 // UpdateOut are the return values of Update.
@@ -665,7 +665,7 @@ func (_out *UpdateResponse) Get() (err error) {
 /*
 Update updates the person's data in the directory.
 */
-func (_c *MulticastClient) Update(ctx context.Context, key PersonKey, httpRequestBody *Person) <-chan *UpdateResponse {
+func (_c *MulticastClient) Update(ctx context.Context, key PersonKey, httpRequestBody Person) <-chan *UpdateResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons/key/{key}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`key`: key,
@@ -713,7 +713,7 @@ func (_c *MulticastClient) Update(ctx context.Context, key PersonKey, httpReques
 /*
 Update updates the person's data in the directory.
 */
-func (_c *Client) Update(ctx context.Context, key PersonKey, httpRequestBody *Person) (err error) {
+func (_c *Client) Update(ctx context.Context, key PersonKey, httpRequestBody Person) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons/key/{key}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -757,7 +757,7 @@ type LoadByEmailIn struct {
 
 // LoadByEmailOut are the return values of LoadByEmail.
 type LoadByEmailOut struct {
-	HTTPResponseBody *Person `json:"httpResponseBody"`
+	HTTPResponseBody Person `json:"httpResponseBody"`
 }
 
 // LoadByEmailResponse is the response to LoadByEmail.
@@ -768,7 +768,7 @@ type LoadByEmailResponse struct {
 }
 
 // Get retrieves the return values.
-func (_out *LoadByEmailResponse) Get() (httpResponseBody *Person, err error) {
+func (_out *LoadByEmailResponse) Get() (httpResponseBody Person, err error) {
 	httpResponseBody = _out.data.HTTPResponseBody
 	err = _out.err
 	return
@@ -824,7 +824,7 @@ func (_c *MulticastClient) LoadByEmail(ctx context.Context, email string) <-chan
 /*
 LoadByEmail looks up a person in the directory by their email.
 */
-func (_c *Client) LoadByEmail(ctx context.Context, email string) (httpResponseBody *Person, err error) {
+func (_c *Client) LoadByEmail(ctx context.Context, email string) (httpResponseBody Person, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/persons/email/{email}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{

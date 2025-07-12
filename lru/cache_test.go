@@ -432,8 +432,11 @@ func BenchmarkLRU_Store(b *testing.B) {
 		cache.Store(i, i)
 	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// 288 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/lru
+	// cpu: Apple M1 Pro
+	// BenchmarkLRU_Store-10    	 5560801	       254.4 ns/op	     142 B/op	       2 allocs/op
 }
 
 func BenchmarkLRU_LoadNoBump(b *testing.B) {
@@ -446,8 +449,11 @@ func BenchmarkLRU_LoadNoBump(b *testing.B) {
 		cache.Load(i, NoBump())
 	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// 193 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/lru
+	// cpu: Apple M1 Pro
+	// BenchmarkLRU_LoadNoBump-10    	 6022860	       223.9 ns/op	      24 B/op	       1 allocs/op
 }
 
 func BenchmarkLRU_LoadBump(b *testing.B) {
@@ -460,8 +466,11 @@ func BenchmarkLRU_LoadBump(b *testing.B) {
 		cache.Load(i)
 	}
 
-	// On 2021 MacBook M1 Pro 16":
-	// 190 ns/op
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/lru
+	// cpu: Apple M1 Pro
+	// BenchmarkLRU_LoadBump-10    	 4951041	       254.0 ns/op	      24 B/op	       1 allocs/op
 }
 
 // integrity checks the internal structure of the cache.

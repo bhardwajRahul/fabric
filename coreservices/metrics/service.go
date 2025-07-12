@@ -135,7 +135,21 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 			for i := range ch {
 				res, err := i.Get()
 				if err != nil {
-					svc.LogWarn(ctx, "Fetching metrics", "error", err)
+					// Error 501 Status Not Implemented indicates that Prometheus metric collection is disabled.
+					// Set the PROMETHEUS_EXPORTER_ENABLED environment variable to enable.
+					svc.LogWarn(ctx, "Fetching metrics",
+						"error", err,
+						"targetService", s,
+					)
+					continue
+				}
+				if res.StatusCode != http.StatusOK {
+					// Error 501 Status Not Implemented indicates that Prometheus metric collection is disabled.
+					// Set the PROMETHEUS_EXPORTER_ENABLED environment variable to enable.
+					svc.LogWarn(ctx, "Fetching metrics",
+						"statusCode", res.StatusCode,
+						"targetService", s,
+					)
 					continue
 				}
 
@@ -146,7 +160,10 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 				if res.Header.Get("Content-Encoding") == "gzip" {
 					unzipper, err := gzip.NewReader(res.Body)
 					if err != nil {
-						svc.LogWarn(ctx, "Unzippping metrics", "error", err)
+						svc.LogWarn(ctx, "Unzippping metrics",
+							"error", err,
+							"targetService", s,
+						)
 						continue
 					}
 					reader = unzipper
@@ -157,7 +174,10 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 				_, err = io.Copy(writer, reader)
 				mux.Unlock()
 				if err != nil {
-					svc.LogWarn(ctx, "Copying metrics", "error", err)
+					svc.LogWarn(ctx, "Copying metrics",
+						"error", err,
+						"targetService", s,
+					)
 				}
 				rCloser.Close()
 			}
@@ -165,6 +185,7 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 		delay += time.Millisecond
 	}
 	wg.Wait()
+	writer.Write([]byte(""))
 	if wCloser != nil {
 		wCloser.Close()
 	}

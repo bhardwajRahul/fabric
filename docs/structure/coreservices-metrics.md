@@ -10,3 +10,5 @@ The endpoint to obtain metrics from the metrics microservice is `https://localho
 Metrics can also be obtained from a microservice directly at `https://localhost:8080/hello.example:888/metrics`.
 
 The metrics core microservice is unnecessary if metrics are pushed to an OpenTelemetry collector, rather than pulled.
+
+Prometheus metric collection must be explicitly enabled by setting the `MICROBUS_PROMETHEUS_EXPORTER` [environment variable](../tech/envars.md).

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
@@ -47,6 +48,8 @@ type Application struct {
 func New() *Application {
 	app := &Application{
 		sig:             make(chan os.Signal, 1),
+		plane:           env.Get("MICROBUS_PLANE"),
+		deployment:      env.Get("MICROBUS_DEPLOYMENT"),
 		startupTimeout:  time.Second * 20,
 		shutdownTimeout: time.Second * 20,
 		initializer:     func(s service.Service) {},

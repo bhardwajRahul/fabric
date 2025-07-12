@@ -25,8 +25,8 @@ import (
 
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/nats-io/nats.go"
 )
 
 var methodValidator = regexp.MustCompile(`^[A-Z]+$`)
@@ -43,7 +43,7 @@ type Subscription struct {
 	Path     string
 	Queue    string
 	Handler  any
-	Subs     []*nats.Subscription
+	Subs     []*transport.Subscription
 	specPath string
 	Actor    string
 }

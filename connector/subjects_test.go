@@ -93,3 +93,14 @@ func TestConnector_ReverseHostname(t *testing.T) {
 	tt.Equal("com", reverseHostname("com"))
 	tt.Equal("", reverseHostname(""))
 }
+
+func BenchmarkConnector_ReverseHostname(b *testing.B) {
+	for b.Loop() {
+		reverseHostname("www.sub.example.com")
+	}
+	// goos: darwin
+	// goarch: arm64
+	// pkg: github.com/microbus-io/fabric/connector
+	// cpu: Apple M1 Pro
+	// BenchmarkConnector_ReverseHostname-10    	39063982	        30.07 ns/op	      24 B/op	       1 allocs/op
+}

@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/env"
@@ -90,14 +89,18 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 	}
-	if exp == nil {
-		exp = &nilExporter{}
+
+	// Create a second exporter for Prometheus handler in order to support pull model
+	var promExp *otelprom.Exporter
+	if v := env.Get("MICROBUS_PROMETHEUS_EXPORTER"); v == "1" || strings.EqualFold(v, "true") {
+		metricsRegistry := prometheus.NewRegistry()
+		promExp, _ = otelprom.New(otelprom.WithRegisterer(metricsRegistry))
+		c.metricsHandler = promhttp.HandlerFor(metricsRegistry, promhttp.HandlerOpts{})
 	}
 
-	// Create a second exporter for Prometheus handler in order to support pull model as well
-	c.metricsRegistry = prometheus.NewRegistry()
-	promExp, _ := otelprom.New(otelprom.WithRegisterer(c.metricsRegistry))
-	c.metricsHandler = promhttp.HandlerFor(c.metricsRegistry, promhttp.HandlerOpts{})
+	if exp == nil && promExp == nil {
+		return nil
+	}
 
 	intervalMillis, _ := strconv.Atoi(env.Get("OTEL_METRIC_EXPORT_INTERVAL"))
 	if intervalMillis <= 0 {
@@ -108,11 +111,7 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 		}
 	}
 
-	c.meterProvider = sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(
-			sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(time.Duration(intervalMillis)*time.Millisecond), sdkmetric.WithProducer(&jitProducer{c: c})),
-		),
-		sdkmetric.WithReader(promExp),
+	options := []sdkmetric.Option{
 		sdkmetric.WithResource(resource.NewSchemaless(
 			// https://opentelemetry.io/docs/specs/semconv/attributes-registry/service/
 			attribute.String("service.namespace", c.Plane()),
@@ -121,8 +120,26 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 			attribute.String("service.instance.id", c.ID()),
 			attribute.String("deployment.environment", c.Deployment()),
 		)),
-	)
+	}
+	if exp != nil {
+		options = append(options, sdkmetric.WithReader(
+			sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(time.Duration(intervalMillis)*time.Millisecond), sdkmetric.WithProducer(&jitProducer{c: c})),
+		))
+	}
+	if promExp != nil {
+		options = append(options, sdkmetric.WithReader(promExp))
+	}
+	c.metricLock.Lock()
+	c.meterProvider = sdkmetric.NewMeterProvider(options...)
 	c.meter = c.meterProvider.Meter("microbus")
+	c.metricCommonAttrs = []attribute.KeyValue{
+		attribute.String("plane", c.Plane()),
+		attribute.String("service", c.Hostname()),
+		attribute.Int("ver", c.Version()),
+		attribute.String("id", c.ID()),
+		attribute.String("deployment", c.Deployment()),
+	}
+	c.metricLock.Unlock()
 
 	c.DescribeHistogram(
 		"microbus_callback_duration_seconds",
@@ -173,6 +190,8 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 
 // termMeter flushes and shuts down the meter collector.
 func (c *Connector) termMeter(ctx context.Context) (err error) {
+	c.metricLock.Lock()
+	defer c.metricLock.Unlock()
 	if c.meterProvider == nil {
 		return nil
 	}
@@ -210,6 +229,12 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 	if !c.IsStarted() {
 		return nil
 	}
+	c.metricLock.RLock()
+	meter := c.meter
+	c.metricLock.RUnlock()
+	if meter == nil {
+		return nil
+	}
 
 	uptime := max(c.Now(ctx).Sub(c.startupTime), 0)
 	_ = c.RecordGauge(ctx, "microbus_uptime_duration_seconds", uptime.Seconds())
@@ -222,7 +247,7 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 
 	// OpenTelemetry: create a span for the callback
 	ctx, span := c.StartSpan(c.Lifetime(), "observe-metrics", trc.Internal())
-	atomic.AddInt32(&c.pendingOps, 1)
+	c.pendingOps.Add(1)
 	startTime := time.Now()
 
 	// Call the callback functions
@@ -246,7 +271,7 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 		span.SetOK(http.StatusOK)
 	}
 	dur := time.Since(startTime)
-	atomic.AddInt32(&c.pendingOps, -1)
+	c.pendingOps.Add(-1)
 	_ = c.RecordHistogram(
 		ctx,
 		"microbus_callback_duration_seconds",
@@ -350,30 +375,38 @@ func (c *Connector) inferMetricUnit(name string, desc string) (unit string) {
 // AddCounter adds a non-negative value to a counter metric.
 // Attributes conform to the standard slog pattern.
 func (c *Connector) AddCounter(ctx context.Context, name string, val float64, attributes ...any) (err error) {
-	if c.meter == nil {
-		return nil
-	}
 	if val < 0 {
 		return errors.New("counter '%s' can't be subtracted from", name)
 	}
+	var counter metric.Float64Counter
 	c.metricLock.RLock()
+	meter := c.meter
 	m, ok := c.metricInstruments[name]
-	if ok && m.Counter == nil && m.Kind == "counter" {
-		// Lazy instantiation
-		m.Counter, err = c.meter.Float64Counter(
-			name,
-			metric.WithUnit(m.Unit),
-			metric.WithDescription(m.Description),
-		)
+	if ok {
+		counter = m.Counter
 	}
 	c.metricLock.RUnlock()
-	if err != nil {
-		return errors.Trace(err)
+	if meter == nil {
+		return nil
 	}
 	if !ok {
 		return errors.New("unknown metric '%s'", name)
 	}
-	if m.Counter == nil {
+	if counter == nil && m.Kind == "counter" {
+		// Lazy instantiation
+		counter, err = meter.Float64Counter(
+			name,
+			metric.WithUnit(m.Unit),
+			metric.WithDescription(m.Description),
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.metricLock.Lock()
+		m.Counter = counter
+		c.metricLock.Unlock()
+	}
+	if counter == nil {
 		return errors.New("metric '%s' is not a counter", name)
 	}
 	attributes = append(attributes,
@@ -383,102 +416,115 @@ func (c *Connector) AddCounter(ctx context.Context, name string, val float64, at
 		"id", c.ID(),
 		"deployment", c.Deployment(),
 	)
-	kvAttributes, err := attributesToKV(attributes)
+	opt, err := c.makeAttributeSetOption(attributes)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.Counter.Add(ctx, val, metric.WithAttributes(kvAttributes...))
+	counter.Add(ctx, val, opt)
 	return nil
 }
 
 // RecordGauge observes a value for a gauge metric.
 // Attributes conform to the standard slog pattern.
 func (c *Connector) RecordGauge(ctx context.Context, name string, val float64, attributes ...any) (err error) {
-	if c.meter == nil {
-		return nil
-	}
+	var gauge metric.Float64Gauge
 	c.metricLock.RLock()
+	meter := c.meter
 	m, ok := c.metricInstruments[name]
-	if ok && m.Gauge == nil && m.Kind == "gauge" {
-		// Lazy instantiation
-		m.Gauge, err = c.meter.Float64Gauge(
-			name,
-			metric.WithUnit(m.Unit),
-			metric.WithDescription(m.Description),
-		)
+	if ok {
+		gauge = m.Gauge
 	}
 	c.metricLock.RUnlock()
-	if err != nil {
-		return errors.Trace(err)
+	if meter == nil {
+		return nil
 	}
 	if !ok {
 		return errors.New("unknown metric '%s'", name)
 	}
-	if m.Gauge == nil {
+	if gauge == nil && m.Kind == "gauge" {
+		// Lazy instantiation
+		gauge, err = meter.Float64Gauge(
+			name,
+			metric.WithUnit(m.Unit),
+			metric.WithDescription(m.Description),
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.metricLock.Lock()
+		m.Gauge = gauge
+		c.metricLock.Unlock()
+	}
+	if gauge == nil {
 		return errors.New("metric '%s' is not a gauge", name)
 	}
-	attributes = append(attributes,
-		"plane", c.Plane(),
-		"service", c.Hostname(),
-		"ver", c.Version(),
-		"id", c.ID(),
-		"deployment", c.Deployment(),
-	)
-	kvAttributes, err := attributesToKV(attributes)
+	opt, err := c.makeAttributeSetOption(attributes)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.Gauge.Record(ctx, val, metric.WithAttributes(kvAttributes...))
+	gauge.Record(ctx, val, opt)
 	return nil
 }
 
 // RecordHistogram observes a value for a histogram metric.
 // Attributes conform to the standard slog pattern.
 func (c *Connector) RecordHistogram(ctx context.Context, name string, val float64, attributes ...any) (err error) {
-	if c.meter == nil {
+	var histogram metric.Float64Histogram
+	c.metricLock.RLock()
+	meter := c.meter
+	m, ok := c.metricInstruments[name]
+	if ok {
+		histogram = m.Histogram
+	}
+	c.metricLock.RUnlock()
+	if meter == nil {
 		return nil
 	}
-	c.metricLock.RLock()
-	m, ok := c.metricInstruments[name]
-	if ok && m.Histogram == nil && m.Kind == "histogram" {
+	if !ok {
+		return errors.New("unknown metric '%s'", name)
+	}
+	if histogram == nil && m.Kind == "histogram" {
 		// Lazy instantiation
-		m.Histogram, err = c.meter.Float64Histogram(
+		histogram, err = meter.Float64Histogram(
 			name,
 			metric.WithUnit(m.Unit),
 			metric.WithDescription(m.Description),
 			metric.WithExplicitBucketBoundaries(m.Buckets...),
 		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.metricLock.Lock()
+		m.Histogram = histogram
+		c.metricLock.Unlock()
 	}
-	c.metricLock.RUnlock()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
-		return errors.New("unknown metric '%s'", name)
-	}
-	if m.Histogram == nil {
+	if histogram == nil {
 		return errors.New("metric '%s' is not a histogram", name)
 	}
-	attributes = append(attributes,
-		"plane", c.Plane(),
-		"service", c.Hostname(),
-		"ver", c.Version(),
-		"id", c.ID(),
-		"deployment", c.Deployment(),
-	)
-	kvAttributes, err := attributesToKV(attributes)
+	opt, err := c.makeAttributeSetOption(attributes)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.Histogram.Record(ctx, val, metric.WithAttributes(kvAttributes...))
+	histogram.Record(ctx, val, opt)
 	return nil
 }
 
-func attributesToKV(attributes []any) ([]attribute.KeyValue, error) {
+var kvPool = sync.Pool{
+	New: func() any {
+		b := make([]attribute.KeyValue, 0, 20)
+		return &b
+	},
+}
+
+// makeAttributeSetOption prepares a the metric option wrapping the slog style arguments.
+func (c *Connector) makeAttributeSetOption(attributes []any) (metric.MeasurementOption, error) {
 	if len(attributes)%2 != 0 {
 		return nil, errors.New("uneven number of attributes")
 	}
-	kvAttributes := []attribute.KeyValue{}
+	ptrSlice := kvPool.Get().(*[]attribute.KeyValue)
+	defer kvPool.Put(ptrSlice)
+	kvAttributes := append(*ptrSlice, c.metricCommonAttrs...)
+
 	for i := 0; i < len(attributes); i += 2 {
 		k, ok := attributes[i].(string)
 		if !ok {
@@ -509,26 +555,8 @@ func attributesToKV(attributes []any) ([]attribute.KeyValue, error) {
 			kvAttributes = append(kvAttributes, attribute.Stringer(k, v))
 		}
 	}
-	return kvAttributes, nil
-}
-
-type nilExporter struct {
-}
-
-func (de *nilExporter) Temporality(ik sdkmetric.InstrumentKind) metricdata.Temporality {
-	return metricdata.CumulativeTemporality
-}
-func (de *nilExporter) Aggregation(ik sdkmetric.InstrumentKind) sdkmetric.Aggregation {
-	return sdkmetric.AggregationDefault{}
-}
-func (de *nilExporter) Export(ctx context.Context, rm *metricdata.ResourceMetrics) error {
-	return nil
-}
-func (de *nilExporter) ForceFlush(ctx context.Context) error {
-	return nil
-}
-func (de *nilExporter) Shutdown(ctx context.Context) error {
-	return nil
+	attrSet := attribute.NewSet(kvAttributes...)
+	return metric.WithAttributeSet(attrSet), nil
 }
 
 // DefineHistogram defines a new histogram metric.
@@ -593,15 +621,16 @@ func (c *Connector) DefineGauge(name string, help string, labels []string) (err 
 //
 // Deprecated: Use AddCounter or RecordGauge instead.
 func (c *Connector) IncrementMetric(name string, val float64, labels ...string) (err error) {
-	if c.meter == nil {
-		return nil
-	}
 	if val == 0 {
 		return nil
 	}
 	c.metricLock.RLock()
+	meter := c.meter
 	m, ok := c.metricInstruments[name]
 	c.metricLock.RUnlock()
+	if meter == nil {
+		return nil
+	}
 	if !ok {
 		return errors.New("unknown metric '%s'", name)
 	}
@@ -631,12 +660,13 @@ func (c *Connector) IncrementMetric(name string, val float64, labels ...string) 
 //
 // Deprecated: Use RecordGauge or RecordHistogram instead.
 func (c *Connector) ObserveMetric(name string, val float64, labels ...string) (err error) {
-	if c.meter == nil {
-		return nil
-	}
 	c.metricLock.RLock()
+	meter := c.meter
 	m, ok := c.metricInstruments[name]
 	c.metricLock.RUnlock()
+	if meter == nil {
+		return nil
+	}
 	if !ok {
 		return errors.New("unknown metric '%s'", name)
 	}

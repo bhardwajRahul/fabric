@@ -260,6 +260,7 @@ func Body(body any) Option {
 			req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		}
 		req.Header.Set("Content-Length", r.Header.Get("Content-Length"))
+		req.ContentLength = int(r.ContentLength)
 		return nil
 	}
 }

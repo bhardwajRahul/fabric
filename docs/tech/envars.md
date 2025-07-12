@@ -11,9 +11,11 @@ The `Microbus` framework uses environment variables for various purposes:
 
 Environment variables may also be set by placing an `env.yaml` file in the working directory of the executable running the microservice. The bundled example application includes such a file at `main/env.yaml`.
 
-### NATS Connection
+### Transports
 
-Before connecting to NATS, a microservice can't communicate with other microservices and therefore it can't reach the configurator microservice to fetch the values of its config properties. Connecting to NATS therefore must precede configuration which means that initializing the NATS connection itself can't be done using the standard configuration pattern. Instead, the [NATS connection is initialized using environment variables](../tech/nats-connection.md): `MICROBUS_NATS`, `MICROBUS_NATS_USER`, `MICROBUS_NATS_PASSWORD` and `MICROBUS_NATS_TOKEN`.
+A microservice can't communicate with other microservices, including the configurator microservice, before connecting to the transport. [Initializing the NATS connection](../tech/nats-connection.md) therefore relies on environment variables: `MICROBUS_NATS`, `MICROBUS_NATS_USER`, `MICROBUS_NATS_PASSWORD` and `MICROBUS_NATS_TOKEN`.
+
+`MICROBUS_SHORT_CIRCUIT` can be set to `0` or `false` to disable the [short-circuit transport](../tech/short-circuit.md).
 
 ### Deployment
 
@@ -37,7 +39,7 @@ The `MICROBUS_LOCALITY` environment variable sets the locality of the microservi
 
 ### Logging
 
-Setting the `MICROBUS_LOG_DEBUG` environment variable to any non-empty value is required for microservices to [log](../blocks/logging.md) debug-level messages.
+Setting the `MICROBUS_LOG_DEBUG` environment variable to `1` or `true` is required for microservices to [log](../blocks/logging.md) debug-level messages.
  
 ### OpenTelemetry
 
@@ -46,3 +48,5 @@ Setting the `MICROBUS_LOG_DEBUG` environment variable to any non-empty value is 
 The `OTEL_METRIC_EXPORT_INTERVAL` variable can be used to set the interval (in milliseconds) between pushes of metrics. It defaults to 15 seconds in `LOCAL` or `TESTING` deployments, and 60 seconds in `PROD` or `LAB` deployments.
 
 Other [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/) are respected.
+
+Set the `MICROBUS_PROMETHEUS_EXPORTER` variable to `1` or `true` to enable Prometheus metric collection in the microservice. This enables the [metrics](../structure/coreservices-metrics.md) core microservice to collect and aggregate metrics from the microservice.

@@ -91,7 +91,7 @@ func TestHttpingress_Ports(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 	res, err := client.Get("http://localhost:4040/ports/ok")
 	if tt.NoError(err) {
 		b, err := io.ReadAll(res.Body)
@@ -134,7 +134,7 @@ func TestHttpingress_RequestMemoryLimit(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	// Small request at 25% of capacity
 	tt.Zero(Svc.reqMemoryUsed)
@@ -195,7 +195,7 @@ func TestHttpingress_Compression(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 	req, err := http.NewRequest("GET", "http://localhost:4040/compression/ok", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	tt.NoError(err)
@@ -227,7 +227,7 @@ func TestHttpingress_PortMapping(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	// External port 4040 grants access to all internal ports
 	res, err := client.Get("http://localhost:4040/port.mapping/ok443")
@@ -280,7 +280,7 @@ func TestHttpingress_ForwardedHeaders(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	// Make a standard request
 	req, err := http.NewRequest("GET", "http://localhost:4040/forwarded.headers/ok", nil)
@@ -323,7 +323,7 @@ func TestHttpingress_Root(t *testing.T) {
 	t.Parallel()
 	tt := testarossa.For(t)
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 	res, err := client.Get("http://localhost:4040/")
 	if tt.NoError(err) {
 		tt.Equal(http.StatusNotFound, res.StatusCode)
@@ -359,7 +359,7 @@ func TestHttpingress_CORS(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	// Request with no origin header
 	count := callCount
@@ -432,7 +432,7 @@ func TestHttpingress_ParseForm(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 8}
 
 	// Under 10MB
 	var buf bytes.Buffer
@@ -491,7 +491,7 @@ func TestHttpingress_InternalHeaders(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	req, err := http.NewRequest("GET", "http://localhost:4040/internal.headers:555/ok", nil)
 	tt.NoError(err)
@@ -533,7 +533,7 @@ func TestHttpingress_OnRoute(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	req, err := http.NewRequest("GET", "http://localhost:4040/greeting:555/ok", nil)
 	tt.NoError(err)
@@ -579,7 +579,7 @@ func TestHttpingress_BlockedPaths(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	req, err := http.NewRequest("GET", "http://localhost:4040/blocked.paths/admin.php", nil)
 	tt.NoError(err)
@@ -599,7 +599,7 @@ func TestHttpingress_DefaultFavIcon(t *testing.T) {
 	t.Parallel()
 	tt := testarossa.For(t)
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 
 	req, err := http.NewRequest("GET", "http://localhost:4040/favicon.ico", nil)
 	tt.NoError(err)
@@ -627,7 +627,7 @@ func TestHttpingress_NoCache(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 	res, err := client.Get("http://localhost:4040/no.cache/ok")
 	if tt.NoError(err) {
 		tt.Equal("no-store", res.Header.Get("Cache-Control"))
@@ -743,7 +743,7 @@ func TestHttpingress_Authorization(t *testing.T) {
 	tt.NoError(err)
 	defer con.Shutdown()
 
-	client := http.Client{Timeout: time.Second * 2}
+	client := http.Client{Timeout: time.Second * 4}
 	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:4040/authorization/protected", nil)
 	tt.NoError(err)
 

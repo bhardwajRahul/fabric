@@ -39,6 +39,9 @@ func NewFragRequest(r *http.Request, fragmentSize int64) (*FragRequest, error) {
 	if r.Body == nil {
 		return &FragRequest{origRequest: r, noFrags: true}, nil
 	}
+	if fragmentSize <= 0 {
+		return nil, errors.New("non-positive fragment size")
+	}
 
 	result := &FragRequest{origRequest: r}
 

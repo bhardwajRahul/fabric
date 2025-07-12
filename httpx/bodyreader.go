@@ -56,3 +56,8 @@ func (br *BodyReader) Bytes() []byte {
 func (br *BodyReader) Reset() {
 	br.reader = bytes.NewReader(br.bytes)
 }
+
+// Len is the length of the underlying bytes.
+func (br *BodyReader) Len() int {
+	return len(br.bytes)
+}

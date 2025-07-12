@@ -19,6 +19,7 @@ package connector
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -214,10 +215,10 @@ func TestConnector_Restart(t *testing.T) {
 	t.Parallel()
 	tt := testarossa.For(t)
 
-	startupCalled := 0
-	shutdownCalled := 0
-	endpointCalled := 0
-	tickerCalled := 0
+	var startupCalled atomic.Int32
+	var shutdownCalled atomic.Int32
+	var endpointCalled atomic.Int32
+	var tickerCalled atomic.Int32
 
 	// Set up a configurator
 	plane := rand.AlphaNum64(12)
@@ -234,19 +235,19 @@ func TestConnector_Restart(t *testing.T) {
 	con.SetDeployment(LAB) // Tickers and configs are disabled in TESTING
 	con.SetPlane(plane)
 	con.SetOnStartup(func(ctx context.Context) error {
-		startupCalled++
+		startupCalled.Add(1)
 		return nil
 	})
 	con.SetOnShutdown(func(ctx context.Context) error {
-		shutdownCalled++
+		shutdownCalled.Add(1)
 		return nil
 	})
 	con.Subscribe("GET", "/endpoint", func(w http.ResponseWriter, r *http.Request) error {
-		endpointCalled++
+		endpointCalled.Add(1)
 		return nil
 	})
 	con.StartTicker("tick", time.Millisecond*500, func(ctx context.Context) error {
-		tickerCalled++
+		tickerCalled.Add(1)
 		return nil
 	})
 	con.DefineConfig("config", cfg.DefaultValue("default"))
@@ -260,19 +261,19 @@ func TestConnector_Restart(t *testing.T) {
 	})
 	err = con.Startup()
 	tt.NoError(err)
-	tt.Equal(1, startupCalled)
-	tt.Zero(shutdownCalled)
+	tt.Equal(int32(1), startupCalled.Load())
+	tt.Zero(shutdownCalled.Load())
 	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
 	tt.NoError(err)
-	tt.Equal(1, endpointCalled)
+	tt.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
-	tt.True(tickerCalled > 0)
+	tt.True(tickerCalled.Load() > 0)
 	tt.Equal("overriden", con.Config("config"))
 
 	// Shutdown
 	err = con.Shutdown()
 	tt.NoError(err)
-	tt.Equal(1, shutdownCalled)
+	tt.Equal(int32(1), shutdownCalled.Load())
 
 	// Restart
 	configurator.Unsubscribe("POST", ":888/values")
@@ -280,26 +281,26 @@ func TestConnector_Restart(t *testing.T) {
 		w.Write([]byte(`{}`))
 		return nil
 	})
-	startupCalled = 0
-	shutdownCalled = 0
-	endpointCalled = 0
-	tickerCalled = 0
+	startupCalled.Store(0)
+	shutdownCalled.Store(0)
+	endpointCalled.Store(0)
+	tickerCalled.Store(0)
 
 	err = con.Startup()
 	tt.NoError(err)
-	tt.Equal(1, startupCalled)
-	tt.Zero(shutdownCalled)
+	tt.Equal(int32(1), startupCalled.Load())
+	tt.Zero(shutdownCalled.Load())
 	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
 	tt.NoError(err)
-	tt.Equal(1, endpointCalled)
+	tt.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
-	tt.True(tickerCalled > 0)
+	tt.True(tickerCalled.Load() > 0)
 	tt.Equal("default", con.Config("config"))
 
 	// Shutdown
 	err = con.Shutdown()
 	tt.NoError(err)
-	tt.Equal(1, shutdownCalled)
+	tt.Equal(int32(1), shutdownCalled.Load())
 }
 
 func TestConnector_GoGracefulShutdown(t *testing.T) {

@@ -27,11 +27,12 @@ import (
 // Request is used to construct an HTTP request that can be sent over the bus.
 // Although technically public, it is used internally and should not be constructed by microservices directly.
 type Request struct {
-	Method    string
-	URL       string
-	Header    http.Header
-	Body      io.Reader
-	Multicast bool
+	Method        string
+	URL           string
+	Header        http.Header
+	Body          io.Reader
+	Multicast     bool
+	ContentLength int
 
 	queryArgs string
 }

@@ -32,6 +32,7 @@ import (
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
@@ -282,6 +283,8 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			span.End()
 		}
 	}()
+	// Set a frame in the context and request
+	ctx = frame.ContextWithFrameOf(ctx, r)
 	r = r.WithContext(ctx)
 
 	ww := httpx.NewResponseRecorder() // This recorder allows modifying the response after it was written
@@ -342,7 +345,7 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
-	// Use the first segment of the URI as the hostname to contact
+	// Use the first segment of the path as the hostname to contact
 	u, err := resolveInternalURL(r.URL, svc.portMappings)
 	if err != nil {
 		// Ignore requests to invalid internal hostnames, such as via https://example.com/%3Fterms=1 or https://example.com/.env
@@ -378,7 +381,7 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		options = append(options, pub.Header(k, v[0]))
 	}
 
-	// Delegate the request over NATS
+	// Delegate the request over the bus
 	internalRes, err := svc.Request(ctx, options...)
 	if err != nil {
 		return err // No trace

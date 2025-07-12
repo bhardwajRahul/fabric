@@ -98,7 +98,7 @@ MICROBUS_DEPLOYMENT: LOCAL
 # The plane of communication isolates communication among a group of microservices over a NATS cluster
 # MICROBUS_PLANE: microbus
 
-# Any non-empty value enables logging of debug-level messages
+# Enable logging of debug-level messages
 # MICROBUS_LOG_DEBUG: 1
 
 # OpenTelemetry

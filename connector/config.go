@@ -102,7 +102,7 @@ func (c *Connector) SetConfig(name string, value any) error {
 		for _, callback := range c.onConfigChanged {
 			err := errors.CatchPanic(func() error {
 				return callback(
-					c.lifetimeCtx,
+					c.Lifetime(),
 					func(n string) bool {
 						return strings.EqualFold(n, name)
 					},

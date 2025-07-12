@@ -106,13 +106,19 @@ func (f Frame) IsNil() bool {
 // In either case, the returned context is guaranteed to have a frame.
 // Manipulating the frame of the cloned context does not impact the parent's.
 func CloneContext(parent context.Context) (cloned context.Context) {
-	return ContextWithFrameOf(parent, ContextWithFrame(parent))
+	return ContextWithClonedFrameOf(parent, ContextWithFrame(parent))
 }
 
-// ContextWithFrameOf returns a copy of the parent context, setting on it a clone of the frame obtained from x.
+// ContextWithClonedFrameOf returns a copy of the parent context, setting on it a clone of the frame obtained from x.
 // Manipulating the frame of the returned context does not impact the parent's.
-func ContextWithFrameOf(parent context.Context, x any) (ctx context.Context) {
+func ContextWithClonedFrameOf(parent context.Context, x any) (ctx context.Context) {
 	return context.WithValue(parent, contextKey, Of(x).h.Clone())
+}
+
+// ContextWithFrameOf returns a copy of the parent context, setting on it the frame obtained from x.
+// Use with caution. Manipulating the frame of the returned context also impacts the parent's.
+func ContextWithFrameOf(parent context.Context, x any) (ctx context.Context) {
+	return context.WithValue(parent, contextKey, Of(x).h)
 }
 
 // ContextWithFrame returns either the parent, or a copy of the parent with a new frame.
@@ -120,7 +126,7 @@ func ContextWithFrameOf(parent context.Context, x any) (ctx context.Context) {
 func ContextWithFrame(parent context.Context) (ctx context.Context) {
 	f := Of(parent)
 	if f.h == nil {
-		return ContextWithFrameOf(parent, make(http.Header))
+		return ContextWithClonedFrameOf(parent, make(http.Header))
 	}
 	return parent
 }

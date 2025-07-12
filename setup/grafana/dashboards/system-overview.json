@@ -2639,6 +2639,10 @@
           "text": "LOCAL",
           "value": "LOCAL"
         },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "definition": "label_values(microbus_uptime_duration_seconds,deployment)",
         "label": "Deployment",
         "name": "deployment",
@@ -2648,7 +2652,7 @@
           "query": "label_values(microbus_uptime_duration_seconds,deployment)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "sort": 1,
         "type": "query"
@@ -2736,5 +2740,5 @@
   "timezone": "",
   "title": "System Overview",
   "uid": "microbus_qTPVYZ",
-  "version": 15
+  "version": 16
 }

@@ -282,3 +282,14 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Smart variadic versions of `errors.New` and `errors.Trace`
 - Improved error printer middleware
 - Charset UTF-8 middleware
+
+[Milestone 35](https://github.com/microbus-io/fabric/tree/milestone/35):
+
+- Short-circuit transport
+- Memory allocation optimizations
+- Fixed data races
+- Fixed bug in defragging of large payloads
+- Zero impact when tracer is disabled
+- Fixed bug in definition of Grafana dashboards
+- `MICROBUS_PROMETHEUS_EXPORTER` environment variable
+- Differentiated `frame.ContextWithFrameOf` and `frame.ContextWithClonedFrameOf`
