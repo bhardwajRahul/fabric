@@ -293,3 +293,14 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Fixed bug in definition of Grafana dashboards
 - `MICROBUS_PROMETHEUS_EXPORTER` environment variable
 - Differentiated `frame.ContextWithFrameOf` and `frame.ContextWithClonedFrameOf`
+
+[Milestone 36](https://github.com/microbus-io/fabric/tree/milestone/36):
+
+- Allow running purely with the short-circuit transport
+- Resolved data race in tracing span
+- Tracing span variadic API for setting attributes
+- Token issuer not to override provided claims
+- Marshal errors returned by endpoints as `{"err":{...}}` to facilitate parsing by web clients
+- Support `%w` when creating a new error
+- Added trace ID as a property of the error
+- Improved browser detection in the error page redirection middleware

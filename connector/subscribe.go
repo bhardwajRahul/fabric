@@ -409,27 +409,31 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	cancel()
 
 	if handlerErr != nil {
-		handlerErr = errors.Convert(handlerErr)
-		if handlerErr.Error() == "http: request body too large" || // https://go.dev/src/net/http/request.go#L1150
-			handlerErr.Error() == "http: POST too large" { // https://go.dev/src/net/http/request.go#L1240
-			errors.Convert(handlerErr).StatusCode = http.StatusRequestEntityTooLarge
+		convertedErr := errors.Convert(handlerErr)
+		handlerErr = convertedErr
+		if convertedErr.Error() == "http: request body too large" || // https://go.dev/src/net/http/request.go#L1150
+			convertedErr.Error() == "http: POST too large" { // https://go.dev/src/net/http/request.go#L1240
+			convertedErr.StatusCode = http.StatusRequestEntityTooLarge
 		}
-		statusCode := errors.Convert(handlerErr).StatusCode
+		statusCode := convertedErr.StatusCode
 		if statusCode == 0 {
 			statusCode = http.StatusInternalServerError
 		}
 		c.LogError(ctx, "Handling request",
-			"error", handlerErr,
+			"error", convertedErr,
 			"path", s.Path,
 			"depth", frame.Of(httpReq).CallDepth(),
 			"code", statusCode,
 		)
 
 		// OpenTelemetry: record the error, adding the request attributes
-		span.SetString("http.route", s.Path)
+		span.SetAttributes("http.route", s.Path)
 		span.SetRequest(httpReq)
-		span.SetError(handlerErr)
+		span.SetError(convertedErr)
 		c.ForceTrace(ctx)
+
+		// Enrich error with trace ID
+		convertedErr.Trace = span.TraceID()
 
 		// Prepare an error response instead
 		httpRecorder = httpx.NewResponseRecorder()
@@ -439,7 +443,12 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		if c.Deployment() == LOCAL {
 			encoder.SetIndent("", "  ")
 		}
-		err = encoder.Encode(handlerErr)
+		serializedErr := struct {
+			Err error `json:"err"`
+		}{
+			Err: convertedErr,
+		}
+		err = encoder.Encode(serializedErr)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -495,6 +504,8 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	if handlerErr == nil {
 		span.SetOK(httpResponse.StatusCode)
 	}
+	span.End()
+	spanEnded = true
 
 	// Send back the response, in fragments if needed
 	fragger, err := httpx.NewFragResponse(httpResponse, c.maxFragmentSize)
@@ -512,7 +523,5 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		}
 	}
 
-	span.End()
-	spanEnded = true
 	return nil
 }

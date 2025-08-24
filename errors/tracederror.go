@@ -21,8 +21,11 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 )
+
+const zeroTrace = "00000000000000000000000000000000"
 
 // Ensure interfaces
 var (
@@ -38,6 +41,7 @@ type TracedError struct {
 	Err        error
 	Stack      []*StackFrame
 	StatusCode int
+	Trace      string
 	Properties map[string]any
 }
 
@@ -48,7 +52,7 @@ In the simplest case, the pattern is a static string.
 
 	New("network timeout")
 
-If the pattern contains % signs, the next appropriate number of arguments are used to format the message of the new error.
+If the pattern contains % signs, the next appropriate number of arguments are used to format the message of the new error as if with fmt.Errorf.
 
 	New("failed to parse '%s' for user %d", dateStr, userID)
 
@@ -60,78 +64,88 @@ Properties are not part of the error's message and can be retrieved up the call 
 		"os", os,
 	)
 
-Two notable properties do not require a name: errors and integers.
+Three notable properties do not require a name: errors, integers and 32-character long hex string.
 
 	New("failed to parse form",
 		err,
 		http.StatusBadRequest,
+		"ba0da7b3d3150f20702229c4521b58e9",
 		"path", r.URL.Path,
 	)
 
-An unnamed error is interpreted to be the original source of the error. The new error is created to wrap the original error.
+An unnamed error is interpreted to be the original source of the error. The new error is created to wrap the original error as if with
 
 	fmt.Errorf(errorMessage+": %w", originalError)
 
 An unnamed integer is interpreted to be an HTTP status code to associate with the error. If the pattern is empty, the status text is set by default.
 
-	New("user not found",
-		http.StatusNotFound,
-		"id", userID,
-	)
+An unnamed 32-character long hex string is interpreted to be a trace ID.
 */
-func New(pattern string, a ...any) error {
+func New(pattern string, args ...any) error {
 	pctArgs := strings.Count(pattern, `%`) - 2*strings.Count(pattern, `%%`)
-	pctArgs = min(pctArgs, len(a))
-	msg := fmt.Sprintf(pattern, a[:pctArgs]...)
+	pctArgs = min(pctArgs, len(args))
 	err := &TracedError{}
+	if pattern != "" {
+		// Important: Trace expects that an empty pattern will not wrap followup error objects
+		err.Err = fmt.Errorf(pattern, args[:pctArgs]...)
+	}
 	i := pctArgs
-	unnamed := 0
-	for i < len(a) {
+	for i < len(args) {
 		if err.Properties == nil {
-			err.Properties = make(map[string]any, len(a)-pctArgs)
+			err.Properties = make(map[string]any, len(args)-pctArgs)
 		}
-		switch k := a[i].(type) {
+		switch k := args[i].(type) {
 		case int:
 			err.StatusCode = k
-			if msg == "" {
-				msg = statusText[k]
+			if err.Err == nil {
+				err.Err = stderrors.New(statusText[k])
 			}
 			i++
 		case error:
-			if msg == "" {
+			if err.Err == nil {
+				// Important: Trace expects that an empty pattern will not wrap followup error objects
 				err.Err = k
 			} else {
-				err.Err = fmt.Errorf(msg+": %w", k)
+				err.Err = fmt.Errorf("%w: %w", err.Err, k)
 			}
 			if tracedErr, ok := k.(*TracedError); ok {
 				if err.StatusCode == 0 {
 					err.StatusCode = tracedErr.StatusCode
 				}
-				for k, v := range tracedErr.Properties {
-					err.Properties[k] = v
+				if err.Trace == "" || err.Trace == zeroTrace {
+					err.Trace = tracedErr.Trace
 				}
+				maps.Copy(err.Properties, tracedErr.Properties)
 				err.Stack = tracedErr.Stack
 			}
 			i++
 		case string:
-			if i < len(a)-1 {
-				err.Properties[k] = a[i+1]
+			isHex := func(s string) bool {
+				for i := range s {
+					c := s[i]
+					if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+						return false
+					}
+				}
+				return true
+			}
+			if len(k) == 32 && isHex(k) {
+				err.Trace = k
+				i++
+			} else if i < len(args)-1 {
+				err.Properties[k] = args[i+1]
 				i += 2
 			} else {
 				err.Properties[k] = ""
 				i++
 			}
 		default:
-			unnamed++
-			err.Properties[fmt.Sprintf("unnamed%d", unnamed)] = k
+			err.Properties["!BADKEY"] = k
 			i++
 		}
 	}
 	if err.Err == nil {
-		if msg == "" {
-			msg = "unspecified error"
-		}
-		err.Err = stderrors.New(msg)
+		err.Err = stderrors.New("unspecified error")
 	}
 	if err.StatusCode == 0 {
 		err.StatusCode = 500
@@ -193,15 +207,17 @@ func (e *TracedError) String() string {
 	var b strings.Builder
 	b.WriteString(e.Error())
 	if e.StatusCode != 0 && e.StatusCode != 500 {
-		b.WriteString(fmt.Sprintf("\n[%d]", e.StatusCode))
+		b.WriteString("\nstatusCode=")
+		b.WriteString(fmt.Sprintf("%d", e.StatusCode))
 	}
-	if len(e.Properties) > 0 {
-		b.WriteString("\n")
+	if e.Trace != "" && e.Trace != zeroTrace {
+		b.WriteString("\ntrace=")
+		b.WriteString(e.Trace)
 	}
 	for k, v := range e.Properties {
 		b.WriteString("\n")
 		b.WriteString(k)
-		b.WriteString(": ")
+		b.WriteString("=")
 		b.WriteString(fmt.Sprintf("%v", v))
 	}
 	if len(e.Stack) > 0 {
@@ -216,33 +232,64 @@ func (e *TracedError) String() string {
 
 // StreamedError is the schema used to marshal and unmarshal the traced error.
 type StreamedError struct {
-	Error      string         `json:"error" jsonschema:"example=message"`
-	StatusCode int            `json:"statusCode,omitempty"`
-	Properties map[string]any `json:"properties,omitempty"`
-	Stack      []*StackFrame  `json:"stack,omitempty"`
+	Error      string        `json:"error" jsonschema:"example=message"`
+	StatusCode int           `json:"statusCode,omitzero"`
+	Trace      string        `json:"trace,omitzero"`
+	Stack      []*StackFrame `json:"stack,omitzero"`
 }
 
 // MarshalJSON marshals the error to JSON.
 func (e *TracedError) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&StreamedError{
-		Error:      e.Err.Error(),
-		Stack:      e.Stack,
-		StatusCode: e.StatusCode,
-		Properties: e.Properties,
-	})
+	m := map[string]any{}
+	if len(e.Properties) > 0 {
+		maps.Copy(m, e.Properties)
+	}
+	m["error"] = e.Err.Error()
+	if e.StatusCode != 0 {
+		m["statusCode"] = e.StatusCode
+	} else {
+		delete(m, "statusCode")
+	}
+	if e.Stack != nil {
+		m["stack"] = e.Stack
+	} else {
+		delete(m, "stack")
+	}
+	if e.Trace != "" && e.Trace != zeroTrace {
+		m["trace"] = e.Trace
+	} else {
+		delete(m, "trace")
+	}
+	return json.Marshal(m)
 }
 
 // UnmarshalJSON unmarshals the error from JSON.
+// Neither the type of the error nor any errors it wraps can be restored.
 func (e *TracedError) UnmarshalJSON(data []byte) error {
 	var j StreamedError
 	err := json.Unmarshal(data, &j)
 	if err != nil {
 		return err
 	}
-	e.Err = stderrors.New(j.Error) // Type is lost
+	e.Err = stderrors.New(j.Error)
 	e.Stack = j.Stack
 	e.StatusCode = j.StatusCode
-	e.Properties = j.Properties
+	e.Trace = j.Trace
+
+	var m map[string]any
+	err = json.Unmarshal(data, &m)
+	if err != nil {
+		return err
+	}
+	delete(m, "error")
+	delete(m, "statusCode")
+	delete(m, "stack")
+	delete(m, "trace")
+	if len(m) > 0 {
+		e.Properties = m
+	} else {
+		e.Properties = nil
+	}
 	return nil
 }
 

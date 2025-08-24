@@ -86,6 +86,7 @@ func (svc *Service) ValidateToken(ctx context.Context, signedToken string) (acto
 	delete(claims, "exp")
 	delete(claims, "jti")
 	delete(claims, "ver")
+	delete(claims, "nbf")
 	return claims, true, nil
 }
 
@@ -168,12 +169,23 @@ func (svc *Service) IssueToken(ctx context.Context, claims any) (signedToken str
 	}
 	// Create and sign JWT
 	// Refer to https://www.iana.org/assignments/jwt/jwt.xhtml for common claim names
-	now := svc.Now(ctx)
+	now := svc.Now(ctx).Truncate(time.Second)
 	mapClaims["iss"] = issClaim
-	mapClaims["validator"] = svc.Hostname()             // Used by Authorization middleware to know to the hostname of the validator
-	mapClaims["iat"] = now.Truncate(time.Second).Unix() // Must not be in the future
-	mapClaims["exp"] = now.Add(svc.AuthTokenTTL()).Round(time.Second).Unix()
-	mapClaims["jti"] = rand.AlphaNum64(24)
+	if mapClaims["validator"] == nil {
+		mapClaims["validator"] = svc.Hostname() // Used by Authorization middleware to know to the hostname of the validator
+	}
+	if mapClaims["iat"] == nil {
+		mapClaims["iat"] = now.Add(-5 * time.Minute).Unix() // Must not be in the future
+	}
+	if mapClaims["nbf"] == nil {
+		mapClaims["nbf"] = mapClaims["iat"]
+	}
+	if mapClaims["exp"] == nil {
+		mapClaims["exp"] = now.Add(svc.AuthTokenTTL()).Unix()
+	}
+	if mapClaims["jti"] == nil {
+		mapClaims["jti"] = rand.AlphaNum64(24)
+	}
 	mapClaims["ver"] = 1
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS512, mapClaims)
 	signedToken, err = jwtToken.SignedString([]byte(secretKey))

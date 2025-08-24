@@ -140,15 +140,19 @@ func TestTester_StringCut(t *testing.T) {
 	tt.NotNil(openAPIValue(basePath + "responses|4XX"))
 	schemaRef = openAPIValue(basePath + "responses|4XX|content|application/json|schema|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
-	tt.Equal("string", openAPIValue(schemaRef+"properties|error|type"))
-	tt.Equal("integer", openAPIValue(schemaRef+"properties|statusCode|type"))
-	tt.Equal("object", openAPIValue(schemaRef+"properties|properties|type"))
-	tt.NotNil(openAPIValue(basePath + "responses|5XX"))
-	schemaRef = openAPIValue(basePath + "responses|5XX|content|application/json|schema|$ref").(string)
+	schemaRef = openAPIValue(schemaRef + "properties|err|$ref").(string)
 	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
 	tt.Equal("string", openAPIValue(schemaRef+"properties|error|type"))
 	tt.Equal("integer", openAPIValue(schemaRef+"properties|statusCode|type"))
-	tt.Equal("object", openAPIValue(schemaRef+"properties|properties|type"))
+	tt.Equal("array", openAPIValue(schemaRef+"properties|stack|type"))
+	tt.NotNil(openAPIValue(basePath + "responses|5XX"))
+	schemaRef = openAPIValue(basePath + "responses|5XX|content|application/json|schema|$ref").(string)
+	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
+	schemaRef = openAPIValue(schemaRef + "properties|err|$ref").(string)
+	schemaRef = strings.ReplaceAll(schemaRef, "/", "|")[2:] + "|"
+	tt.Equal("string", openAPIValue(schemaRef+"properties|error|type"))
+	tt.Equal("integer", openAPIValue(schemaRef+"properties|statusCode|type"))
+	tt.Equal("array", openAPIValue(schemaRef+"properties|stack|type"))
 }
 
 func TestTester_PointDistance(t *testing.T) {

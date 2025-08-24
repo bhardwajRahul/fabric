@@ -22,7 +22,7 @@ import (
 
 // StackFrame is a single stack location.
 type StackFrame struct {
-	Function string `json:"function"`
+	Function string `json:"func"`
 	File     string `json:"file"`
 	Line     int    `json:"line"`
 }

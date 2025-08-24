@@ -18,9 +18,11 @@ package httpingress
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
 	"github.com/microbus-io/fabric/errors"
@@ -52,8 +54,8 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	// Warning: renaming or removing middleware is a breaking change because the names are used as location markers
 	m := &middleware.Chain{}
 	m.Append(CharsetUTF8, middleware.CharsetUTF8())
-	m.Append(ErrorPrinter, middleware.ErrorPrinter(func() string {
-		return svc.Deployment()
+	m.Append(ErrorPrinter, middleware.ErrorPrinter(func() bool {
+		return svc.Deployment() != connector.PROD
 	}))
 	m.Append(BlockedPaths, middleware.BlockedPaths(func(path string) bool {
 		if svc.blockedPaths[path] {
@@ -82,11 +84,14 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m.Append(Authorization, middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
 		if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok {
 			actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(validator).ValidateToken(ctx, token)
+			if errors.StatusCode(err) == http.StatusNotFound {
+				return nil, false, nil
+			}
 		}
 		return actor, valid, errors.Trace(err)
 	}))
 	m.Append(Ready, middleware.NoOp()) // Marker
-	m.Append(CacheControl, middleware.CacheControl("no-store"))
+	m.Append(CacheControl, middleware.CacheControl("no-cache, no-store, max-age=0"))
 	m.Append(Compress, middleware.Compress())
 	m.Append(DefaultFavIcon, middleware.DefaultFavIcon())
 

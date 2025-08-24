@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -95,12 +94,12 @@ func slogToTracingAttrs(prefix string, f slog.Attr) []attribute.KeyValue {
 	case slog.KindGroup:
 		var group []attribute.KeyValue
 		for _, a := range f.Value.Group() {
-			group = append(group, slogToTracingAttrs(f.Key+".", a)...)
+			group = append(group, slogToTracingAttrs(prefix+f.Key+".", a)...)
 		}
 		return group
 	case slog.KindString:
 		return []attribute.KeyValue{
-			attribute.String(f.Key, f.Value.String()),
+			attribute.String(prefix+f.Key, f.Value.String()),
 		}
 	case slog.KindInt64:
 		return []attribute.KeyValue{
@@ -141,7 +140,60 @@ func (s Span) Log(severity string, msg string, args ...any) {
 	s.internal.AddEvent("log", trace.WithAttributes(attrs...))
 }
 
+/*
+SetAttributes tags the span during its creation.
+The arguments are expected in the standard slog name=value pairs pattern.
+
+	span.SetAttributes("string", s, "bool", false)
+*/
+func (s Span) SetAttributes(args ...any) {
+	if s.internal == nil {
+		return
+	}
+	for i := 0; i < len(args); i++ {
+		var v any
+		k, ok := args[i].(string)
+		if !ok {
+			k = "!BADKEY"
+			v = args[i]
+		} else {
+			if i+1 < len(args) {
+				v = args[i+1]
+			}
+			i++
+		}
+		switch vv := v.(type) {
+		case string:
+			s.internal.SetAttributes(attribute.String(k, vv))
+		case []string:
+			s.internal.SetAttributes(attribute.StringSlice(k, vv))
+		case fmt.Stringer:
+			s.internal.SetAttributes(attribute.Stringer(k, vv))
+		case bool:
+			s.internal.SetAttributes(attribute.Bool(k, vv))
+		case []bool:
+			s.internal.SetAttributes(attribute.BoolSlice(k, vv))
+		case int:
+			s.internal.SetAttributes(attribute.Int(k, vv))
+		case []int:
+			s.internal.SetAttributes(attribute.IntSlice(k, vv))
+		case int64:
+			s.internal.SetAttributes(attribute.Int64(k, vv))
+		case []int64:
+			s.internal.SetAttributes(attribute.Int64Slice(k, vv))
+		case float64:
+			s.internal.SetAttributes(attribute.Float64(k, vv))
+		case []float64:
+			s.internal.SetAttributes(attribute.Float64Slice(k, vv))
+		default:
+			s.internal.SetAttributes(attribute.String(k, fmt.Sprintf("%v", v)))
+		}
+	}
+}
+
 // SetString tags the span during its creation.
+//
+// Deprecated: Use SetAttributes
 func (s Span) SetString(k string, v string) {
 	if s.internal == nil {
 		return
@@ -150,6 +202,8 @@ func (s Span) SetString(k string, v string) {
 }
 
 // SetStrings tags the span during its creation.
+//
+// Deprecated: Use SetAttributes
 func (s Span) SetStrings(k string, v []string) {
 	if s.internal == nil {
 		return
@@ -158,6 +212,8 @@ func (s Span) SetStrings(k string, v []string) {
 }
 
 // SetBool tags the span during its creation.
+//
+// Deprecated: Use SetAttributes
 func (s Span) SetBool(k string, v bool) {
 	if s.internal == nil {
 		return
@@ -166,6 +222,8 @@ func (s Span) SetBool(k string, v bool) {
 }
 
 // SetInt tags the span during its creation.
+//
+// Deprecated: Use SetAttributes
 func (s Span) SetInt(k string, v int) {
 	if s.internal == nil {
 		return
@@ -174,6 +232,8 @@ func (s Span) SetInt(k string, v int) {
 }
 
 // SetFloat tags the span during its creation.
+//
+// Deprecated: Use SetAttributes
 func (s Span) SetFloat(k string, v float64) {
 	if s.internal == nil {
 		return
@@ -192,12 +252,16 @@ func (s Span) SetRequest(r *http.Request) {
 }
 
 // SetClientIP tags the span during its creation with the IP address and port number of the client.
-func (s Span) SetClientIP(ip string) {
-	p := strings.LastIndex(ip, ":")
-	if p > 0 {
-		portInt, _ := strconv.Atoi(ip[p+1:])
+func (s Span) SetClientIP(ipPort string) {
+	if s.internal == nil {
+		return
+	}
+	p := strings.LastIndex(ipPort, ":")
+	b := strings.LastIndex(ipPort, "]") // For IPv6, e.g. [::1]:443
+	if p > 0 && p > b {
+		portInt, _ := strconv.Atoi(ipPort[p+1:])
 		s.internal.SetAttributes(
-			attribute.String("client.address", ip[:p]),
+			attribute.String("client.address", ipPort[:p]),
 			attribute.Int("client.port", portInt),
 		)
 	}
@@ -214,34 +278,4 @@ func (s Span) TraceID() string {
 		return ""
 	}
 	return s.internal.SpanContext().TraceID().String()
-}
-
-// Attributes returns the attributes set on the span.
-func (s Span) Attributes() map[string]string {
-	m := map[string]string{}
-	attributes := reflect.ValueOf(s.internal).Elem().FieldByName("attributes")
-	for i := range attributes.Len() {
-		k := attributes.Index(i).FieldByName("Key").String()
-		v := attributes.Index(i).FieldByName("Value").FieldByName("stringly").String()
-		if v == "" {
-			i := attributes.Index(i).FieldByName("Value").FieldByName("numeric").Uint()
-			if i != 0 {
-				v = strconv.Itoa(int(i))
-			}
-		}
-		if v == "" {
-			slice := attributes.Index(i).FieldByName("Value").FieldByName("slice").Elem()
-			if slice.Len() == 1 {
-				v = slice.Index(0).String()
-			}
-		}
-		m[k] = v
-	}
-	return m
-}
-
-// Status returns the status of the span: 0=unset; 1=error; 2=OK.
-func (s Span) Status() int {
-	status := reflect.ValueOf(s.internal).Elem().FieldByName("status")
-	return int(status.FieldByName("Code").Uint())
 }

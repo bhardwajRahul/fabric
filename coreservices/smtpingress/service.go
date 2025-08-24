@@ -150,11 +150,13 @@ func (svc *Service) startDaemon(ctx context.Context) (err error) {
 					})
 					if err != nil || svc.Deployment() == connector.LOCAL {
 						// The request attributes may take a lot of memory, so record only in LOCAL deployment or if there's an error
-						span.SetString("email.subject", e.Subject)
-						span.SetString("email.from", e.MailFrom.String())
+						span.SetAttributes(
+							"email.subject", e.Subject,
+							"email.from", e.MailFrom.String(),
+						)
 						span.SetClientIP(e.RemoteIP)
 						for k, v := range e.Header {
-							span.SetStrings("email.header."+k, v)
+							span.SetAttributes("email.header."+k, v)
 						}
 					}
 					if err != nil {

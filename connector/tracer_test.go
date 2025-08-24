@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -46,14 +48,14 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 		span = beta.Span(r.Context())
 
 		// The request attributes should not be added until and unless there's an error
-		attributes := span.Attributes()
+		attributes := spanAttributes(span)
 		tt.Zero(len(attributes["http.method"]))
 		tt.Zero(len(attributes["url.scheme"]))
 		tt.Zero(len(attributes["server.address"]))
 		tt.Zero(len(attributes["server.port"]))
 		tt.Zero(len(attributes["url.path"]))
 
-		tt.Equal(0, span.Status())
+		tt.Equal(0, spanStatus(span))
 
 		if r.URL.Query().Get("err") != "" {
 			return errors.New("oops")
@@ -73,28 +75,28 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 	_, err = alpha.GET(ctx, "https://beta.test.request.attributes.connector/handle?err=1")
 	if tt.Error(err) {
 		// The request attributes should be added since there was an error
-		attributes := span.Attributes()
+		attributes := spanAttributes(span)
 		tt.Equal("GET", attributes["http.method"])
 		tt.Equal("https", attributes["url.scheme"])
 		tt.Equal("beta.test.request.attributes.connector", attributes["server.address"])
 		tt.Equal("443", attributes["server.port"])
 		tt.Equal("/handle", attributes["url.path"])
 
-		tt.Equal(1, span.Status())
+		tt.Equal(1, spanStatus(span))
 	}
 
 	// A request that returns OK
 	_, err = alpha.GET(ctx, "https://beta.test.request.attributes.connector/handle")
 	if tt.NoError(err) {
 		// The request attributes should not be added since there was no error
-		attributes := span.Attributes()
+		attributes := spanAttributes(span)
 		tt.Zero(len(attributes["http.method"]))
 		tt.Zero(len(attributes["url.scheme"]))
 		tt.Zero(len(attributes["server.address"]))
 		tt.Zero(len(attributes["server.port"]))
 		tt.Zero(len(attributes["url.path"]))
 
-		tt.Equal(2, span.Status())
+		tt.Equal(2, spanStatus(span))
 	}
 }
 
@@ -124,4 +126,34 @@ func TestConnector_GoTracingSpan(t *testing.T) {
 
 	wg.Wait()
 	tt.Equal(topSpan.TraceID(), goSpan.TraceID())
+}
+
+// spanAttributes returns the attributes set on the span.
+func spanAttributes(s trc.Span) map[string]string {
+	m := map[string]string{}
+	attributes := reflect.ValueOf(s).FieldByName("internal").Elem().Elem().FieldByName("attributes")
+	for i := range attributes.Len() {
+		k := attributes.Index(i).FieldByName("Key").String()
+		v := attributes.Index(i).FieldByName("Value").FieldByName("stringly").String()
+		if v == "" {
+			i := attributes.Index(i).FieldByName("Value").FieldByName("numeric").Uint()
+			if i != 0 {
+				v = strconv.Itoa(int(i))
+			}
+		}
+		if v == "" {
+			slice := attributes.Index(i).FieldByName("Value").FieldByName("slice").Elem()
+			if slice.Len() == 1 {
+				v = slice.Index(0).String()
+			}
+		}
+		m[k] = v
+	}
+	return m
+}
+
+// Status returns the status of the span: 0=unset; 1=error; 2=OK.
+func spanStatus(s trc.Span) int {
+	status := reflect.ValueOf(s).FieldByName("internal").Elem().Elem().FieldByName("status")
+	return int(status.FieldByName("Code").Uint())
 }

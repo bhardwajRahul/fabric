@@ -77,7 +77,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 
 	// Check if there's enough time budget
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkHop {
-		err := errors.New("timeout", http.StatusRequestTimeout)
+		err := errors.New("timeout", http.StatusRequestTimeout, c.Span(ctx).TraceID())
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
@@ -86,7 +86,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	inboundFrame := frame.Of(ctx)
 	depth := inboundFrame.CallDepth()
 	if depth >= c.maxCallDepth {
-		err := errors.New("call depth overflow", http.StatusLoopDetected)
+		err := errors.New("call depth overflow", http.StatusLoopDetected, c.Span(ctx).TraceID())
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
 	}
@@ -94,7 +94,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	// Build the request
 	req, err := pub.NewRequest()
 	if err != nil {
-		errOutput <- pub.NewErrorResponse(errors.Trace(err))
+		errOutput <- pub.NewErrorResponse(errors.Trace(err, c.Span(ctx).TraceID()))
 		return errOutput
 	}
 	outboundFrame := frame.Of(req.Header)
@@ -113,7 +113,11 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	}
 
 	// Options can override anything above
-	req.Apply(options...)
+	err = req.Apply(options...)
+	if err != nil {
+		errOutput <- pub.NewErrorResponse(errors.Trace(err, c.Span(ctx).TraceID()))
+		return errOutput
+	}
 
 	// Set depth
 	outboundFrame.SetCallDepth(depth + 1)
@@ -201,7 +205,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	// Prepare the HTTP request (first fragment only)
 	httpReq, err := http.NewRequest(req.Method, req.URL, req.Body)
 	if err != nil {
-		err = errors.Trace(err)
+		err = errors.Trace(err, c.Span(ctx).TraceID())
 		output = append(output, pub.NewErrorResponse(err))
 		return output
 	}
@@ -221,13 +225,13 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	// Fragment large requests
 	fragger, err := httpx.NewFragRequest(httpReq, c.maxFragmentSize)
 	if err != nil {
-		err = errors.Trace(err)
+		err = errors.Trace(err, c.Span(ctx).TraceID())
 		output = append(output, pub.NewErrorResponse(err))
 		return output
 	}
 	httpReq, err = fragger.Fragment(1)
 	if err != nil {
-		err = errors.Trace(err)
+		err = errors.Trace(err, c.Span(ctx).TraceID())
 		output = append(output, pub.NewErrorResponse(err))
 		return output
 	}
@@ -275,7 +279,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 		err = c.transportConn.Request(subject, httpReq)
 	}
 	if err != nil {
-		err = errors.Trace(err)
+		err = errors.Trace(err, c.Span(ctx).TraceID())
 		output = append(output, pub.NewErrorResponse(err))
 		return output
 	}
@@ -406,15 +410,18 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			// Error
 			if opCode == frame.OpCodeError {
 				// Reconstitute the error
-				var reconstitutedError *errors.TracedError
+				var reconstitutedError struct {
+					Err *errors.TracedError `json:"err"`
+				}
 				err = json.NewDecoder(response.Body).Decode(&reconstitutedError)
-				if err != nil || reconstitutedError == nil {
-					err = errors.New("unparsable error response")
+				if err != nil || reconstitutedError.Err == nil {
+					err = errors.New("unparsable error response: %s", req.Canonical(), c.Span(ctx).TraceID())
 				} else {
-					err = errors.Convert(reconstitutedError)
+					reconstitutedError.Err.Trace = c.Span(ctx).TraceID()
+					err = errors.Convert(reconstitutedError.Err)
 				}
 				output = append(output, pub.NewErrorResponse(err))
-				statusCode := reconstitutedError.StatusCode
+				statusCode := reconstitutedError.Err.StatusCode
 				if statusCode == 0 {
 					statusCode = http.StatusInternalServerError
 				}
@@ -447,7 +454,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 				"msg", msgID,
 				"subject", subject,
 			)
-			err = errors.New("timeout", http.StatusRequestTimeout)
+			err = errors.New(
+				"timeout: %s", req.Canonical(),
+				http.StatusRequestTimeout,
+				c.Span(ctx).TraceID(),
+			)
 			output = append(output, pub.NewErrorResponse(err))
 			c.postRequestData.Store("timeout:"+msgID, subject)
 			_ = c.AddCounter(
@@ -490,7 +501,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 						"subject", subject,
 					)
 				} else {
-					err = errors.New("ack timeout", http.StatusNotFound)
+					err = errors.New(
+						"ack timeout: %s", req.Canonical(),
+						http.StatusNotFound,
+						c.Span(ctx).TraceID(),
+					)
 					output = append(output, pub.NewErrorResponse(err))
 					_ = c.AddCounter(
 						ctx,

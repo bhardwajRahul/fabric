@@ -516,43 +516,48 @@ var kvPool = sync.Pool{
 	},
 }
 
-// makeAttributeSetOption prepares a the metric option wrapping the slog style arguments.
+// makeAttributeSetOption prepares a the metric option wrapping the attributes.
+// The arguments are expected in the standard slog name=value pairs pattern.
 func (c *Connector) makeAttributeSetOption(attributes []any) (metric.MeasurementOption, error) {
-	if len(attributes)%2 != 0 {
-		return nil, errors.New("uneven number of attributes")
-	}
 	ptrSlice := kvPool.Get().(*[]attribute.KeyValue)
 	defer kvPool.Put(ptrSlice)
 	kvAttributes := append(*ptrSlice, c.metricCommonAttrs...)
 
-	for i := 0; i < len(attributes); i += 2 {
+	for i := 0; i < len(attributes); i++ {
+		var v any
 		k, ok := attributes[i].(string)
 		if !ok {
-			return nil, errors.New("expected string for attribute name, found '%s'", attributes[i])
+			k = "!BADKEY"
+			v = attributes[i]
+		} else {
+			if i+1 < len(attributes) {
+				v = attributes[i+1]
+			}
+			i++
 		}
-		switch v := attributes[i+1].(type) {
+		switch vv := v.(type) {
 		case string:
-			kvAttributes = append(kvAttributes, attribute.String(k, v))
+			kvAttributes = append(kvAttributes, attribute.String(k, vv))
 		case int:
-			kvAttributes = append(kvAttributes, attribute.Int(k, v))
+			kvAttributes = append(kvAttributes, attribute.Int(k, vv))
 		case int64:
-			kvAttributes = append(kvAttributes, attribute.Int64(k, v))
+			kvAttributes = append(kvAttributes, attribute.Int64(k, vv))
 		case float64:
-			kvAttributes = append(kvAttributes, attribute.Float64(k, v))
+			kvAttributes = append(kvAttributes, attribute.Float64(k, vv))
 		case bool:
-			kvAttributes = append(kvAttributes, attribute.Bool(k, v))
+			kvAttributes = append(kvAttributes, attribute.Bool(k, vv))
 		case []string:
-			kvAttributes = append(kvAttributes, attribute.StringSlice(k, v))
+			kvAttributes = append(kvAttributes, attribute.StringSlice(k, vv))
 		case []int:
-			kvAttributes = append(kvAttributes, attribute.IntSlice(k, v))
+			kvAttributes = append(kvAttributes, attribute.IntSlice(k, vv))
 		case []int64:
-			kvAttributes = append(kvAttributes, attribute.Int64Slice(k, v))
+			kvAttributes = append(kvAttributes, attribute.Int64Slice(k, vv))
 		case []float64:
-			kvAttributes = append(kvAttributes, attribute.Float64Slice(k, v))
+			kvAttributes = append(kvAttributes, attribute.Float64Slice(k, vv))
 		case []bool:
-			kvAttributes = append(kvAttributes, attribute.BoolSlice(k, v))
+			kvAttributes = append(kvAttributes, attribute.BoolSlice(k, vv))
 		case fmt.Stringer:
-			kvAttributes = append(kvAttributes, attribute.Stringer(k, v))
+			kvAttributes = append(kvAttributes, attribute.Stringer(k, vv))
 		}
 	}
 	attrSet := attribute.NewSet(kvAttributes...)

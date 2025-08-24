@@ -19,6 +19,7 @@ package errors_test
 import (
 	stderrors "errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -147,6 +148,10 @@ func TestErrors_New(t *testing.T) {
 	tt.Error(err)
 	tt.Equal(originalErr.Error(), err.Error())
 
+	err = errors.New("failed to parse date: %w", originalErr)
+	tt.Error(err)
+	tt.Equal("failed to parse date: "+originalErr.Error(), err.Error())
+
 	err = errors.New("")
 	tt.Error(err)
 	tt.NotEqual("", err.Error())
@@ -156,13 +161,12 @@ func TestErrors_New(t *testing.T) {
 	tracedErr = errors.Convert(err)
 	tt.Equal(7, tracedErr.StatusCode)
 
-	// Unnamed properties
-	err = errors.New("message", time.Second, false)
+	// Unnamed property
+	err = errors.New("message", false, "dur", time.Second)
 	tt.Error(err)
 	tracedErr = errors.Convert(err)
 	tt.Len(tracedErr.Properties, 2)
-	tt.Equal(time.Second, tracedErr.Properties["unnamed1"])
-	tt.Equal(false, tracedErr.Properties["unnamed2"])
+	tt.Equal(false, tracedErr.Properties["!BADKEY"])
 
 	// Not enough args for pattern
 	err = errors.New("pattern %s %d", "XYZ")
@@ -184,18 +188,29 @@ func TestErrors_Trace(t *testing.T) {
 	stdErr := stderrors.New("standard error")
 	tt.Error(stdErr)
 
-	err := errors.Trace(stdErr)
+	err := errors.Trace(stdErr, http.StatusForbidden, "0123456789abcdef0123456789abcdef", "foo", "bar")
 	tt.Error(err)
 	tt.Len(err.(*errors.TracedError).Stack, 1)
 	tt.Contains(err.(*errors.TracedError).Stack[0].Function, "TestErrors_Trace")
+	tt.Equal(http.StatusForbidden, err.(*errors.TracedError).StatusCode)
+	tt.Equal("0123456789abcdef0123456789abcdef", err.(*errors.TracedError).Trace)
+	tt.Equal("bar", err.(*errors.TracedError).Properties["foo"])
 
-	err = errors.Trace(err)
+	err = errors.Trace(err, http.StatusNotImplemented, "moo", "baz")
 	tt.Len(err.(*errors.TracedError).Stack, 2)
 	tt.NotEqual("", err.(*errors.TracedError).String())
+	tt.Equal(http.StatusNotImplemented, err.(*errors.TracedError).StatusCode)
+	tt.Equal("0123456789abcdef0123456789abcdef", err.(*errors.TracedError).Trace)
+	tt.Equal("bar", err.(*errors.TracedError).Properties["foo"])
+	tt.Equal("baz", err.(*errors.TracedError).Properties["moo"])
 
 	err = errors.Trace(err)
 	tt.Len(err.(*errors.TracedError).Stack, 3)
 	tt.NotEqual("", err.(*errors.TracedError).String())
+	tt.Equal(http.StatusNotImplemented, err.(*errors.TracedError).StatusCode)
+	tt.Equal("0123456789abcdef0123456789abcdef", err.(*errors.TracedError).Trace)
+	tt.Equal("bar", err.(*errors.TracedError).Properties["foo"])
+	tt.Equal("baz", err.(*errors.TracedError).Properties["moo"])
 
 	stdErr = errors.Trace(nil)
 	tt.NoError(stdErr)
@@ -306,7 +321,7 @@ func TestErrors_String(t *testing.T) {
 	err = errors.Trace(err)
 	s := err.(*errors.TracedError).String()
 	tt.Contains(s, "oops!")
-	tt.Contains(s, "[400]")
+	tt.Contains(s, "400")
 	tt.Contains(s, "/fabric/errors/errors_test.go:")
 	tt.Contains(s, "key")
 	tt.Contains(s, "value")
@@ -320,9 +335,25 @@ func TestErrors_Unwrap(t *testing.T) {
 	t.Parallel()
 	tt := testarossa.For(t)
 
-	stdErr := stderrors.New("Oops")
+	stdErr := stderrors.New("oops")
 	err := errors.Trace(stdErr)
 	tt.Equal(stdErr, errors.Unwrap(err))
+
+	err = errors.New("", stdErr)
+	tt.Equal(stdErr, errors.Unwrap(err))
+
+	err = errors.New("failed: %w", stdErr)
+	tt.Equal(stdErr, errors.Unwrap(errors.Unwrap(err)))
+	tt.True(errors.Is(err, stdErr))
+
+	inlineErr := stderrors.New("inline")
+	arg1Err := stderrors.New("arg1")
+	arg2Err := stderrors.New("arg2")
+	err = errors.New("failed: %w", inlineErr, arg1Err, "id", 123, arg2Err)
+	tt.Equal("failed: inline: arg1: arg2", err.Error())
+	tt.True(errors.Is(err, inlineErr))
+	tt.True(errors.Is(err, arg1Err))
+	tt.True(errors.Is(err, arg2Err))
 }
 
 func TestErrors_TraceFull(t *testing.T) {

@@ -61,6 +61,12 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 	if u == "" && !c.shortCircuitEnabled {
 		u = "nats://127.0.0.1:4222"
 	}
+	if u == "" {
+		if logger != nil {
+			logger.LogInfo(ctx, "Using short-circuit only")
+		}
+		return nil
+	}
 	opts := []nats.Option{}
 
 	// Credentials

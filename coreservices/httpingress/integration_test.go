@@ -630,7 +630,7 @@ func TestHttpingress_NoCache(t *testing.T) {
 	client := http.Client{Timeout: time.Second * 4}
 	res, err := client.Get("http://localhost:4040/no.cache/ok")
 	if tt.NoError(err) {
-		tt.Equal("no-store", res.Header.Get("Cache-Control"))
+		tt.Equal("no-cache, no-store, max-age=0", res.Header.Get("Cache-Control"))
 	}
 }
 
@@ -754,6 +754,7 @@ func TestHttpingress_Authorization(t *testing.T) {
 	}
 
 	// Request origination from a browser should be redirected to the login page
+	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	res, err = client.Do(req)

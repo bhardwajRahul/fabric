@@ -34,7 +34,16 @@ func ErrorPageRedirect(statusCode int, errorPagePath string) Middleware {
 		errorPagePath = "/" + strings.TrimLeft(errorPagePath, "/")
 		return func(w http.ResponseWriter, r *http.Request) (err error) {
 			// Ignore requests not coming from a browser for a top-level document
-			if r.Header.Get("Sec-Fetch-Mode") != "navigate" || r.Header.Get("Sec-Fetch-Dest") != "document" {
+			browser := strings.HasPrefix(r.Header.Get("User-Agent"), "Mozilla/")
+			mode := r.Header.Get("Sec-Fetch-Mode")
+			if mode == "" {
+				mode = "navigate"
+			}
+			dest := r.Header.Get("Sec-Fetch-Dest")
+			if dest == "" {
+				dest = "document"
+			}
+			if !browser || mode != "navigate" || dest != "document" {
 				return next(w, r) // No trace
 			}
 			// Delegate the request downstream

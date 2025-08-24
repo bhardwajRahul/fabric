@@ -70,8 +70,12 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 	}
 
 	// Error schema
-	errorType := reflect.TypeOf(errors.StreamedError{})
-	errorSchema := jsonschema.ReflectFromType(errorType)
+	type Error errors.StreamedError
+	type Response struct {
+		Err Error `json:"err"`
+	}
+	errorType := reflect.TypeOf(Response{})
+	errorSchema := jsonschemaReflectFromType(errorType)
 	resolveRefs(doc, errorSchema, "error")
 
 	for _, ep := range s.Endpoints {
@@ -144,9 +148,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			var schemaOut *jsonschema.Schema
 			if field, ok := reflect.TypeOf(ep.OutputArgs).FieldByName("HTTPResponseBody"); ok {
 				// httpResponseBody argument overrides the response body and preempts all other return values
-				schemaOut = jsonschema.ReflectFromType(field.Type)
+				schemaOut = jsonschemaReflectFromType(field.Type)
 			} else {
-				schemaOut = jsonschema.Reflect(ep.OutputArgs)
+				schemaOut = jsonschemaReflect(ep.OutputArgs)
 			}
 			resolveRefs(doc, schemaOut, ep.Name+"_OUT")
 			doc.Components.Schemas[ep.Name+"_OUT"] = schemaOut
@@ -156,7 +160,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			if field, ok := reflect.TypeOf(ep.InputArgs).FieldByName("HTTPRequestBody"); ok {
 				httpRequestBodyExists = true  // Makes all other args query or path args
 				if methodHasBody(ep.Method) { // Only works if the method has a body
-					schemaIn := jsonschema.ReflectFromType(field.Type)
+					schemaIn := jsonschemaReflectFromType(field.Type)
 					resolveRefs(doc, schemaIn, ep.Name+"_IN")
 					doc.Components.Schemas[ep.Name+"_IN"] = schemaIn
 
@@ -197,7 +201,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 						delete(pathArgs, name+"+")
 					}
 
-					fieldSchema := jsonschema.ReflectFromType(field.Type)
+					fieldSchema := jsonschemaReflectFromType(field.Type)
 					resolveRefs(doc, fieldSchema, ep.Name+"_IN")
 					if fieldSchema.Ref != "" {
 						// Non-primitive type
@@ -213,7 +217,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 				}
 			} else {
 				// IN is JSON in the request body
-				schemaIn := jsonschema.Reflect(ep.InputArgs)
+				schemaIn := jsonschemaReflect(ep.InputArgs)
 				resolveRefs(doc, schemaIn, ep.Name+"_IN")
 				doc.Components.Schemas[ep.Name+"_IN"] = schemaIn
 
@@ -405,4 +409,20 @@ func resolveRefs(doc oapiDoc, schema *jsonschema.Schema, endpoint string) {
 	}
 	schema.Definitions = nil
 	schema.Version = "" // Avoid rendering the $schema property
+}
+
+// jsonschemaReflectFromType generates root schema, allowing additional properties by default.
+func jsonschemaReflectFromType(t reflect.Type) *jsonschema.Schema {
+	r := jsonschema.Reflector{
+		AllowAdditionalProperties: true,
+	}
+	return r.ReflectFromType(t)
+}
+
+// jsonschemaReflect reflects to Schema from a value, allowing additional properties by default.
+func jsonschemaReflect(v any) *jsonschema.Schema {
+	r := jsonschema.Reflector{
+		AllowAdditionalProperties: true,
+	}
+	return r.Reflect(v)
 }

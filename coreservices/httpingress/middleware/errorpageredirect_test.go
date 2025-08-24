@@ -30,6 +30,7 @@ func TestErrorPageRedirect_Redirect(t *testing.T) {
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
+	r.Header.Set("User-Agent", "Mozilla/5.0")
 	r.Header.Set("Sec-Fetch-Mode", "navigate")
 	r.Header.Set("Sec-Fetch-Dest", "document")
 	mw := ErrorPageRedirect(http.StatusUnauthorized, "/login")
@@ -38,7 +39,7 @@ func TestErrorPageRedirect_Redirect(t *testing.T) {
 		return nil
 	})(w, r)
 	tt.NoError(err)
-	tt.Equal(w.StatusCode(), http.StatusTemporaryRedirect)
+	tt.Equal(http.StatusTemporaryRedirect, w.StatusCode())
 	tt.Equal(w.Header().Get("Location"), "/login")
 }
 
@@ -48,13 +49,14 @@ func TestErrorPageRedirect_NoBrowserHeaders(t *testing.T) {
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
+	r.Header.Set("User-Agent", "Mozilla/5.0")
 	mw := ErrorPageRedirect(http.StatusUnauthorized, "/login")
 	err := mw(func(w http.ResponseWriter, r *http.Request) (err error) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return nil
 	})(w, r)
 	tt.NoError(err)
-	tt.Equal(w.StatusCode(), http.StatusUnauthorized)
+	tt.Equal(http.StatusTemporaryRedirect, w.StatusCode())
 }
 
 func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
@@ -63,6 +65,7 @@ func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
+	r.Header.Set("User-Agent", "Mozilla/5.0")
 	r.Header.Set("Sec-Fetch-Mode", "navigate")
 	r.Header.Set("Sec-Fetch-Dest", "document")
 	mw := ErrorPageRedirect(http.StatusUnauthorized, "/login")
@@ -71,5 +74,5 @@ func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
 		return nil
 	})(w, r)
 	tt.NoError(err)
-	tt.Equal(w.StatusCode(), http.StatusBadRequest)
+	tt.Equal(http.StatusBadRequest, w.StatusCode())
 }
