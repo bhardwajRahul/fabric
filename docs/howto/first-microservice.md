@@ -4,7 +4,7 @@ This guide walks through the creation of a microservice that implements a simpli
 
 For example, if the secret word is `APPLE` and a guess is `OPERA`, the system will identify the second letter `P` as an exact match (green), the letters `A` and `E` as out-of-place matches (yellow), and the letters `O` and `R` as mismatches (grey).
 
-<img src="first-service-1.png" width="213">
+<img src="first-microservice-1.png" width="213">
 
 ### Step 1: Bootstrap
 

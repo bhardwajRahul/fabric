@@ -304,3 +304,9 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Support `%w` when creating a new error
 - Added trace ID as a property of the error
 - Improved browser detection in the error page redirection middleware
+
+[Milestone 37](https://github.com/microbus-io/fabric/tree/milestone/37):
+
+- Bootstrapping a new project using the code generator
+- Code generator inserts new microservices to the main app
+- Updated dependencies to latest versions

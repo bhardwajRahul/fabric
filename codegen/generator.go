@@ -53,7 +53,7 @@ func NewGenerator() *Generator {
 }
 
 // Run performs code generation.
-func (gen *Generator) Run() error {
+func (gen *Generator) Run() (err error) {
 	if !strings.HasPrefix(gen.WorkDir, string(os.PathSeparator)) {
 		// Use current working directory if one is not explicitly specified
 		cwd, err := os.Getwd()
@@ -63,7 +63,7 @@ func (gen *Generator) Run() error {
 		gen.WorkDir = filepath.Join(cwd, gen.WorkDir)
 	}
 
-	err := gen.identifyPackage()
+	err = gen.identifyPackage()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -71,6 +71,48 @@ func (gen *Generator) Run() error {
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 	gen.Printer.Debug("Directory %s", gen.WorkDir)
+
+	// Check if running at the root directory
+	_, err = os.Stat(filepath.Join(gen.WorkDir, "go.mod"))
+	atRootDir := err == nil
+	if atRootDir {
+		err = gen.runRoot()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		err = gen.runService()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// runRoot performs code generation inside the root directory.
+func (gen *Generator) runRoot() (err error) {
+	err = gen.makeMain()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeVSCode()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// runService performs code generation inside a microservice directory.
+func (gen *Generator) runService() (err error) {
+	if !strings.HasPrefix(gen.WorkDir, string(os.PathSeparator)) {
+		// Use current working directory if one is not explicitly specified
+		cwd, err := os.Getwd()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		gen.WorkDir = filepath.Join(cwd, gen.WorkDir)
+	}
+
 	gen.Printer.Debug("Package %s", gen.PackagePath)
 
 	// Generate hash
@@ -110,55 +152,55 @@ func (gen *Generator) Run() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	// Parse service.yaml
-	if ok {
-		b, err := os.ReadFile(filepath.Join(gen.WorkDir, "service.yaml"))
-		if err != nil {
-			return errors.Trace(err)
-		}
-		gen.Specs = &spec.Service{
-			ModulePath:  gen.ModulePath,
-			PackagePath: gen.PackagePath, // Must be set before parsing
-			PackageDir:  gen.PackageDir,
-		}
-		err = yaml.Unmarshal(b, gen.Specs)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		gen.Printer.Debug("Service.yaml parsed")
+	if !ok {
+		// Empty service.yaml created
+		return nil
 	}
 
+	// Parse service.yaml
+	b, err := os.ReadFile(filepath.Join(gen.WorkDir, "service.yaml"))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	gen.Specs = &spec.Service{
+		ModulePath:  gen.ModulePath,
+		PackagePath: gen.PackagePath, // Must be set before parsing
+		PackageDir:  gen.PackageDir,
+	}
+	err = yaml.Unmarshal(b, gen.Specs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	gen.Printer.Debug("Service.yaml parsed")
+
 	// Process specs
-	if gen.Specs != nil {
-		err = gen.makeApp()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeAPI()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeResources()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeIntermediate()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeImplementation()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeIntegration()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = gen.makeRefreshSignature()
-		if err != nil {
-			return errors.Trace(err)
-		}
+	err = gen.makeApp()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeAPI()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeResources()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeIntermediate()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeImplementation()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeIntegration()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeRefreshSignature()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	err = gen.makeTraceReturnedErrors()
@@ -166,18 +208,21 @@ func (gen *Generator) Run() error {
 		return errors.Trace(err)
 	}
 
-	if gen.Specs != nil {
-		verNum := 1
-		if v != nil {
-			verNum = v.Version + 1
-			if verNum == 7357 { // Reserved to indicate TEST
-				verNum++
-			}
+	verNum := 1
+	if v != nil {
+		verNum = v.Version + 1
+		if verNum == 7357 { // Reserved to indicate TEST
+			verNum++
 		}
-		err := gen.makeVersion(verNum)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	}
+	err = gen.makeVersion(verNum)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = gen.makeAddToMainApp()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	return nil
@@ -186,7 +231,7 @@ func (gen *Generator) Run() error {
 // identifyPackage identifies the full package path of the working directory.
 // It scans for the go.mod and combines the module name with the relative path of
 // the working directory.
-func (gen *Generator) identifyPackage() error {
+func (gen *Generator) identifyPackage() (err error) {
 	// Locate module name in go.mod
 	goModExists := func(path string) bool {
 		_, err := os.Stat(filepath.Join(path, "go.mod"))
@@ -258,7 +303,7 @@ func (gen *Generator) identifyPackage() error {
 }
 
 // currentVersion loads the version information.
-func (gen *Generator) currentVersion() (*spec.Version, error) {
+func (gen *Generator) currentVersion() (ver *spec.Version, err error) {
 	buf, err := os.ReadFile(filepath.Join(gen.WorkDir, "version-gen.go"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

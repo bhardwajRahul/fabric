@@ -25,8 +25,7 @@ import (
 )
 
 func (gen *Generator) prepareServiceYAML() (found bool, err error) {
-	// Create a new service.yaml if the directory only contains doc.go or
-	// if there's an empty service.yaml file
+	// Create a new service.yaml if the directory only contains doc.go or if there's an empty service.yaml file
 	createNew := false
 	fs, err := os.Stat(filepath.Join(gen.WorkDir, "service.yaml"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -61,7 +60,7 @@ func (gen *Generator) prepareServiceYAML() (found bool, err error) {
 
 // createServiceYAML generates a new service.yaml file.
 func (gen *Generator) createServiceYAML() (found bool, err error) {
-	tt, err := LoadTemplate("service.yaml.txt")
+	tt, err := LoadTemplate("service/service.yaml.txt")
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -76,7 +75,7 @@ func (gen *Generator) createServiceYAML() (found bool, err error) {
 // updateServiceYAML updates the comments and sections to the latest version.
 func (gen *Generator) updateServiceYAML() error {
 	// Read the latest version line by line
-	tt, err := LoadTemplate("service.yaml.txt")
+	tt, err := LoadTemplate("service/service.yaml.txt")
 	if err != nil {
 		return errors.Trace(err)
 	}

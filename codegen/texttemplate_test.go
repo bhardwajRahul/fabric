@@ -49,10 +49,10 @@ func TestCodegen_TextTemplate(t *testing.T) {
 	t.Parallel()
 	tt := testarossa.For(t)
 
-	_, err := LoadTemplate("doesn't.exist")
+	_, err := LoadTemplate("service/doesn't.exist")
 	tt.Error(err)
 
-	tmpl, err := LoadTemplate("service.txt")
+	tmpl, err := LoadTemplate("service/service.txt")
 	tt.NoError(err)
 
 	var x struct{}

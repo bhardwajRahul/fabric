@@ -133,7 +133,7 @@ Distributed tracing, metrics and structured logging provide precision observabil
 
 👉 Go through the various [examples](./docs/structure/examples.md)
 
-👉 Follow the step-by-step guide and [build your first microservice](./docs/howto/first-service.md)
+👉 Follow the step-by-step guide and [build your first microservice](./docs/howto/first-microservice.md)
 
 👉 Discover the power of [code generation](./docs/blocks/codegen.md). It's totally RAD, dude
 

@@ -1,76 +1,52 @@
 # Bootstrapping a New Project
 
-Follow these steps to create a new project that takes advantage of `Microbus`.
+Follow these steps to create a new project based on the `Microbus` framework.
 
-### Step 1: Choose Package Name
+### Step 1: Init the Go Project
 
-Choose a name for the package to hold your project, for example `github.com/mycompany/mysolution`.
-
-### Step 2: Create a Matching Directory
-
-Make a directory to hold your projects files. It's recommended to mirror the package structure.
+Make a directory to hold your projects files.
 
 ```cmd
-mkdir github.com/mycompany/mysolution
+mkdir mysolution
 ```
 
-### Step 3: Init the Go Project
-
-Init the Go project with the name of the package.
+Init the Go project with the name of the package of your project, for example `github.com/mycompany/mysolution`.
 
 ```cmd
-cd github.com/mycompany/mysolution
+cd mysolution
 go mod init github.com/mycompany/mysolution
 ```
 
-### Step 4: Get `Microbus`
+### Step 2: Code Generate the Project Structure
 
-Add `Microbus` to `go.mod` using:
-
-```cmd
-go get github.com/microbus-io/fabric
-```
-
-### Step 5: Create `main` Package
-
-Make a `main` subdirectory under your project's root directory.
+Add `Microbus`'s code generator to `go.mod` using:
 
 ```cmd
-mkdir main
+go get github.com/microbus-io/fabric/codegen
 ```
 
-Create `main/main.go`:
+Create `doc.go` in the root of the project.
 
 ```go
-package main
+package root
 
-import (
-	"github.com/microbus-io/fabric/application"
-	"github.com/microbus-io/fabric/coreservices/configurator"
-	"github.com/microbus-io/fabric/coreservices/httpegress"
-	"github.com/microbus-io/fabric/coreservices/httpingress"
-	"github.com/microbus-io/fabric/coreservices/openapiportal"
-)
+//go:generate go run github.com/microbus-io/fabric/codegen
+```
 
-func main() {
-	app := application.New()
-	app.Add(
-		configurator.NewService(),
-	)
-	app.Add(
-		httpegress.NewService(),
-		openapiportal.NewService(),
-		tokenissuer.NewService(),
-	)
-	app.Add(
-		// Add solution microservices here
-	)
-	app.Add(
-		httpingress.NewService(),
-		// smtpingress.NewService(),
-	)
-	app.Run()
-}
+Use the code generator to create the project structure.
+
+```cmd
+go generate
+```
+
+```
+mysolution/
+├── .vscode/
+│   └── launch.json				 # VSCode launch file
+└── main/
+    ├── config.yaml              # Configuration file
+    ├── env.yaml                 # Environment settings
+    └── main.go                  # Main application
 ```
 
 Fetch the dependencies.
@@ -79,61 +55,6 @@ Fetch the dependencies.
 go mod tidy
 ```
 
-Create `main/env.yaml` to be able to set the [environment variables](../tech/envars.md) in code:
+### Step 3: Create Microservices
 
-```yaml
-# NATS connection settings
-MICROBUS_NATS: nats://127.0.0.1:4222
-# MICROBUS_NATS_USER:
-# MICROBUS_NATS_PASSWORD:
-# MICROBUS_NATS_TOKEN:
-
-# The deployment impacts certain aspects of the framework such as the log format and log verbosity level
-#   PROD - production deployments
-#   LAB - fully-functional non-production deployments such as dev integration, testing, staging, etc.
-#   LOCAL - developing locally
-#   TESTING - unit and integration testing
-MICROBUS_DEPLOYMENT: LOCAL
-
-# The plane of communication isolates communication among a group of microservices over a NATS cluster
-# MICROBUS_PLANE: microbus
-
-# Enable logging of debug-level messages
-# MICROBUS_LOG_DEBUG: 1
-
-# OpenTelemetry
-OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
-```
-
-Create `main/config.yaml` where you'll store the [configuration](../blocks/configuration.md) of your microservices:
-
-```yaml
-http.ingress.core:
-#  Ports: 8080
-#  TimeBudget: 20s
-```
-
-### Step 6: Visual Studio Code Launcher
-
-If you're using Visual Studio Code, update `.vscode/launch.json` and add a configuration to run `main.go`:
-
-```json
-{
-    "version": "0.2.0",
-    "configurations": [
-		{
-			"name": "MySolution Main",
-			"type": "go",
-			"request": "launch",
-			"mode": "auto",
-			"program": "${workspaceFolder}/main",
-			"cwd": "${workspaceFolder}/main"
-		}
-	]
-}
-```
-
-### Step 7: Create Microservices
-
-[Create one microservice](../howto/create-microservice.md) at a time.
+[Create a microservice](../howto/create-microservice.md), rinse and repeat.

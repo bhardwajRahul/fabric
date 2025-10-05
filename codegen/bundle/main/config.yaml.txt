@@ -1,0 +1,3 @@
+http.ingress.core:
+#  Ports: 8080
+#  TimeBudget: 20s

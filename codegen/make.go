@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -47,13 +48,13 @@ func (gen *Generator) makeIntegration() error {
 	// integration-gen_test.go
 	fileName := filepath.Join(gen.WorkDir, "integration-gen_test.go")
 	tt, err := LoadTemplate(
-		"integration-gen_test.txt",
-		"integration-gen_test.functions.txt",
-		"integration-gen_test.events.txt",
-		"integration-gen_test.webs.txt",
-		"integration-gen_test.tickers.txt",
-		"integration-gen_test.configs.txt",
-		"integration-gen_test.metrics.txt",
+		"service/integration-gen_test.txt",
+		"service/integration-gen_test.functions.txt",
+		"service/integration-gen_test.events.txt",
+		"service/integration-gen_test.webs.txt",
+		"service/integration-gen_test.tickers.txt",
+		"service/integration-gen_test.configs.txt",
+		"service/integration-gen_test.metrics.txt",
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -68,7 +69,7 @@ func (gen *Generator) makeIntegration() error {
 	fileName = filepath.Join(gen.WorkDir, "integration_test.go")
 	_, err = os.Stat(fileName)
 	if errors.Is(err, os.ErrNotExist) {
-		tt, err = LoadTemplate("integration_test.txt")
+		tt, err = LoadTemplate("service/integration_test.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -118,7 +119,7 @@ func (gen *Generator) makeIntegration() error {
 	// Append new handlers
 	fileName = filepath.Join(gen.WorkDir, "integration_test.go")
 	if newTests {
-		tt, err = LoadTemplate("integration_test.append.txt")
+		tt, err = LoadTemplate("service/integration_test.append.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -165,10 +166,10 @@ func (gen *Generator) makeIntermediate() error {
 	// intermediate-gen.go
 	fileName := filepath.Join(gen.WorkDir, "intermediate", "intermediate-gen.go")
 	tt, err := LoadTemplate(
-		"intermediate/intermediate-gen.txt",
-		"intermediate/intermediate-gen.configs.txt",
-		"intermediate/intermediate-gen.functions.txt",
-		"intermediate/intermediate-gen.metrics.txt",
+		"service/intermediate/intermediate-gen.txt",
+		"service/intermediate/intermediate-gen.configs.txt",
+		"service/intermediate/intermediate-gen.functions.txt",
+		"service/intermediate/intermediate-gen.metrics.txt",
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -182,7 +183,7 @@ func (gen *Generator) makeIntermediate() error {
 	// mock-gen.go
 	fileName = filepath.Join(gen.WorkDir, "intermediate", "mock-gen.go")
 	tt, err = LoadTemplate(
-		"intermediate/mock-gen.txt",
+		"service/intermediate/mock-gen.txt",
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -213,7 +214,7 @@ func (gen *Generator) makeResources() error {
 
 	// embed-gen.go
 	fileName := filepath.Join(gen.WorkDir, "resources", "embed-gen.go")
-	tt, err := LoadTemplate("resources/embed-gen.txt")
+	tt, err := LoadTemplate("service/resources/embed-gen.txt")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -253,7 +254,7 @@ func (gen *Generator) makeApp() error {
 
 	// main-gen.go
 	fileName := filepath.Join(gen.WorkDir, "app", gen.Specs.PackageDirSuffix(), "main-gen.go")
-	tt, err := LoadTemplate("app/main-gen.txt")
+	tt, err := LoadTemplate("service/app/main-gen.txt")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -331,7 +332,7 @@ func (gen *Generator) makeAPI() error {
 			fileName := filepath.Join(dir, "imports-gen.go")
 			if hasImports {
 				// Create imports-gen.go
-				tt, err := LoadTemplate("api/imports-gen.txt")
+				tt, err := LoadTemplate("service/api/imports-gen.txt")
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -348,7 +349,7 @@ func (gen *Generator) makeAPI() error {
 			for _, ct := range gen.Specs.Types {
 				if !ct.Exists && len(typeDefs[ct.Name]) != 1 {
 					fileName := filepath.Join(dir, strings.ToLower(ct.Name)+".go")
-					tt, err := LoadTemplate("api/type.txt")
+					tt, err := LoadTemplate("service/api/type.txt")
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -366,9 +367,9 @@ func (gen *Generator) makeAPI() error {
 	// clients-gen.go
 	fileName := filepath.Join(gen.WorkDir, gen.Specs.PackageDirSuffix()+"api", "clients-gen.go")
 	tt, err := LoadTemplate(
-		"api/clients-gen.txt",
-		"api/clients-gen.webs.txt",
-		"api/clients-gen.functions.txt",
+		"service/api/clients-gen.txt",
+		"service/api/clients-gen.webs.txt",
+		"service/api/clients-gen.functions.txt",
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -393,7 +394,7 @@ func (gen *Generator) makeImplementation() error {
 
 	// Overwrite service-gen.go
 	fileName := filepath.Join(gen.WorkDir, "service-gen.go")
-	tt, err := LoadTemplate("service-gen.txt")
+	tt, err := LoadTemplate("service/service-gen.txt")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -407,7 +408,7 @@ func (gen *Generator) makeImplementation() error {
 	fileName = filepath.Join(gen.WorkDir, "service.go")
 	_, err = os.Stat(fileName)
 	if errors.Is(err, os.ErrNotExist) {
-		tt, err = LoadTemplate("service.txt")
+		tt, err = LoadTemplate("service/service.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -460,7 +461,7 @@ func (gen *Generator) makeImplementation() error {
 	// Append new handlers
 	fileName = filepath.Join(gen.WorkDir, "service.go")
 	if newEndpoints {
-		tt, err = LoadTemplate("service.append.txt")
+		tt, err = LoadTemplate("service/service.append.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -479,11 +480,12 @@ func (gen *Generator) makeImplementation() error {
 				continue
 			}
 			if !h.Exists {
-				if h.Type == "config" {
+				switch h.Type {
+				case "config":
 					gen.Printer.Debug("OnChanged%s", h.Name())
-				} else if h.Type == "metric" {
+				case "metric":
 					gen.Printer.Debug("OnObserve%s", h.Name())
-				} else {
+				default:
 					gen.Printer.Debug("%s", h.Name())
 				}
 			}
@@ -836,21 +838,165 @@ func (gen *Generator) makeVersion(version int) error {
 	gen.Printer.Debug("SHA256 %s", v.SHA256)
 	gen.Printer.Debug("Timestamp %v", v.Timestamp)
 
-	templateNames := []string{
-		"version-gen",
-		"version-gen_test",
+	tt, err := LoadTemplate("service/version-gen.txt")
+	if err != nil {
+		return errors.Trace(err)
 	}
-	for _, n := range templateNames {
-		fileName := filepath.Join(gen.WorkDir, n+".go")
-		tt, err := LoadTemplate(n + ".txt")
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = tt.Overwrite(fileName, &v)
-		if err != nil {
-			return errors.Trace(err)
+	fileName := filepath.Join(gen.WorkDir, "version-gen.go")
+	err = tt.Overwrite(fileName, &v)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tt, err = LoadTemplate("service/version-gen_test.txt")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	fileName = filepath.Join(gen.WorkDir, "version-gen_test.go")
+	err = tt.Overwrite(fileName, &v)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// makeMain creates the main directory and files.
+func (gen *Generator) makeMain() (err error) {
+	gen.Printer.Debug("Generating main")
+	gen.Printer.Indent()
+	defer gen.Printer.Unindent()
+
+	// Create the directory
+	dir := filepath.Join(gen.WorkDir, "main")
+	_, err = os.Stat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		os.Mkdir(dir, os.ModePerm)
+		gen.Printer.Debug("mkdir main")
+	} else if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Create files
+	for _, fn := range []string{"main.go", "env.yaml", "config.yaml"} {
+		fileName := filepath.Join(gen.WorkDir, "main/", fn)
+		_, err = os.Stat(fileName)
+		if errors.Is(err, os.ErrNotExist) {
+			tt, err := LoadTemplate("main/" + strings.TrimSuffix(fn, ".go") + ".txt")
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = tt.Overwrite(fileName, gen.Specs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			gen.Printer.Debug("main/" + fn)
 		}
 	}
 
+	return nil
+}
+
+// makeVSCode creates the .vscode directory and files.
+func (gen *Generator) makeVSCode() (err error) {
+	gen.Printer.Debug("Generating .vscode")
+	gen.Printer.Indent()
+	defer gen.Printer.Unindent()
+
+	// Create the directory
+	dir := filepath.Join(gen.WorkDir, ".vscode")
+	_, err = os.Stat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		os.Mkdir(dir, os.ModePerm)
+		gen.Printer.Debug("mkdir .vscode")
+	} else if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Create launch.json
+	fileName := filepath.Join(gen.WorkDir, ".vscode/launch.json")
+	_, err = os.Stat(fileName)
+	if errors.Is(err, os.ErrNotExist) {
+		tt, err := LoadTemplate("vscode/launch.json.txt")
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = tt.Overwrite(fileName, gen.Specs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		gen.Printer.Debug(".vscode/launch.json")
+	}
+
+	return nil
+}
+
+// makeAddToMainApp adds the microservice to the main app.
+func (gen *Generator) makeAddToMainApp() (err error) {
+	gen.Printer.Debug("Adding microservice to main app")
+	gen.Printer.Indent()
+	defer gen.Printer.Unindent()
+
+	fileName := filepath.Join(gen.ProjectDir, "main/main.go")
+	_, err = os.Stat(fileName)
+	if errors.Is(err, os.ErrNotExist) {
+		gen.Printer.Debug("main/main.go not found")
+		return nil
+	}
+
+	shortPackageName := gen.PackagePath
+	p := strings.LastIndex(gen.PackagePath, "/")
+	if p >= 0 {
+		shortPackageName = gen.PackagePath[p+1:]
+	}
+
+	content, err := os.ReadFile(fileName)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if bytes.Index(content, []byte(shortPackageName+".NewService()")) > 0 ||
+		bytes.Index(content, []byte(gen.PackagePath)) > 0 {
+		return nil
+	}
+
+	// Add import statement
+	p = bytes.Index(content, []byte("<--IMPORT"))
+	if p < 0 {
+		gen.Printer.Debug("IMPORT marker not found")
+		return nil
+	}
+	q := bytes.LastIndex(content[:p], []byte("\t"))
+	if q < 0 {
+		gen.Printer.Debug("IMPORT marker not found")
+		return nil
+	}
+	var buf1 bytes.Buffer
+	buf1.Write(content[:q])
+	buf1.Write([]byte("\t\"" + gen.PackagePath + "\"\n"))
+	buf1.Write(content[q:])
+	content = buf1.Bytes()
+
+	// Add shortpackage.NewService
+	p = bytes.Index(content, []byte("<--NEW"))
+	if p < 0 {
+		gen.Printer.Debug("NEW marker not found")
+		return nil
+	}
+	q = bytes.LastIndex(content[:p], []byte("\t\t"))
+	if q < 0 {
+		gen.Printer.Debug("NEW marker not found")
+		return nil
+	}
+	var buf2 bytes.Buffer
+	buf2.Write(content[:q])
+	buf2.Write([]byte("\t\t" + shortPackageName + ".NewService(),\n"))
+	buf2.Write(content[q:])
+	content = buf2.Bytes()
+
+	err = os.WriteFile(fileName, content, 0666)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	gen.Printer.Debug("%s", gen.PackagePath)
 	return nil
 }
