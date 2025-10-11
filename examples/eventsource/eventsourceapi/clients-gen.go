@@ -60,87 +60,103 @@ var (
 	URLOfRegister = httpx.JoinHostAndPath(Hostname, `:443/register`)
 )
 
-// Client is an interface to calling the endpoints of the eventsource.example microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the eventsource.example microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the eventsource.example microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the eventsource.example microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "eventsource.example",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the eventsource.example microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the eventsource.example microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the eventsource.example microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the eventsource.example microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "eventsource.example",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastTrigger is an interface to trigger the events of the eventsource.example microservice.
+// MulticastTrigger is a lightweight proxy for triggering the events of the eventsource.example microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastTrigger creates a new multicast trigger of the eventsource.example microservice.
-func NewMulticastTrigger(caller service.Publisher) *MulticastTrigger {
-	return &MulticastTrigger{
+// NewMulticastTrigger creates a new multicast trigger of events of the eventsource.example microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{
 		svc:  caller,
 		host: "eventsource.example",
 	}
 }
 
-// ForHost replaces the default hostname of this trigger.
-func (_c *MulticastTrigger) ForHost(host string) *MulticastTrigger {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this trigger.
-func (_c *MulticastTrigger) WithOptions(opts ...pub.Option) *MulticastTrigger {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
 // Hook assists in the subscription to the events of the eventsource.example microservice.
@@ -150,17 +166,19 @@ type Hook struct {
 }
 
 // NewHook creates a new hook to the events of the eventsource.example microservice.
-func NewHook(listener service.Subscriber) *Hook {
-	return &Hook{
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{
 		svc:  listener,
 		host: "eventsource.example",
 	}
 }
 
-// ForHost replaces the default hostname of this hook.
-func (_c *Hook) ForHost(host string) *Hook {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (_c Hook) ForHost(host string) Hook {
+	return Hook{
+		svc:  _c.svc,
+		host: host,
+	}
 }
 
 // RegisterIn are the input arguments of Register.
@@ -190,7 +208,7 @@ func (_out *RegisterResponse) Get() (allowed bool, err error) {
 /*
 Register attempts to register a new user.
 */
-func (_c *MulticastClient) Register(ctx context.Context, email string) <-chan *RegisterResponse {
+func (_c MulticastClient) Register(ctx context.Context, email string) <-chan *RegisterResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/register`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`email`: email,
@@ -231,7 +249,7 @@ func (_c *MulticastClient) Register(ctx context.Context, email string) <-chan *R
 /*
 Register attempts to register a new user.
 */
-func (_c *Client) Register(ctx context.Context, email string) (allowed bool, err error) {
+func (_c Client) Register(ctx context.Context, email string) (allowed bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/register`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -292,7 +310,7 @@ func (_out *OnAllowRegisterResponse) Get() (allow bool, err error) {
 OnAllowRegister is called before a user is allowed to register.
 Event sinks are given the opportunity to block the registration.
 */
-func (_c *MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <-chan *OnAllowRegisterResponse {
+func (_c MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <-chan *OnAllowRegisterResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-allow-register`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`email`: email,
@@ -334,10 +352,20 @@ func (_c *MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <
 OnAllowRegister is called before a user is allowed to register.
 Event sinks are given the opportunity to block the registration.
 */
-func (_c *Hook) OnAllowRegister(handler func(ctx context.Context, email string) (allow bool, err error)) error {
+func (_c Hook) OnAllowRegister(handler func(ctx context.Context, email string) (allow bool, err error)) error {
 	doOnAllowRegister := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnAllowRegisterIn
 		var o OnAllowRegisterOut
+		if strings.ContainsAny(`:417/on-allow-register`, "{}") {
+			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-allow-register`), r.URL.Path)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = httpx.DecodeDeepObject(pathArgs, &i)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		err := httpx.ParseRequestData(r, &i)
 		if err != nil {
 			return errors.Trace(err)
@@ -389,7 +417,7 @@ func (_out *OnRegisteredResponse) Get() (err error) {
 /*
 OnRegistered is called when a user is successfully registered.
 */
-func (_c *MulticastTrigger) OnRegistered(ctx context.Context, email string) <-chan *OnRegisteredResponse {
+func (_c MulticastTrigger) OnRegistered(ctx context.Context, email string) <-chan *OnRegisteredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-registered`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`email`: email,
@@ -430,10 +458,20 @@ func (_c *MulticastTrigger) OnRegistered(ctx context.Context, email string) <-ch
 /*
 OnRegistered is called when a user is successfully registered.
 */
-func (_c *Hook) OnRegistered(handler func(ctx context.Context, email string) (err error)) error {
+func (_c Hook) OnRegistered(handler func(ctx context.Context, email string) (err error)) error {
 	doOnRegistered := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnRegisteredIn
 		var o OnRegisteredOut
+		if strings.ContainsAny(`:417/on-registered`, "{}") {
+			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-registered`), r.URL.Path)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = httpx.DecodeDeepObject(pathArgs, &i)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		err := httpx.ParseRequestData(r, &i)
 		if err != nil {
 			return errors.Trace(err)

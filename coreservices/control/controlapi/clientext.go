@@ -39,7 +39,7 @@ type ServiceInfo struct {
 
 // PingServices performs a ping and returns service info for microservices on the network.
 // Results are deduped on a per-service basis.
-func (_c *MulticastClient) PingServices(ctx context.Context) <-chan *ServiceInfo {
+func (_c MulticastClient) PingServices(ctx context.Context) <-chan *ServiceInfo {
 	ch := _c.Ping(ctx)
 	filtered := make(chan *ServiceInfo, cap(ch))
 	go func() {
@@ -65,7 +65,7 @@ func (_c *MulticastClient) PingServices(ctx context.Context) <-chan *ServiceInfo
 
 // PingVersions performs a ping and returns service info for microservice versions on the network.
 // Results are deduped on a per-version basis.
-func (_c *MulticastClient) PingVersions(ctx context.Context) <-chan *ServiceInfo {
+func (_c MulticastClient) PingVersions(ctx context.Context) <-chan *ServiceInfo {
 	ch := _c.Ping(ctx)
 	filtered := make(chan *ServiceInfo, cap(ch))
 	go func() {
@@ -92,7 +92,7 @@ func (_c *MulticastClient) PingVersions(ctx context.Context) <-chan *ServiceInfo
 }
 
 // PingInstances performs a ping and returns service info for all instances on the network.
-func (_c *MulticastClient) PingInstances(ctx context.Context) <-chan *ServiceInfo {
+func (_c MulticastClient) PingInstances(ctx context.Context) <-chan *ServiceInfo {
 	ch := _c.Ping(ctx)
 	filtered := make(chan *ServiceInfo, cap(ch))
 	go func() {

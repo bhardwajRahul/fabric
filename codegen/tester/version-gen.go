@@ -18,12 +18,12 @@ limitations under the License.
 
 package tester
 
-const Version = 165
-const SourceCodeSHA256 = "09755e3973f3a6539c3b2626b03292970946d8c61339e5ba95d60ef4ed6c9ed9"
-const Timestamp = "2025-07-12T16:29:54.049Z"
+const Version = 171
+const SourceCodeSHA256 = "a3ae41b6407c037446d149e60707b779d10e66b88ffa212d3656d3b4073f722f"
+const Timestamp = "2025-10-12T22:01:01.081759Z"
 
 /* {
-	"ver": 165,
-	"sha256": "09755e3973f3a6539c3b2626b03292970946d8c61339e5ba95d60ef4ed6c9ed9",
-	"ts": "2025-07-12T16:29:54.049Z"
+	"ver": 171,
+	"sha256": "a3ae41b6407c037446d149e60707b779d10e66b88ffa212d3656d3b4073f722f",
+	"ts": "2025-10-12T22:01:01.081759Z"
 } */

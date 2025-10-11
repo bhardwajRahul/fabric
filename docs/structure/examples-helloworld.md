@@ -6,7 +6,7 @@ http://localhost:8080/helloworld.example/hello-world simply prints `Hello, World
 
 The code looks rather daunting but practically all of it is code generated. The manually-coded pieces are:
 
-The definition of the service and its single endpoint `HelloWorld` in `service.yaml`:
+The definition of the microservice and its single endpoint `HelloWorld` in `service.yaml`:
 
 ```yaml
 general:
@@ -25,14 +25,17 @@ w.Write([]byte("Hello, World!"))
 return nil
 ```
 
-A test of `TestHelloworld_HelloWorld` in `integration_test.go`:
+A test of `TestHelloworld_HelloWorld` in `service_test.go`:
 
 ```go
-ctx := Context()
-HelloWorld_Get(t, ctx, "").BodyContains("Hello, World!")
+res, err := client.HelloWorld(ctx, "")
+if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+	body, err := io.ReadAll(res.Body)
+	tt.Expect(body, []string("Hello, World!"), err, nil)
+}
 ```
 
-And finally, the addition of the microservce to the app in `main/main.go`.
+And finally, the addition of the microservice to the app in `main/main.go`.
 
 ```go
 app.Add(

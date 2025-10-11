@@ -21,7 +21,6 @@ import (
 	"encoding"
 	"encoding/base64"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
@@ -189,20 +188,16 @@ func UnsafeBytesToString(b []byte) string {
 // AnyToString returns the string representation of the object.
 // It looks for a TextMarshaler or Stringer interfaces first before defaulting to fmt.Sprintf.
 func AnyToString(o any) string {
-	isNil := func(obj any) bool {
-		defer func() { recover() }()
-		return obj == nil || reflect.ValueOf(obj).IsNil()
-	}
 	if s, ok := o.(string); ok {
 		return s
 	}
-	if tm, ok := o.(encoding.TextMarshaler); ok && !isNil(tm) {
+	if tm, ok := o.(encoding.TextMarshaler); ok && !IsNil(tm) {
 		txt, err := tm.MarshalText()
 		if err == nil {
 			return UnsafeBytesToString(txt)
 		}
 	}
-	if s, ok := o.(fmt.Stringer); ok && !isNil(s) {
+	if s, ok := o.(fmt.Stringer); ok && !IsNil(s) {
 		return s.String()
 	}
 	return fmt.Sprintf("%v", o)

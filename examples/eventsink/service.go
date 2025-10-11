@@ -18,6 +18,8 @@ package eventsink
 
 import (
 	"context"
+	"net/mail"
+	"slices"
 	"strings"
 	"sync"
 
@@ -25,9 +27,9 @@ import (
 )
 
 var (
-	// Emulated data store
+	// Emulated data store - keyed by plane for test isolation
 	mux           sync.Mutex
-	registrations []string
+	registrations = make(map[string][]string)
 )
 
 /*
@@ -50,12 +52,21 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 }
 
 /*
-OnAllowRegister blocks registrations from certain email providers
-as well as duplicate registrations.
+OnAllowRegister blocks registrations from gmail and hotmail domains.
 */
 func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bool, err error) {
-	email = strings.ToLower(email)
-	if strings.HasSuffix(email, "@gmail.com") || strings.HasSuffix(email, "@hotmail.com") {
+	svc.LogInfo(ctx, "OnAllowRegister", "email", email)
+	address, err := mail.ParseAddress(strings.ToLower(email))
+	if err != nil {
+		return false, nil
+	}
+	email = address.Address
+	if strings.HasSuffix(email, "@gmail.com") || strings.HasSuffix(email, ".gmail.com") ||
+		strings.HasSuffix(email, "@hotmail.com") || strings.HasSuffix(email, ".hotmail.com") {
+		return false, nil
+	}
+	plane := svc.Plane()
+	if slices.Contains(registrations[plane], email) {
 		return false, nil
 	}
 	return true, nil
@@ -65,8 +76,10 @@ func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bo
 OnRegistered keeps track of registrations.
 */
 func (svc *Service) OnRegistered(ctx context.Context, email string) (err error) {
+	svc.LogInfo(ctx, "OnRegistered", "email", email)
+	plane := svc.Plane()
 	mux.Lock()
-	registrations = append(registrations, strings.ToLower(email))
+	registrations[plane] = append(registrations[plane], strings.ToLower(email))
 	mux.Unlock()
 	return nil
 }
@@ -75,9 +88,10 @@ func (svc *Service) OnRegistered(ctx context.Context, email string) (err error) 
 Registered returns the list of registered users.
 */
 func (svc *Service) Registered(ctx context.Context) (emails []string, err error) {
+	plane := svc.Plane()
 	emails = []string{}
 	mux.Lock()
-	emails = append(emails, registrations...)
+	emails = append(emails, registrations[plane]...)
 	mux.Unlock()
 	return emails, nil
 }

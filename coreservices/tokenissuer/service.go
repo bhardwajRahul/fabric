@@ -47,10 +47,12 @@ type Service struct {
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() == connector.LOCAL || svc.Deployment() == connector.TESTING {
 		svc.devOnlySecretKey = strings.Repeat("0123456789abcdef", 4)
-	} else if len(svc.SecretKey()) == 0 {
-		return errors.New("secret key is required")
-	} else if len(svc.SecretKey()) < 64 {
-		svc.LogWarn(ctx, "secret key should be 512 bits (64 characters) long")
+	} else {
+		if len(svc.SecretKey()) == 0 {
+			return errors.New("secret key is required")
+		} else if len(svc.SecretKey()) < 64 {
+			svc.LogWarn(ctx, "secret key should be at least 512 bits (64 characters) long")
+		}
 	}
 	return nil
 }

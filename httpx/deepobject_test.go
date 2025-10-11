@@ -34,9 +34,11 @@ func TestHttpx_DeepObject(t *testing.T) {
 	}
 	type Doc struct {
 		I       int       `json:"i"`
+		LI      int       `json:"li"`
 		Zero    int       `json:"z,omitzero"`
 		B       bool      `json:"b"`
 		F       float32   `json:"f"`
+		LF      float32   `json:"lf"`
 		S       string    `json:"s"`
 		Pt      Point     `json:"pt"`
 		Empty   *Point    `json:"e,omitzero"`
@@ -48,8 +50,10 @@ func TestHttpx_DeepObject(t *testing.T) {
 	// Encode
 	d1 := Doc{
 		I:       5,
+		LI:      10000000,
 		B:       true,
 		F:       5.67,
+		LF:      8.9e23,
 		S:       "Hello",
 		Special: "Q&A",
 		Pt:      Point{X: 3, Y: 4},
@@ -58,8 +62,10 @@ func TestHttpx_DeepObject(t *testing.T) {
 	values, err := EncodeDeepObject(d1)
 	if tt.NoError(err) {
 		tt.Equal("5", values.Get("i"))
+		tt.Equal("10000000", values.Get("li"))
 		tt.Equal("true", values.Get("b"))
 		tt.Equal("5.67", values.Get("f"))
+		tt.Equal("8.9e+23", values.Get("lf"))
 		tt.Equal("Hello", values.Get("s"))
 		tt.Equal("Q&A", values.Get("sp"))
 		tt.Equal("3", values.Get("pt[X]"))
@@ -134,6 +140,14 @@ func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 	if tt.NoError(err) {
 		tt.Equal(5, data.I)
 	}
+	err = decodeOne("i", "1000000", &data)
+	if tt.NoError(err) {
+		tt.Equal(1000000, data.I)
+	}
+	// err = decodeOne("i", "1e+06", &data)
+	// if tt.NoError(err) {
+	// 	tt.Equal(1000000, data.I)
+	// }
 
 	// Into float64
 	err = decodeOne("f", "5", &data)
@@ -143,6 +157,10 @@ func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 	err = decodeOne("f", "5.6", &data)
 	if tt.NoError(err) {
 		tt.Equal(5.6, data.F)
+	}
+	err = decodeOne("f", "1e-3", &data)
+	if tt.NoError(err) {
+		tt.Equal(.001, data.F)
 	}
 
 	// Into bool

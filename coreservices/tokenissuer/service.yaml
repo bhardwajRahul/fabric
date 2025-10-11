@@ -49,11 +49,13 @@ configs:
   - signature: SecretKey() (key string)
     description: SecretKey is a symmetrical key used to sign and validate the JWT when using the HMAC-SHA algorithm.
     secret: true
+    validation: str ^(|.{64,})$
   - signature: AltSecretKey() (key string)
     description: |-
       AltSecretKey is an alternative key used to validate the JWT when using the HMAC-SHA algorithm.
       Setting the previous secret key as an alternative key is useful when rotating keys.
     secret: true
+    validation: str ^(|.{64,})$
 
 # Functions
 #

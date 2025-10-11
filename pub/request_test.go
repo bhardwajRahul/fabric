@@ -136,6 +136,16 @@ func TestPub_Body(t *testing.T) {
 	body, err = io.ReadAll(httpReq.Body)
 	tt.NoError(err)
 	tt.Equal(`{"s":"ABC","i":123}`, string(body))
+
+	// nil
+	req, err = NewRequest([]Option{
+		POST("https://www.example.com"),
+		Body(nil),
+	}...)
+	tt.NoError(err)
+	httpReq, err = toHTTP(req)
+	tt.NoError(err)
+	tt.Nil(httpReq.Body)
 }
 
 func toHTTP(req *Request) (*http.Request, error) {
@@ -251,4 +261,33 @@ func TestPub_QueryArgs(t *testing.T) {
 	httpReq, err = toHTTP(req)
 	tt.NoError(err)
 	tt.Equal("https://zzz.example.com:123/newpath?b=2&a=3&m=5&n=6&x=33&y=66", httpReq.URL.String())
+}
+
+func TestPub_RelativeURL(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	req, err := NewRequest([]Option{
+		GET("https://www.example.com/path/to/file"),
+		RelativeURL("../another-file"),
+	}...)
+	tt.NoError(err)
+	httpReq, err := toHTTP(req)
+	tt.NoError(err)
+	tt.Equal("GET", httpReq.Method)
+	tt.Equal("/path/another-file", httpReq.URL.Path)
+}
+
+func TestPub_FillPathArguments(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	req, err := NewRequest([]Option{
+		GET("https://www.example.com/user/{id}/details?id=5"),
+	}...)
+	tt.NoError(err)
+	httpReq, err := toHTTP(req)
+	tt.NoError(err)
+	tt.Equal("GET", httpReq.Method)
+	tt.Equal("/user/5/details", httpReq.URL.Path)
 }

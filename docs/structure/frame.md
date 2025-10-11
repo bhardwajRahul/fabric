@@ -48,31 +48,29 @@ func (svc *Service) WebEndpoint(w http.ResponseWriter, r *http.Request) (err err
 }
 ```
 
-Writing to a frame modifies the `http.Header` held internally by the context. Cloning the context avoids this side effect.
+Writing to a frame modifies the `http.Header` held internally by the context and should be done with care, if at all.
+Cloning the context avoids modifying the original context's `http.Header`.
 
 ```go
 func (svc *Service) FunctionEndpoint(ctx context.Context, x int, y int) (z int, err error) {
 	// Call downstream using the original context
-	x, err := downstreamapi.NewClient(svc).Standard(ctx)
-	// Elevate the context to call a restricted downstream API
-	elevatedCtx := frame.CloneContext(ctx)
-	elevatedCtx.SetActor(Actor{
-		SuperUser: true,
-	})
-	y, err := downstreamapi.NewClient(svc).Restricted(elevatedCtx)
+	key, err := downstreamapi.NewClient(svc).GetKey(ctx)
+	// ...
+	// Clone the incoming context and attach baggage to it
+	clonedCtx := frame.CloneContext(ctx)
+	clonedCtx.SetBaggage("key", key)
+	y, err := downstreamapi.NewClient(svc).ProcessJob(clonedCtx)
 	// ...
 }
 ```
 
-An empty frame can be added to a standard `context.Context` by means of `frame.ContextWithFrame` and thereafter manipulated with the frame's setter methods.
+Cloning also adds a frame to a standard `context.Context`.
 
 ```go
-func TestMyService_Restricted(t *testing.T) {
-	elevatedCtx := frame.ContextWithFrame(context.Background())
-	elevatedCtx.SetActor(Actor{
-		SuperUser: true,
-	})
-	y, err := myserviceapi.NewClient(svc).Restricted(elevatedCtx)
+func TestMyService_FunctionEndpoint(t *testing.T) {
+	ctx := frame.CloneContext(t.Context())
+	clonedCtx.SetBaggage("key", "1234567890")
+	y, err := downstreamapi.NewClient(svc).ProcessJob(clonedCtx)
 	if err != nil || y != 12345 {
 		t.Fail()
 	}
@@ -90,15 +88,21 @@ func (svc *Service) WebEndpoint(w http.ResponseWriter, r *http.Request) (err err
 	frame.Of(r).ParseActor(&actor)
 	userName := actor.FullName
 
-	// Impersonate another user when calling downstream
-	impersonatedCtx := frame.CloneContext(r.Context())
-	impersonatedCtx.SetActor(Actor{
+	// Impersonate another user using WithOptions (recommended)
+	impersonatedActor := Actor{
 		Subject: "someone_else@example.com",
 		Name:    "Someone Else",
 		Roles:   "manager",
-	})
-	err = downstreamapi.NewClient(svc).OnBehalfOf(impersonatedCtx)
+	}
+	err = downstreamapi.NewClient(svc).
+		WithOptions(pub.Actor(impersonatedActor)).
+		OnBehalfOf(ctx)
 	// ...
+
+	// Impersonate another user using a cloned context
+	clonedCtx := frame.CloneContext(r.Context())
+	clonedCtx.SetActor(impersonatedActor)
+	err = downstreamapi.NewClient(svc).OnBehalfOf(clonedCtx)
 }
 ```
 
@@ -119,7 +123,7 @@ func (svc *Service) WebEndpoint(w http.ResponseWriter, r *http.Request) (err err
 
 ```go
 func TestMyService_ClockShift(t *testing.T) {
-	ctx := frame.ContextWithFrame(context.Background())
+	ctx := frame.CloneContext(t.Context())
 	resultNow, err := Svc.TimeSensitiveOperation(ctx)
 	// Shift clock 1 hour forward
 	frame.Of(ctx).IncrementClockShift(time.Hour)

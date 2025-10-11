@@ -160,10 +160,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doRegister(w http.ResponseWriter, r *http.Request) error {
 	var i eventsourceapi.RegisterIn
 	var o eventsourceapi.RegisterOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/register`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/register`), r.URL.Path)
 		if err != nil {
@@ -173,6 +169,10 @@ func (svc *Intermediate) doRegister(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Allowed, err = svc.impl.Register(
 		r.Context(),

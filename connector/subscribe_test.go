@@ -721,8 +721,8 @@ func TestConnector_PathArguments(t *testing.T) {
 	}
 	_, err = con.Request(ctx, pub.GET("https://path.arguments.connector/foo/{foo}/bar/{bar}"))
 	if tt.NoError(err) {
-		tt.Equal("{foo}", foo)
-		tt.Equal("{bar}", bar)
+		tt.Equal("", foo)
+		tt.Equal("", bar)
 	}
 	_, err = con.Request(ctx, pub.GET("https://path.arguments.connector/foo//bar/BAR2"))
 	if tt.NoError(err) {
@@ -903,42 +903,40 @@ func TestConnector_Actor(t *testing.T) {
 	defer con.Shutdown()
 
 	// Without a token
-	mogulCtx := context.Background()
-	_, err = con.GET(mogulCtx, "https://actor.connector/student")
+	ctx := t.Context()
+	_, err = con.GET(ctx, "https://actor.connector/student")
 	tt.Error(err)
 	tt.Equal(http.StatusUnauthorized, errors.StatusCode(err))
 	tt.Equal(0, entered)
-	_, err = con.GET(mogulCtx, "https://actor.connector/professor")
+	_, err = con.GET(ctx, "https://actor.connector/professor")
 	tt.Error(err)
 	tt.Equal(http.StatusUnauthorized, errors.StatusCode(err))
 	tt.Equal(0, entered)
 
 	// Create token for wizard role
-	wizardCtx := frame.CloneContext(mogulCtx)
-	frame.Of(wizardCtx).SetActor(map[string]any{
+	harry := map[string]any{
 		"iss":   "hogwats.issuer",
 		"sub":   "harry@hogwarts.edu",
 		"roles": "wizard student",
-	})
-	_, err = con.Request(wizardCtx, pub.GET("https://actor.connector/student"))
+	}
+	_, err = con.Request(ctx, pub.GET("https://actor.connector/student"), pub.Actor(harry))
 	tt.NoError(err)
 	tt.Equal(1, entered)
-	_, err = con.Request(wizardCtx, pub.GET("https://actor.connector/professor"))
+	_, err = con.Request(ctx, pub.GET("https://actor.connector/professor"), pub.Actor(harry))
 	tt.Error(err)
 	tt.Equal(http.StatusForbidden, errors.StatusCode(err))
 	tt.Equal(1, entered)
 
 	// Create token for professor role
-	professorCtx := frame.CloneContext(mogulCtx)
-	frame.Of(professorCtx).SetActor(map[string]any{
+	dumbledore := map[string]any{
 		"iss":   "hogwats.issuer",
 		"sub":   "dumbledore@hogwarts.edu",
 		"roles": "wizard professor headmaster",
-	})
-	_, err = con.Request(professorCtx, pub.GET("https://actor.connector/student"))
+	}
+	_, err = con.Request(ctx, pub.GET("https://actor.connector/student"), pub.Actor(dumbledore))
 	tt.NoError(err)
 	tt.Equal(2, entered)
-	_, err = con.Request(professorCtx, pub.GET("https://actor.connector/professor"))
+	_, err = con.Request(ctx, pub.GET("https://actor.connector/professor"), pub.Actor(dumbledore))
 	tt.NoError(err)
 	tt.Equal(3, entered)
 }

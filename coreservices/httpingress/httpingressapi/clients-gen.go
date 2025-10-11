@@ -59,58 +59,68 @@ const Hostname = "http.ingress.core"
 var (
 )
 
-// Client is an interface to calling the endpoints of the http.ingress.core microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the http.ingress.core microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the http.ingress.core microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the http.ingress.core microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "http.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the http.ingress.core microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the http.ingress.core microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the http.ingress.core microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the http.ingress.core microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "http.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }

@@ -216,10 +216,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) error {
 	var i calculatorapi.ArithmeticIn
 	var o calculatorapi.ArithmeticOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/arithmetic`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/arithmetic`), r.URL.Path)
 		if err != nil {
@@ -229,6 +225,10 @@ func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.XEcho, o.OpEcho, o.YEcho, o.Result, err = svc.impl.Arithmetic(
 		r.Context(),
@@ -255,10 +255,6 @@ func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) error {
 	var i calculatorapi.SquareIn
 	var o calculatorapi.SquareOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/square`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/square`), r.URL.Path)
 		if err != nil {
@@ -268,6 +264,10 @@ func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) error 
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.XEcho, o.Result, err = svc.impl.Square(
 		r.Context(),
@@ -292,10 +292,6 @@ func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) error 
 func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) error {
 	var i calculatorapi.DistanceIn
 	var o calculatorapi.DistanceOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/distance`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/distance`), r.URL.Path)
 		if err != nil {
@@ -305,6 +301,10 @@ func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.D, err = svc.impl.Distance(
 		r.Context(),

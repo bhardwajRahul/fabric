@@ -112,12 +112,14 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.DefineConfig(
 		"SecretKey",
 		cfg.Description(`SecretKey is a symmetrical key used to sign and validate the JWT when using the HMAC-SHA algorithm.`),
+		cfg.Validation(`str ^(|.{64,})$`),
 		cfg.Secret(),
 	)
 	svc.DefineConfig(
 		"AltSecretKey",
 		cfg.Description(`AltSecretKey is an alternative key used to validate the JWT when using the HMAC-SHA algorithm.
 Setting the previous secret key as an alternative key is useful when rotating keys.`),
+		cfg.Validation(`str ^(|.{64,})$`),
 		cfg.Secret(),
 	)
 
@@ -258,10 +260,6 @@ func (svc *Intermediate) SetAltSecretKey(key string) error {
 func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) error {
 	var i tokenissuerapi.IssueTokenIn
 	var o tokenissuerapi.IssueTokenOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:444/issue-token`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/issue-token`), r.URL.Path)
 		if err != nil {
@@ -271,6 +269,10 @@ func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.SignedToken, err = svc.impl.IssueToken(
 		r.Context(),
@@ -295,10 +297,6 @@ func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doValidateToken(w http.ResponseWriter, r *http.Request) error {
 	var i tokenissuerapi.ValidateTokenIn
 	var o tokenissuerapi.ValidateTokenOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:444/validate-token`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/validate-token`), r.URL.Path)
 		if err != nil {
@@ -308,6 +306,10 @@ func (svc *Intermediate) doValidateToken(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Actor, o.Valid, err = svc.impl.ValidateToken(
 		r.Context(),

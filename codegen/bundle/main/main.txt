@@ -6,8 +6,6 @@ import (
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
-
-	// <--IMPORT (do not remove this marker)
 )
 
 /*
@@ -27,7 +25,6 @@ func main() {
 	)
 	app.Add(
 		// Add solution microservices here
-		// <--NEW (do not remove this marker)
 	)
 	app.Add(
 		// When everything is ready, begin to accept external requests

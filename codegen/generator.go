@@ -32,20 +32,22 @@ import (
 
 // Generator is the main operator that generates the code.
 type Generator struct {
-	Force       bool
-	WorkDir     string
-	ProjectDir  string
-	ModulePath  string
-	PackagePath string
-	PackageDir  string
-	Printer     IndentPrinter
-	Specs       *spec.Service
+	Force        bool
+	WorkDir      string
+	ProjectDir   string
+	ModulePath   string
+	PackagePath  string
+	PackageDir   string
+	Printer      IndentPrinter
+	Specs        *spec.Service
+	AddToMainApp bool
 }
 
 // NewGenerator creates a new code generator set to run on
 // the current working directory and output to stdout.
 func NewGenerator() *Generator {
 	return &Generator{
+		AddToMainApp: true,
 		Printer: &Printer{
 			Verbose: true,
 		},
@@ -216,11 +218,6 @@ func (gen *Generator) runService() (err error) {
 		}
 	}
 	err = gen.makeVersion(verNum)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = gen.makeAddToMainApp()
 	if err != nil {
 		return errors.Trace(err)
 	}

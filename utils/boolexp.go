@@ -223,7 +223,7 @@ func evaluateBoolExp(boolExp string, flattenedSymbols map[string]any) (bool, err
 	}
 	// Existence
 	v := evalValue(boolExp, flattenedSymbols)
-	if nilish(v) {
+	if IsNil(v) {
 		// Verify it's an identifier x.y.z
 		matched := identifierRegexp.MatchString(boolExp)
 		if !matched {
@@ -245,18 +245,9 @@ func sameType(x any, y any) bool {
 	return reflect.TypeOf(x) == reflect.TypeOf(y)
 }
 
-// nilish returns true if x is nil or an interface holding nil.
-func nilish(x any) bool {
-	defer func() { recover() }()
-	if x == nil || reflect.ValueOf(x).IsNil() {
-		return true
-	}
-	return false
-}
-
 // empty returns true if x is nil or the zero value for its type.
 func empty(x any) bool {
-	if nilish(x) {
+	if IsNil(x) {
 		return true
 	}
 	switch v := x.(type) {
@@ -276,7 +267,7 @@ func eq(x any, y any) bool {
 	if reflect.TypeOf(x) != reflect.TypeOf(y) {
 		return false
 	}
-	if nilish(x) && nilish(y) {
+	if IsNil(x) && IsNil(y) {
 		return true
 	}
 	switch v := x.(type) {

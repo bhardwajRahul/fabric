@@ -490,10 +490,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.StringCutIn
 	var o testerapi.StringCutOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/string-cut`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/string-cut`), r.URL.Path)
 		if err != nil {
@@ -503,6 +499,10 @@ func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) err
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Before, o.After, o.Found, err = svc.impl.StringCut(
 		r.Context(),
@@ -528,10 +528,6 @@ func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) err
 func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.PointDistanceIn
 	var o testerapi.PointDistanceOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/point-distance`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/point-distance`), r.URL.Path)
 		if err != nil {
@@ -541,6 +537,10 @@ func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.D, err = svc.impl.PointDistance(
 		r.Context(),
@@ -566,10 +566,6 @@ func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request)
 func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.ShiftPointIn
 	var o testerapi.ShiftPointOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/shift-point`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/shift-point`), r.URL.Path)
 		if err != nil {
@@ -579,6 +575,10 @@ func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Shifted, err = svc.impl.ShiftPoint(
 		r.Context(),
@@ -605,10 +605,6 @@ func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.LinesIntersectionIn
 	var o testerapi.LinesIntersectionOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/lines-intersection`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/lines-intersection`), r.URL.Path)
 		if err != nil {
@@ -618,6 +614,10 @@ func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.B, err = svc.impl.LinesIntersection(
 		r.Context(),
@@ -643,10 +643,6 @@ func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Requ
 func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.EchoAnythingIn
 	var o testerapi.EchoAnythingOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/echo-anything`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/echo-anything`), r.URL.Path)
 		if err != nil {
@@ -656,6 +652,10 @@ func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Echoed, err = svc.impl.EchoAnything(
 		r.Context(),
@@ -680,14 +680,6 @@ func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) 
 func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.SubArrayRangeIn
 	var o testerapi.SubArrayRangeOut
-	err := httpx.ParseRequestBody(r, &i.HTTPRequestBody)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/sub-array-range/{max}`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/sub-array-range/{max}`), r.URL.Path)
 		if err != nil {
@@ -697,6 +689,14 @@ func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestBody(r, &i.HTTPRequestBody)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.HTTPResponseBody, o.HTTPStatusCode, err = svc.impl.SubArrayRange(
 		r.Context(),
@@ -724,10 +724,6 @@ func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request)
 func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.SumTwoIntegersIn
 	var o testerapi.SumTwoIntegersOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/sum-two-integers`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/sum-two-integers`), r.URL.Path)
 		if err != nil {
@@ -737,6 +733,10 @@ func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Sum, o.HTTPStatusCode, err = svc.impl.SumTwoIntegers(
 		r.Context(),
@@ -763,10 +763,6 @@ func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request
 func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.FunctionPathArgumentsIn
 	var o testerapi.FunctionPathArgumentsOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/function-path-arguments/fixed/{named}/{}/{suffix+}`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`), r.URL.Path)
 		if err != nil {
@@ -776,6 +772,10 @@ func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Joined, err = svc.impl.FunctionPathArguments(
 		r.Context(),
@@ -802,10 +802,6 @@ func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.
 func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.NonStringPathArgumentsIn
 	var o testerapi.NonStringPathArgumentsOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`), r.URL.Path)
 		if err != nil {
@@ -815,6 +811,10 @@ func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Joined, err = svc.impl.NonStringPathArguments(
 		r.Context(),
@@ -841,10 +841,6 @@ func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http
 func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.UnnamedFunctionPathArgumentsIn
 	var o testerapi.UnnamedFunctionPathArgumentsOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`), r.URL.Path)
 		if err != nil {
@@ -854,6 +850,10 @@ func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Joined, err = svc.impl.UnnamedFunctionPathArguments(
 		r.Context(),
@@ -880,10 +880,6 @@ func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r
 func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.PathArgumentsPriorityIn
 	var o testerapi.PathArgumentsPriorityOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/path-arguments-priority/{foo}`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/path-arguments-priority/{foo}`), r.URL.Path)
 		if err != nil {
@@ -893,6 +889,10 @@ func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Echo, err = svc.impl.PathArgumentsPriority(
 		r.Context(),
@@ -917,10 +917,6 @@ func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.
 func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.WhatTimeIsItIn
 	var o testerapi.WhatTimeIsItOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/what-time-is-it`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/what-time-is-it`), r.URL.Path)
 		if err != nil {
@@ -930,6 +926,10 @@ func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.T, err = svc.impl.WhatTimeIsIt(
 		r.Context(),
@@ -953,10 +953,6 @@ func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) 
 func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request) error {
 	var i testerapi.AuthzRequiredIn
 	var o testerapi.AuthzRequiredOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/authz-required`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/authz-required`), r.URL.Path)
 		if err != nil {
@@ -966,6 +962,10 @@ func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.AuthzRequired(
 		r.Context(),

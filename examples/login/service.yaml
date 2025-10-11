@@ -154,9 +154,11 @@ webs:
   - signature: AdminOnly()
     description: AdminOnly is only accessible by admins.
     actor: roles.a
+    method: GET
   - signature: ManagerOnly()
     description: ManagerOnly is only accessible by managers.
     actor: roles.m
+    method: GET
 
 # Tickers
 #

@@ -25,6 +25,7 @@ import (
 	"strconv"
 
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/utils"
 )
 
 // SetRequestBody sets the body of the request.
@@ -33,7 +34,7 @@ import (
 // All other types are serialized as JSON.
 // The Content-Type Content-Length headers will be set to match the body if they can be determined and unless already set.
 func SetRequestBody(r *http.Request, body any) error {
-	if body == nil {
+	if utils.IsNil(body) {
 		return nil
 	}
 	hasContentType := r.Header.Get("Content-Type") != ""

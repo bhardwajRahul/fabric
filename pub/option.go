@@ -51,6 +51,20 @@ func URL(url string) Option {
 		}
 		u.RawQuery += req.queryArgs
 		req.URL = u.String()
+		req.URL = strings.ReplaceAll(req.URL, "%7B", "{")
+		req.URL = strings.ReplaceAll(req.URL, "%7D", "}")
+		return nil
+	}
+}
+
+// RelativeURL sets the URL of the request in relation to one already set earlier.
+func RelativeURL(relative string) Option {
+	return func(req *Request) error {
+		resolved, err := httpx.ResolveURL(req.URL, relative)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		req.URL = resolved
 		return nil
 	}
 }
@@ -246,9 +260,6 @@ func Query(args url.Values) Option {
 // All other types are serialized as JSON.
 // The Content-Type Content-Length headers will be set to match the body if they can be determined and unless already set.
 func Body(body any) Option {
-	if body == nil {
-		return Noop()
-	}
 	return func(req *Request) error {
 		r, _ := http.NewRequest("POST", "", nil)
 		err := httpx.SetRequestBody(r, body)
@@ -267,10 +278,12 @@ func Body(body any) Option {
 
 // ContentType sets the Content-Type header.
 func ContentType(contentType string) Option {
-	return func(req *Request) error {
-		req.Header.Set("Content-Type", contentType)
-		return nil
-	}
+	return Header("Content-Type", contentType)
+}
+
+// Languages sets the Accept-Language header.
+func Languages(language ...string) Option {
+	return Header("Accept-Language", strings.Join(language, ", "))
 }
 
 // Unicast indicates that a single response is expected from this request.

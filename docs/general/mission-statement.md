@@ -28,7 +28,6 @@ And because it is open sourced, you can feel confident betting your business on 
 `Microbus` delivers a dynamic range of tools designed to optimize the full SDLC of microservice solutions.
 
 #### Develop
-
 Run and debug an entire solution comprising a multitude of microservices on your [local development](../tech/local-dev.md) machine, just as easily as if it were a monolith.
 
 Speed up development with [code generation](../blocks/codegen.md).

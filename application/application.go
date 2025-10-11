@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/microbus-io/fabric/connector"
@@ -29,6 +30,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/testarossa"
 )
 
 // Application is a collection of microservices that run in a single process and share the same lifecycle.
@@ -207,8 +209,7 @@ func (app *Application) Interrupt() {
 	app.sig <- syscall.SIGINT
 }
 
-// Run starts up all microservices included in this app, waits for interrupt,
-// then shuts them down.
+// Run starts up all microservices included in this app, waits for interrupt, then shuts them down.
 func (app *Application) Run() error {
 	err := app.Startup()
 	if err != nil {
@@ -219,5 +220,21 @@ func (app *Application) Run() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	return nil
+}
+
+// RunInTest starts up all microservices included in this app, waits for the test to finish, then shuts them down.
+// Errors in startup or shutdown will fail the test.
+func (app *Application) RunInTest(t testing.TB) error {
+	tt := testarossa.For(t)
+	err := app.Startup()
+	if !tt.NoError(err) {
+		t.FailNow()
+		return errors.Trace(err)
+	}
+	t.Cleanup(func() {
+		err := app.Shutdown()
+		tt.NoError(err)
+	})
 	return nil
 }

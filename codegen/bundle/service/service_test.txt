@@ -1,0 +1,29 @@
+package {{ .PackagePathSuffix }}
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"testing"
+
+	"github.com/microbus-io/fabric/application"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/testarossa"
+
+	"{{ .PackageDir }}/{{ .PackageDirSuffix }}api"
+)
+
+var (
+	_ context.Context
+	_ io.Closer
+	_ http.Handler
+	_ testing.TB
+	_ *application.Application
+	_ *connector.Connector
+	_ *frame.Frame
+	_ pub.Option
+	_ testarossa.TestingT
+	_ *{{ .PackageDirSuffix }}api.Client
+)

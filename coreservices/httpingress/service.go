@@ -283,7 +283,7 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			span.End()
 		}
 	}()
-	// Set a frame in the context and request
+	// Set a frame in the context and the request
 	ctx = frame.ContextWithFrameOf(ctx, r)
 	r = r.WithContext(ctx)
 

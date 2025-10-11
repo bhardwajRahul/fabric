@@ -150,6 +150,21 @@ func New(hostname string) *Connector {
 	return c
 }
 
+/*
+Init enables a single-statement pattern for initializing the connector.
+
+	New("my.connector").Init(func(c *Connector) {
+		c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("ok"))
+			return nil
+		})
+	})
+*/
+func (c *Connector) Init(initializer func(c *Connector)) *Connector {
+	initializer(c)
+	return c
+}
+
 // ID is a unique identifier of a particular instance of the microservice
 func (c *Connector) ID() string {
 	return c.id

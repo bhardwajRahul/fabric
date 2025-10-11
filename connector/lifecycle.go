@@ -268,7 +268,7 @@ func (c *Connector) Startup() (err error) {
 			return err
 		}
 	}
-	time.Sleep(20 * time.Millisecond) // Give time for subscription activation by NATS
+	c.transportConn.WaitForSub()
 
 	// Run all tickers
 	c.runTickers()

@@ -1,6 +1,6 @@
 {{ if .Webs }}
 // errChan returns a response channel with a single error response.
-func (_c *MulticastClient) errChan(err error) <-chan *pub.Response {
+func (_c MulticastClient) errChan(err error) <-chan *pub.Response {
 	ch := make(chan *pub.Response, 1)
 	ch <- pub.NewErrorResponse(err)
 	close(ch)
@@ -12,313 +12,122 @@ func (_c *MulticastClient) errChan(err error) <-chan *pub.Response {
 
 {{- if eq .Method "ANY" }}
 /*
-{{ .Name }}_Get performs a GET request to the {{ .Name }} endpoint.
-
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) {{ .Name }}_Get(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-{{ .Name }}_Get performs a GET request to the {{ .Name }} endpoint.
-
-{{ .Description }}
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) {{ .Name }}_Get(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-{{ .Name }}_Post performs a POST request to the {{ .Name }} endpoint.
-
-{{ .Description }}
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) {{ .Name }}_Post(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
+func (_c Client) {{ .Name }}(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "{{ if eq .Method "ANY" }}POST{{ else }}{{ .Method }}{{ end }}"
 	}
 	res, err = _c.svc.Request(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
-{{ .Name }}_Post performs a POST request to the {{ .Name }} endpoint.
-
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *MulticastClient) {{ .Name }}_Post(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
+func (_c MulticastClient) {{ .Name }}(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "{{ if eq .Method "ANY" }}POST{{ else }}{{ .Method }}{{ end }}"
 	}
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
 }
-
-{{- else if .MethodWithBody }}
+{{ else if .MethodWithBody }}
 /*
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) {{ .Name }}(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+func (_c Client) {{ .Name }}(ctx context.Context, relURL string, contentType string, body any) (res *http.Response, err error) {
 	res, err = _c.svc.Request(
 		ctx,
-		pub.Method(`{{ .Method }}`),
-		pub.URL(url),
+		pub.Method("{{ .Method }}"),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *MulticastClient) {{ .Name }}(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
+func (_c MulticastClient) {{ .Name }}_{{ CapitalizeIdentifier (ToLower .Method) }}(ctx context.Context, relURL string, contentType string, body any) <-chan *pub.Response {
 	return _c.svc.Publish(
 		ctx,
-		pub.Method(`{{ .Method }}`),
-		pub.URL(url),
+		pub.Method("{{ .Method }}"),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
 }
-
-{{- else }}
+{{ else }}
 /*
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c *Client) {{ .Name }}(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+func (_c Client) {{ .Name }}(ctx context.Context, relURL string) (res *http.Response, err error) {
 	res, err = _c.svc.Request(
 		ctx,
-		pub.Method(`{{ .Method }}`),
-		pub.URL(url),
+		pub.Method("{{ .Method }}"),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
 {{ .Description }}
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c *MulticastClient) {{ .Name }}(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOf{{ .Name }}, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
+func (_c MulticastClient) {{ .Name }}(ctx context.Context, relURL string) <-chan *pub.Response {
 	return _c.svc.Publish(
 		ctx,
-		pub.Method(`{{ .Method }}`),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-{{- end }}
-
-/*
-{{ if ne .Method "ANY" }}{{ .Name }}_Do performs a customized request to the {{ .Name }} endpoint.
-
-{{ end -}}
-
-{{ .Description }}
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) {{ .Name }}{{ if ne .Method "ANY" }}_Do{{ end }}(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`{{ if eq .Method "ANY" }}GET{{ else }}{{ .Method }}{{ end }}`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	{{- if ne .Method "ANY" }}
-	if r.Method != `{{ .Method }}` {
-		return nil, errors.New("", http.StatusNotFound)
-	}
-	{{- end }}
-	url, err := httpx.ResolveURL(URLOf{{ .Name }}, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-{{ if ne .Method "ANY" }}{{ .Name }}_Do performs a customized request to the {{ .Name }} endpoint.
-
-{{ end -}}
-
-{{ .Description }}
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) {{ .Name }}{{ if ne .Method "ANY" }}_Do{{ end }}(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`{{ if eq .Method "ANY" }}GET{{ else }}{{ .Method }}{{ end }}`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	{{- if ne .Method "ANY" }}
-	if r.Method != `{{ .Method }}` {
-		return _c.errChan(errors.New("", http.StatusNotFound))
-	}
-	{{- end }}
-	url, err := httpx.ResolveURL(URLOf{{ .Name }}, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
+		pub.Method("{{ .Method }}"),
+		pub.URL(URLOf{{ .Name }}),
+		pub.RelativeURL(relURL),
 		pub.Options(_c.opts...),
 	)
 }
 {{ end }}
+{{- end }}

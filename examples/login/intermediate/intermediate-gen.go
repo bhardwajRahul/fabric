@@ -111,8 +111,8 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe(`ANY`, `:443/login`, svc.impl.Login)
 	svc.Subscribe(`ANY`, `:443/logout`, svc.impl.Logout)
 	svc.Subscribe(`ANY`, `:443/welcome`, svc.impl.Welcome, sub.Actor(`roles.a || roles.m || roles.u`))
-	svc.Subscribe(`ANY`, `:443/admin-only`, svc.impl.AdminOnly, sub.Actor(`roles.a`))
-	svc.Subscribe(`ANY`, `:443/manager-only`, svc.impl.ManagerOnly, sub.Actor(`roles.m`))
+	svc.Subscribe(`GET`, `:443/admin-only`, svc.impl.AdminOnly, sub.Actor(`roles.a`))
+	svc.Subscribe(`GET`, `:443/manager-only`, svc.impl.ManagerOnly, sub.Actor(`roles.m`))
 
 	// Resources file system
 	svc.SetResFS(resources.FS)
@@ -167,7 +167,7 @@ Rendering is adjusted based on the user's roles.`,
 		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
 			Type:        `web`,
 			Name:        `AdminOnly`,
-			Method:      `ANY`,
+			Method:      `GET`,
 			Path:        `:443/admin-only`,
 			Summary:     `AdminOnly()`,
 			Description: `AdminOnly is only accessible by admins.`,
@@ -178,7 +178,7 @@ Rendering is adjusted based on the user's roles.`,
 		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
 			Type:        `web`,
 			Name:        `ManagerOnly`,
-			Method:      `ANY`,
+			Method:      `GET`,
 			Path:        `:443/manager-only`,
 			Summary:     `ManagerOnly()`,
 			Description: `ManagerOnly is only accessible by managers.`,

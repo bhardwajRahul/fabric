@@ -28,7 +28,7 @@ Another important header included by the client in each request is `Microbus-Msg
 To look at an example that puts this all together, disable the [short-circuit transport](../tech/short-circuit.md) and start NATS in debug mode in another window.
 The `-D -V` flags slow down NATS considerably and it's recommended to run it only for the duration that these flags are needed.
 
-```cmd
+```shell
 MICROBUS_SHORT_CIRCUIT=0 ./nats-server -D -V
 ```
 

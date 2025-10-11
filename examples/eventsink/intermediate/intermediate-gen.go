@@ -166,10 +166,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doRegistered(w http.ResponseWriter, r *http.Request) error {
 	var i eventsinkapi.RegisteredIn
 	var o eventsinkapi.RegisteredOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/registered`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/registered`), r.URL.Path)
 		if err != nil {
@@ -179,6 +175,10 @@ func (svc *Intermediate) doRegistered(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Emails, err = svc.impl.Registered(
 		r.Context(),

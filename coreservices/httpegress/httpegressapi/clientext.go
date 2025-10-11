@@ -26,7 +26,7 @@ import (
 )
 
 // Get makes a GET request to a URL, respecting the timeout set in the context.
-func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
+func (c Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -41,7 +41,7 @@ func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err 
 }
 
 // Post makes a POST request to a URL, respecting the timeout set in the context.
-func (c *Client) Post(ctx context.Context, url string, contentType string, body any) (resp *http.Response, err error) {
+func (c Client) Post(ctx context.Context, url string, contentType string, body any) (resp *http.Response, err error) {
 	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -63,7 +63,7 @@ func (c *Client) Post(ctx context.Context, url string, contentType string, body 
 }
 
 // Do makes a request to a URL, respecting the timeout set in the context.
-func (c *Client) Do(ctx context.Context, req *http.Request) (resp *http.Response, err error) {
+func (c Client) Do(ctx context.Context, req *http.Request) (resp *http.Response, err error) {
 	var buf bytes.Buffer
 	err = req.WriteProxy(&buf)
 	if err != nil {

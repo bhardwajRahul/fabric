@@ -84,18 +84,13 @@ func (svc *Service) OnChangedMyConfig(ctx context.Context) (err error) {
 
 ### Integration Tests
 
-A skeleton test is created in `integration_test.go` for each testable web handler, functional endpoint, event, event sink and config callback. For example:
+A test harness is created in `service_test.go` for each testable web handler, functional endpoint, event, event sink ticker, config callback and metric callback.
 
 ```go
-func TestMyService_FuncHandler(t *testing.T) {
+func TestMyService_MyFunction(t *testing.T) {
 	t.Parallel()
-tt := testarossa.For(t)
-	/*
-		FuncHandler(t, ctx, id).
-			Expect(ok).
-			NoError()
-	*/
-	ctx := Context()
+	
+	// ... (test harness code omitted)
 
 	// TO DO: Test FuncHandler
 }

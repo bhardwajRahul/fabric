@@ -100,3 +100,109 @@ func TestHttpx_FillPathArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestHttpx_ResolveURL(t *testing.T) {
+	testCases := []struct {
+		base     string
+		rel      string
+		expected string
+	}{
+		// Full path resolution
+		{
+			base:     "https://example.com/foo",
+			rel:      "/bar",
+			expected: "https://example.com/bar",
+		},
+		// Full URL override
+		{
+			base:     "https://example.com/foo",
+			rel:      "https://company.io/bar",
+			expected: "https://company.io/bar",
+		},
+		// Empty relative URL returns base
+		{
+			base:     "https://example.com/foo",
+			rel:      "",
+			expected: "https://example.com/foo",
+		},
+		// Relative path resolution
+		{
+			base:     "https://example.com/foo/bar",
+			rel:      "baz",
+			expected: "https://example.com/foo/baz",
+		},
+		{
+			base:     "https://example.com/foo/bar/",
+			rel:      "baz",
+			expected: "https://example.com/foo/bar/baz",
+		},
+		// Path traversal with ../
+		{
+			base:     "https://example.com/foo/bar",
+			rel:      "../baz",
+			expected: "https://example.com/baz",
+		},
+		{
+			base:     "https://example.com/foo/bar/qux",
+			rel:      "../../baz",
+			expected: "https://example.com/baz",
+		},
+		// Fragment handling
+		{
+			base:     "https://example.com/foo",
+			rel:      "#section",
+			expected: "https://example.com/foo#section",
+		},
+		{
+			base:     "https://example.com/foo",
+			rel:      "/bar#section",
+			expected: "https://example.com/bar#section",
+		},
+		// Query string handling
+		{
+			base:     "https://example.com/foo?old=1",
+			rel:      "?new=2",
+			expected: "https://example.com/foo?new=2",
+		},
+		{
+			base:     "https://example.com/foo",
+			rel:      "bar?q=1&r=2",
+			expected: "https://example.com/bar?q=1&r=2",
+		},
+		// Curly braces preservation (special handling in ResolveURL)
+		{
+			base:     "https://example.com/foo",
+			rel:      "/api/{id}/details",
+			expected: "https://example.com/api/{id}/details",
+		},
+		{
+			base:     "https://example.com/api",
+			rel:      "users/{userId}/posts/{postId}",
+			expected: "https://example.com/users/{userId}/posts/{postId}",
+		},
+		// Protocol-relative URLs
+		{
+			base:     "http://example.com/foo",
+			rel:      "//company.io/bar",
+			expected: "http://company.io/bar",
+		},
+		// Absolute path with query and fragment
+		{
+			base:     "https://example.com/old/path",
+			rel:      "/new/path?q=1#top",
+			expected: "https://example.com/new/path?q=1#top",
+		},
+		// Combined query and fragment
+		{
+			base:     "https://example.com/foo",
+			rel:      "bar?q=1#section",
+			expected: "https://example.com/bar?q=1#section",
+		},
+	}
+
+	tt := testarossa.For(t)
+	for _, tc := range testCases {
+		resolved, err := ResolveURL(tc.base, tc.rel)
+		tt.Expect(resolved, tc.expected, err, nil)
+	}
+}

@@ -150,10 +150,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.PingIn
 	var o controlapi.PingOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:888/ping`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/ping`), r.URL.Path)
 		if err != nil {
@@ -163,6 +159,10 @@ func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Pong, err = svc.impl.Ping(
 		r.Context(),
@@ -186,10 +186,6 @@ func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) error {
 func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.ConfigRefreshIn
 	var o controlapi.ConfigRefreshOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:888/config-refresh`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/config-refresh`), r.URL.Path)
 		if err != nil {
@@ -199,6 +195,10 @@ func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.ConfigRefresh(
 		r.Context(),
@@ -222,10 +222,6 @@ func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request)
 func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.TraceIn
 	var o controlapi.TraceOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:888/trace`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/trace`), r.URL.Path)
 		if err != nil {
@@ -235,6 +231,10 @@ func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.Trace(
 		r.Context(),

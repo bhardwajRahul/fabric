@@ -17,6 +17,8 @@ limitations under the License.
 package utils
 
 import (
+	"reflect"
+
 	"github.com/microbus-io/fabric/errors"
 )
 
@@ -24,4 +26,10 @@ import (
 // Deprecated: Use [errors.CatchPanic] instead.
 func CatchPanic(f func() error) (err error) {
 	return errors.CatchPanic(f)
+}
+
+// IsNil returns true if x is nil or an interface holding nil.
+func IsNil(x any) bool {
+	defer func() { recover() }()
+	return x == nil || reflect.ValueOf(x).IsNil()
 }

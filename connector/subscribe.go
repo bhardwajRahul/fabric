@@ -75,7 +75,7 @@ func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandle
 		if err != nil {
 			return c.captureInitErr(errors.Trace(err))
 		}
-		time.Sleep(20 * time.Millisecond) // Give time for subscription activation by NATS
+		c.transportConn.WaitForSub()
 	}
 	key := method + "|" + newSub.Canonical()
 	c.subsLock.Lock()

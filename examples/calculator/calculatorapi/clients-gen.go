@@ -62,60 +62,70 @@ var (
 	URLOfDistance = httpx.JoinHostAndPath(Hostname, `:443/distance`)
 )
 
-// Client is an interface to calling the endpoints of the calculator.example microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the calculator.example microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the calculator.example microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the calculator.example microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "calculator.example",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the calculator.example microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the calculator.example microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the calculator.example microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the calculator.example microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "calculator.example",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
 // ArithmeticIn are the input arguments of Arithmetic.
@@ -153,7 +163,7 @@ func (_out *ArithmeticResponse) Get() (xEcho int, opEcho string, yEcho int, resu
 /*
 Arithmetic perform an arithmetic operation between two integers x and y given an operator op.
 */
-func (_c *MulticastClient) Arithmetic(ctx context.Context, x int, op string, y int) <-chan *ArithmeticResponse {
+func (_c MulticastClient) Arithmetic(ctx context.Context, x int, op string, y int) <-chan *ArithmeticResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/arithmetic`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`x`: x,
@@ -204,7 +214,7 @@ func (_c *MulticastClient) Arithmetic(ctx context.Context, x int, op string, y i
 /*
 Arithmetic perform an arithmetic operation between two integers x and y given an operator op.
 */
-func (_c *Client) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) {
+func (_c Client) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/arithmetic`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -277,7 +287,7 @@ func (_out *SquareResponse) Get() (xEcho int, result int, err error) {
 /*
 Square prints the square of the integer x.
 */
-func (_c *MulticastClient) Square(ctx context.Context, x int) <-chan *SquareResponse {
+func (_c MulticastClient) Square(ctx context.Context, x int) <-chan *SquareResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/square`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`x`: x,
@@ -324,7 +334,7 @@ func (_c *MulticastClient) Square(ctx context.Context, x int) <-chan *SquareResp
 /*
 Square prints the square of the integer x.
 */
-func (_c *Client) Square(ctx context.Context, x int) (xEcho int, result int, err error) {
+func (_c Client) Square(ctx context.Context, x int) (xEcho int, result int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/square`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -391,7 +401,7 @@ func (_out *DistanceResponse) Get() (d float64, err error) {
 Distance calculates the distance between two points.
 It demonstrates the use of the defined type Point.
 */
-func (_c *MulticastClient) Distance(ctx context.Context, p1 Point, p2 Point) <-chan *DistanceResponse {
+func (_c MulticastClient) Distance(ctx context.Context, p1 Point, p2 Point) <-chan *DistanceResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/distance`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`p1`: p1,
@@ -435,7 +445,7 @@ func (_c *MulticastClient) Distance(ctx context.Context, p1 Point, p2 Point) <-c
 Distance calculates the distance between two points.
 It demonstrates the use of the defined type Point.
 */
-func (_c *Client) Distance(ctx context.Context, p1 Point, p2 Point) (d float64, err error) {
+func (_c Client) Distance(ctx context.Context, p1 Point, p2 Point) (d float64, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/distance`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{

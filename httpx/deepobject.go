@@ -67,9 +67,17 @@ func encodeOne(prefix string, obj any, values url.Values) {
 	case int:
 		val = strconv.FormatInt(int64(fieldObj), 10)
 	case float64:
-		val = strconv.FormatFloat(fieldObj, 'g', -1, 64)
+		if fieldObj == float64(int64(fieldObj)) {
+			val = strconv.FormatInt(int64(fieldObj), 10)
+		} else {
+			val = strconv.FormatFloat(fieldObj, 'g', -1, 64)
+		}
 	case float32:
-		val = strconv.FormatFloat(float64(fieldObj), 'g', -1, 64)
+		if float64(fieldObj) == float64(int64(fieldObj)) {
+			val = strconv.FormatInt(int64(fieldObj), 10)
+		} else {
+			val = strconv.FormatFloat(float64(fieldObj), 'g', -1, 64)
+		}
 	default:
 		if obj == nil {
 			val = "null"
@@ -134,8 +142,19 @@ func decodeOne(k, v string, data any) error {
 			j = jPre + v + strings.Repeat("}", countDots+1)
 			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
 		} else {
+			// Trying to parse a number into a wrong type
+			// Try to parse into a string first
 			j = jPre + `"` + v + `"` + strings.Repeat("}", countDots+1)
 			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
+			if err != nil {
+				// Parsing exponent float into an integer field
+				f64, parseErr := strconv.ParseFloat(v, 64)
+				if parseErr == nil {
+					v = strconv.FormatFloat(f64, 'f', -1, 64)
+					j = jPre + v + strings.Repeat("}", countDots+1)
+					err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
+				}
+			}
 		}
 	}
 	if err != nil {

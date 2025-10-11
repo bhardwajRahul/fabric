@@ -20,7 +20,7 @@ package wordly
 
 From within the directory, run `go generate`.
 
-```cmd
+```shell
 cd examples/wordly
 go generate
 ```
@@ -70,8 +70,7 @@ wordly
 ├── wordlyapi
 │   └── client-gen.go
 ├── doc.go
-├── integration_test.go
-├── integration-gen_test.go
+├── service_test.go
 ├── service-gen.go
 ├── service.go
 ├── service.yaml
@@ -240,7 +239,7 @@ game = &Game{
 
 ### Step 6: Time to Play!
 
-Include the new microservice in the app in `main/main.go` and run it using `go run` or your IDE.
+The code generator should have included the new microservice in the app in `main/main.go`. Do it manually otherwise.
 
 ```go
 func main() {
@@ -255,13 +254,20 @@ func main() {
 	)
 	app.Add(
         // ...
-    	wordly.NewService(), // <-- Add
+    	wordly.NewService(), // <-- Added
 	)
 	app.Add(
 		httpingress.NewService(),
 	)
 	app.Run()
 }
+```
+
+Run the app using `go run` or your IDE.
+
+```shell
+cd main
+go run main.go
 ```
 
 Go to http://localhost:8080/wordly.example/play and enjoy!

@@ -59,87 +59,103 @@ const Hostname = "smtp.ingress.core"
 var (
 )
 
-// Client is an interface to calling the endpoints of the smtp.ingress.core microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the smtp.ingress.core microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the smtp.ingress.core microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the smtp.ingress.core microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "smtp.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the smtp.ingress.core microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the smtp.ingress.core microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the smtp.ingress.core microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the smtp.ingress.core microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "smtp.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastTrigger is an interface to trigger the events of the smtp.ingress.core microservice.
+// MulticastTrigger is a lightweight proxy for triggering the events of the smtp.ingress.core microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastTrigger creates a new multicast trigger of the smtp.ingress.core microservice.
-func NewMulticastTrigger(caller service.Publisher) *MulticastTrigger {
-	return &MulticastTrigger{
+// NewMulticastTrigger creates a new multicast trigger of events of the smtp.ingress.core microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{
 		svc:  caller,
 		host: "smtp.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this trigger.
-func (_c *MulticastTrigger) ForHost(host string) *MulticastTrigger {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this trigger.
-func (_c *MulticastTrigger) WithOptions(opts ...pub.Option) *MulticastTrigger {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
 // Hook assists in the subscription to the events of the smtp.ingress.core microservice.
@@ -149,17 +165,19 @@ type Hook struct {
 }
 
 // NewHook creates a new hook to the events of the smtp.ingress.core microservice.
-func NewHook(listener service.Subscriber) *Hook {
-	return &Hook{
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{
 		svc:  listener,
 		host: "smtp.ingress.core",
 	}
 }
 
-// ForHost replaces the default hostname of this hook.
-func (_c *Hook) ForHost(host string) *Hook {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (_c Hook) ForHost(host string) Hook {
+	return Hook{
+		svc:  _c.svc,
+		host: host,
+	}
 }
 
 // OnIncomingEmailIn are the input arguments of OnIncomingEmail.
@@ -187,7 +205,7 @@ func (_out *OnIncomingEmailResponse) Get() (err error) {
 /*
 OnIncomingEmail is triggered when a new email message is received.
 */
-func (_c *MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Email) <-chan *OnIncomingEmailResponse {
+func (_c MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Email) <-chan *OnIncomingEmailResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-incoming-email`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`mailMessage`: mailMessage,
@@ -228,10 +246,20 @@ func (_c *MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Em
 /*
 OnIncomingEmail is triggered when a new email message is received.
 */
-func (_c *Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Email) (err error)) error {
+func (_c Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Email) (err error)) error {
 	doOnIncomingEmail := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnIncomingEmailIn
 		var o OnIncomingEmailOut
+		if strings.ContainsAny(`:417/on-incoming-email`, "{}") {
+			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-incoming-email`), r.URL.Path)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = httpx.DecodeDeepObject(pathArgs, &i)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		err := httpx.ParseRequestData(r, &i)
 		if err != nil {
 			return errors.Trace(err)

@@ -71,6 +71,7 @@ func ResolveURL(base string, relative string) (resolved string, err error) {
 }
 
 // ParseURL returns a canonical version of the parsed URL with the scheme and port filled in if omitted.
+// This method should only be used on internal URLs because it limits the hostname to certain specifications.
 func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	if strings.Contains(rawURL, "`") {
 		return nil, errors.New("backtick not allowed in URL '%s'", rawURL)

@@ -21,7 +21,7 @@ package myservice
 
 The next step is to create a `service.yaml` file which will be used to specify the functionality of the microservice. If the directory contains only a `doc.go` or an empty `service.yaml`, running `go generate` inside the directory will automatically populate `service.yaml`.
 
-```cmd
+```shell
 go generate
 ```
 

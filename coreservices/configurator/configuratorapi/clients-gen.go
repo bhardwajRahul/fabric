@@ -65,60 +65,70 @@ var (
 	URLOfSync443 = httpx.JoinHostAndPath(Hostname, `:443/sync`)
 )
 
-// Client is an interface to calling the endpoints of the configurator.core microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the configurator.core microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the configurator.core microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the configurator.core microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "configurator.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the configurator.core microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the configurator.core microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the configurator.core microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the configurator.core microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "configurator.core",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
 // ValuesIn are the input arguments of Values.
@@ -148,7 +158,7 @@ func (_out *ValuesResponse) Get() (values map[string]string, err error) {
 /*
 Values returns the values associated with the specified config property names for the caller microservice.
 */
-func (_c *MulticastClient) Values(ctx context.Context, names []string) <-chan *ValuesResponse {
+func (_c MulticastClient) Values(ctx context.Context, names []string) <-chan *ValuesResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`names`: names,
@@ -189,7 +199,7 @@ func (_c *MulticastClient) Values(ctx context.Context, names []string) <-chan *V
 /*
 Values returns the values associated with the specified config property names for the caller microservice.
 */
-func (_c *Client) Values(ctx context.Context, names []string) (values map[string]string, err error) {
+func (_c Client) Values(ctx context.Context, names []string) (values map[string]string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -247,7 +257,7 @@ func (_out *RefreshResponse) Get() (err error) {
 Refresh tells all microservices to contact the configurator and refresh their configs.
 An error is returned if any of the values sent to the microservices fails validation.
 */
-func (_c *MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse {
+func (_c MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
@@ -287,7 +297,7 @@ func (_c *MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse 
 Refresh tells all microservices to contact the configurator and refresh their configs.
 An error is returned if any of the values sent to the microservices fails validation.
 */
-func (_c *Client) Refresh(ctx context.Context) (err error) {
+func (_c Client) Refresh(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -343,7 +353,7 @@ func (_out *SyncRepoResponse) Get() (err error) {
 /*
 SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (_c *MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncRepoResponse {
+func (_c MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncRepoResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`timestamp`: timestamp,
@@ -386,7 +396,7 @@ func (_c *MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, va
 /*
 SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (_c *Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+func (_c Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -447,7 +457,7 @@ func (_out *Values443Response) Get() (values map[string]string, err error) {
 /*
 Values443 is deprecated.
 */
-func (_c *MulticastClient) Values443(ctx context.Context, names []string) <-chan *Values443Response {
+func (_c MulticastClient) Values443(ctx context.Context, names []string) <-chan *Values443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`names`: names,
@@ -488,7 +498,7 @@ func (_c *MulticastClient) Values443(ctx context.Context, names []string) <-chan
 /*
 Values443 is deprecated.
 */
-func (_c *Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
+func (_c Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -545,7 +555,7 @@ func (_out *Refresh443Response) Get() (err error) {
 /*
 Refresh443 is deprecated.
 */
-func (_c *MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Response {
+func (_c MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
@@ -584,7 +594,7 @@ func (_c *MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Res
 /*
 Refresh443 is deprecated.
 */
-func (_c *Client) Refresh443(ctx context.Context) (err error) {
+func (_c Client) Refresh443(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -640,7 +650,7 @@ func (_out *Sync443Response) Get() (err error) {
 /*
 Sync443 is deprecated.
 */
-func (_c *MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *Sync443Response {
+func (_c MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *Sync443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`timestamp`: timestamp,
@@ -683,7 +693,7 @@ func (_c *MulticastClient) Sync443(ctx context.Context, timestamp time.Time, val
 /*
 Sync443 is deprecated.
 */
-func (_c *Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+func (_c Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{

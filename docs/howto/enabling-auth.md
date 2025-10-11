@@ -71,7 +71,7 @@ functions:
 
 [Port](../tech/ports.md) `:444` is used in order to keep these endpoints internal.
 
-Remember to add the custom issuer to the main app.
+Remember to include the custom issuer in the main app if not already done so by the code generator.
 
 ```go
 app.Add(

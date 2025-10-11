@@ -461,6 +461,10 @@ func (f Frame) SetLocality(locality string) {
 
 // HeaderActor associates an actor with the frame.
 func (f Frame) SetActor(actor any) error {
+	if utils.IsNil(actor) {
+		f.h.Del(HeaderActor)
+		return nil
+	}
 	buf, err := json.Marshal(actor)
 	if err != nil {
 		return errors.Trace(err)

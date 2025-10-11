@@ -78,87 +78,103 @@ var (
 	URLOfHello = httpx.JoinHostAndPath(Hostname, `:443/hello`)
 )
 
-// Client is an interface to calling the endpoints of the codegen.test microservice.
-// This simple version is for unicast calls.
+// Client is a lightweight proxy for making unicast calls to the codegen.test microservice.
 type Client struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewClient creates a new unicast client to the codegen.test microservice.
-func NewClient(caller service.Publisher) *Client {
-	return &Client{
+// NewClient creates a new unicast client proxy to the codegen.test microservice.
+func NewClient(caller service.Publisher) Client {
+	return Client{
 		svc:  caller,
 		host: "codegen.test",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *Client) ForHost(host string) *Client {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c Client) ForHost(host string) Client {
+	return Client{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *Client) WithOptions(opts ...pub.Option) *Client {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c Client) WithOptions(opts ...pub.Option) Client {
+	return Client{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastClient is an interface to calling the endpoints of the codegen.test microservice.
-// This advanced version is for multicast calls.
+// MulticastClient is a lightweight proxy for making multicast calls to the codegen.test microservice.
 type MulticastClient struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastClient creates a new multicast client to the codegen.test microservice.
-func NewMulticastClient(caller service.Publisher) *MulticastClient {
-	return &MulticastClient{
+// NewMulticastClient creates a new multicast client proxy to the codegen.test microservice.
+func NewMulticastClient(caller service.Publisher) MulticastClient {
+	return MulticastClient{
 		svc:  caller,
 		host: "codegen.test",
 	}
 }
 
-// ForHost replaces the default hostname of this client.
-func (_c *MulticastClient) ForHost(host string) *MulticastClient {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the client with a different hostname to be applied to requests.
+func (_c MulticastClient) ForHost(host string) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this client.
-func (_c *MulticastClient) WithOptions(opts ...pub.Option) *MulticastClient {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the client with options to be applied to requests.
+func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
+	return MulticastClient{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
-// MulticastTrigger is an interface to trigger the events of the codegen.test microservice.
+// MulticastTrigger is a lightweight proxy for triggering the events of the codegen.test microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
 	host string
 	opts []pub.Option
 }
 
-// NewMulticastTrigger creates a new multicast trigger of the codegen.test microservice.
-func NewMulticastTrigger(caller service.Publisher) *MulticastTrigger {
-	return &MulticastTrigger{
+// NewMulticastTrigger creates a new multicast trigger of events of the codegen.test microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{
 		svc:  caller,
 		host: "codegen.test",
 	}
 }
 
-// ForHost replaces the default hostname of this trigger.
-func (_c *MulticastTrigger) ForHost(host string) *MulticastTrigger {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
 }
 
-// WithOptions applies options to requests made by this trigger.
-func (_c *MulticastTrigger) WithOptions(opts ...pub.Option) *MulticastTrigger {
-	_c.opts = append(_c.opts, opts...)
-	return _c
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
 }
 
 // Hook assists in the subscription to the events of the codegen.test microservice.
@@ -168,21 +184,23 @@ type Hook struct {
 }
 
 // NewHook creates a new hook to the events of the codegen.test microservice.
-func NewHook(listener service.Subscriber) *Hook {
-	return &Hook{
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{
 		svc:  listener,
 		host: "codegen.test",
 	}
 }
 
-// ForHost replaces the default hostname of this hook.
-func (_c *Hook) ForHost(host string) *Hook {
-	_c.host = host
-	return _c
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (_c Hook) ForHost(host string) Hook {
+	return Hook{
+		svc:  _c.svc,
+		host: host,
+	}
 }
 
 // errChan returns a response channel with a single error response.
-func (_c *MulticastClient) errChan(err error) <-chan *pub.Response {
+func (_c MulticastClient) errChan(err error) <-chan *pub.Response {
 	ch := make(chan *pub.Response, 1)
 	ch <- pub.NewErrorResponse(err)
 	close(ch)
@@ -190,296 +208,46 @@ func (_c *MulticastClient) errChan(err error) <-chan *pub.Response {
 }
 
 /*
-Echo_Get performs a GET request to the Echo endpoint.
-
 Echo tests a typical web handler.
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) Echo_Get(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfEcho, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-Echo_Get performs a GET request to the Echo endpoint.
-
-Echo tests a typical web handler.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) Echo_Get(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfEcho, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Echo_Post performs a POST request to the Echo endpoint.
-
-Echo tests a typical web handler.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) Echo_Post(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfEcho, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
+func (_c Client) Echo(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "POST"
 	}
 	res, err = _c.svc.Request(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOfEcho),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-Echo_Post performs a POST request to the Echo endpoint.
-
-Echo tests a typical web handler.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-If the body if of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-If a content type is not explicitly provided, an attempt will be made to derive it from the body.
-*/
-func (_c *MulticastClient) Echo_Post(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfEcho, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
-		pub.ContentType(contentType),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
+	return res, err // No trace
 }
 
 /*
 Echo tests a typical web handler.
 
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) Echo(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfEcho, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-Echo tests a typical web handler.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) Echo(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfEcho, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-MultiValueHeaders_Get performs a GET request to the MultiValueHeaders endpoint.
-
-MultiValueHeaders tests a passing in and returning headers with multiple values.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) MultiValueHeaders_Get(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfMultiValueHeaders, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-MultiValueHeaders_Get performs a GET request to the MultiValueHeaders endpoint.
-
-MultiValueHeaders tests a passing in and returning headers with multiple values.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) MultiValueHeaders_Get(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfMultiValueHeaders, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-MultiValueHeaders_Post performs a POST request to the MultiValueHeaders endpoint.
-
-MultiValueHeaders tests a passing in and returning headers with multiple values.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) MultiValueHeaders_Post(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfMultiValueHeaders, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
-		pub.ContentType(contentType),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-MultiValueHeaders_Post performs a POST request to the MultiValueHeaders endpoint.
-
-MultiValueHeaders tests a passing in and returning headers with multiple values.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-If the body if of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-If a content type is not explicitly provided, an attempt will be made to derive it from the body.
-*/
-func (_c *MulticastClient) MultiValueHeaders_Post(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfMultiValueHeaders, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
+func (_c MulticastClient) Echo(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOfEcho),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -489,178 +257,44 @@ func (_c *MulticastClient) MultiValueHeaders_Post(ctx context.Context, url strin
 /*
 MultiValueHeaders tests a passing in and returning headers with multiple values.
 
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body if of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) MultiValueHeaders(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfMultiValueHeaders, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
+func (_c Client) MultiValueHeaders(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "POST"
 	}
 	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
+		ctx,
+		pub.Method(method),
+		pub.URL(URLOfMultiValueHeaders),
+		pub.RelativeURL(relURL),
+		pub.ContentType(contentType),
+		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
 MultiValueHeaders tests a passing in and returning headers with multiple values.
 
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) MultiValueHeaders(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfMultiValueHeaders, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-WebPathArguments_Get performs a GET request to the WebPathArguments endpoint.
-
-WebPathArguments tests path arguments in web handlers.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) WebPathArguments_Get(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfWebPathArguments, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-WebPathArguments_Get performs a GET request to the WebPathArguments endpoint.
-
-WebPathArguments tests path arguments in web handlers.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) WebPathArguments_Get(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfWebPathArguments, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method("GET"),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-WebPathArguments_Post performs a POST request to the WebPathArguments endpoint.
-
-WebPathArguments tests path arguments in web handlers.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) WebPathArguments_Post(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfWebPathArguments, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
-		pub.ContentType(contentType),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-WebPathArguments_Post performs a POST request to the WebPathArguments endpoint.
-
-WebPathArguments tests path arguments in web handlers.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-If the body if of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-If a content type is not explicitly provided, an attempt will be made to derive it from the body.
-*/
-func (_c *MulticastClient) WebPathArguments_Post(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfWebPathArguments, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
+func (_c MulticastClient) MultiValueHeaders(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOfMultiValueHeaders),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -670,64 +304,46 @@ func (_c *MulticastClient) WebPathArguments_Post(ctx context.Context, url string
 /*
 WebPathArguments tests path arguments in web handlers.
 
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body if of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) WebPathArguments(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfWebPathArguments, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
+func (_c Client) WebPathArguments(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "POST"
 	}
 	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
+		ctx,
+		pub.Method(method),
+		pub.URL(URLOfWebPathArguments),
+		pub.RelativeURL(relURL),
+		pub.ContentType(contentType),
+		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
 WebPathArguments tests path arguments in web handlers.
 
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body if of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *MulticastClient) WebPathArguments(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfWebPathArguments, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
+func (_c MulticastClient) WebPathArguments(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
+		pub.Method(method),
+		pub.URL(URLOfWebPathArguments),
+		pub.RelativeURL(relURL),
+		pub.ContentType(contentType),
+		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
 }
@@ -735,428 +351,108 @@ func (_c *MulticastClient) WebPathArguments(ctx context.Context, r *http.Request
 /*
 UnnamedWebPathArguments tests path arguments that are not named.
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c *Client) UnnamedWebPathArguments(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfUnnamedWebPathArguments, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method(`GET`),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-UnnamedWebPathArguments tests path arguments that are not named.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) UnnamedWebPathArguments(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfUnnamedWebPathArguments, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(`GET`),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-UnnamedWebPathArguments_Do performs a customized request to the UnnamedWebPathArguments endpoint.
-
-UnnamedWebPathArguments tests path arguments that are not named.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) UnnamedWebPathArguments_Do(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	if r.Method != `GET` {
-		return nil, errors.New("", http.StatusNotFound)
-	}
-	url, err := httpx.ResolveURL(URLOfUnnamedWebPathArguments, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-UnnamedWebPathArguments_Do performs a customized request to the UnnamedWebPathArguments endpoint.
-
-UnnamedWebPathArguments tests path arguments that are not named.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) UnnamedWebPathArguments_Do(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	if r.Method != `GET` {
-		return _c.errChan(errors.New("", http.StatusNotFound))
-	}
-	url, err := httpx.ResolveURL(URLOfUnnamedWebPathArguments, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-DirectoryServer tests service resources given a greedy path argument.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) DirectoryServer(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfDirectoryServer, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		ctx,
-		pub.Method(`GET`),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-DirectoryServer tests service resources given a greedy path argument.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) DirectoryServer(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfDirectoryServer, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(`GET`),
-		pub.URL(url),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-DirectoryServer_Do performs a customized request to the DirectoryServer endpoint.
-
-DirectoryServer tests service resources given a greedy path argument.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) DirectoryServer_Do(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	if r.Method != `GET` {
-		return nil, errors.New("", http.StatusNotFound)
-	}
-	url, err := httpx.ResolveURL(URLOfDirectoryServer, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-DirectoryServer_Do performs a customized request to the DirectoryServer endpoint.
-
-DirectoryServer tests service resources given a greedy path argument.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) DirectoryServer_Do(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	if r.Method != `GET` {
-		return _c.errChan(errors.New("", http.StatusNotFound))
-	}
-	url, err := httpx.ResolveURL(URLOfDirectoryServer, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Hello_Get performs a GET request to the Hello endpoint.
-
-Hello prints hello in the language best matching the request's Accept-Language header.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) Hello_Get(ctx context.Context, url string) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfHello, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+func (_c Client) UnnamedWebPathArguments(ctx context.Context, relURL string) (res *http.Response, err error) {
 	res, err = _c.svc.Request(
 		ctx,
 		pub.Method("GET"),
-		pub.URL(url),
+		pub.URL(URLOfUnnamedWebPathArguments),
+		pub.RelativeURL(relURL),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
-Hello_Get performs a GET request to the Hello endpoint.
+UnnamedWebPathArguments tests path arguments that are not named.
 
-Hello prints hello in the language best matching the request's Accept-Language header.
-
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c *MulticastClient) Hello_Get(ctx context.Context, url string) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfHello, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
+func (_c MulticastClient) UnnamedWebPathArguments(ctx context.Context, relURL string) <-chan *pub.Response {
 	return _c.svc.Publish(
 		ctx,
 		pub.Method("GET"),
-		pub.URL(url),
+		pub.URL(URLOfUnnamedWebPathArguments),
+		pub.RelativeURL(relURL),
 		pub.Options(_c.opts...),
 	)
 }
 
 /*
-Hello_Post performs a POST request to the Hello endpoint.
+DirectoryServer tests service resources given a greedy path argument.
 
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c Client) DirectoryServer(ctx context.Context, relURL string) (res *http.Response, err error) {
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(URLOfDirectoryServer),
+		pub.RelativeURL(relURL),
+		pub.Options(_c.opts...),
+	)
+	return res, err // No trace
+}
+
+/*
+DirectoryServer tests service resources given a greedy path argument.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c MulticastClient) DirectoryServer(ctx context.Context, relURL string) <-chan *pub.Response {
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(URLOfDirectoryServer),
+		pub.RelativeURL(relURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
 Hello prints hello in the language best matching the request's Accept-Language header.
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *Client) Hello_Post(ctx context.Context, url string, contentType string, body any) (res *http.Response, err error) {
-	url, err = httpx.ResolveURL(URLOfHello, url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
+func (_c Client) Hello(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "POST"
 	}
 	res, err = _c.svc.Request(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOfHello),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
+	return res, err // No trace
 }
 
 /*
-Hello_Post performs a POST request to the Hello endpoint.
-
 Hello prints hello in the language best matching the request's Accept-Language header.
 
-If a URL is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
+If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body if of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 If a content type is not explicitly provided, an attempt will be made to derive it from the body.
 */
-func (_c *MulticastClient) Hello_Post(ctx context.Context, url string, contentType string, body any) <-chan *pub.Response {
-	var err error
-	url, err = httpx.ResolveURL(URLOfHello, url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
+func (_c MulticastClient) Hello(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("POST"),
-		pub.URL(url),
+		pub.Method(method),
+		pub.URL(URLOfHello),
+		pub.RelativeURL(relURL),
 		pub.ContentType(contentType),
 		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Hello prints hello in the language best matching the request's Accept-Language header.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *Client) Hello(r *http.Request) (res *http.Response, err error) {
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfHello, r.URL.String())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	res, err = _c.svc.Request(
-		r.Context(),
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
-		pub.Options(_c.opts...),
-	)
-	if err != nil {
-		return nil, err // No trace
-	}
-	return res, err
-}
-
-/*
-Hello prints hello in the language best matching the request's Accept-Language header.
-
-If a request is not provided, it defaults to the URL of the endpoint. Otherwise, it is resolved relative to the URL of the endpoint.
-*/
-func (_c *MulticastClient) Hello(ctx context.Context, r *http.Request) <-chan *pub.Response {
-	var err error
-	if r == nil {
-		r, err = http.NewRequest(`GET`, "", nil)
-		if err != nil {
-			return _c.errChan(errors.Trace(err))
-		}
-	}
-	url, err := httpx.ResolveURL(URLOfHello, r.URL.String())
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	url, err = httpx.FillPathArguments(url)
-	if err != nil {
-		return _c.errChan(errors.Trace(err))
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(r.Method),
-		pub.URL(url),
-		pub.CopyHeaders(r.Header),
-		pub.Body(r.Body),
 		pub.Options(_c.opts...),
 	)
 }
@@ -1193,7 +489,7 @@ func (_out *StringCutResponse) Get() (before string, after string, found bool, e
 /*
 StringCut tests a function that takes primitive input arguments and returns primitive values.
 */
-func (_c *MulticastClient) StringCut(ctx context.Context, s string, sep string) <-chan *StringCutResponse {
+func (_c MulticastClient) StringCut(ctx context.Context, s string, sep string) <-chan *StringCutResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/string-cut`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`s`: s,
@@ -1236,7 +532,7 @@ func (_c *MulticastClient) StringCut(ctx context.Context, s string, sep string) 
 /*
 StringCut tests a function that takes primitive input arguments and returns primitive values.
 */
-func (_c *Client) StringCut(ctx context.Context, s string, sep string) (before string, after string, found bool, err error) {
+func (_c Client) StringCut(ctx context.Context, s string, sep string) (before string, after string, found bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/string-cut`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1301,7 +597,7 @@ func (_out *PointDistanceResponse) Get() (d float64, err error) {
 /*
 PointDistance tests a function that takes non-primitive input arguments.
 */
-func (_c *MulticastClient) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) <-chan *PointDistanceResponse {
+func (_c MulticastClient) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) <-chan *PointDistanceResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/point-distance`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`p1`: p1,
@@ -1350,7 +646,7 @@ func (_c *MulticastClient) PointDistance(ctx context.Context, p1 XYCoord, p2 *XY
 /*
 PointDistance tests a function that takes non-primitive input arguments.
 */
-func (_c *Client) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) (d float64, err error) {
+func (_c Client) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) (d float64, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/point-distance`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1418,7 +714,7 @@ func (_out *ShiftPointResponse) Get() (shifted *XYCoord, err error) {
 /*
 ShiftPoint tests passing pointers of non-primitive types.
 */
-func (_c *MulticastClient) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) <-chan *ShiftPointResponse {
+func (_c MulticastClient) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) <-chan *ShiftPointResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/shift-point`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`p`: p,
@@ -1463,7 +759,7 @@ func (_c *MulticastClient) ShiftPoint(ctx context.Context, p *XYCoord, x float64
 /*
 ShiftPoint tests passing pointers of non-primitive types.
 */
-func (_c *Client) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) (shifted *XYCoord, err error) {
+func (_c Client) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) (shifted *XYCoord, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/shift-point`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1528,7 +824,7 @@ func (_out *LinesIntersectionResponse) Get() (b bool, err error) {
 /*
 LinesIntersection tests nested non-primitive types.
 */
-func (_c *MulticastClient) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) <-chan *LinesIntersectionResponse {
+func (_c MulticastClient) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) <-chan *LinesIntersectionResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/lines-intersection`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`l1`: l1,
@@ -1571,7 +867,7 @@ func (_c *MulticastClient) LinesIntersection(ctx context.Context, l1 XYLine, l2 
 /*
 LinesIntersection tests nested non-primitive types.
 */
-func (_c *Client) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) (b bool, err error) {
+func (_c Client) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) (b bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/lines-intersection`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1633,7 +929,7 @@ func (_out *EchoAnythingResponse) Get() (echoed any, err error) {
 /*
 EchoAnything tests arguments of type any.
 */
-func (_c *MulticastClient) EchoAnything(ctx context.Context, original any) <-chan *EchoAnythingResponse {
+func (_c MulticastClient) EchoAnything(ctx context.Context, original any) <-chan *EchoAnythingResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`original`: original,
@@ -1674,7 +970,7 @@ func (_c *MulticastClient) EchoAnything(ctx context.Context, original any) <-cha
 /*
 EchoAnything tests arguments of type any.
 */
-func (_c *Client) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
+func (_c Client) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1740,7 +1036,7 @@ SubArrayRange tests sending arguments as the entire request and response bodies.
 An httpRequestBody argument allows sending other arguments via query or path.
 An httpResponseBody argument prevents returning additional values, except for the status code.
 */
-func (_c *MulticastClient) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) <-chan *SubArrayRangeResponse {
+func (_c MulticastClient) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) <-chan *SubArrayRangeResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sub-array-range/{max}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`min`: min,
@@ -1793,7 +1089,7 @@ SubArrayRange tests sending arguments as the entire request and response bodies.
 An httpRequestBody argument allows sending other arguments via query or path.
 An httpResponseBody argument prevents returning additional values, except for the status code.
 */
-func (_c *Client) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) (httpResponseBody []int, httpStatusCode int, err error) {
+func (_c Client) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) (httpResponseBody []int, httpStatusCode int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sub-array-range/{max}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1865,7 +1161,7 @@ func (_out *SumTwoIntegersResponse) Get() (sum int, httpStatusCode int, err erro
 /*
 SumTwoIntegers tests returning a status code from a function.
 */
-func (_c *MulticastClient) SumTwoIntegers(ctx context.Context, x int, y int) <-chan *SumTwoIntegersResponse {
+func (_c MulticastClient) SumTwoIntegers(ctx context.Context, x int, y int) <-chan *SumTwoIntegersResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sum-two-integers`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`x`: x,
@@ -1909,7 +1205,7 @@ func (_c *MulticastClient) SumTwoIntegers(ctx context.Context, x int, y int) <-c
 /*
 SumTwoIntegers tests returning a status code from a function.
 */
-func (_c *Client) SumTwoIntegers(ctx context.Context, x int, y int) (sum int, httpStatusCode int, err error) {
+func (_c Client) SumTwoIntegers(ctx context.Context, x int, y int) (sum int, httpStatusCode int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sum-two-integers`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -1975,7 +1271,7 @@ func (_out *FunctionPathArgumentsResponse) Get() (joined string, err error) {
 /*
 FunctionPathArguments tests path arguments in functions.
 */
-func (_c *MulticastClient) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) <-chan *FunctionPathArgumentsResponse {
+func (_c MulticastClient) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) <-chan *FunctionPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`named`: named,
@@ -2026,7 +1322,7 @@ func (_c *MulticastClient) FunctionPathArguments(ctx context.Context, named stri
 /*
 FunctionPathArguments tests path arguments in functions.
 */
-func (_c *Client) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) (joined string, err error) {
+func (_c Client) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2096,7 +1392,7 @@ func (_out *NonStringPathArgumentsResponse) Get() (joined string, err error) {
 /*
 NonStringPathArguments tests path arguments that are not strings.
 */
-func (_c *MulticastClient) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) <-chan *NonStringPathArgumentsResponse {
+func (_c MulticastClient) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) <-chan *NonStringPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`named`: named,
@@ -2147,7 +1443,7 @@ func (_c *MulticastClient) NonStringPathArguments(ctx context.Context, named int
 /*
 NonStringPathArguments tests path arguments that are not strings.
 */
-func (_c *Client) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) (joined string, err error) {
+func (_c Client) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2217,7 +1513,7 @@ func (_out *UnnamedFunctionPathArgumentsResponse) Get() (joined string, err erro
 /*
 UnnamedFunctionPathArguments tests path arguments that are not named.
 */
-func (_c *MulticastClient) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) <-chan *UnnamedFunctionPathArgumentsResponse {
+func (_c MulticastClient) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) <-chan *UnnamedFunctionPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`path1`: path1,
@@ -2268,7 +1564,7 @@ func (_c *MulticastClient) UnnamedFunctionPathArguments(ctx context.Context, pat
 /*
 UnnamedFunctionPathArguments tests path arguments that are not named.
 */
-func (_c *Client) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) (joined string, err error) {
+func (_c Client) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2336,7 +1632,7 @@ func (_out *PathArgumentsPriorityResponse) Get() (echo string, err error) {
 /*
 PathArgumentsPriority tests the priority of path arguments in functions.
 */
-func (_c *MulticastClient) PathArgumentsPriority(ctx context.Context, foo string) <-chan *PathArgumentsPriorityResponse {
+func (_c MulticastClient) PathArgumentsPriority(ctx context.Context, foo string) <-chan *PathArgumentsPriorityResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/path-arguments-priority/{foo}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`foo`: foo,
@@ -2377,7 +1673,7 @@ func (_c *MulticastClient) PathArgumentsPriority(ctx context.Context, foo string
 /*
 PathArgumentsPriority tests the priority of path arguments in functions.
 */
-func (_c *Client) PathArgumentsPriority(ctx context.Context, foo string) (echo string, err error) {
+func (_c Client) PathArgumentsPriority(ctx context.Context, foo string) (echo string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/path-arguments-priority/{foo}`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2436,7 +1732,7 @@ func (_out *WhatTimeIsItResponse) Get() (t time.Time, err error) {
 /*
 WhatTimeIsIt tests shifting the clock.
 */
-func (_c *MulticastClient) WhatTimeIsIt(ctx context.Context) <-chan *WhatTimeIsItResponse {
+func (_c MulticastClient) WhatTimeIsIt(ctx context.Context) <-chan *WhatTimeIsItResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/what-time-is-it`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
@@ -2475,7 +1771,7 @@ func (_c *MulticastClient) WhatTimeIsIt(ctx context.Context) <-chan *WhatTimeIsI
 /*
 WhatTimeIsIt tests shifting the clock.
 */
-func (_c *Client) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
+func (_c Client) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/what-time-is-it`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2530,7 +1826,7 @@ func (_out *AuthzRequiredResponse) Get() (err error) {
 /*
 AuthzRequired tests authorization.
 */
-func (_c *MulticastClient) AuthzRequired(ctx context.Context) <-chan *AuthzRequiredResponse {
+func (_c MulticastClient) AuthzRequired(ctx context.Context) <-chan *AuthzRequiredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 	})
@@ -2569,7 +1865,7 @@ func (_c *MulticastClient) AuthzRequired(ctx context.Context) <-chan *AuthzRequi
 /*
 AuthzRequired tests authorization.
 */
-func (_c *Client) AuthzRequired(ctx context.Context) (err error) {
+func (_c Client) AuthzRequired(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
@@ -2629,7 +1925,7 @@ func (_out *OnDiscoveredResponse) Get() (q XYCoord, m int, err error) {
 /*
 OnDiscovered tests firing events.
 */
-func (_c *MulticastTrigger) OnDiscovered(ctx context.Context, p XYCoord, n int) <-chan *OnDiscoveredResponse {
+func (_c MulticastTrigger) OnDiscovered(ctx context.Context, p XYCoord, n int) <-chan *OnDiscoveredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-discovered`)
 	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
 		`p`: p,
@@ -2672,10 +1968,20 @@ func (_c *MulticastTrigger) OnDiscovered(ctx context.Context, p XYCoord, n int) 
 /*
 OnDiscovered tests firing events.
 */
-func (_c *Hook) OnDiscovered(handler func(ctx context.Context, p XYCoord, n int) (q XYCoord, m int, err error)) error {
+func (_c Hook) OnDiscovered(handler func(ctx context.Context, p XYCoord, n int) (q XYCoord, m int, err error)) error {
 	doOnDiscovered := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnDiscoveredIn
 		var o OnDiscoveredOut
+		if strings.ContainsAny(`:417/on-discovered`, "{}") {
+			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-discovered`), r.URL.Path)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = httpx.DecodeDeepObject(pathArgs, &i)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 		err := httpx.ParseRequestData(r, &i)
 		if err != nil {
 			return errors.Trace(err)

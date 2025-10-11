@@ -308,5 +308,14 @@ Note: These milestones are maintained in separate branches in order to demonstra
 [Milestone 37](https://github.com/microbus-io/fabric/tree/milestone/37):
 
 - Bootstrapping a new project using the code generator
-- Code generator inserts new microservices to the main app
+- Code generator inserts new microservices to the main app automatically
 - Updated dependencies to latest versions
+
+[Milestone 38](https://github.com/microbus-io/fabric/tree/milestone/38):
+
+- Revamped the code-generated testing harness
+- Modified client signatures of web endpoints
+- Modified clients to be passed by value rather than with a pointer
+- New pub options: Actor and RelativeURL
+- Adjusted order of applying path, body and query args
+- Improved code generator to not require insertion point markers in the code

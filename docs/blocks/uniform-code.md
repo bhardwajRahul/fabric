@@ -16,8 +16,7 @@ The code generator creates numerous files and subdirectories in the directory of
 │   └── mock-gen.go
 ├── resources
 │   └── embed-gen.go
-├── integration_test.go
-├── integration-gen_test.go
+├── service_test.go
 ├── service-gen.go
 ├── service.go
 ├── service.yaml
@@ -33,13 +32,13 @@ The `{name}api` directory (and package) defines the `Client` and `MulticastClien
 
 The `intermediate` directory (and package) defines the `Intermediate` and the `Mock`. The `Intermediate` serves as the base of the microservice via anonymous inclusion and in turn extends the [`Connector`](../structure/connector.md). The `Mock` is a mockable stub of the microservices that can be used in [integration testing](../blocks/integration-testing.md) when a live version of the microservice cannot.
 
-`integration-gen_test.go` is a testing harness that facilitates the implementation of integration tests, which are expected to be implemented in `integration_test.go`
+A test harness is created in `service_test.go` for each testable web handler, functional endpoint, event, event sink ticker, config callback and metric callback of the microservice. The logic of each test is left to the solution developer to implement.
 
 The `resources` directory is a place to put [static files to be embedded](../blocks/embedded-res.md) into the executable of the microservice. Templates, images and scripts are some examples of what can potentially be embedded.
 
 `service-gen.go` primarily includes the function to create a `NewService`.
 
-`service.go` is where solution developers are expected to introduce the business logic of the microservice. `service.go` implements `Service`, which extends `Intermediate` as mentioned earlier. Most of the tools that a microservice needs are available through the receiver `(svc *Service)` which points to the `Intermediate` and by extension the `Connector`. It include the methods of the `Connector` as well as type-specific methods defined in the `Intermediate`.
+`service.go` is where the solution developer is expected to introduce the business logic of the microservice. `service.go` implements `Service`, which extends `Intermediate` as mentioned earlier. Most of the tools that a microservice needs are available through the receiver `(svc *Service)` which points to the `Intermediate` and by extension the `Connector`. It include the methods of the `Connector` as well as type-specific methods defined in the `Intermediate`.
 
 ```go
 type Intermediate struct {
@@ -69,6 +68,6 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 }
 ```
 
-`service.yaml` is the input to the code generator.
+`service.yaml` is the input to the code generator. Every microservice starts here.
 
 `version-gen.go` holds the SHA256 of the source code and the auto-incremented version number. `version-gen_test.go` makes sure it is up to date. If the test fails, running `go generate` brings the version up to date.

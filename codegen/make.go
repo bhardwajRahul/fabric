@@ -32,7 +32,7 @@ import (
 )
 
 // makeIntegration creates the integration tests.
-func (gen *Generator) makeIntegration() error {
+func (gen *Generator) makeIntegration() (err error) {
 	gen.Printer.Debug("Generating integration tests")
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
@@ -45,39 +45,19 @@ func (gen *Generator) makeIntegration() error {
 	// Fully qualify the types outside of the API directory
 	gen.Specs.FullyQualifyTypes()
 
-	// integration-gen_test.go
-	fileName := filepath.Join(gen.WorkDir, "integration-gen_test.go")
-	tt, err := LoadTemplate(
-		"service/integration-gen_test.txt",
-		"service/integration-gen_test.functions.txt",
-		"service/integration-gen_test.events.txt",
-		"service/integration-gen_test.webs.txt",
-		"service/integration-gen_test.tickers.txt",
-		"service/integration-gen_test.configs.txt",
-		"service/integration-gen_test.metrics.txt",
-	)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = tt.Overwrite(fileName, gen.Specs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	gen.Printer.Debug("integration-gen_test.go")
-
-	// Create integration_test.go if it doesn't exist
-	fileName = filepath.Join(gen.WorkDir, "integration_test.go")
+	// Create service_test.go if it doesn't exist
+	fileName := filepath.Join(gen.WorkDir, "service_test.go")
 	_, err = os.Stat(fileName)
 	if errors.Is(err, os.ErrNotExist) {
-		tt, err = LoadTemplate("service/integration_test.txt")
+		tt, err := LoadTemplate("service/service_test.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err := tt.Overwrite(fileName, gen.Specs)
+		err = tt.Overwrite(fileName, gen.Specs)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		gen.Printer.Debug("integration_test.go")
+		gen.Printer.Debug("service_test.go")
 	}
 
 	// Scan .go files for existing endpoints
@@ -117,9 +97,9 @@ func (gen *Generator) makeIntegration() error {
 	}
 
 	// Append new handlers
-	fileName = filepath.Join(gen.WorkDir, "integration_test.go")
+	fileName = filepath.Join(gen.WorkDir, "service_test.go")
 	if newTests {
-		tt, err = LoadTemplate("service/integration_test.append.txt")
+		tt, err := LoadTemplate("service/service_test.append.txt")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -131,7 +111,7 @@ func (gen *Generator) makeIntegration() error {
 		gen.Printer.Debug("New tests created")
 		gen.Printer.Indent()
 		for _, h := range gen.Specs.AllHandlers() {
-			if h.Type != "function" && h.Type != "event" && h.Type != "sink" && h.Type != "web" && h.Type != "ticker" {
+			if h.Type != "function" && h.Type != "event" && h.Type != "sink" && h.Type != "web" && h.Type != "ticker" && h.Type != "metric" {
 				continue
 			}
 			if !h.Exists {
@@ -139,6 +119,54 @@ func (gen *Generator) makeIntegration() error {
 			}
 		}
 		gen.Printer.Unindent()
+	}
+
+	// Add imports to new event sources
+	if len(gen.Specs.Sinks) > 0 {
+		content, err := os.ReadFile(fileName)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		modified := false
+		for _, h := range gen.Specs.Sinks {
+			if h.Exists {
+				continue
+			}
+			if bytes.Index(content, []byte(`"`+h.Source+"/"+h.SourceSuffix()+"api"+`"`)) > 0 {
+				// Already imported
+				continue
+			}
+
+			findImportPointer := func() int {
+				p := bytes.Index(content, []byte("\nimport ("))
+				if p < 0 {
+					return -1
+				}
+				q := bytes.Index(content[p:], []byte("\n)"))
+				if q < 0 {
+					return -1
+				}
+				return p + q + 1 // At start of row
+			}
+			p1 := findImportPointer()
+			if p1 < 0 {
+				continue
+			}
+
+			// Add import statement
+			var buf bytes.Buffer
+			buf.Write(content[:p1])
+			buf.Write([]byte("\t\"" + h.Source + "/" + h.SourceSuffix() + "api\"\n"))
+			buf.Write(content[p1:])
+			content = buf.Bytes()
+			modified = true
+		}
+		if modified {
+			err = os.WriteFile(fileName, content, 0666)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 	}
 
 	return nil
@@ -417,6 +445,11 @@ func (gen *Generator) makeImplementation() error {
 			return errors.Trace(err)
 		}
 		gen.Printer.Debug("service.go")
+
+		err = gen.makeAddToMainApp()
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Scan .go files for existing endpoints
@@ -933,9 +966,14 @@ func (gen *Generator) makeVSCode() (err error) {
 
 // makeAddToMainApp adds the microservice to the main app.
 func (gen *Generator) makeAddToMainApp() (err error) {
-	gen.Printer.Debug("Adding microservice to main app")
+	gen.Printer.Debug("Adding to main app")
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
+
+	if !gen.AddToMainApp {
+		gen.Printer.Debug("Skipped")
+		return nil
+	}
 
 	fileName := filepath.Join(gen.ProjectDir, "main/main.go")
 	_, err = os.Stat(fileName)
@@ -959,44 +997,66 @@ func (gen *Generator) makeAddToMainApp() (err error) {
 		return nil
 	}
 
+	findImportPointer := func() int {
+		p := bytes.Index(content, []byte("\nimport ("))
+		if p < 0 {
+			return -1
+		}
+		q := bytes.Index(content[p:], []byte("\n)"))
+		if q < 0 {
+			return -1
+		}
+		return p + q + 1 // At start of row
+	}
+	findNewServicePointer := func() int {
+		p := bytes.Index(content, []byte("httpingress.NewService()"))
+		if p < 0 {
+			p = bytes.Index(content, []byte("\tapp.Run()"))
+		}
+		if p < 0 {
+			return -1
+		}
+		q := bytes.LastIndex(content[:p], []byte("\n\tapp.Add("))
+		if q < 0 {
+			return -1
+		}
+		r := bytes.LastIndex(content[:q], []byte("\n\tapp.Add("))
+		if r < 0 {
+			r = q
+		}
+		s := bytes.Index(content[r:], []byte("\n\t)"))
+		if s < 0 {
+			return -1
+		}
+		return r + s + 1 // At start of row
+	}
+
+	p1 := findImportPointer()
+	p2 := findNewServicePointer()
+	if p1 < 0 || p2 < 0 {
+		gen.Printer.Debug("Insert locations not found")
+		return nil
+	}
+
 	// Add import statement
-	p = bytes.Index(content, []byte("<--IMPORT"))
-	if p < 0 {
-		gen.Printer.Debug("IMPORT marker not found")
-		return nil
-	}
-	q := bytes.LastIndex(content[:p], []byte("\t"))
-	if q < 0 {
-		gen.Printer.Debug("IMPORT marker not found")
-		return nil
-	}
 	var buf1 bytes.Buffer
-	buf1.Write(content[:q])
+	buf1.Write(content[:p1])
 	buf1.Write([]byte("\t\"" + gen.PackagePath + "\"\n"))
-	buf1.Write(content[q:])
+	buf1.Write(content[p1:])
 	content = buf1.Bytes()
+	p2 += len([]byte("\t\"" + gen.PackagePath + "\"\n"))
 
 	// Add shortpackage.NewService
-	p = bytes.Index(content, []byte("<--NEW"))
-	if p < 0 {
-		gen.Printer.Debug("NEW marker not found")
-		return nil
-	}
-	q = bytes.LastIndex(content[:p], []byte("\t\t"))
-	if q < 0 {
-		gen.Printer.Debug("NEW marker not found")
-		return nil
-	}
 	var buf2 bytes.Buffer
-	buf2.Write(content[:q])
+	buf2.Write(content[:p2])
 	buf2.Write([]byte("\t\t" + shortPackageName + ".NewService(),\n"))
-	buf2.Write(content[q:])
+	buf2.Write(content[p2:])
 	content = buf2.Bytes()
 
 	err = os.WriteFile(fileName, content, 0666)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gen.Printer.Debug("%s", gen.PackagePath)
+	gen.Printer.Debug("%s", shortPackageName)
 	return nil
 }

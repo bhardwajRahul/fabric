@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/httpx"
 )
 
 // Request is used to construct an HTTP request that can be sent over the bus.
@@ -59,6 +60,11 @@ func (req *Request) Apply(options ...Option) error {
 			return errors.Trace(err)
 		}
 	}
+	filled, err := httpx.FillPathArguments(req.URL)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	req.URL = filled
 	return nil
 }
 

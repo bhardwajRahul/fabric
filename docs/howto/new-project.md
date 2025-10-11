@@ -6,13 +6,13 @@ Follow these steps to create a new project based on the `Microbus` framework.
 
 Make a directory to hold your projects files.
 
-```cmd
+```shell
 mkdir mysolution
 ```
 
 Init the Go project with the name of the package of your project, for example `github.com/mycompany/mysolution`.
 
-```cmd
+```shell
 cd mysolution
 go mod init github.com/mycompany/mysolution
 ```
@@ -21,11 +21,11 @@ go mod init github.com/mycompany/mysolution
 
 Add `Microbus`'s code generator to `go.mod` using:
 
-```cmd
+```shell
 go get github.com/microbus-io/fabric/codegen
 ```
 
-Create `doc.go` in the root of the project.
+Create `doc.go` in the root of the project next to `go.mod`.
 
 ```go
 package root
@@ -35,7 +35,7 @@ package root
 
 Use the code generator to create the project structure.
 
-```cmd
+```shell
 go generate
 ```
 
@@ -51,7 +51,7 @@ mysolution/
 
 Fetch the dependencies.
 
-```cmd
+```shell
 go mod tidy
 ```
 

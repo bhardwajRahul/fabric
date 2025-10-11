@@ -77,7 +77,7 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 	if secretKey == "" {
 		secretKey = r.URL.Query().Get("secret_key")
 	}
-	if secretKey != svc.SecretKey() {
+	if secretKey != svc.SecretKey() && svc.SecretKey() != "" {
 		return errors.New("incorrect secret key", http.StatusNotFound)
 	}
 

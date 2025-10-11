@@ -101,16 +101,17 @@ metrics:
 	// Generate
 	gen := NewGenerator()
 	gen.WorkDir = dir
+	gen.AddToMainApp = false
 	err = gen.Run()
 	tt.NoError(err)
 
 	// Validate
 	fileContains := func(fileName string, terms ...string) {
-		b, err := os.ReadFile(filepath.Join(dir, fileName))
-		tt.NoError(err, "%s", fileName)
-		body := string(b)
-		for _, term := range terms {
-			tt.Contains(body, term, "%s does not contain '%s'", fileName, term)
+		body, err := os.ReadFile(filepath.Join(dir, fileName))
+		if tt.NoError(err, "%s", fileName) {
+			for _, term := range terms {
+				tt.Contains(body, term, "%s does not contain '%s'", fileName, term)
+			}
 		}
 	}
 
@@ -167,14 +168,16 @@ metrics:
 	)
 
 	ver, err := gen.currentVersion()
-	tt.NoError(err)
-	tt.Equal(1, ver.Version)
+	if tt.NoError(err) {
+		tt.Equal(1, ver.Version)
+	}
 
 	// Second run should be a no op
 	err = gen.Run()
 	tt.NoError(err)
 
 	ver, err = gen.currentVersion()
-	tt.NoError(err)
-	tt.Equal(1, ver.Version)
+	if tt.NoError(err) {
+		tt.Equal(1, ver.Version)
+	}
 }

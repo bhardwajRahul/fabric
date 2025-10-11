@@ -159,10 +159,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.ValuesIn
 	var o configuratorapi.ValuesOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:888/values`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/values`), r.URL.Path)
 		if err != nil {
@@ -172,6 +168,10 @@ func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error 
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Values, err = svc.impl.Values(
 		r.Context(),
@@ -196,10 +196,6 @@ func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error 
 func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.RefreshIn
 	var o configuratorapi.RefreshOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:444/refresh`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/refresh`), r.URL.Path)
 		if err != nil {
@@ -209,6 +205,10 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.Refresh(
 		r.Context(),
@@ -232,10 +232,6 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.SyncRepoIn
 	var o configuratorapi.SyncRepoOut
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:888/sync-repo`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/sync-repo`), r.URL.Path)
 		if err != nil {
@@ -245,6 +241,10 @@ func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.SyncRepo(
 		r.Context(),
@@ -270,10 +270,6 @@ func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) erro
 func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Values443In
 	var o configuratorapi.Values443Out
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/values`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/values`), r.URL.Path)
 		if err != nil {
@@ -283,6 +279,10 @@ func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) err
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	o.Values, err = svc.impl.Values443(
 		r.Context(),
@@ -307,10 +307,6 @@ func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) err
 func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Refresh443In
 	var o configuratorapi.Refresh443Out
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/refresh`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/refresh`), r.URL.Path)
 		if err != nil {
@@ -320,6 +316,10 @@ func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.Refresh443(
 		r.Context(),
@@ -343,10 +343,6 @@ func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Sync443In
 	var o configuratorapi.Sync443Out
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	if strings.ContainsAny(`:443/sync`, "{}") {
 		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/sync`), r.URL.Path)
 		if err != nil {
@@ -356,6 +352,10 @@ func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) error
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	err := httpx.ParseRequestData(r, &i)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	err = svc.impl.Sync443(
 		r.Context(),

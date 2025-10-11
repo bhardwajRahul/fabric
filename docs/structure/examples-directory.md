@@ -17,7 +17,7 @@ configs:
 
 Then run `go generate` to create the `svc.SQL()` method corresponding to the `SQL` configuration property.
 
-```cmd
+```shell
 go generate
 ```
 
@@ -69,7 +69,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 
 This example requires a MariaDB database instance. If you don't already have one installed, you can add it to Docker using:
 
-```cmd
+```shell
 docker pull mariadb
 docker run -p 3306:3306 --name mariadb-1 -e MARIADB_ROOT_PASSWORD=secret1234 -d mariadb
 ```
@@ -78,7 +78,7 @@ Next, create a database named `microbus_examples`.
 
 From the `Exec` panel of the `mariadb-1` container, type:
 
-```cmd
+```shell
 mysql -uroot -psecret1234
 ```
 

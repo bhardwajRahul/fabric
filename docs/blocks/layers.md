@@ -125,5 +125,3 @@ Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pen
 [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
 
 [JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
-
-[Cascadia](https://github.com/andybalholm/cascadia) implements CSS selectors for use with parsed HTML trees produced by Go's `html` package. Used in unit and integration tests, it facilitates assertions against an HTML document. 

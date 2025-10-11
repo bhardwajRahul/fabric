@@ -105,6 +105,7 @@ functions:
 webs:
   - signature: Collect()
     description: Collect returns the latest aggregated metrics.
+    method: GET
 
 # Tickers
 #

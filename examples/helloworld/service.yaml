@@ -147,6 +147,7 @@ sinks:
 webs:
   - signature: HelloWorld()
     description: HelloWorld prints the classic greeting.
+    method: GET
 
 # Tickers
 #

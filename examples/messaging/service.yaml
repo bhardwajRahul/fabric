@@ -103,22 +103,27 @@ functions:
 webs:
   - signature: Home()
     description: Home demonstrates making requests using multicast and unicast request/response patterns.
+    method: GET
   - signature: NoQueue()
     description: |-
       NoQueue demonstrates how the NoQueue subscription option is used to create
       a multicast request/response communication pattern.
       All instances of this microservice will respond to each request.
     queue: none
+    method: GET
   - signature: DefaultQueue()
     description: |-
       DefaultQueue demonstrates how the DefaultQueue subscription option is used to create
       a unicast request/response communication pattern.
       Only one of the instances of this microservice will respond to each request.
     queue: default
+    method: GET
   - signature: CacheLoad()
     description: CacheLoad looks up an element in the distributed cache of the microservice.
+    method: GET
   - signature: CacheStore()
     description: CacheStore stores an element in the distributed cache of the microservice.
+    method: GET
 
 # Tickers
 #

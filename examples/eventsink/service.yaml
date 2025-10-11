@@ -118,9 +118,7 @@ events:
 # actor - Authorization requirements as a boolean expression over actor properties
 sinks:
   - signature: OnAllowRegister(email string) (allow bool)
-    description: |-
-      OnAllowRegister blocks registrations from certain email providers
-      as well as duplicate registrations.
+    description: OnAllowRegister blocks registrations from gmail and hotmail domains.
     event: OnAllowRegister
     source: github.com/microbus-io/fabric/examples/eventsource
   - signature: OnRegistered(email string)

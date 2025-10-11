@@ -13,7 +13,6 @@ The following open source software (OSS) is used or referenced by the `Microbus`
 | [Go YAML](https://github.com/go-yaml/yaml) | MIT License<br>Apache License 2.0 | Copyright (c) 2006-2010 Kirill Simonov<br>Copyright (c) 2011-2019 Canonical Ltd |
 | [MariaDB](https://mariadb.com) | GNU General Public License | Copyright (c) 2018, 2022, MariaDB Corporation. |
 | [JSON Schema](https://github.com/invopop/jsonschema) | MIT License | Copyright (C) 2014 Alec Thomas |
-| [Cascadia](https://github.com/andybalholm/cascadia) | BSD 2-Clause "Simplified" License | Copyright (c) 2011 Andy Balholm. All rights reserved. |
 | [Go Guerilla](https://github.com/phires/go-guerrilla) | MIT License | Copyright (c) 2016 GuerrillaMail.com. |
 | [Letters](https://github.com/mnako/letters) | MIT License | Copyright (c) 2019 Michal Nakoneczny |
 | [JWT](https://github.com/golang-jwt/jwt) | MIT License | Copyright (c) 2012 Dave Grijalva<br>Copyright (c) 2021 golang-jwt maintainers |
@@ -21,7 +20,7 @@ The following open source software (OSS) is used or referenced by the `Microbus`
 ### NATS
 
 ```
-Copyright 2012-2022 The NATS Authors
+Copyright 2012-2025 The NATS Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -202,35 +201,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
-### Cascadia
-
-```
-Copyright (c) 2011 Andy Balholm. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
-
-* Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-* Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 ### Go Guerilla

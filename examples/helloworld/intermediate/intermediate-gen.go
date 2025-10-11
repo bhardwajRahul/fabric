@@ -104,7 +104,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 
 	// Webs
-	svc.Subscribe(`ANY`, `:443/hello-world`, svc.impl.HelloWorld)
+	svc.Subscribe(`GET`, `:443/hello-world`, svc.impl.HelloWorld)
 
 	// Resources file system
 	svc.SetResFS(resources.FS)
@@ -125,7 +125,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 		oapiSvc.Endpoints = append(oapiSvc.Endpoints, &openapi.Endpoint{
 			Type:        `web`,
 			Name:        `HelloWorld`,
-			Method:      `ANY`,
+			Method:      `GET`,
 			Path:        `:443/hello-world`,
 			Summary:     `HelloWorld()`,
 			Description: `HelloWorld prints the classic greeting.`,

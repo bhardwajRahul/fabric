@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/errors"
@@ -406,6 +407,14 @@ func (c *Conn) Subscribe(subject string, handler MsgHandler) (sub *Subscription,
 	c.mux.Unlock()
 
 	return sub, nil
+}
+
+// WaitForSub gives a bit of time for the subscription to be registered with NATS.
+// It is a no op if NATS is not enabled.
+func (c *Conn) WaitForSub() {
+	if c.natsConn != nil {
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // unsubscribe removes interest in the subject of the subscription.

@@ -4,237 +4,207 @@ Thorough testing is an important cornerstone of good software. Testing a microse
 
 ## Testing App
 
-`Microbus` takes a different approach and spins up the actual downstream microservices along with the microservice being tested into a single process. The microservices are collected into an isolated [`Application`](../structure/application.md) that is started up for the duration of running the test suite and shutdown immediately thereafter. The microservices communicate over NATS on a random [plane of communications](../blocks/unicast.md), which keeps them isolated from other test suites that may run in parallel.
+`Microbus` takes a different approach and spins up the actual downstream microservices along with the microservice being tested into a single process. The microservices are collected into an isolated [`Application`](../structure/application.md) that is started up for the duration of running the test and shutdown immediately thereafter. The microservices communicate on a random [plane of communications](../blocks/unicast.md), which keeps them isolated from other tests that may run in parallel.
 
-Mocks can be added to the application when it's impractical to run the actual downstream microservice, for example if that microservice is calling a third-party web service such as a payment processor. The preference however should be to include the actual microservice whenever possible and not rely on mocks. Note that in `Microbus` microservices are mocked rather than clients. The upstream microservice still sends messages over the bus, which are responded to by the mock of the downstream microservice.
+Mocks can be added to the application when it's impractical to run the actual downstream microservice, for example if that microservice is calling a third-party web service such as a payment processor. The preference however should be to include the actual microservice whenever possible and not rely on mocks. Note that in `Microbus` it is the microservices that are mocked rather than the clients. The upstream microservice still sends messages to the downstream, they are just responded to by the mock.
 
 <img src="./integration-testing-1.drawio.svg">
 
 ## Code Generated Test Harness
 
-This is all rather complicated to set up which is where the [code generator](../blocks/codegen.md) comes into the picture and automatically creates a test harness (`integration-gen_test.go`) and placeholder tests (`integration_test.go`) for each of the microservice's endpoints out of the specification of the microservice (`service.yaml`). It is then left for the developer to initialize the testing app and implement the tests.
+This is all rather complicated to set up which is where the [code generator](../blocks/codegen.md) comes into the picture and automatically creates a test harness for each of the microservice's endpoints based on the specification of the microservice (`service.yaml`). It is left for the developer to initialize the testing app and implement the logic of each test.
 
 ### Initializing the Testing App
 
-The code generator prepares the testing app `App` and includes in it the microservice being tested `Svc`. All dependencies on downstream microservices must be added to the app manually, using the `NewService` constructor of that service. During testing, the [configurator](../structure/coreservices-configurator.md) core microservice is disabled and microservices must be configured directly. The `Init` method is a convenient one-statement pattern for initialization. If the microservice under test defines any configuration properties, they are pre-listed commented-out inside a call to `Svc.Init`.
+For each test, the code generator prepares a testing app `app` and includes in it the microservice under test `svc`. Dependencies on downstream microservices should be added to the app manually, using the `NewService` constructor of that service. During testing, the [configurator](../structure/coreservices-configurator.md) core microservice is disabled and microservices must be configured directly. If the microservice under test defines any configuration properties, they are pre-listed commented-out for convenience.
 
 ```go
-// Initialize starts up the testing app.
-func Initialize() (err error) {
-	// Add microservices to the testing app
-	err = App.AddAndStartup(
+func TestMyService_MyEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+	// svc.SetMyConfig(myConfig)
+
+	// Initialize the testers
+	tester := connector.New("myservice.myendpoint.tester")
+	client := myservice.NewClient(tester)
+
+	// Run the testing app
+	app := application.NewTesting()
+	app.Add(
+		// Add microservices or mocks required for this test
+		svc,
+		tester,
 		downstream.NewService().Init(func(svc *downstream.Service) {
-			downstream.SetTimeout(2*time.Minute)
+			downstream.SetKey("abcde")
 		}),
 	)
-	if err != nil {
-		return err
-	}
-	err = App.AddAndStartup(
-		Svc.Init(func(svc *Service) {
-			// Initialize the microservice under test
-			svc.SetNumLines(10)
-		}),
-	)
-	if err != nil {
-		return err
-	}
-	return nil
+	app.RunInTest(t)
+
+	// ...
 }
 ```
 
-The `Init` method at the microservice level, including `Svc.Init` for the service under test, have access to the interface of the individual microservice along with all its customizations.   
+The `Init` method is a convenient one-statement pattern for initialization of a microservice.
 
-### Testing Functions and Event Sinks
+### Testing Functions
 
-For each endpoint, the testing harness `integration-gen_test.go` defines a corresponding test case which invokes the underlying endpoint and provides asserters on the result. In the following example, `Arithmetic` calls `Svc.Arithmetic` behind the scenes and returns an `ArithmeticTestCase` with asserters that are customized for its return values. It only takes a few lines of code to run various test cases against the endpoint.
+A test is generated in `service_test.go` for each corresponding endpoint of the microservice. The recommended test pattern differs based on the type of the endpoint. In the following example, `Arithmetic` is a functional endpoint.
 
 ```go
 func TestCalculator_Arithmetic(t *testing.T) {
-	t.Parallel()
-tt := testarossa.For(t)
-	/*
-		Arithmetic(t, ctx, x, op, y).
-			Expect(xEcho, opEcho, yEcho, result).
-			NoError()
-	*/
-	ctx := Context()
-	Arithmetic(t, ctx, 3, "-", 8).Expect(3, "-", 8, -5)
-	Arithmetic(t, ctx, -9, "+", 9).Expect(-9, "+", 9, 0)
-	Arithmetic(t, ctx, -9, " ", 9).Expect(-9, "+", 9, 0)
-	Arithmetic(t, ctx, 5, "*", 5).Expect(5, "*", 5, 25)
-	Arithmetic(t, ctx, 5, "*", -6).Expect(5, "*", -6, -30)
-	Arithmetic(t, ctx, 15, "/", 5).Expect(15, "/", 5, 3)
-	Arithmetic(t, ctx, 15, "/", 0).Error("zero")
-	Arithmetic(t, ctx, 15, "z", 0).Error("operator")
+	// ...
+
+	t.Run("addition", func(t *testing.T) {
+		tt := testarossa.For(t)
+		result, err := client.Arithmetic(ctx, 5, "+", 6)
+		tt.Expect(result, 11, err, nil)
+	})
+
+	// ...
 }
 ```
 
-Test cases support the following asserters:
+Notice the use of the `client` to call the endpoint of the microservice. Although it is possible to call `svc.Arithmetic` directly, using the client mimics more accurately the call path in a production setting.
 
-* `Expect` - asserts the return values
-* `Error`, `ErrorCode`, `NoError` - assert the error returned
-* `CompletedIn` - assert the execution time
-* `Assert` - custom asserter
-
-They also support a `Get` function that returns the values returned by the call to the underlying endpoint.
-
-```go
-x, op, y, sum, err := Arithmetic(t, ctx, 3, "-", 8).Get()
-```
-
-It is not required to use the provided test cases and asserters. For example, `Arithmetic(t, ctx, 3, "-", 8).Expect(3, "-", 8, -5)` can also be expressed as:
-
-```go
-x, op, y, sum, err := Svc.Arithmetic(ctx, 3, "-", 8)
-if tt.NoError(err) {
-	tt.Equal(3, x)
-	tt.Equal("-", op)
-	tt.Equal(8, y)
-	tt.Equal(-5, sum)
-}
-```
+It is recommended, but not required, to use the `testarossa` asserter.
 
 ### Testing Webs
 
-Raw web endpoints are tested in a similar fashion, except that their asserters are customized for a web request. In the following example, the `Hello` endpoint is method-anostic and can be tested with various HTTP methods. The resulting `HelloTestCase` includes asserters that are tailored to an `http.Response` return value. Note how asserters can be chained.
+Raw web endpoints are tested in a similar fashion, except that assertion is customized for a web request. In the following example, the `Hello` endpoint is method-agnostic and can be tested with various HTTP methods.
 
 ```go
 func TestHello_Hello(t *testing.T) {
-	t.Parallel()
-tt := testarossa.For(t)
-	/*
-		Hello_Get(t, ctx, "").
-			BodyContains(value).
-			NoError()
-		Hello_Post(t, ctx, "", "", body).
-			BodyContains(value).
-			NoError()
-		Hello(t, httpRequest).
-			BodyContains(value).
-			NoError()
-	*/
-	ctx := Context()
-	Hello_Get(t, ctx, "").
-		BodyContains(Svc.Greeting()).
-		BodyNotContains("Maria Chavez")
-	Hello_Get(t, ctx, "?"+httpx.QArgs{"name": "Maria Chavez"}.Encode()).
-		BodyContains(Svc.Greeting()).
-		BodyContains("Maria Chavez")
-	Hello_Post(t, ctx, "", "", httpx.QArgs{"name": "Maria Chavez"}).
-		BodyContains(Svc.Greeting()).
-		BodyContains("Maria Chavez")
-	Hello(t, httpx.MustNewRequestWithContext(ctx, "PATCH", "application/json", `{"name":"Maria Chavez"}`)).
-		BodyContains(Svc.Greeting()).
-		BodyContains("Maria Chavez")
+	// ...
+
+	t.Run("hello", func(t *testing.T) {
+		tt := testarossa.For(t)
+
+		res, err := client.Hello(ctx, "GET", "?name=Maria", "", nil)
+		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+			body, err := io.ReadAll(res.Body)
+			if tt.NoError(err) {
+				tt.Contains(body, "Hello, Maria")
+			}
+		}
+	})
+
+	// ...
 }
 ```
 
-URLs are resolved relative to the URL of the endpoint. The empty URL `""` therefore resolves to the exact URL of the endpoint. A URL starting with `?` is the way to pass query arguments. The example uses `httpx.QArgs` to properly encode the query arguments in the `GET` test case, and to pass in form values in the `POST` example. `httpx.MustNewRequestWithContext` is a thin wrapper of the standard `http.NewRequestWithContext` that panics instead of returning an error.
-
-Available asserters:
-
-* `StatusOK`, `StatusCode` - assert the HTTP response status code
-* `BodyContains`, `BodyNotContains` - assert the HTTP response body content
-* `HeaderExists`, `HeaderNotExists`, `HeaderEqual`, `HeaderNotEqual`,`HeaderContains`, `HeaderNotContains` - assert the headers of the HTTP response
-* `ContentType` - assert the `Content-Type` header of the HTTP response
-* `TagExists`, `TagNotExists`, `TagEqual`, `TagNotEqual`, `TagContains`, `TagNotContains` - parse the HTTP response as HTML and assert HTML tags
-* `Error`, `ErrorCode`, `NoError` - assert the error returned
-* `CompletedIn` - assert the execution time
-* `Assert` - custom asserter
-
-The `Get` function returns the HTTP response and error returned by the call to the underlying endpoint.
-
-```go
-res, err := Hello_Get(t, ctx, "")
-```
+URLs are resolved relative to the URL of the endpoint. The empty URL `""` resolves to the exact URL of the endpoint. A URL that starts with a `?` is the way to pass query arguments.
 
 ### Testing Tickers
 
-[Tickers](../blocks/tickers.md) are disabled during testing in order to avoid the unpredictability of their running schedule. Instead, tickers can be tested manually like other endpoints. Tickers don't take arguments nor return values so the only testing possible is error validation.
+[Tickers](../blocks/tickers.md) are disabled during testing in order to avoid the unpredictability of their running schedule. Instead, tickers have their own dedicated tests.
 
 ```go
 func TestHello_TickTock(t *testing.T) {
-	t.Parallel()
-tt := testarossa.For(t)
-	/*
-		TickTock(t, ctx).
-			NoError()
-	*/
-	ctx := Context()
-	TickTock(t, ctx).NoError()
+	// ...
+
+	t.Run("ticktock_runs", func(t *testing.T) {
+		tt := testarossa.For(t)
+		err := svc.TickTock(ctx)
+		tt.NoError(err)
+	})
+
+	// ...
 }
 ```
-
-Tickers can be also be called inside other tests via `Svc`.
-
-Available asserters:
-
-* `Error`, `ErrorCode`, `NoError` - assert the error returned
-* `CompletedIn` - assert the execution time
-* `Assert` - custom asserter
 
 ### Testing Config Callbacks
 
-Callbacks that handle changes to config property values are similarly tested.
+Callbacks that handle changes to config property values are tested by calling the corresponding setter. The callback will be triggered behind the scenes.
 
 ```go
-func TestExample_OnChangedConnectionString(t *testing.T) {
-	t.Parallel()
-tt := testarossa.For(t)
-	/*
-		OnChangedConnectionString(t, ctx).
-			NoError()
-	*/
-	ctx := Context()
-	OnChangedConnectionString(t, ctx).NoError()
+func TestExample_OnChangedPort(t *testing.T) {
+	// ...
+
+	t.Run("switch_database", func(t *testing.T) {
+		tt := testarossa.For(t)
+		err := svc.SetPort(1234)
+		tt.NoError(err)
+	})
+
+	// ...
 }
 ```
-
-Available asserters:
-
-* `Error`, `ErrorCode`, `NoError` - assert the error returned
-* `CompletedIn` - assert the execution time
-* `Assert` - custom asserter
 
 ### Testing Event Sources
 
-Events are tested through a corresponding event sink. The event test case must be defined prior to the firing of the event, then `Wait`-ed on after the event is triggered. In the following example, `OnAllowRegister` defines the event test case and `Register` fires the event.
+Events require the setting of an event sink and the firing of the event via the appropriate trigger.
+In the following example, `hook.OnRegistered` attaches an event sink to the `tester`, and `trigger.OnRegistered` fires the event.
+An event can be processed by multiple recipients, hence the `range` loop and the check that the response was received from the `tester`.
 
 ```go
-func TestExample_OnAllowRegister(t *testing.T) {
-	// No parallel: event sinks might clash across tests
-	/*
-		OnAllowRegister(t).
-			Expect(email).
-			Return(allow, err)
-	*/
-	ctx := Context()
-	tc := OnAllowRegister(t).
-		Expect("barb@example.com").
-		Return(true, nil)
-	Register(t, ctx, "barb@example.com").Expect(true)
-	tc.Wait()
-	tc = OnAllowRegister(t).
-		Expect("josh@example.com").
-		Return(false, nil)
-	Register(t, ctx, "josh@example.com").Expect(false)
-	tc.Wait()
+func TestExample_OnRegistered(t *testing.T) {
+	// ...
+
+	t.Run("registration_notification", func(t *testing.T) {
+		tt := testarossa.For(t)
+		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+			tt.Expect(email, "peter@example.com")
+			return nil
+		})
+		defer hook.OnRegistered(nil)
+		for e := range trigger.OnRegistered(ctx, "peter@example.com") {
+			if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
+				err := e.Get()
+				tt.NoError(err)
+			}
+		}
+	})
+
+	// ...
 }
 ```
 
-Notice how the assertion of an event is reversed: input arguments of the event are `Expect`-ed whereas its output is `Return`-ed.
+### Testing Event Sinks
 
-`Wait`-ing is necessary for events that fire asynchronously (e.g. using a goroutine) and can be be omitted for synchronous events.
+Event sinks use the trigger of the event source to fire the event, and the service under test as its sink.
+In the following example, `eventsourceTrigger.OnAllowRegister` fires the event to the event sink implemented by `svc.OnAllowRegister`.
+An event can be processed by multiple recipients, hence the `range` loop and the check that the response was received from `svc`.
 
-Available asserters:
+```go
+func TestExample_OnAllowRegister(t *testing.T) {
+	// ...
 
-* `Expect` - asserts the input arguments
-* `Return` - defines the return values of the event sink
-* `Assert` - custom asserter
-* `Wait` - awaits completion of execution
+	t.Run("allowed_registrations", func(t *testing.T) {
+		tt := testarossa.For(t)
+		for e := range eventsourceTrigger.OnAllowRegister(ctx, "user@example.com") {
+			if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
+				allow, err := i.Get()
+				tt.Expect(allow, true, err, nil)
+			}
+		}
+	})
 
-### Skipping Tests
+	// ...
+}
+```
+
+### Testing Metric Callbacks
+
+Callbacks that handle observation of a metric are tested by calling the callback directly via `svc`.
+
+```go
+func TestExample_OnObserveNumOperations(t *testing.T) {
+	// ...
+
+	t.Run("observe_num_operations", func(t *testing.T) {
+		tt := testarossa.For(t)
+		err := svc.OnObserveNumOperations(ctx)
+		tt.NoError(err)
+	})
+
+	// ...
+}
+```
+
+## Skipping Tests
 
 A removed test will be regenerated on the next run of the code generator, so disabling a test is best achieved by placing a call to `t.Skip()` along with an explanation of why the test was skipped.
 
@@ -244,10 +214,9 @@ func TestEventsink_OnRegistered(t *testing.T) {
 }
 ```
 
-### Parallelism
+## Parallelism
 
-The code generator specifies to run all tests (except for events) in parallel by default. The assumption is that tests written in a single test suite are implemented as to not interfere with one another. Commenting out `t.Parallel()
-tt := testarossa.For(t)` runs that test separately from other tests, however the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
+The code generator specifies to run all tests in parallel. The assumption is that tests are implemented as to not interfere with one another. Comment out `t.Parallel()` to run that test separately from other tests. Be advised that the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
 
 ## Mocking
 
@@ -256,55 +225,31 @@ Sometimes, using the actual microservice is not possible because it depends on a
 In order to more easily mock microservices, the code generator creates a `Mock` for every microservice. This mock includes type-safe methods for mocking all the endpoints of the microservice. If mocking is going to be the same for all tests, the mock can be permanently included in the application in the initialization phase.
 
 ```go
-// Initialize starts up the testing app.
-func Initialize() error {
-	// Add microservices to the testing app
-	err = App.AddAndStartup(
-		Svc.Init(func(svc *Service) {
-			// Initialize the microservice under test
-			svc.SetNumLines(10),
-		}),
+func TestPayment_ChargeUser(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("payment.chargeuser.tester")
+	client := payment.NewClient(tester)
+
+	// Run the testing app
+	app := application.NewTesting()
+	app.Add(
+		// Add microservices or mocks required for this test
+		svc,
+		tester,
 		webpay.NewMock().
 			MockCharge(func(ctx context.Context, userID string, amount int) (success bool, balance int, err error) {
 				return true, 100, nil
 			}),
 	)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-```
+	app.RunInTest(t)
 
-If mocking is going to be different for individual tests, a mock should be temporarily joined to the app in each relevant test instead. More likely than not, these tests should not run in parallel. In the following fictitious example, the `ChargeUser` endpoint of the `payment` microservice is calling a downstream microservice `webpay` that wraps the functionality of a third-party payment processor cloud service. `webpay` is mocked to fail payments over $200 and emulate an error if the amount is $503.
-
-```go
-func TestPayment_ChargeUser(t *testing.T) {
-	// No parallel: side effects of mocking
-	/*
-		ChargeUser(ctx, userID, amount).
-			Expect(t, success)
-	*/
-
-	mockWebPaySvc := webpay.NewMock().
-		MockCharge(func(ctx context.Context, userID string, amount int) (success bool, balance int, err error) {
-			if amount >= 200 {
-				return false, 100, nil
-			}
-			if amount == 503 {
-				return false, 0, errors.New("service unavailable")
-			}
-			return true, 100, nil
-		})
-
-	// Join the mock to the app
-	App.AddAndStartup(mockWebPaySvc)
-	defer mockWebPaySvc.Shutdown()
-
-	ctx := Context()
-	ChargeUser(ctx, "123", 500).Expect(t, false)
-	ChargeUser(ctx, "123", 100).Expect(t, true)
-	ChargeUser(ctx, "123", 503).Error(t, "service unavailable")
+	// ...
 }
 ```
 
@@ -318,31 +263,41 @@ To shift the clock in the test:
 
 ```go
 func TestFoo_DoSomething(t *testing.T) {
-	ctx := Context()
+	// ...
 
-	frame.Of(ctx).SetClockShift(-time.Hour * 24) // Yesterday
-	Svc.DoSomething(ctx, 2).NoError()
+	t.Run("yesterday", func(t *testing.T) {
+		tt := testarossa.For(t)
+		ctx := frame.CloneContext(ctx)
 
-	tm, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z07:00")
-	frame.Of(ctx).SetClockShift(time.Until(tm))
-	Svc.DoSomething(ctx, 3).NoError()
+		frame.Of(ctx).SetClockShift(-time.Hour * 24) // 24 hours ago
+		err := client.DoSomething(ctx, userKey)
+		tt.NoError(err)
+
+		frame.Of(ctx).IncrementClockShift(time.Hour) // 23 hours ago
+		err = client.DoSomething(ctx, userKey)
+		tt.NoError(err)
+	})
+
+	// ...
 }
 ```
 
-To obtain the "current" time in the microservice:
+Note that you need to clone the context before modifying its frame.
+
+To obtain the "current" time in a microservice, use `svc.Now(ctx)` instead of `time.Now()`.
 
 ```go
 func (svc *Service) DoSomething(ctx context.Context, n int) (err error) {
 	now := svc.Now(ctx) // Now is offset by the clock shift
 	// ...
-	barapi.NewClient(svc).DoSomethingElse(ctx, n) // Clock shift is propagated downstream
+	err = barapi.NewClient(svc).DoSomethingElse(ctx, n) // Clock shift is propagated downstream
 	// ...
 }
 ```
 
-The clock shift is propagated down the call chain to downstream microservices. The success of this pattern depends on each of the microservices involved in the transaction using `connector.Now(ctx)` instead of the standard `time.Now()` to obtain the current time.
+The clock shift is propagated down the call chain to downstream microservices. The success of this pattern depends on each of the microservices involved in the transaction using `svc.Now(ctx)` instead of the standard `time.Now()` to obtain the current time.
 
-Shifting the clock outside the `TESTING` deployment should be done with extreme caution. Unlike the `TESTING` deployment, tickers are enabled in the `LOCAL`, `LAB` and `PROD` [deployments](../tech/deployments.md) and always executed at the real time.
+Shifting the clock outside the `TESTING` deployment should be done with extreme caution. Unlike the `TESTING` deployment, tickers are enabled in the `LOCAL`, `LAB` and `PROD` [deployments](../tech/deployments.md) and are always executed at the real time.
 
 Note that shifting the clock will not cause any timeouts or deadlines to be triggered. It is simply a mechanism of transferring an offset down the call chain.
 
@@ -364,7 +319,7 @@ Some tips for maximizing the effectiveness of your testing:
 
 ### Code Coverage
 
-The testing harness automatically creates a test for each one of the microservice's endpoints. Use them to define numerous test cases and cover all aspects of the endpoint, including its edge cases. This is a quick way to achieve high code coverage. 
+A test is generated for each one of the microservice's endpoints. Use them to define numerous test cases and cover all aspects of the endpoint, including its edge cases. This is a quick way to achieve high code coverage. 
 
 ### Downstream Microservices
 
@@ -373,4 +328,4 @@ Include in the testing app all the downstream microservices that the microservic
 
 ### Scenarios
 
-Don't be satisfied with the automatically created tests. High code coverage is not enough. Write tests that perform complex scenarios based on the business logic of the solution. For example, if the microservice under test is a CRUD microservice, perform a test that goes through a sequence of steps such as `Create`, `Load`, `List`, `Update`, `Load`, `List`, `Delete`, `Load`, `List` and check for integrity after each step. Involve as many of the downstream microservices as possible, if applicable.
+Don't be satisfied with the code-generated tests. High code coverage is not enough. Write tests that perform complex scenarios based on the business logic of the solution. For example, if the microservice under test is a CRUD microservice, perform a test that goes through a sequence of steps such as `Create`, `Load`, `List`, `Update`, `Load`, `List`, `Delete`, `Load`, `List` and check for integrity after each step. Involve as many of the downstream microservices as possible, if applicable.

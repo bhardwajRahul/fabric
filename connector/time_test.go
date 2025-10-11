@@ -67,7 +67,7 @@ func TestConnector_ClockOffset(t *testing.T) {
 	defer gamma.Shutdown()
 
 	// Shift the time in the context one minute in the past
-	ctx := frame.ContextWithFrame(context.Background())
+	ctx := frame.CloneContext(context.Background())
 	f := frame.Of(ctx)
 	f.SetClockShift(-time.Minute)
 	tt.Equal(-time.Minute, f.ClockShift())
@@ -85,7 +85,7 @@ func TestConnector_ClockOffset(t *testing.T) {
 	tt.Equal(-time.Minute, gammaShift)
 
 	// Shift the time in the context one hour in the future
-	ctx = frame.ContextWithFrame(context.Background())
+	ctx = frame.CloneContext(context.Background())
 	f = frame.Of(ctx)
 	f.SetClockShift(15 * time.Minute)
 	f.IncrementClockShift(45 * time.Minute)

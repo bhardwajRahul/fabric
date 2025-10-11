@@ -4,7 +4,7 @@
 
 Fetch the code:
 
-```cmd
+```shell
 mkdir github.com/microbus-io
 cd github.com/microbus-io
 git clone https://github.com/microbus-io/fabric
@@ -19,7 +19,7 @@ The `Microbus` framework depends on a couple of third-party technologies:
 
 To quickly set up the above, use Docker Compose from within the `setup` directory to install NATS and [Grafana LGTM](https://grafana.com/blog/2024/03/13/an-opentelemetry-backend-in-a-docker-image-introducing-grafana/otel-lgtm/) in containers.
 
-```cmd
+```shell
 cd setup
 docker compose -f microbus.yaml -p microbus up -d
 ```
@@ -34,7 +34,7 @@ Note that Docker is not mandatory. You can install the dependencies manually, in
 
 Run the example app:
 
-```cmd
+```shell
 cd main
 go run main.go
 ```
