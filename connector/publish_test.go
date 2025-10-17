@@ -998,6 +998,8 @@ func TestConnector_Multicast(t *testing.T) {
 
 	// Startup the microservices
 	for _, i := range []*Connector{noqueue1, noqueue2, named1, named2, def1, def2} {
+		i.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
+
 		err := i.Startup()
 		tt.NoError(err)
 		defer i.Shutdown()
@@ -1262,32 +1264,28 @@ func TestConnector_KnownResponders(t *testing.T) {
 
 	// Create the microservices
 	alpha := New("known.responders.connector")
+	alpha.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
 	alpha.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}, sub.NoQueue())
-
-	beta := New("known.responders.connector")
-	beta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
-
-	gamma := New("known.responders.connector")
-	gamma.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
-
-	delta := New("known.responders.connector")
-	delta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
-
-	// Startup the microservices
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
+
+	beta := New("known.responders.connector")
+	beta.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
+	beta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+		return nil
+	}, sub.NoQueue())
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
+
+	gamma := New("known.responders.connector")
+	gamma.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
+	gamma.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+		return nil
+	}, sub.NoQueue())
 	err = gamma.Startup()
 	tt.NoError(err)
 	defer gamma.Shutdown()
@@ -1318,6 +1316,11 @@ func TestConnector_KnownResponders(t *testing.T) {
 	tt.True(quick)
 
 	// Add a new microservice
+	delta := New("known.responders.connector")
+	delta.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
+	delta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+		return nil
+	}, sub.NoQueue())
 	err = delta.Startup()
 	tt.NoError(err)
 

@@ -298,7 +298,10 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 
 	var expectedResponders map[string]bool
 	if req.Multicast {
-		expectedResponders, _ = c.knownResponders.Load(subject, lru.Bump(true))
+		// Known responders optimization
+		if c.Deployment() != TESTING { // To avoid non-determinism in tests
+			expectedResponders, _ = c.knownResponders.Load(subject, lru.Bump(true))
+		}
 		if len(expectedResponders) > 0 {
 			c.LogDebug(ctx, "Expecting responders",
 				"msg", msgID,

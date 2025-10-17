@@ -319,3 +319,4 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - New pub options: Actor and RelativeURL
 - Adjusted order of applying path, body and query args
 - Improved code generator to not require insertion point markers in the code
+- Disabled known responders optimization in `TESTING` deployment env

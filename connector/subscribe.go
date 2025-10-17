@@ -79,6 +79,14 @@ func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandle
 	}
 	key := method + "|" + newSub.Canonical()
 	c.subsLock.Lock()
+	if sub, ok := c.subs[key]; ok {
+		err = c.deactivateSub(sub)
+		if err == nil {
+			delete(c.subs, key)
+		} else {
+			return errors.New("unable to deactivate subscription '%s %s'", method, newSub.Canonical())
+		}
+	}
 	c.subs[key] = newSub
 	c.subsLock.Unlock()
 	return nil

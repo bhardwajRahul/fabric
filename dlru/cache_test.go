@@ -38,18 +38,21 @@ func TestDLRU_Lookup(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("lookup.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("lookup.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("lookup.dlru")
+	gamma.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = gamma.Startup()
 	tt.NoError(err)
 	defer gamma.Shutdown()
@@ -140,18 +143,21 @@ func TestDLRU_Replicate(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("replicate.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("replicate.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("replicate.dlru")
+	gamma.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = gamma.Startup()
 	tt.NoError(err)
 	defer gamma.Shutdown()
@@ -200,6 +206,7 @@ func TestDLRU_Rescue(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("rescue.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	alphaLRU := alpha.DistribCache()
@@ -226,12 +233,14 @@ func TestDLRU_Rescue(t *testing.T) {
 	tt.Equal(n, alphaLRU.LocalCache().Len())
 
 	beta := connector.New("rescue.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("rescue.dlru")
+	gamma.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = gamma.Startup()
 	tt.NoError(err)
 	defer gamma.Shutdown()
@@ -277,6 +286,7 @@ func TestDLRU_MaxMemory(t *testing.T) {
 	maxMem := 4096
 
 	alpha := connector.New("max.memory.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
@@ -284,6 +294,7 @@ func TestDLRU_MaxMemory(t *testing.T) {
 	alphaLRU.SetMaxMemory(maxMem)
 
 	beta := connector.New("max.memory.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -338,12 +349,14 @@ func TestDLRU_WeightAndLen(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("weight.and.len.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("weight.and.len.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -397,12 +410,14 @@ func TestDLRU_MulticastOptim(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("multicast.optim.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("multicast.optim.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -428,6 +443,7 @@ func TestDLRU_InvalidRequests(t *testing.T) {
 	ctx := context.Background()
 
 	con := connector.New("invalid.requests.dlru")
+	con.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := con.Startup()
 	tt.NoError(err)
 	defer con.Shutdown()
@@ -455,12 +471,14 @@ func TestDLRU_Inconsistency(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("inconsistency.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("inconsistency.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -517,12 +535,14 @@ func TestDLRU_MaxAge(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("maxage.actions.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("maxage.actions.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -554,12 +574,14 @@ func TestDLRU_DeletePrefix(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("delete.prefix.actions.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("delete.prefix.actions.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -601,12 +623,14 @@ func TestDLRU_DeleteContains(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("delete.contains.actions.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("delete.contains.actions.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
@@ -648,16 +672,19 @@ func TestDLRU_RandomActions(t *testing.T) {
 	ctx := context.Background()
 
 	alpha := connector.New("random.actions.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	tt.NoError(err)
 	defer alpha.Shutdown()
 
 	beta := connector.New("random.actions.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	tt.NoError(err)
 	defer beta.Shutdown()
 
 	gamma := connector.New("random.actions.dlru")
+	gamma.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = gamma.Startup()
 	tt.NoError(err)
 	defer gamma.Shutdown()
@@ -699,12 +726,14 @@ func BenchmarkDLRU_Store(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.store.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	testarossa.NoError(b, err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.store.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	testarossa.NoError(b, err)
 	defer beta.Shutdown()
@@ -727,12 +756,14 @@ func BenchmarkDLRU_Load(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.load.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	testarossa.NoError(b, err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.load.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	testarossa.NoError(b, err)
 	defer beta.Shutdown()
@@ -759,12 +790,14 @@ func BenchmarkDLRU_LoadNoConsistencyCheck(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.load.dlru")
+	alpha.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err := alpha.Startup()
 	testarossa.NoError(b, err)
 	defer alpha.Shutdown()
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.load.dlru")
+	beta.SetDeployment(connector.LAB) // Known responders optimization is disabled in TESTING so use LAB
 	err = beta.Startup()
 	testarossa.NoError(b, err)
 	defer beta.Shutdown()
