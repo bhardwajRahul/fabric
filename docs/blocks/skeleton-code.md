@@ -9,13 +9,11 @@ Skeletons of the `OnStartup` and `OnShutDown` lifecycle callbacks are created fo
 ```go
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
-	// TO DO: Implement OnStartup
 	return nil
 }
 
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-	// TO DO: Implement OnShutdown
 	return nil
 }
 ```

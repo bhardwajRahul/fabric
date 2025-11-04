@@ -26,7 +26,7 @@ import (
 
 func TestHttpx_DeepObject(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	type Point struct {
 		X int
@@ -60,29 +60,29 @@ func TestHttpx_DeepObject(t *testing.T) {
 		T:       time.Date(2001, 10, 1, 12, 0, 0, 0, time.UTC),
 	}
 	values, err := EncodeDeepObject(d1)
-	if tt.NoError(err) {
-		tt.Equal("5", values.Get("i"))
-		tt.Equal("10000000", values.Get("li"))
-		tt.Equal("true", values.Get("b"))
-		tt.Equal("5.67", values.Get("f"))
-		tt.Equal("8.9e+23", values.Get("lf"))
-		tt.Equal("Hello", values.Get("s"))
-		tt.Equal("Q&A", values.Get("sp"))
-		tt.Equal("3", values.Get("pt[X]"))
-		tt.Equal("4", values.Get("pt[Y]"))
-		tt.Equal("2001-10-01T12:00:00Z", values.Get("t"))
+	if assert.NoError(err) {
+		assert.Equal("5", values.Get("i"))
+		assert.Equal("10000000", values.Get("li"))
+		assert.Equal("true", values.Get("b"))
+		assert.Equal("5.67", values.Get("f"))
+		assert.Equal("8.9e+23", values.Get("lf"))
+		assert.Equal("Hello", values.Get("s"))
+		assert.Equal("Q&A", values.Get("sp"))
+		assert.Equal("3", values.Get("pt[X]"))
+		assert.Equal("4", values.Get("pt[Y]"))
+		assert.Equal("2001-10-01T12:00:00Z", values.Get("t"))
 	}
 
 	var d2 Doc
 	err = DecodeDeepObject(values, &d2)
-	if tt.NoError(err) {
-		tt.Equal(d1, d2)
+	if assert.NoError(err) {
+		assert.Equal(d1, d2)
 	}
 }
 
 func TestHttpx_DeepObjectRequestPath(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var data struct {
 		X struct {
@@ -98,21 +98,21 @@ func TestHttpx_DeepObjectRequestPath(t *testing.T) {
 		E string
 	}
 	r, err := http.NewRequest("GET", `/path?x.a=5&x[b]=3&x.y.c=1&x[y][d]=2&s=str&b=true&e=`, nil)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = DecodeDeepObject(r.URL.Query(), &data)
-	tt.NoError(err)
-	tt.Equal(5, data.X.A)
-	tt.Equal(3, data.X.B)
-	tt.Equal(1, data.X.Y.C)
-	tt.Equal(2, data.X.Y.D)
-	tt.Equal("str", data.S)
-	tt.Equal(true, data.B)
-	tt.Equal("", data.E)
+	assert.NoError(err)
+	assert.Equal(5, data.X.A)
+	assert.Equal(3, data.X.B)
+	assert.Equal(1, data.X.Y.C)
+	assert.Equal(2, data.X.Y.D)
+	assert.Equal("str", data.S)
+	assert.Equal(true, data.B)
+	assert.Equal("", data.E)
 }
 
 func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	data := struct {
 		S string  `json:"s"`
@@ -123,53 +123,53 @@ func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
 
 	// Into string
 	err := decodeOne("s", "hello", &data)
-	if tt.NoError(err) {
-		tt.Equal("hello", data.S)
+	if assert.NoError(err) {
+		assert.Equal("hello", data.S)
 	}
 	err = decodeOne("s", `"hello"`, &data)
-	if tt.NoError(err) {
-		tt.Equal("hello", data.S)
+	if assert.NoError(err) {
+		assert.Equal("hello", data.S)
 	}
 	err = decodeOne("s", "5", &data)
-	if tt.NoError(err) {
-		tt.Equal("5", data.S)
+	if assert.NoError(err) {
+		assert.Equal("5", data.S)
 	}
 
 	// Into int
 	err = decodeOne("i", "5", &data)
-	if tt.NoError(err) {
-		tt.Equal(5, data.I)
+	if assert.NoError(err) {
+		assert.Equal(5, data.I)
 	}
 	err = decodeOne("i", "1000000", &data)
-	if tt.NoError(err) {
-		tt.Equal(1000000, data.I)
+	if assert.NoError(err) {
+		assert.Equal(1000000, data.I)
 	}
 	// err = decodeOne("i", "1e+06", &data)
-	// if tt.NoError(err) {
-	// 	tt.Equal(1000000, data.I)
+	// if assert.NoError(err) {
+	// 	assert.Equal(1000000, data.I)
 	// }
 
 	// Into float64
 	err = decodeOne("f", "5", &data)
-	if tt.NoError(err) {
-		tt.Equal(5.0, data.F)
+	if assert.NoError(err) {
+		assert.Equal(5.0, data.F)
 	}
 	err = decodeOne("f", "5.6", &data)
-	if tt.NoError(err) {
-		tt.Equal(5.6, data.F)
+	if assert.NoError(err) {
+		assert.Equal(5.6, data.F)
 	}
 	err = decodeOne("f", "1e-3", &data)
-	if tt.NoError(err) {
-		tt.Equal(.001, data.F)
+	if assert.NoError(err) {
+		assert.Equal(.001, data.F)
 	}
 
 	// Into bool
 	err = decodeOne("b", "true", &data)
-	if tt.NoError(err) {
-		tt.Equal(true, data.B)
+	if assert.NoError(err) {
+		assert.Equal(true, data.B)
 	}
 	err = decodeOne("b", `"true"`, &data)
-	if tt.NoError(err) {
-		tt.Equal(true, data.B)
+	if assert.NoError(err) {
+		assert.Equal(true, data.B)
 	}
 }

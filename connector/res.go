@@ -67,8 +67,12 @@ func (c *Connector) ReadResFile(name string) ([]byte, error) {
 }
 
 // MustReadResFile returns the content of a resource file, or nil if not found.
+// It panics if the resource file is not found.
 func (c *Connector) MustReadResFile(name string) []byte {
-	b, _ := c.resourcesFS.ReadFile(name)
+	b, err := c.resourcesFS.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }
 
@@ -79,8 +83,12 @@ func (c *Connector) ReadResTextFile(name string) (string, error) {
 }
 
 // MustReadResTextFile returns the content of a resource file as a string, or "" if not found.
+// It panics if the resource file is not found.
 func (c *Connector) MustReadResTextFile(name string) string {
-	b, _ := c.resourcesFS.ReadFile(name)
+	b, err := c.resourcesFS.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
@@ -115,20 +123,18 @@ func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Req
 	return nil
 }
 
-// ExecuteResTemplate parses the resource file as a template, executes it given the data, and returns
-// the result. The template is assumed to be a text template unless the file name ends in .html,
-// in which case it is processed as an HTML template.
+// ExecuteResTemplate parses the resource file as a template, executes it given the data, and returns the result.
+// The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.
 //
-// {{ var | attr }}, {{ var | url }}, {{ var | css }} or {{ var | safe }} may be used to prevent the
-// escaping of a variable in an HTML template.
-// These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML]
-// respectively. Use of these types presents a security risk.
-func (c *Connector) ExecuteResTemplate(name string, data any) (string, error) {
+// {{ var | attr }}, {{ var | url }}, {{ var | css }} or {{ var | safe }} may be used to prevent the escaping of a variable in an HTML template.
+// These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML] respectively.
+// Use of these types presents a security risk.
+func (c *Connector) ExecuteResTemplate(name string, data any) ([]byte, error) {
 	templateFile, err := c.resourcesFS.ReadFile(name)
 	if err != nil {
-		return "", errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	var renderedPage bytes.Buffer
+	var rendered bytes.Buffer
 	if strings.HasSuffix(strings.ToLower(name), ".html") {
 		funcMap := htmltemplate.FuncMap{
 			"attr": func(s string) htmltemplate.HTMLAttr {
@@ -144,33 +150,39 @@ func (c *Connector) ExecuteResTemplate(name string, data any) (string, error) {
 				return htmltemplate.HTML(s)
 			},
 		}
-		htmlTmpl, err := htmltemplate.New(name).Funcs(funcMap).Parse(utils.UnsafeBytesToString(templateFile))
+		htmlTmpl, err := htmltemplate.New(name).
+			Funcs(funcMap).
+			Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
-			return "", errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
-		err = htmlTmpl.ExecuteTemplate(&renderedPage, name, data)
+		err = htmlTmpl.ExecuteTemplate(&rendered, name, data)
 		if err != nil {
-			return "", errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	} else {
-		textTmpl, err := texttemplate.New(name).Parse(utils.UnsafeBytesToString(templateFile))
+		textTmpl, err := texttemplate.New(name).
+			Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
-			return "", errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
-		err = textTmpl.ExecuteTemplate(&renderedPage, name, data)
+		err = textTmpl.ExecuteTemplate(&rendered, name, data)
 		if err != nil {
-			return "", errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
-	return utils.UnsafeBytesToString(renderedPage.Bytes()), nil
+	return rendered.Bytes(), nil
 }
 
-// initStringBundle reads strings.yaml from the FS into an in-memory map.
+// initStringBundle reads text.yaml from the FS into an in-memory map.
 func (c *Connector) initStringBundle() error {
 	c.stringBundle = nil
-	b, err := c.ReadResFile("strings.yaml")
+	b, err := c.ReadResFile("text.yaml")
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		b, err = c.ReadResFile("strings.yaml") // Backward compatibility
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 	}
 	if err != nil {
 		return errors.Trace(err)
@@ -178,45 +190,33 @@ func (c *Connector) initStringBundle() error {
 	if len(b) == 0 {
 		return nil
 	}
-	var raw map[string]map[string]string
-	err = yaml.NewDecoder(bytes.NewReader(b)).Decode(&raw)
+	err = yaml.NewDecoder(bytes.NewReader(b)).Decode(&c.stringBundle)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	if len(raw) == 0 {
-		return nil
-	}
-	// Lowercase the string keys and the language codes
-	c.stringBundle = make(map[string]map[string]string, len(raw))
-	for k, v := range raw {
-		lcKey := strings.ToLower(k)
-		c.stringBundle[lcKey] = make(map[string]string, len(v))
-		for kk, vv := range v {
-			c.stringBundle[lcKey][strings.ToLower(kk)] = vv
-		}
 	}
 	return nil
 }
 
 /*
-LoadResString returns a string from the string bundle in the language best matched to the locale in the context.
-The string bundle is a YAML file that must be loadable from the service's resource FS with the name strings.yaml.
-The YAML is expected to be in the following format:
+LoadResString returns a localized string from the string bundle best matched to the locale of the context.
+The string bundle is a YAML file that must be loadable from the service's resource FS with the name text.yaml.
+The YAML should map a string key to its localized values on a per language basis:
 
-	stringKey:
-	  default: Localized
+	Localized:
 	  en: Localized
 	  en-UK: Localised
 	  fr: Localisée
+	  it: Localizzato
+	  default: Localized
 
-If a default is not provided, English (en) is used as the fallback language.
-String keys and locale names are case insensitive.
+If a default is not explicitly provided, English (en) is used as the fallback language.
+String keys and ISO 639 language codes are case sensitive.
 */
-func (c *Connector) LoadResString(ctx context.Context, stringKey string) (string, error) {
+func (c *Connector) LoadResString(ctx context.Context, stringKey string) (value string, err error) {
 	if c.stringBundle == nil {
-		return "", errors.New("string bundle strings.yaml is not found in resource FS")
+		return "", errors.New("string bundle text.yaml not found in resource FS")
 	}
-	txl := c.stringBundle[strings.ToLower(stringKey)]
+	txl := c.stringBundle[stringKey]
 	if txl == nil {
 		return "", errors.New("no string matches the key '%s'", stringKey)
 	}
@@ -240,7 +240,6 @@ func (c *Connector) LoadResString(ctx context.Context, stringKey string) (string
 			qStr := strings.TrimLeft(after, " q=")
 			q, _ = strconv.ParseFloat(qStr, 64)
 		}
-		lang = strings.ToLower(lang)
 		if q <= qMax {
 			continue
 		}
@@ -261,8 +260,44 @@ func (c *Connector) LoadResString(ctx context.Context, stringKey string) (string
 		var ok bool
 		result, ok = txl["default"]
 		if !ok {
-			result = txl["en"]
+			result, ok = txl["en"]
+		}
+		if !ok {
+			result = txl["en-US"]
 		}
 	}
 	return result, nil
+}
+
+// MustLoadResString returns a string from the string bundle. It panics if the string is not found.
+func (c *Connector) MustLoadResString(ctx context.Context, stringKey string) string {
+	s, err := c.LoadResString(ctx, stringKey)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// LoadResStrings returns all strings from the string bundle best matched to the locale in the context.
+func (c *Connector) LoadResStrings(ctx context.Context) (valuesByStringKey map[string]string, err error) {
+	if c.stringBundle == nil {
+		return nil, errors.New("string bundle text.yaml not found in resource FS")
+	}
+	valuesByStringKey = map[string]string{}
+	for key := range c.stringBundle {
+		valuesByStringKey[key], err = c.LoadResString(ctx, key)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return valuesByStringKey, nil
+}
+
+// MustLoadResStrings returns all strings from from the string bundle. It panics if the string bundle is not found.
+func (c *Connector) MustLoadResStrings(ctx context.Context) (valuesByStringKey map[string]string) {
+	m, err := c.LoadResStrings(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }

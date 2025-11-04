@@ -32,32 +32,32 @@ import (
 
 func TestApplication_StartStop(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	alpha := connector.New("alpha.start.stop.application")
 	beta := connector.New("beta.start.stop.application")
 	app := NewTesting()
 	app.Add(alpha, beta)
 
-	tt.False(alpha.IsStarted())
-	tt.False(beta.IsStarted())
+	assert.False(alpha.IsStarted())
+	assert.False(beta.IsStarted())
 
 	err := app.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.True(alpha.IsStarted())
-	tt.True(beta.IsStarted())
+	assert.True(alpha.IsStarted())
+	assert.True(beta.IsStarted())
 
 	err = app.Shutdown()
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.False(alpha.IsStarted())
-	tt.False(beta.IsStarted())
+	assert.False(alpha.IsStarted())
+	assert.False(beta.IsStarted())
 }
 
 func TestApplication_Interrupt(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := connector.New("interrupt.application")
 	app := NewTesting()
@@ -66,26 +66,26 @@ func TestApplication_Interrupt(t *testing.T) {
 	ch := make(chan bool)
 	go func() {
 		err := app.Startup()
-		tt.NoError(err)
+		assert.NoError(err)
 		go func() {
 			app.WaitForInterrupt()
 			err := app.Shutdown()
-			tt.NoError(err)
+			assert.NoError(err)
 			ch <- true
 		}()
 		ch <- true
 	}()
 
 	<-ch
-	tt.True(con.IsStarted())
+	assert.True(con.IsStarted())
 	app.Interrupt()
 	<-ch
-	tt.False(con.IsStarted())
+	assert.False(con.IsStarted())
 }
 
 func TestApplication_NoConflict(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -109,39 +109,39 @@ func TestApplication_NoConflict(t *testing.T) {
 
 	// Start the apps
 	err := appAlpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer appAlpha.Shutdown()
 	err = appBeta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer appBeta.Shutdown()
 
 	// Assert different planes of communication
-	tt.NotEqual(alpha.Plane(), beta.Plane())
-	tt.Equal(connector.TESTING, alpha.Deployment())
-	tt.Equal(connector.TESTING, beta.Deployment())
+	assert.NotEqual(alpha.Plane(), beta.Plane())
+	assert.Equal(connector.TESTING, alpha.Deployment())
+	assert.Equal(connector.TESTING, beta.Deployment())
 
 	// Alpha should never see beta
 	for range 32 {
 		response, err := alpha.GET(ctx, "https://no.conflict.application/id")
-		tt.NoError(err)
+		assert.NoError(err)
 		body, err := io.ReadAll(response.Body)
-		tt.NoError(err)
-		tt.Equal("alpha", string(body))
+		assert.NoError(err)
+		assert.Equal("alpha", string(body))
 	}
 
 	// Beta should never see alpha
 	for range 32 {
 		response, err := beta.GET(ctx, "https://no.conflict.application/id")
-		tt.NoError(err)
+		assert.NoError(err)
 		body, err := io.ReadAll(response.Body)
-		tt.NoError(err)
-		tt.Equal("beta", string(body))
+		assert.NoError(err)
+		assert.Equal("beta", string(body))
 	}
 }
 
 func TestApplication_DependencyStart(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	startupTimeout := time.Second * 2
 
@@ -173,16 +173,16 @@ func TestApplication_DependencyStart(t *testing.T) {
 	t0 := time.Now()
 	err := app.Startup()
 	dur := time.Since(t0)
-	tt.NoError(err)
-	tt.True(failCount > 0)
-	tt.True(dur >= startupTimeout/2)
+	assert.NoError(err)
+	assert.True(failCount > 0)
+	assert.True(dur >= startupTimeout/2)
 
 	app.Shutdown()
 }
 
 func TestApplication_FailStart(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	startupTimeout := time.Second
 
@@ -203,49 +203,49 @@ func TestApplication_FailStart(t *testing.T) {
 	t0 := time.Now()
 	err := app.Startup()
 	dur := time.Since(t0)
-	tt.Error(err)
-	tt.True(failCount > 0)
-	tt.True(dur >= startupTimeout)
-	tt.True(beta.IsStarted())
-	tt.False(alpha.IsStarted())
+	assert.Error(err)
+	assert.True(failCount > 0)
+	assert.True(dur >= startupTimeout)
+	assert.True(beta.IsStarted())
+	assert.False(alpha.IsStarted())
 
 	err = app.Shutdown()
-	tt.NoError(err)
-	tt.False(beta.IsStarted())
-	tt.False(alpha.IsStarted())
+	assert.NoError(err)
+	assert.False(beta.IsStarted())
+	assert.False(alpha.IsStarted())
 }
 
 func TestApplication_Remove(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	alpha := connector.New("alpha.remove.application")
 	beta := connector.New("beta.remove.application")
 
 	app := NewTesting()
 	app.AddAndStartup(alpha, beta)
-	tt.True(alpha.IsStarted())
-	tt.True(beta.IsStarted())
-	tt.Equal(alpha.Plane(), beta.Plane())
+	assert.True(alpha.IsStarted())
+	assert.True(beta.IsStarted())
+	assert.Equal(alpha.Plane(), beta.Plane())
 
 	app.Remove(beta)
-	tt.True(alpha.IsStarted())
-	tt.True(beta.IsStarted())
-	tt.Equal(alpha.Plane(), beta.Plane())
+	assert.True(alpha.IsStarted())
+	assert.True(beta.IsStarted())
+	assert.Equal(alpha.Plane(), beta.Plane())
 
 	err := app.Shutdown()
-	tt.NoError(err)
-	tt.False(alpha.IsStarted())
-	tt.True(beta.IsStarted()) // Should remain up because no longer under management of the app
+	assert.NoError(err)
+	assert.False(alpha.IsStarted())
+	assert.True(beta.IsStarted()) // Should remain up because no longer under management of the app
 
 	err = beta.Shutdown()
-	tt.NoError(err)
-	tt.False(beta.IsStarted())
+	assert.NoError(err)
+	assert.False(beta.IsStarted())
 }
 
 func TestApplication_Run(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := connector.New("run.application")
 	config := configurator.NewService()
@@ -255,16 +255,16 @@ func TestApplication_Run(t *testing.T) {
 
 	go func() {
 		err := app.Run()
-		tt.NoError(err)
+		assert.NoError(err)
 	}()
 
 	time.Sleep(2 * time.Second)
-	tt.True(con.IsStarted())
-	tt.True(config.IsStarted())
+	assert.True(con.IsStarted())
+	assert.True(config.IsStarted())
 
 	app.Interrupt()
 
 	time.Sleep(time.Second)
-	tt.False(con.IsStarted())
-	tt.False(config.IsStarted())
+	assert.False(con.IsStarted())
+	assert.False(config.IsStarted())
 }

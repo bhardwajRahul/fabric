@@ -27,7 +27,7 @@ import (
 
 func TestCodegen_CapitalizeIdentifier(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := map[string]string{
 		"fooBar":     "FooBar",
@@ -41,23 +41,23 @@ func TestCodegen_CapitalizeIdentifier(t *testing.T) {
 		"xId":        "XId",
 	}
 	for id, expected := range testCases {
-		tt.Equal(expected, capitalizeIdentifier(id))
+		assert.Equal(expected, capitalizeIdentifier(id))
 	}
 }
 
 func TestCodegen_TextTemplate(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	_, err := LoadTemplate("service/doesn't.exist")
-	tt.Error(err)
+	assert.Error(err)
 
 	tmpl, err := LoadTemplate("service/service.txt")
-	tt.NoError(err)
+	assert.NoError(err)
 
 	var x struct{}
 	_, err = tmpl.Execute(&x)
-	tt.Error(err)
+	assert.Error(err)
 
 	specs := &spec.Service{
 		PackagePath: "testing/text/template",
@@ -68,28 +68,28 @@ func TestCodegen_TextTemplate(t *testing.T) {
 	}
 	rendered, err := tmpl.Execute(specs)
 	n := len(rendered)
-	tt.NoError(err)
-	tt.Contains(string(rendered), specs.PackagePathSuffix())
-	tt.Contains(string(rendered), specs.General.Host)
+	assert.NoError(err)
+	assert.Contains(string(rendered), specs.PackagePathSuffix())
+	assert.Contains(string(rendered), specs.General.Host)
 
 	fileName := "testing-" + rand.AlphaNum32(12)
 	defer os.Remove(fileName)
 
 	err = tmpl.AppendTo(fileName, specs)
-	tt.NoError(err)
+	assert.NoError(err)
 	onDisk, err := os.ReadFile(fileName)
-	tt.NoError(err)
-	tt.Equal(rendered, onDisk)
+	assert.NoError(err)
+	assert.Equal(rendered, onDisk)
 
 	err = tmpl.AppendTo(fileName, specs)
-	tt.NoError(err)
+	assert.NoError(err)
 	onDisk, err = os.ReadFile(fileName)
-	tt.NoError(err)
-	tt.Len(onDisk, n*2)
+	assert.NoError(err)
+	assert.Len(onDisk, n*2)
 
 	err = tmpl.Overwrite(fileName, specs)
-	tt.NoError(err)
+	assert.NoError(err)
 	onDisk, err = os.ReadFile(fileName)
-	tt.NoError(err)
-	tt.Equal(rendered, onDisk)
+	assert.NoError(err)
+	assert.Equal(rendered, onDisk)
 }

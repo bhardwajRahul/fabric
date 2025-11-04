@@ -67,37 +67,37 @@ func TestEventsource_Register(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("blocked_by_sink_hotmail", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		// hotmail.com is disallowed by eventsink service
 		allowed, err := client.Register(ctx, "brian@hotmail.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, false,
 			err, nil,
 		)
 	})
 
 	t.Run("blocked_by_sink_gmail", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		// gmail.com is disallowed by eventsink service
 		allowed, err := client.Register(ctx, "sarah@gmail.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, false,
 			err, nil,
 		)
 	})
 
 	t.Run("allowed_example_domain", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		// example.com is allowed
 		allowed, err := client.Register(ctx, "brian@example.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, true,
 			err, nil,
 		)
 	})
 
 	t.Run("allowed_multiple_users", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		testCases := []string{
 			"mandy@example.com",
@@ -107,7 +107,7 @@ func TestEventsource_Register(t *testing.T) {
 
 		for _, email := range testCases {
 			allowed, err := client.Register(ctx, email)
-			tt.Expect(
+			assert.Expect(
 				allowed, true,
 				err, nil,
 			)
@@ -115,24 +115,24 @@ func TestEventsource_Register(t *testing.T) {
 	})
 
 	t.Run("case_insensitive_blocking", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		// Gmail with mixed case should still be blocked
 		allowed, err := client.Register(ctx, "User@GMAIL.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, false,
 			err, nil,
 		)
 	})
 
 	t.Run("invalid_email_format", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		// Invalid email should be rejected by sink
 		allowed, err := client.Register(ctx, "invalid-email")
-		tt.Expect(allowed, false, err, nil)
+		assert.Expect(allowed, false, err, nil)
 	})
 
 	t.Run("partial_approval_is_blocked", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
 			return false, nil
@@ -141,11 +141,11 @@ func TestEventsource_Register(t *testing.T) {
 
 		// The eventsink service approves, but the local hook blocks
 		allowed, err := client.Register(ctx, "mixed@example.com")
-		tt.Expect(allowed, false, err, nil)
+		assert.Expect(allowed, false, err, nil)
 	})
 
 	t.Run("sink_errors_out", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
 			return false, errors.New("oops")
@@ -153,7 +153,7 @@ func TestEventsource_Register(t *testing.T) {
 		defer hook.OnAllowRegister(nil)
 
 		_, err := client.Register(ctx, "error@example.com")
-		tt.Contains(err, "oops")
+		assert.Contains(err, "oops")
 	})
 }
 
@@ -182,7 +182,7 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("sink_allows_registration", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		testCases := []string{
 			"barb@example.com",
@@ -193,13 +193,13 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 		for _, tc := range testCases {
 			for i := range trigger.OnAllowRegister(ctx, tc) {
 				allow, err := i.Get()
-				tt.Expect(allow, true, err, nil)
+				assert.Expect(allow, true, err, nil)
 			}
 		}
 	})
 
 	t.Run("sink_blocks_registration", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		testCases := []string{
 			"josh@gmail.com",
@@ -210,18 +210,18 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 		for _, tc := range testCases {
 			for i := range trigger.OnAllowRegister(ctx, tc) {
 				allow, err := i.Get()
-				tt.Expect(allow, false, err, nil)
+				assert.Expect(allow, false, err, nil)
 			}
 		}
 	})
 
 	t.Run("hook_receives_event", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Install a hook to verify it receives the event
 		hookReceived := false
 		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
-			tt.Expect(email, "test@example.com")
+			assert.Expect(email, "test@example.com")
 			hookReceived = true
 			// Hook returns true, but sink will also be consulted
 			return true, nil
@@ -233,14 +233,14 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 		for i := range trigger.OnAllowRegister(ctx, "test@example.com") {
 			count++
 			allow, err := i.Get()
-			tt.Expect(allow, true, err, nil)
+			assert.Expect(allow, true, err, nil)
 		}
-		tt.True(hookReceived)
-		tt.Equal(2, count)
+		assert.True(hookReceived)
+		assert.Equal(2, count)
 	})
 
 	t.Run("case_insensitive_blocking", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		testCases := []string{
 			"User@GMAIL.COM",
@@ -249,7 +249,7 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 		for _, tc := range testCases {
 			for i := range trigger.OnAllowRegister(ctx, tc) {
 				allow, err := i.Get()
-				tt.Expect(allow, false, err, nil)
+				assert.Expect(allow, false, err, nil)
 			}
 		}
 	})
@@ -280,25 +280,25 @@ func TestEventsource_OnRegistered(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("allowed_registration_triggers_event", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Verify the OnRegistered event is fired with the correct email
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
-			tt.Expect(email, "peter@example.com")
+			assert.Expect(email, "peter@example.com")
 			return nil
 		})
 		defer hook.OnRegistered(nil)
 
 		// Register a user
 		allowed, err := client.Register(ctx, "peter@example.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, true,
 			err, nil,
 		)
 	})
 
 	t.Run("blocked_registration_no_event", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// OnRegistered should NOT fire for blocked registrations
 		// The service only fires the event after successful registration
@@ -310,14 +310,14 @@ func TestEventsource_OnRegistered(t *testing.T) {
 
 		// Try to register a blocked user
 		allowed, err := client.Register(ctx, "paul@gmail.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, false,
 			err, nil,
 		)
 	})
 
 	t.Run("multiple_registrations", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Track that events are fired for each registration
 		expectedEmails := []string{"alice@example.com", "bob@company.org", "carol@test.io"}
@@ -326,7 +326,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// Verify each email matches expected order
 			if emailIndex < len(expectedEmails) {
-				tt.Expect(email, expectedEmails[emailIndex])
+				assert.Expect(email, expectedEmails[emailIndex])
 				emailIndex++
 			}
 			return nil
@@ -336,7 +336,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		// Register multiple users
 		for _, email := range expectedEmails {
 			allowed, err := client.Register(ctx, email)
-			tt.Expect(
+			assert.Expect(
 				allowed, true,
 				err, nil,
 			)
@@ -344,20 +344,20 @@ func TestEventsource_OnRegistered(t *testing.T) {
 	})
 
 	t.Run("event_receives_original_email", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Verify the event receives the email as submitted (not normalized)
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// The service passes the email as-is to the event
 			// Normalization happens in the event sink
-			tt.Expect(email, "David@EXAMPLE.com")
+			assert.Expect(email, "David@EXAMPLE.com")
 			return nil
 		})
 		defer hook.OnRegistered(nil)
 
 		// Register with mixed case
 		allowed, err := client.Register(ctx, "David@EXAMPLE.com")
-		tt.Expect(
+		assert.Expect(
 			allowed, true,
 			err, nil,
 		)

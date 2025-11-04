@@ -28,7 +28,7 @@ import (
 
 func TestConnector_SetConfig(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	plane := rand.AlphaNum64(12)
 
@@ -43,7 +43,7 @@ func TestConnector_SetConfig(t *testing.T) {
 	})
 
 	err := mockCfg.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer mockCfg.Shutdown()
 
 	// Connector
@@ -52,38 +52,38 @@ func TestConnector_SetConfig(t *testing.T) {
 	con.SetPlane(plane)
 
 	err = con.DefineConfig("s", cfg.DefaultValue("default"))
-	tt.NoError(err)
-	tt.Equal("default", con.Config("s"))
+	assert.NoError(err)
+	assert.Equal("default", con.Config("s"))
 
 	err = con.SetConfig("s", "changed")
-	tt.NoError(err)
-	tt.Equal("changed", con.Config("s"))
+	assert.NoError(err)
+	assert.Equal("changed", con.Config("s"))
 
 	err = con.ResetConfig("s")
-	tt.NoError(err)
-	tt.Equal("default", con.Config("s"))
+	assert.NoError(err)
+	assert.Equal("default", con.Config("s"))
 
 	err = con.SetConfig("s", "changed")
-	tt.NoError(err)
-	tt.Equal("changed", con.Config("s"))
+	assert.NoError(err)
+	assert.Equal("changed", con.Config("s"))
 
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
-	tt.Equal("default", con.Config("s")) // Gets reset after fetching from configurator
+	assert.Equal("default", con.Config("s")) // Gets reset after fetching from configurator
 
 	err = con.SetConfig("s", "something")
-	tt.Error(err)
-	tt.Equal("default", con.Config("s"))
+	assert.Error(err)
+	assert.Equal("default", con.Config("s"))
 
 	err = con.ResetConfig("s")
-	tt.Error(err)
+	assert.Error(err)
 }
 
 func TestConnector_FetchConfig(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	ctx := context.Background()
 
 	plane := rand.AlphaNum64(12)
@@ -101,7 +101,7 @@ func TestConnector_FetchConfig(t *testing.T) {
 	})
 
 	err := mockCfg.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer mockCfg.Shutdown()
 
 	// Connector
@@ -109,42 +109,42 @@ func TestConnector_FetchConfig(t *testing.T) {
 	con.SetDeployment(LAB) // Configs are disabled in TESTING
 	con.SetPlane(plane)
 	err = con.DefineConfig("foo", cfg.DefaultValue("bar"))
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DefineConfig("int", cfg.Validation("int"), cfg.DefaultValue("5"))
-	tt.NoError(err)
+	assert.NoError(err)
 	callbackCalled := false
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
-		tt.True(changed("FOO"))
-		tt.True(changed("int"))
+		assert.True(changed("FOO"))
+		assert.True(changed("int"))
 		callbackCalled = true
 		return nil
 	})
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.Equal("bar", con.Config("foo"))
-	tt.Equal("5", con.Config("int"))
+	assert.Equal("bar", con.Config("foo"))
+	assert.Equal("5", con.Config("int"))
 
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
-	tt.Equal("baz", con.Config("foo"), "New value should be read from configurator")
-	tt.Equal("5", con.Config("int"), "Invalid value should not be accepted")
-	tt.False(callbackCalled)
+	assert.Equal("baz", con.Config("foo"), "New value should be read from configurator")
+	assert.Equal("5", con.Config("int"), "Invalid value should not be accepted")
+	assert.False(callbackCalled)
 
 	fooValue = "bam"
 	intValue = "8"
 	_, err = mockCfg.GET(ctx, "https://fetch.config.connector:888/config-refresh")
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.Equal("bam", con.Config("foo"))
-	tt.Equal("8", con.Config("int"))
-	tt.True(callbackCalled)
+	assert.Equal("bam", con.Config("foo"))
+	assert.Equal("8", con.Config("int"))
+	assert.True(callbackCalled)
 }
 
 func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	plane := rand.AlphaNum64(12)
 
@@ -158,62 +158,62 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	})
 
 	err := mockCfg.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer mockCfg.Shutdown()
 
 	// Connector
 	con := New("no.fetch.in.testing.app.config.connector")
 	con.SetPlane(plane)
 	err = con.DefineConfig("foo", cfg.DefaultValue("bar"))
-	tt.NoError(err)
+	assert.NoError(err)
 	callbackCalled := false
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
 		callbackCalled = true
 		return nil
 	})
-	tt.NoError(err)
+	assert.NoError(err)
 
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
-	tt.Equal("bar", con.Config("foo"))
-	tt.False(callbackCalled)
+	assert.Equal("bar", con.Config("foo"))
+	assert.False(callbackCalled)
 }
 
 func TestConnector_CallbackWhenStarted(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Connector
 	con := New("callback.when.started.config.connector")
 	err := con.DefineConfig("foo", cfg.DefaultValue("bar"))
-	tt.NoError(err)
+	assert.NoError(err)
 	callbackCalled := 0
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
 		callbackCalled++
-		tt.True(changed("foo"))
+		assert.True(changed("foo"))
 		return nil
 	})
-	tt.NoError(err)
+	assert.NoError(err)
 
 	con.SetConfig("foo", "baz")
-	tt.Equal("baz", con.Config("foo"))
-	tt.Zero(callbackCalled)
+	assert.Equal("baz", con.Config("foo"))
+	assert.Zero(callbackCalled)
 
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
-	tt.Zero(callbackCalled)
+	assert.Zero(callbackCalled)
 
 	con.SetConfig("foo", "bam")
-	tt.Equal("bam", con.Config("foo"))
-	tt.Equal(1, callbackCalled)
+	assert.Equal("bam", con.Config("foo"))
+	assert.Equal(1, callbackCalled)
 }
 
 func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	ctx := context.Background()
 
 	plane := rand.AlphaNum64(12)
@@ -230,7 +230,7 @@ func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	})
 
 	err := mockCfg.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer mockCfg.Shutdown()
 
 	// Connector
@@ -238,33 +238,33 @@ func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	con.SetDeployment(LAB) // Configs are disabled in TESTING
 	con.SetPlane(plane)
 	err = con.DefineConfig("foo-config_", cfg.DefaultValue("bar"))
-	tt.NoError(err)
+	assert.NoError(err)
 	callbackCalled := false
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
-		tt.True(changed("foo-config_"))
-		tt.True(changed("foo-CONFIG_"))
-		tt.True(changed("FOO-config_"))
+		assert.True(changed("foo-config_"))
+		assert.True(changed("foo-CONFIG_"))
+		assert.True(changed("FOO-config_"))
 		callbackCalled = true
 		return nil
 	})
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.Equal(configValue, con.Config("foo-config_"))
-	tt.Equal(configValue, con.Config("foo-CONFIG_"))
-	tt.Equal(configValue, con.Config("FOO-config_"))
+	assert.Equal(configValue, con.Config("foo-config_"))
+	assert.Equal(configValue, con.Config("foo-CONFIG_"))
+	assert.Equal(configValue, con.Config("FOO-config_"))
 
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
-	tt.False(callbackCalled)
+	assert.False(callbackCalled)
 
 	configValue = "baz"
 	_, err = mockCfg.GET(ctx, "https://case.insensitive.config.connector:888/config-refresh")
-	tt.NoError(err)
+	assert.NoError(err)
 
-	tt.True(callbackCalled)
-	tt.Equal(configValue, con.Config("foo-config_"))
-	tt.Equal(configValue, con.Config("foo-CONFIG_"))
-	tt.Equal(configValue, con.Config("FOO-config_"))
+	assert.True(callbackCalled)
+	assert.Equal(configValue, con.Config("foo-config_"))
+	assert.Equal(configValue, con.Config("foo-CONFIG_"))
+	assert.Equal(configValue, con.Config("FOO-config_"))
 }

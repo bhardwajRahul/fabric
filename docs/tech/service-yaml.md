@@ -1,8 +1,8 @@
 # `service.yaml`
 
-`service.yaml` defines the various characteristics of the microservice in a declarative fashion. The code generator then picks up these definitions to generate boilerplate and skeleton code, leaving it up to the developer to fill in the gaps and implement the business logic. Code generation is additive and idempotent. Declarations can be added over time and applied incrementally.
+`service.yaml` defines the various features of the microservice in a declarative fashion. The code generator then picks up these definitions to generate boilerplate and skeleton code, leaving it up to the developer to fill in the gaps and implement the business logic. Code generation is additive and idempotent. Declarations can be added over time and applied incrementally.
 
-`service.yaml` include several sections that define the characteristics of the microservice: general, configs, functions, events, sinks, webs, tickers.
+`service.yaml` include several sections that define the features of the microservice: general, configs, functions, events, sinks, webs, metrics, tickers.
 
 <img src="./service-yaml-1.drawio.svg">
 <p></p>

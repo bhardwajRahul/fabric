@@ -26,7 +26,7 @@ import (
 
 func TestCodegen_FindReplaceReturnedErrors(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := []string{
 		`
@@ -66,13 +66,13 @@ return errors.Trace(err)
 
 	for i := 0; i < len(testCases); i += 2 {
 		modified := findReplaceReturnedErrors(testCases[i])
-		tt.Equal(testCases[i+1], modified)
+		assert.Equal(testCases[i+1], modified)
 	}
 }
 
 func TestCodegen_FindReplaceImportErrors(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := []string{
 		`
@@ -151,13 +151,13 @@ import "fmt"
 
 	for i := 0; i < len(testCases); i += 2 {
 		modified := findReplaceImportErrors(testCases[i])
-		tt.Equal(testCases[i+1], modified, "test case %d", (i/2)+1)
+		assert.Equal(testCases[i+1], modified, "test case %d", (i/2)+1)
 	}
 }
 
 func TestCodegen_FindReplaceSignatureAndDescription(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	code := `
 /*
@@ -269,5 +269,5 @@ func (svc *Service) TickTock(ctx context.Context) (err error) {
 	return
 }
 `
-	tt.Equal(expected, modified)
+	assert.Equal(expected, modified)
 }

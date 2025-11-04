@@ -24,7 +24,7 @@ import (
 
 func TestUtils_ValidateHostname(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	valid := []string{
 		"hello",
@@ -45,16 +45,16 @@ func TestUtils_ValidateHostname(t *testing.T) {
 	}
 
 	for _, x := range valid {
-		tt.NoError(ValidateHostname(x), "%s", x)
+		assert.NoError(ValidateHostname(x), "%s", x)
 	}
 	for _, x := range invalid {
-		tt.Error(ValidateHostname(x), "%s", x)
+		assert.Error(ValidateHostname(x), "%s", x)
 	}
 }
 
 func TestUtils_ValidateConfigName(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	valid := []string{
 		"hello",
@@ -72,16 +72,16 @@ func TestUtils_ValidateConfigName(t *testing.T) {
 	}
 
 	for _, x := range valid {
-		tt.NoError(ValidateConfigName(x), "%s", x)
+		assert.NoError(ValidateConfigName(x), "%s", x)
 	}
 	for _, x := range invalid {
-		tt.Error(ValidateConfigName(x), "%s", x)
+		assert.Error(ValidateConfigName(x), "%s", x)
 	}
 }
 
 func TestUtils_ValidateTickerName(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	valid := []string{
 		"hello",
@@ -99,9 +99,9 @@ func TestUtils_ValidateTickerName(t *testing.T) {
 	}
 
 	for _, x := range valid {
-		tt.NoError(ValidateTickerName(x), "%s", x)
+		assert.NoError(ValidateTickerName(x), "%s", x)
 	}
 	for _, x := range invalid {
-		tt.Error(ValidateTickerName(x), "%s", x)
+		assert.Error(ValidateTickerName(x), "%s", x)
 	}
 }

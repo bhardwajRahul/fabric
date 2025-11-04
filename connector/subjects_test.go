@@ -25,7 +25,7 @@ import (
 
 func TestConnector_EncodePathPart(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := []string{
 		"UPPERCASE", "UPPERCASE",
@@ -39,59 +39,59 @@ func TestConnector_EncodePathPart(t *testing.T) {
 	for i := 0; i < len(testCases); i += 2 {
 		var b strings.Builder
 		escapePathPart(&b, testCases[i])
-		tt.Equal(testCases[i+1], b.String())
+		assert.Equal(testCases[i+1], b.String())
 	}
 }
 
 func TestConnector_SubjectOfSubscription(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
-	tt.Equal("p0.80.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/to/file.html"))
-	tt.Equal("p0.80.com.example.|.GET.PATH._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/"))
-	tt.Equal("p0.123.com.example.|.POST.DIR.>", subjectOfSubscription("p0", "POST", "example.com", "123", "DIR/{+}"))
-	tt.Equal("p0.123.com.example.|.PATCH.DIR.>", subjectOfSubscription("p0", "PATCH", "example.com", "123", "/DIR/{file+}"))
-	tt.Equal("p0.443.com.example.www.|.DELETE.>", subjectOfSubscription("p0", "delete", "www.example.com", "443", "/{+}"))
-	tt.Equal("p0.443.com.example.www.|.*._", subjectOfSubscription("p0", "ANY", "www.example.com", "443", ""))
-	tt.Equal("p0.*.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "0", "PATH/to/file.html"))
-	tt.Equal("p0.443.com.example.|.GET.foo.*.bar.*", subjectOfSubscription("p0", "GET", "example.com", "443", "/foo/{foo}/bar/{bar}"))
-	tt.Equal("p0.*.com.example.|.*.foo.*.bar.*.>", subjectOfSubscription("p0", "ANY", "example.com", "0", "/foo/{foo}/bar/{bar}/{appendix+}"))
-	tt.Equal("p0.80.com.example.|.GET.empty._._._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "empty///"))
+	assert.Equal("p0.80.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/to/file.html"))
+	assert.Equal("p0.80.com.example.|.GET.PATH._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/"))
+	assert.Equal("p0.123.com.example.|.POST.DIR.>", subjectOfSubscription("p0", "POST", "example.com", "123", "DIR/{+}"))
+	assert.Equal("p0.123.com.example.|.PATCH.DIR.>", subjectOfSubscription("p0", "PATCH", "example.com", "123", "/DIR/{file+}"))
+	assert.Equal("p0.443.com.example.www.|.DELETE.>", subjectOfSubscription("p0", "delete", "www.example.com", "443", "/{+}"))
+	assert.Equal("p0.443.com.example.www.|.*._", subjectOfSubscription("p0", "ANY", "www.example.com", "443", ""))
+	assert.Equal("p0.*.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "0", "PATH/to/file.html"))
+	assert.Equal("p0.443.com.example.|.GET.foo.*.bar.*", subjectOfSubscription("p0", "GET", "example.com", "443", "/foo/{foo}/bar/{bar}"))
+	assert.Equal("p0.*.com.example.|.*.foo.*.bar.*.>", subjectOfSubscription("p0", "ANY", "example.com", "0", "/foo/{foo}/bar/{bar}/{appendix+}"))
+	assert.Equal("p0.80.com.example.|.GET.empty._._._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "empty///"))
 }
 
 func TestConnector_SubjectOfRequest(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
-	tt.Equal("p0.80.com.example.|.GET.PATH.to.file_html", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "PATH/to/file.html"))
-	tt.Equal("p0.80.com.example.|.GET.PATH._", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "PATH/"))
-	tt.Equal("p0.123.com.example.|.PATCH.DIR._", subjectOfRequest("p0", "PATCH", "example.com", "123", "/DIR/"))
-	tt.Equal("p0.443.com.example.www.|.ANY.method", subjectOfRequest("p0", "ANY", "www.example.com", "443", "/method"))
-	tt.Equal("p0.443.com.example.www.|.DELETE._", subjectOfRequest("p0", "delete", "www.example.com", "443", "/"))
-	tt.Equal("p0.443.com.example.www.|.OPTIONS._", subjectOfRequest("p0", "OPTIONS", "www.example.com", "443", ""))
-	tt.Equal("p0.0.com.example.|.GET.PATH.to.file_html", subjectOfRequest("p0", "GET", "EXAMPLE.com", "0", "PATH/to/file.html"))
-	tt.Equal("p0.443.com.example.|.GET.foo.%007bfoo%007d.bar.%007bbar%007d", subjectOfRequest("p0", "GET", "example.com", "443", "/foo/{foo}/bar/{bar}"))
-	tt.Equal("p0.80.com.example.|.GET.empty._._._", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "empty///"))
+	assert.Equal("p0.80.com.example.|.GET.PATH.to.file_html", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "PATH/to/file.html"))
+	assert.Equal("p0.80.com.example.|.GET.PATH._", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "PATH/"))
+	assert.Equal("p0.123.com.example.|.PATCH.DIR._", subjectOfRequest("p0", "PATCH", "example.com", "123", "/DIR/"))
+	assert.Equal("p0.443.com.example.www.|.ANY.method", subjectOfRequest("p0", "ANY", "www.example.com", "443", "/method"))
+	assert.Equal("p0.443.com.example.www.|.DELETE._", subjectOfRequest("p0", "delete", "www.example.com", "443", "/"))
+	assert.Equal("p0.443.com.example.www.|.OPTIONS._", subjectOfRequest("p0", "OPTIONS", "www.example.com", "443", ""))
+	assert.Equal("p0.0.com.example.|.GET.PATH.to.file_html", subjectOfRequest("p0", "GET", "EXAMPLE.com", "0", "PATH/to/file.html"))
+	assert.Equal("p0.443.com.example.|.GET.foo.%007bfoo%007d.bar.%007bbar%007d", subjectOfRequest("p0", "GET", "example.com", "443", "/foo/{foo}/bar/{bar}"))
+	assert.Equal("p0.80.com.example.|.GET.empty._._._", subjectOfRequest("p0", "GET", "EXAMPLE.com", "80", "empty///"))
 }
 
 func TestConnector_subjectOfResponses(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
-	tt.Equal("p0.r.com.example.1234", subjectOfResponses("p0", "example.com", "1234"))
-	tt.Equal("p0.r.com.example.www.abcd1234", subjectOfResponses("p0", "www.example.com", "abcd1234"))
-	tt.Equal("p0.r.com.example.www.abcd1234", subjectOfResponses("p0", "www.EXAMPLE.com", "ABCD1234"))
+	assert.Equal("p0.r.com.example.1234", subjectOfResponses("p0", "example.com", "1234"))
+	assert.Equal("p0.r.com.example.www.abcd1234", subjectOfResponses("p0", "www.example.com", "abcd1234"))
+	assert.Equal("p0.r.com.example.www.abcd1234", subjectOfResponses("p0", "www.EXAMPLE.com", "ABCD1234"))
 }
 
 func TestConnector_ReverseHostname(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
-	tt.Equal("com.example.sub.www", reverseHostname("www.sub.example.com"))
-	tt.Equal("com.example.www", reverseHostname("www.example.com"))
-	tt.Equal("com.example", reverseHostname("example.com"))
-	tt.Equal("com", reverseHostname("com"))
-	tt.Equal("", reverseHostname(""))
+	assert.Equal("com.example.sub.www", reverseHostname("www.sub.example.com"))
+	assert.Equal("com.example.www", reverseHostname("www.example.com"))
+	assert.Equal("com.example", reverseHostname("example.com"))
+	assert.Equal("com", reverseHostname("com"))
+	assert.Equal("", reverseHostname(""))
 }
 
 func BenchmarkConnector_ReverseHostname(b *testing.B) {

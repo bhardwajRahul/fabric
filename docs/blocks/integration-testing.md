@@ -58,9 +58,9 @@ func TestCalculator_Arithmetic(t *testing.T) {
 	// ...
 
 	t.Run("addition", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		result, err := client.Arithmetic(ctx, 5, "+", 6)
-		tt.Expect(result, 11, err, nil)
+		assert.Expect(result, 11, err, nil)
 	})
 
 	// ...
@@ -80,13 +80,13 @@ func TestHello_Hello(t *testing.T) {
 	// ...
 
 	t.Run("hello", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.Hello(ctx, "GET", "?name=Maria", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "Hello, Maria")
+			if assert.NoError(err) {
+				assert.Contains(body, "Hello, Maria")
 			}
 		}
 	})
@@ -106,9 +106,9 @@ func TestHello_TickTock(t *testing.T) {
 	// ...
 
 	t.Run("ticktock_runs", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		err := svc.TickTock(ctx)
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 
 	// ...
@@ -124,9 +124,9 @@ func TestExample_OnChangedPort(t *testing.T) {
 	// ...
 
 	t.Run("switch_database", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		err := svc.SetPort(1234)
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 
 	// ...
@@ -144,16 +144,16 @@ func TestExample_OnRegistered(t *testing.T) {
 	// ...
 
 	t.Run("registration_notification", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
-			tt.Expect(email, "peter@example.com")
+			assert.Expect(email, "peter@example.com")
 			return nil
 		})
 		defer hook.OnRegistered(nil)
 		for e := range trigger.OnRegistered(ctx, "peter@example.com") {
 			if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
 				err := e.Get()
-				tt.NoError(err)
+				assert.NoError(err)
 			}
 		}
 	})
@@ -173,11 +173,11 @@ func TestExample_OnAllowRegister(t *testing.T) {
 	// ...
 
 	t.Run("allowed_registrations", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		for e := range eventsourceTrigger.OnAllowRegister(ctx, "user@example.com") {
 			if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
 				allow, err := i.Get()
-				tt.Expect(allow, true, err, nil)
+				assert.Expect(allow, true, err, nil)
 			}
 		}
 	})
@@ -195,9 +195,9 @@ func TestExample_OnObserveNumOperations(t *testing.T) {
 	// ...
 
 	t.Run("observe_num_operations", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		err := svc.OnObserveNumOperations(ctx)
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 
 	// ...
@@ -222,7 +222,7 @@ The code generator specifies to run all tests in parallel. The assumption is tha
 
 Sometimes, using the actual microservice is not possible because it depends on a resource that is not available in the testing environment. For example, a microservice that makes requests to a third-party web service should be mocked in order to avoid depending on that service for development.
 
-In order to more easily mock microservices, the code generator creates a `Mock` for every microservice. This mock includes type-safe methods for mocking all the endpoints of the microservice. If mocking is going to be the same for all tests, the mock can be permanently included in the application in the initialization phase.
+In order to more easily mock microservices, the code generator creates a `Mock` for every microservice. This mock includes type-safe methods for mocking all the endpoints of the microservice. Mocks are added to testing applications in lieu of the real services.
 
 ```go
 func TestPayment_ChargeUser(t *testing.T) {
@@ -266,16 +266,16 @@ func TestFoo_DoSomething(t *testing.T) {
 	// ...
 
 	t.Run("yesterday", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 		ctx := frame.CloneContext(ctx)
 
 		frame.Of(ctx).SetClockShift(-time.Hour * 24) // 24 hours ago
 		err := client.DoSomething(ctx, userKey)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		frame.Of(ctx).IncrementClockShift(time.Hour) // 23 hours ago
 		err = client.DoSomething(ctx, userKey)
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 
 	// ...

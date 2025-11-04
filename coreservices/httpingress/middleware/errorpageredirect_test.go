@@ -26,7 +26,7 @@ import (
 
 func TestErrorPageRedirect_Redirect(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
@@ -38,14 +38,14 @@ func TestErrorPageRedirect_Redirect(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return nil
 	})(w, r)
-	tt.NoError(err)
-	tt.Equal(http.StatusTemporaryRedirect, w.StatusCode())
-	tt.Equal(w.Header().Get("Location"), "/login")
+	assert.NoError(err)
+	assert.Equal(http.StatusTemporaryRedirect, w.StatusCode())
+	assert.Equal(w.Header().Get("Location"), "/login")
 }
 
 func TestErrorPageRedirect_NoBrowserHeaders(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
@@ -55,13 +55,13 @@ func TestErrorPageRedirect_NoBrowserHeaders(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return nil
 	})(w, r)
-	tt.NoError(err)
-	tt.Equal(http.StatusTemporaryRedirect, w.StatusCode())
+	assert.NoError(err)
+	assert.Equal(http.StatusTemporaryRedirect, w.StatusCode())
 }
 
 func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/login", nil)
@@ -73,6 +73,6 @@ func TestErrorPageRedirect_WrongErrorCode(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		return nil
 	})(w, r)
-	tt.NoError(err)
-	tt.Equal(http.StatusBadRequest, w.StatusCode())
+	assert.NoError(err)
+	assert.Equal(http.StatusBadRequest, w.StatusCode())
 }

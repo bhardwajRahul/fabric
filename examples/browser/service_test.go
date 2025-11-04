@@ -81,76 +81,76 @@ func TestBrowser_Browse(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("empty_initial_load", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Load the browser without a URL
 		res, err := client.Browse(ctx, "GET", "", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				// Check basic HTML structure
-				tt.HTMLMatch(body, "HTML", "")
-				tt.HTMLMatch(body, "HEAD", "")
-				tt.HTMLMatch(body, "BODY", "")
+				assert.HTMLMatch(body, "HTML", "")
+				assert.HTMLMatch(body, "HEAD", "")
+				assert.HTMLMatch(body, "BODY", "")
 
 				// Check form structure
-				tt.HTMLMatch(body, "FORM", "")
-				tt.HTMLMatch(body, `FORM[method="GET"]`, "")
-				tt.HTMLMatch(body, `FORM[action="browse"]`, "")
+				assert.HTMLMatch(body, "FORM", "")
+				assert.HTMLMatch(body, `FORM[method="GET"]`, "")
+				assert.HTMLMatch(body, `FORM[action="browse"]`, "")
 
 				// Check input elements
-				tt.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
-				tt.HTMLMatch(body, `INPUT[type="submit"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="submit"]`, "")
 
 				// Verify no PRE element (no content fetched yet)
-				tt.HTMLNotMatch(body, "PRE", "")
+				assert.HTMLNotMatch(body, "PRE", "")
 			}
 		}
 	})
 
 	t.Run("fetch_url_with_content", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Load the browser with a URL
 		res, err := client.Browse(ctx, "GET", "?url=https://lorem.ipsum/", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				// Check basic HTML structure
-				tt.HTMLMatch(body, "HTML", "")
-				tt.HTMLMatch(body, "BODY", "")
+				assert.HTMLMatch(body, "HTML", "")
+				assert.HTMLMatch(body, "BODY", "")
 
 				// Check form with populated URL
-				tt.HTMLMatch(body, "FORM", "")
-				tt.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
+				assert.HTMLMatch(body, "FORM", "")
+				assert.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
 
 				// Check that the source code is displayed in a PRE element
-				tt.HTMLMatch(body, "PRE", "")
-				tt.HTMLMatch(body, `PRE`, `<html>`)
-				tt.HTMLMatch(body, `PRE`, `Lorem Ipsum`)
-				tt.HTMLMatch(body, `PRE`, `</html>`)
+				assert.HTMLMatch(body, "PRE", "")
+				assert.HTMLMatch(body, `PRE`, `<html>`)
+				assert.HTMLMatch(body, `PRE`, `Lorem Ipsum`)
+				assert.HTMLMatch(body, `PRE`, `</html>`)
 
 				// Verify the entire expected content appears
 				expectedContent := `<html><body>Lorem Ipsum<body></html>`
-				tt.HTMLMatch(body, `PRE`, "^"+regexp.QuoteMeta(expectedContent)+"$")
+				assert.HTMLMatch(body, `PRE`, "^"+regexp.QuoteMeta(expectedContent)+"$")
 			}
 		}
 	})
 
 	t.Run("url_without_scheme", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Load the browser with a URL without scheme (should be prefixed with https://)
 		res, err := client.Browse(ctx, "GET", "?url=lorem.ipsum", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				// Check that the form shows the input value
-				tt.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="text"][name="url"]`, "")
 
 				// Check that content was fetched and displayed
-				tt.HTMLMatch(body, "PRE", "")
-				tt.HTMLMatch(body, `PRE`, `Lorem Ipsum`)
+				assert.HTMLMatch(body, "PRE", "")
+				assert.HTMLMatch(body, `PRE`, `Lorem Ipsum`)
 			}
 		}
 	})

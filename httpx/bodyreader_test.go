@@ -25,19 +25,19 @@ import (
 
 func TestHttpx_BodyReader(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	bin := []byte("Lorem Ipsum")
 	br := NewBodyReader(bin)
 	bout, err := io.ReadAll(br)
-	tt.NoError(err)
-	tt.Equal(bin, bout)
-	tt.Equal(bin, br.Bytes())
+	assert.NoError(err)
+	assert.Equal(bin, bout)
+	assert.Equal(bin, br.Bytes())
 	br.Reset()
 	bout, err = io.ReadAll(br)
-	tt.NoError(err)
-	tt.Equal(bin, bout)
-	tt.Equal(bin, br.Bytes())
+	assert.NoError(err)
+	assert.Equal(bin, bout)
+	assert.Equal(bin, br.Bytes())
 	err = br.Close()
-	tt.NoError(err)
+	assert.NoError(err)
 }

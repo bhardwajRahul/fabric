@@ -12,7 +12,11 @@ func main() {
 	app.Add(
 		// Other microservices...
 	)
-	app.Run()
+	err := app.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v", err)
+		os.Exit(19)
+	}
 }
 ```
 

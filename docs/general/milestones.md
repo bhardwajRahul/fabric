@@ -148,7 +148,7 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Handle service resources natively in the `Connector` rather than in the code generation layer
 - Enable initializing the `Connector` with a custom `fs.FS`
 - `ServerLanguages` configuration in the HTTP Ingress microservice determines the best language to display to the user based on the `Accept-Language` request header
-- `LoadResString` in `Connector` loads a string from the `strings.yaml` resource file localized to the language of the request
+- `LoadResString` in `Connector` loads a string from the `text.yaml` resource file localized to the language of the request
 - Introduced `Parallel` in `Connector` to run multiple jobs in parallel
 - Startup `Group`s instead of `Connector` startup sequence
 
@@ -320,3 +320,8 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Adjusted order of applying path, body and query args
 - Improved code generator to not require insertion point markers in the code
 - Disabled known responders optimization in `TESTING` deployment env
+
+[Milestone 39](https://github.com/microbus-io/fabric/tree/milestone/39):
+
+- Instructions for coding agents
+- Deprecated the individual app of each microservice

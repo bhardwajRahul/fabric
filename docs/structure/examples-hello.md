@@ -56,7 +56,7 @@ The `/calculator` endpoint renders a rudimentary UI of a calculator. Behind the 
 
 The `/bus.png` endpoint serves an image from the embedded resources directory.
 
-The `/localized` endpoint demonstrates loading a localized string from the `strings.yaml` resource based on the request's `Accept-Language` header.
+The `/localized` endpoint demonstrates loading a localized string from the `text.yaml` resource based on the request's `Accept-Language` header.
 
 http://localhost:8080/hello.example/localized prints `Hello` in one of several European languages:
 

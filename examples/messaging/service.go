@@ -179,7 +179,8 @@ func (svc *Service) CacheLoad(w http.ResponseWriter, r *http.Request) (err error
 	if key == "" {
 		return errors.New("missing key")
 	}
-	value, ok, err := svc.DistribCache().Load(r.Context(), key)
+	var value []byte
+	ok, err := svc.DistribCache().Get(r.Context(), key, &value)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -214,7 +215,7 @@ func (svc *Service) CacheStore(w http.ResponseWriter, r *http.Request) (err erro
 	if value == "" {
 		return errors.New("missing value")
 	}
-	err = svc.DistribCache().Store(r.Context(), key, []byte(value))
+	err = svc.DistribCache().Set(r.Context(), key, []byte(value))
 	if err != nil {
 		return errors.Trace(err)
 	}

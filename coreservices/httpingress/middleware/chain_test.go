@@ -26,7 +26,7 @@ import (
 
 func TestChain_CRUD(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	noop := func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) error {
@@ -35,49 +35,49 @@ func TestChain_CRUD(t *testing.T) {
 	}
 
 	chain := &Chain{}
-	tt.Equal("", chain.String())
+	assert.Equal("", chain.String())
 
 	chain.Append("10", noop)
 	chain.Append("20", noop)
-	tt.Equal("10 -> 20", chain.String())
-	tt.False(chain.Exists("5"))
-	tt.True(chain.Exists("10"))
-	tt.False(chain.Exists("15"))
-	tt.True(chain.Exists("20"))
+	assert.Equal("10 -> 20", chain.String())
+	assert.False(chain.Exists("5"))
+	assert.True(chain.Exists("10"))
+	assert.False(chain.Exists("15"))
+	assert.True(chain.Exists("20"))
 
 	chain.InsertBefore("10", "5", noop)
 	chain.InsertAfter("10", "15", noop)
-	tt.Equal("5 -> 10 -> 15 -> 20", chain.String())
-	tt.True(chain.Exists("5"))
-	tt.True(chain.Exists("10"))
-	tt.True(chain.Exists("15"))
-	tt.True(chain.Exists("20"))
+	assert.Equal("5 -> 10 -> 15 -> 20", chain.String())
+	assert.True(chain.Exists("5"))
+	assert.True(chain.Exists("10"))
+	assert.True(chain.Exists("15"))
+	assert.True(chain.Exists("20"))
 
 	chain.Replace("10", noop)
-	tt.Equal("5 -> 10 -> 15 -> 20", chain.String())
+	assert.Equal("5 -> 10 -> 15 -> 20", chain.String())
 
 	chain.Delete("10")
 	chain.Delete("20")
-	tt.Equal("5 -> 15", chain.String())
+	assert.Equal("5 -> 15", chain.String())
 
 	chain.Prepend("0", noop)
-	tt.Equal("0 -> 5 -> 15", chain.String())
+	assert.Equal("0 -> 5 -> 15", chain.String())
 
 	chain.Clear()
-	tt.Equal("", chain.String())
+	assert.Equal("", chain.String())
 
 	chain.Replace("10", noop)
 	chain.InsertBefore("10", "5", noop)
 	chain.InsertAfter("10", "15", noop)
 	chain.Delete("20")
-	tt.Equal("", chain.String())
-	tt.False(chain.Exists("5"))
-	tt.False(chain.Exists("10"))
-	tt.False(chain.Exists("15"))
-	tt.False(chain.Exists("20"))
+	assert.Equal("", chain.String())
+	assert.False(chain.Exists("5"))
+	assert.False(chain.Exists("10"))
+	assert.False(chain.Exists("15"))
+	assert.False(chain.Exists("20"))
 
 	chain.Prepend("ALPHA", noop)
-	tt.Equal("ALPHA", chain.String())
-	tt.True(chain.Exists("ALPHA"))
-	tt.True(chain.Exists("alpha"))
+	assert.Equal("ALPHA", chain.String())
+	assert.True(chain.Exists("ALPHA"))
+	assert.True(chain.Exists("alpha"))
 }

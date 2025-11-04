@@ -100,7 +100,11 @@ func main() {
 	app.Add(
 		httpingress.NewService(),
 	)
-	app.Run()
+	err := app.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v", err)
+		os.Exit(19)
+	}
 }
 ```
 
@@ -193,6 +197,7 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 ### Guides
 
 * [Code generation](./docs/blocks/codegen.md) - Discover the power of `Microbus`'s powerful RAD tool
+* [Coding agents](./docs/blocks/coding-agents.md) - Leverage coding agents such as Claude
 * [Configuration](./docs/blocks/configuration.md) - How to configure microservices
 * [Path arguments](./docs/tech/path-arguments.md) - Define wildcard path arguments in subscriptions
 * [HTTP magic arguments](./docs/tech/http-arguments.md) - Use HTTP magic arguments in functional endpoints to gain finer control over the HTTP request and response
@@ -224,7 +229,7 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 * [Tickers](./docs/blocks/tickers.md) - Tickers are jobs that run on a schedule
 * [Multiplexed connections](./docs/blocks/multiplexed.md) - Multiplexed connections are more efficient than HTTP/1.1
 * [Load balancing](./docs/blocks/lb.md) - Load balancing requests among all replicas of a microservice
-* [Internationalization](./docs/blocks/i18n.md) - Loading and localizing strings from `strings.yaml`
+* [Internationalization](./docs/blocks/i18n.md) - Loading and localizing strings from `text.yaml`
 * [Locality-aware routing](./docs/blocks/locality-aware-routing.md) - Optimizing service-to-service communication
 * [Connectivity liveness tests](./docs/blocks/connectivity-liveness-test.md) - A microservice's connection to the messaging bus represents its liveness
 * [Skeleton code](./docs/blocks/skeleton-code.md) - Skeleton code is a placeholder for filling in meaningful code
@@ -237,7 +242,7 @@ Dig deeper into the technology of `Microbus` and its philosophy.
 
 * [Encapsulation pattern](./docs/tech/encapsulation.md) - The reasons for encapsulating third-party technologies
 * [JSON/HTTP vs Protobuf](./docs/tech/json-vs-protobuf.md) - Why JSON/HTTP was chosen as the protocol
-* [Out of scope](./docs/tech/out-of-scope.md) - Areas that `Microbus` stays out of
+* [Out of scope](./docs/tech/out-of-scope.md) - Areas that `Microbus` stays clear of
 
 ### Miscellaneous
 

@@ -137,6 +137,6 @@ func (svc *Service) List(w http.ResponseWriter, r *http.Request) (err error) {
 		return errors.Trace(err)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, err = w.Write([]byte(output))
+	_, err = w.Write(output)
 	return errors.Trace(err)
 }

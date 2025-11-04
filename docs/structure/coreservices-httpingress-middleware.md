@@ -28,7 +28,7 @@ validates it with its issuer, and associates the corresponding actor with the re
 - `CharsetUTF8` appends `; charset=utf-8` to the `Content-Type` header of textual responses
 - `Compress` compresses textual responses using brotli, gzip or deflate
 - `CORS` responds to the CORS origin OPTION request and blocks requests from disallowed origins
-- `DefaultFavIcon` responds to `/favicon.ico`, if the app does not
+- `DefaultFavIcon` responds to `/favicon.ico`, if no microservice does
 - `ErrorPageRedirect` that redirects full-page browser requests that resulted in an error to an error page
 - `ErrorPrinter` is the final catcher of errors. It converts the errors to the appropriate HTTP status code, typically `500 Internal Server Error`, and prints an error message to the user
 - `Group` chains nested middleware together and is often used in conjunction with the `OnRoute` middleware to apply a group of middleware to a specific route

@@ -28,7 +28,7 @@ import (
 
 func TestCodeGen_FullGeneration(t *testing.T) {
 	// No parallel
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	serviceYaml := `
 general:
@@ -96,28 +96,25 @@ metrics:
 	os.Mkdir(dir, os.ModePerm)
 	defer os.RemoveAll(dir)
 	err := os.WriteFile(filepath.Join(dir, "service.yaml"), []byte(serviceYaml), 0666)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Generate
 	gen := NewGenerator()
 	gen.WorkDir = dir
 	gen.AddToMainApp = false
 	err = gen.Run()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Validate
 	fileContains := func(fileName string, terms ...string) {
 		body, err := os.ReadFile(filepath.Join(dir, fileName))
-		if tt.NoError(err, "%s", fileName) {
+		if assert.NoError(err, "%s", fileName) {
 			for _, term := range terms {
-				tt.Contains(body, term, "%s does not contain '%s'", fileName, term)
+				assert.Contains(body, term, "%s does not contain '%s'", fileName, term)
 			}
 		}
 	}
 
-	fileContains(filepath.Join("app", dir, "main-gen.go"),
-		"func main", dir+".NewService()",
-	)
 	fileContains(filepath.Join(dir+"api", "clients-gen.go"),
 		"Func1(ctx", "Func2(ctx", "Web1(ctx", "Web2(ctx", "OnEvent1(ctx", "OnEvent2(ctx", "OnEvent1(handler", "OnEvent2(handler",
 	)
@@ -168,16 +165,16 @@ metrics:
 	)
 
 	ver, err := gen.currentVersion()
-	if tt.NoError(err) {
-		tt.Equal(1, ver.Version)
+	if assert.NoError(err) {
+		assert.Equal(1, ver.Version)
 	}
 
 	// Second run should be a no op
 	err = gen.Run()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	ver, err = gen.currentVersion()
-	if tt.NoError(err) {
-		tt.Equal(1, ver.Version)
+	if assert.NoError(err) {
+		assert.Equal(1, ver.Version)
 	}
 }

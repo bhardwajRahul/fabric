@@ -39,7 +39,7 @@ import (
 
 func TestConnector_Echo(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -49,31 +49,31 @@ func TestConnector_Echo(t *testing.T) {
 	beta := New("beta.echo.connector")
 	beta.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
 		body, err := io.ReadAll(r.Body)
-		tt.NoError(err)
+		assert.NoError(err)
 		_, err = w.Write(body)
-		tt.NoError(err)
+		assert.NoError(err)
 		return nil
 	})
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// Send message and validate that it's echoed back
 	response, err := alpha.POST(ctx, "https://beta.echo.connector/echo", []byte("Hello"))
-	tt.NoError(err)
+	assert.NoError(err)
 	body, err := io.ReadAll(response.Body)
-	tt.NoError(err)
-	tt.Equal([]byte("Hello"), body)
+	assert.NoError(err)
+	assert.Equal([]byte("Hello"), body)
 }
 
 func TestConnector_Error(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -95,29 +95,29 @@ func TestConnector_Error(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// Send message and validate that the error is received as sent
 	_, err = alpha.GET(ctx, "https://beta.error.connector/err")
-	tt.Error(err)
+	assert.Error(err)
 	tracedErr := errors.Convert(err)
-	tt.Equal("pattern XYZ 123: original error", tracedErr.Error())
-	tt.Equal(http.StatusBadRequest, tracedErr.StatusCode)
-	tt.Equal(888.0, tracedErr.Properties["int"])
-	tt.Equal("ABC", tracedErr.Properties["str"])
-	tt.Equal(true, tracedErr.Properties["bool"])
-	tt.Equal(float64(time.Second), tracedErr.Properties["dur"])
+	assert.Equal("pattern XYZ 123: original error", tracedErr.Error())
+	assert.Equal(http.StatusBadRequest, tracedErr.StatusCode)
+	assert.Equal(888.0, tracedErr.Properties["int"])
+	assert.Equal("ABC", tracedErr.Properties["str"])
+	assert.Equal(true, tracedErr.Properties["bool"])
+	assert.Equal(float64(time.Second), tracedErr.Properties["dur"])
 	_, parseErr := time.Parse(time.RFC3339, tracedErr.Properties["time"].(string))
-	tt.NoError(parseErr)
+	assert.NoError(parseErr)
 }
 
 func BenchmarkConnector_EchoSerial(b *testing.B) {
 	ctx := context.Background()
-	tt := testarossa.For(b)
+	assert := testarossa.For(b)
 
 	// Create the microservice
 	alpha := New("alpha.echo.serial.connector")
@@ -157,9 +157,9 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 		b.Run(scDesc, func(b *testing.B) {
 			// Startup the microservice
 			err := alpha.Startup()
-			tt.NoError(err)
+			assert.NoError(err)
 			err = beta.Startup()
-			tt.NoError(err)
+			assert.NoError(err)
 
 			for _, kb := range []int{0, 1, 16, 256, 1024 - 64} {
 				b.Run(strconv.Itoa(kb)+"KB", func(b *testing.B) {
@@ -209,7 +209,7 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 }
 
 func BenchmarkConnector_EchoSerialHTTP(b *testing.B) {
-	tt := testarossa.For(b)
+	assert := testarossa.For(b)
 
 	// Create the web server
 	var echoCount atomic.Int32
@@ -252,8 +252,8 @@ func BenchmarkConnector_EchoSerialHTTP(b *testing.B) {
 				}
 			}
 			b.StopTimer()
-			tt.Zero(errCount.Load())
-			tt.Equal(b.N, int(echoCount.Load()))
+			assert.Zero(errCount.Load())
+			assert.Equal(b.N, int(echoCount.Load()))
 		})
 	}
 
@@ -579,7 +579,7 @@ func echoParallelHTTP(b *testing.B, concurrency int, payloadSize int) {
 func TestConnector_EchoParallelCapacity(t *testing.T) {
 	// No parallel
 	t.Skip() // Dependent on strength of CPU running the test
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -630,10 +630,10 @@ func TestConnector_EchoParallelCapacity(t *testing.T) {
 	}
 	wg.Wait()
 	avgTime := totalTime.Load() / int64(n)
-	tt.Zero(errCount.Load())
-	tt.Equal(int32(n), echoCount.Load())
-	tt.True(avgTime <= 250, avgTime)                // 250ms
-	tt.True(maxTime.Load() <= 1000, maxTime.Load()) // 1 sec
+	assert.Zero(errCount.Load())
+	assert.Equal(int32(n), echoCount.Load())
+	assert.True(avgTime <= 250, avgTime)                // 250ms
+	assert.True(maxTime.Load() <= 1000, maxTime.Load()) // 1 sec
 
 	// On 2021 MacBook M1 Pro 16":
 	// n=10000 avg=56 max=133
@@ -644,7 +644,7 @@ func TestConnector_EchoParallelCapacity(t *testing.T) {
 
 func TestConnector_QueryArgs(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -652,23 +652,23 @@ func TestConnector_QueryArgs(t *testing.T) {
 	con := New("query.args.connector")
 	con.Subscribe("GET", "arg", func(w http.ResponseWriter, r *http.Request) error {
 		arg := r.URL.Query().Get("arg")
-		tt.Equal("not_empty", arg)
+		assert.Equal("not_empty", arg)
 		return nil
 	})
 
 	// Startup the microservices
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	// Send request with a query argument
 	_, err = con.GET(ctx, "https://query.args.connector/arg?arg=not_empty")
-	tt.NoError(err)
+	assert.NoError(err)
 }
 
 func TestConnector_LoadBalancing(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -692,13 +692,13 @@ func TestConnector_LoadBalancing(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta1.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta1.Shutdown()
 	err = beta2.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta2.Shutdown()
 
 	// Send messages
@@ -707,21 +707,21 @@ func TestConnector_LoadBalancing(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			_, err := alpha.GET(ctx, "https://beta.load.balancing.connector/lb")
-			tt.NoError(err)
+			assert.NoError(err)
 			wg.Done()
 		}()
 	}
 	wg.Wait()
 
 	// The requests should be more or less evenly distributed among the server microservices
-	tt.Equal(int32(256), count1+count2)
-	tt.True(count1 > 64, count1)
-	tt.True(count2 > 64, count2)
+	assert.Equal(int32(256), count1+count2)
+	assert.True(count1 > 64, count1)
+	assert.True(count2 > 64, count2)
 }
 
 func TestConnector_Concurrent(t *testing.T) {
 	// No parallel
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -737,10 +737,10 @@ func TestConnector_Concurrent(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// Send messages
@@ -752,9 +752,9 @@ func TestConnector_Concurrent(t *testing.T) {
 			start := time.Now()
 			_, err := alpha.GET(ctx, "https://beta.concurrent.connector/wait?ms="+strconv.Itoa(i))
 			end := time.Now()
-			tt.NoError(err)
+			assert.NoError(err)
 			dur := start.Add(time.Millisecond * time.Duration(i)).Sub(end)
-			tt.True(dur.Abs() <= time.Millisecond*49)
+			assert.True(dur.Abs() <= time.Millisecond*49)
 			wg.Done()
 		}()
 	}
@@ -763,7 +763,7 @@ func TestConnector_Concurrent(t *testing.T) {
 
 func TestConnector_CallDepth(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 	depth := 0
@@ -775,29 +775,29 @@ func TestConnector_CallDepth(t *testing.T) {
 		depth++
 
 		step, _ := strconv.Atoi(r.URL.Query().Get("step"))
-		tt.Equal(depth, step)
-		tt.Equal(depth, frame.Of(r).CallDepth())
+		assert.Equal(depth, step)
+		assert.Equal(depth, frame.Of(r).CallDepth())
 
 		_, err := con.GET(r.Context(), "https://call.depth.connector/next?step="+strconv.Itoa(step+1))
-		tt.Error(err)
-		tt.Contains(err.Error(), "call depth overflow")
+		assert.Error(err)
+		assert.Contains(err.Error(), "call depth overflow")
 		return errors.Trace(err)
 	})
 
 	// Startup the microservices
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	_, err = con.GET(ctx, "https://call.depth.connector/next?step=1")
-	tt.Error(err)
-	tt.Contains(err.Error(), "call depth overflow")
-	tt.Equal(con.maxCallDepth, depth)
+	assert.Error(err)
+	assert.Contains(err.Error(), "call depth overflow")
+	assert.Equal(con.maxCallDepth, depth)
 }
 
 func TestConnector_TimeoutDrawdown(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 	depth := 0
@@ -813,7 +813,7 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	budgetedCtx, cancel := context.WithTimeout(ctx, budget)
@@ -822,14 +822,14 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 		budgetedCtx,
 		pub.GET("https://timeout.drawdown.connector/next"),
 	)
-	tt.Error(err)
-	tt.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
-	tt.True(depth >= 7 && depth <= 8, "%d", depth)
+	assert.Error(err)
+	assert.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
+	assert.True(depth >= 7 && depth <= 8, "%d", depth)
 }
 
 func TestConnector_TimeoutContext(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Create the microservice
 	con := New("timeout.context.connector")
@@ -841,7 +841,7 @@ func TestConnector_TimeoutContext(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -850,15 +850,15 @@ func TestConnector_TimeoutContext(t *testing.T) {
 		ctx,
 		pub.GET("https://timeout.context.connector/ok"),
 	)
-	if tt.NoError(err) {
-		tt.False(deadline.IsZero())
-		tt.True(time.Until(deadline) > time.Second*8, time.Until(deadline))
+	if assert.NoError(err) {
+		assert.False(deadline.IsZero())
+		assert.True(time.Until(deadline) > time.Second*8, time.Until(deadline))
 	}
 }
 
 func TestConnector_TimeoutNotFound(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -867,7 +867,7 @@ func TestConnector_TimeoutNotFound(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	// Set a time budget in the request
@@ -879,8 +879,8 @@ func TestConnector_TimeoutNotFound(t *testing.T) {
 		pub.GET("https://timeout.not.found.connector/nowhere"),
 	)
 	dur := time.Since(t0)
-	tt.Error(err)
-	tt.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
+	assert.Error(err)
+	assert.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
 
 	// Use the default time budget
 	t0 = time.Now()
@@ -889,14 +889,14 @@ func TestConnector_TimeoutNotFound(t *testing.T) {
 		pub.GET("https://timeout.not.found.connector/nowhere"),
 	)
 	dur = time.Since(t0)
-	tt.Error(err)
-	tt.Equal(http.StatusNotFound, errors.Convert(err).StatusCode)
-	tt.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
+	assert.Error(err)
+	assert.Equal(http.StatusNotFound, errors.Convert(err).StatusCode)
+	assert.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
 }
 
 func TestConnector_TimeoutSlow(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -909,7 +909,7 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	shortCtx, cancel := context.WithTimeout(ctx, time.Millisecond*500)
@@ -919,14 +919,14 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 		shortCtx,
 		pub.GET("https://timeout.slow.connector/slow"),
 	)
-	tt.Error(err)
+	assert.Error(err)
 	dur := time.Since(t0)
-	tt.True(dur >= 500*time.Millisecond && dur < 600*time.Millisecond)
+	assert.True(dur >= 500*time.Millisecond && dur < 600*time.Millisecond)
 }
 
 func TestConnector_ContextTimeout(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("context.timeout.connector")
 
@@ -938,7 +938,7 @@ func TestConnector_ContextTimeout(t *testing.T) {
 	})
 
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	shortCtx, cancel := context.WithTimeout(con.Lifetime(), time.Second)
@@ -947,13 +947,13 @@ func TestConnector_ContextTimeout(t *testing.T) {
 		shortCtx,
 		pub.GET("https://context.timeout.connector/timeout"),
 	)
-	tt.Error(err)
-	tt.True(done)
+	assert.Error(err)
+	assert.True(done)
 }
 
 func TestConnector_Multicast(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1001,7 +1001,7 @@ func TestConnector_Multicast(t *testing.T) {
 		i.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
 
 		err := i.Startup()
-		tt.NoError(err)
+		assert.NoError(err)
 		defer i.Shutdown()
 	}
 
@@ -1012,21 +1012,21 @@ func TestConnector_Multicast(t *testing.T) {
 	ch := client.Publish(ctx, pub.GET("https://multicast.connector/cast"), pub.Multicast())
 	for i := range ch {
 		res, err := i.Get()
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			body, err := io.ReadAll(res.Body)
-			tt.NoError(err)
+			assert.NoError(err)
 			responded[string(body)] = true
 		}
 	}
 	dur := time.Since(t0)
-	tt.True(dur >= ackTimeout && dur < ackTimeout+time.Second)
-	tt.Len(responded, 4)
-	tt.True(responded["noqueue1"])
-	tt.True(responded["noqueue2"])
-	tt.True(responded["named1"] || responded["named2"])
-	tt.False(responded["named1"] && responded["named2"])
-	tt.True(responded["def1"] || responded["def2"])
-	tt.False(responded["def1"] && responded["def2"])
+	assert.True(dur >= ackTimeout && dur < ackTimeout+time.Second)
+	assert.Len(responded, 4)
+	assert.True(responded["noqueue1"])
+	assert.True(responded["noqueue2"])
+	assert.True(responded["named1"] || responded["named2"])
+	assert.False(responded["named1"] && responded["named2"])
+	assert.True(responded["def1"] || responded["def2"])
+	assert.False(responded["def1"] && responded["def2"])
 
 	// Make the second request, should be quicker due to known responders optimization
 	t0 = time.Now()
@@ -1034,26 +1034,26 @@ func TestConnector_Multicast(t *testing.T) {
 	ch = client.Publish(ctx, pub.GET("https://multicast.connector/cast"), pub.Multicast())
 	for i := range ch {
 		res, err := i.Get()
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			body, err := io.ReadAll(res.Body)
-			tt.NoError(err)
+			assert.NoError(err)
 			responded[string(body)] = true
 		}
 	}
 	dur = time.Since(t0)
-	tt.True(dur < ackTimeout)
-	tt.Len(responded, 4)
-	tt.True(responded["noqueue1"])
-	tt.True(responded["noqueue2"])
-	tt.True(responded["named1"] || responded["named2"])
-	tt.False(responded["named1"] && responded["named2"])
-	tt.True(responded["def1"] || responded["def2"])
-	tt.False(responded["def1"] && responded["def2"])
+	assert.True(dur < ackTimeout)
+	assert.Len(responded, 4)
+	assert.True(responded["noqueue1"])
+	assert.True(responded["noqueue2"])
+	assert.True(responded["named1"] || responded["named2"])
+	assert.False(responded["named1"] && responded["named2"])
+	assert.True(responded["def1"] || responded["def2"])
+	assert.False(responded["def1"] && responded["def2"])
 }
 
 func TestConnector_MulticastPartialTimeout(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 	delay := time.Millisecond * 500
@@ -1081,13 +1081,13 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 
 	// Startup the microservice
 	err := slow.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer slow.Shutdown()
 	err = fast.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer fast.Shutdown()
 	err = tooSlow.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer tooSlow.Shutdown()
 
 	// Send the message
@@ -1101,28 +1101,28 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 		pub.Multicast(),
 	)
 	dur := time.Since(t0)
-	tt.True(dur >= 3*delay && dur < 4*delay)
-	tt.Len(ch, 3)
-	tt.Equal(3, cap(ch))
+	assert.True(dur >= 3*delay && dur < 4*delay)
+	assert.Len(ch, 3)
+	assert.Equal(3, cap(ch))
 	for i := range ch {
 		res, err := i.Get()
 		if err == nil {
 			body, err := io.ReadAll(res.Body)
-			tt.NoError(err)
-			tt.True(string(body) == "fast" || string(body) == "slow")
+			assert.NoError(err)
+			assert.True(string(body) == "fast" || string(body) == "slow")
 			respondedOK++
 		} else {
-			tt.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
+			assert.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
 			respondedErr++
 		}
 	}
-	tt.Equal(2, respondedOK)
-	tt.Equal(1, respondedErr)
+	assert.Equal(2, respondedOK)
+	assert.Equal(1, respondedErr)
 }
 
 func TestConnector_MulticastError(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1140,10 +1140,10 @@ func TestConnector_MulticastError(t *testing.T) {
 
 	// Startup the microservice
 	err := bad.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer bad.Shutdown()
 	err = good.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer good.Shutdown()
 
 	// Send the message
@@ -1159,14 +1159,14 @@ func TestConnector_MulticastError(t *testing.T) {
 		}
 	}
 	dur := time.Since(t0)
-	tt.True(dur >= good.ackTimeout && dur <= good.ackTimeout+time.Second)
-	tt.Equal(1, countErrs)
-	tt.Equal(1, countOKs)
+	assert.True(dur >= good.ackTimeout && dur <= good.ackTimeout+time.Second)
+	assert.Equal(1, countErrs)
+	assert.Equal(1, countOKs)
 }
 
 func TestConnector_MulticastNotFound(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1175,7 +1175,7 @@ func TestConnector_MulticastNotFound(t *testing.T) {
 
 	// Startup the microservice
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	// Send the message
@@ -1187,13 +1187,13 @@ func TestConnector_MulticastNotFound(t *testing.T) {
 		count++
 	}
 	dur := time.Since(t0)
-	tt.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
-	tt.Zero(count)
+	assert.True(dur >= con.ackTimeout && dur < con.ackTimeout+time.Second)
+	assert.Zero(count)
 }
 
 func TestConnector_MassMulticast(t *testing.T) {
 	// No parallel
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 	randomPlane := rand.AlphaNum64(12)
@@ -1205,7 +1205,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 	client.SetPlane(randomPlane)
 
 	err := client.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer client.Shutdown()
 
 	// Create the server microservices in parallel
@@ -1223,7 +1223,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 			}, sub.NoQueue())
 
 			err := cons[i].Startup()
-			tt.NoError(err)
+			assert.NoError(err)
 			wg.Done()
 		}()
 	}
@@ -1234,7 +1234,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				err := cons[i].Shutdown()
-				tt.NoError(err)
+				assert.NoError(err)
 				wg.Done()
 			}()
 		}
@@ -1247,18 +1247,18 @@ func TestConnector_MassMulticast(t *testing.T) {
 	ch := client.Publish(ctx, pub.GET("https://mass.multicast.connector/cast"), pub.Multicast())
 	for i := range ch {
 		_, err := i.Get()
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			countOKs++
 		}
 	}
 	dur := time.Since(t0)
-	tt.True(dur >= cons[0].ackTimeout && dur <= cons[0].ackTimeout+time.Second)
-	tt.Equal(N, countOKs)
+	assert.True(dur >= cons[0].ackTimeout && dur <= cons[0].ackTimeout+time.Second)
+	assert.Equal(N, countOKs)
 }
 
 func TestConnector_KnownResponders(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1269,7 +1269,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 		return nil
 	}, sub.NoQueue())
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 
 	beta := New("known.responders.connector")
@@ -1278,7 +1278,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 		return nil
 	}, sub.NoQueue())
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	gamma := New("known.responders.connector")
@@ -1287,7 +1287,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 		return nil
 	}, sub.NoQueue())
 	err = gamma.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer gamma.Shutdown()
 
 	check := func() (count int, quick bool) {
@@ -1296,7 +1296,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 		ch := alpha.Publish(ctx, pub.GET("https://known.responders.connector/cast"), pub.Multicast())
 		for i := range ch {
 			res, err := i.Get()
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				responded[frame.Of(res).FromID()] = true
 			}
 		}
@@ -1306,14 +1306,14 @@ func TestConnector_KnownResponders(t *testing.T) {
 
 	// First request should be slower, consecutive requests should be quick
 	count, quick := check()
-	tt.Equal(3, count)
-	tt.False(quick)
+	assert.Equal(3, count)
+	assert.False(quick)
 	count, quick = check()
-	tt.Equal(3, count)
-	tt.True(quick)
+	assert.Equal(3, count)
+	assert.True(quick)
 	count, quick = check()
-	tt.Equal(3, count)
-	tt.True(quick)
+	assert.Equal(3, count)
+	assert.True(quick)
 
 	// Add a new microservice
 	delta := New("known.responders.connector")
@@ -1322,7 +1322,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 		return nil
 	}, sub.NoQueue())
 	err = delta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Should most likely get slow again once the new instance is discovered,
 	// consecutive requests should be quick
@@ -1330,24 +1330,24 @@ func TestConnector_KnownResponders(t *testing.T) {
 		count, quick = check()
 	}
 	count, quick = check()
-	tt.Equal(4, count)
-	tt.True(quick)
+	assert.Equal(4, count)
+	assert.True(quick)
 
 	// Remove a microservice
 	delta.Shutdown()
 
 	// Should get slow again, consecutive requests should be quick
 	count, quick = check()
-	tt.Equal(3, count)
-	tt.False(quick)
+	assert.Equal(3, count)
+	assert.False(quick)
 	count, quick = check()
-	tt.Equal(3, count)
-	tt.True(quick)
+	assert.Equal(3, count)
+	assert.True(quick)
 }
 
 func TestConnector_LifetimeCancellation(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("lifetime.cancellation.connector")
 
@@ -1361,7 +1361,7 @@ func TestConnector_LifetimeCancellation(t *testing.T) {
 	})
 
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	t0 := time.Now()
@@ -1370,20 +1370,20 @@ func TestConnector_LifetimeCancellation(t *testing.T) {
 			con.Lifetime(),
 			pub.GET("https://lifetime.cancellation.connector/something"),
 		)
-		tt.Error(err)
+		assert.Error(err)
 		step <- true
 	}()
 	<-step
 	con.ctxCancel()
 	<-step
-	tt.True(done)
+	assert.True(done)
 	dur := time.Since(t0)
-	tt.True(dur < time.Second)
+	assert.True(dur < time.Second)
 }
 
 func TestConnector_ChannelCapacity(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	n := 8
 
@@ -1402,7 +1402,7 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 				return nil
 			}, sub.NoQueue())
 			err := cons[i].Startup()
-			tt.NoError(err)
+			assert.NoError(err)
 			wg.Done()
 		}()
 	}
@@ -1423,10 +1423,10 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 		ctx,
 		pub.GET("https://channel.capacity.connector/multicast"),
 	)
-	tt.True(time.Since(t0) > time.Duration(n*100)*time.Millisecond)
-	tt.Equal(n, int(responses.Load()))
-	tt.Len(ch, n)
-	tt.Equal(n, cap(ch))
+	assert.True(time.Since(t0) > time.Duration(n*100)*time.Millisecond)
+	assert.Equal(n, int(responses.Load()))
+	assert.Len(ch, n)
+	assert.Equal(n, cap(ch))
 
 	// If asking for first response only, it should return immediately when it is produced
 	responses.Store(0)
@@ -1436,19 +1436,19 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 		pub.GET("https://channel.capacity.connector/multicast"),
 		pub.Unicast(),
 	)
-	tt.True(time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond, time.Since(t0))
-	tt.Equal(1, int(responses.Load()))
-	tt.Len(ch, 1)
-	tt.Equal(1, cap(ch))
+	assert.True(time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond, time.Since(t0))
+	assert.Equal(1, int(responses.Load()))
+	assert.Len(ch, 1)
+	assert.Equal(1, cap(ch))
 
 	// The remaining handlers are still called and should finish
 	time.Sleep(time.Duration(n*100) * time.Millisecond)
-	tt.Equal(n, int(responses.Load()))
+	assert.Equal(n, int(responses.Load()))
 }
 
 func TestConnector_UnicastToNoQueue(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	n := 8
 	var wg sync.WaitGroup
@@ -1462,7 +1462,7 @@ func TestConnector_UnicastToNoQueue(t *testing.T) {
 				return nil
 			}, sub.NoQueue())
 			err := cons[i].Startup()
-			tt.NoError(err)
+			assert.NoError(err)
 			wg.Done()
 		}()
 	}
@@ -1477,12 +1477,12 @@ func TestConnector_UnicastToNoQueue(t *testing.T) {
 		cons[0].Lifetime(),
 		pub.GET("https://unicast.to.no.queue.connector/no-queue"),
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 }
 
 func TestConnector_Baggage(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1493,9 +1493,9 @@ func TestConnector_Baggage(t *testing.T) {
 	beta := New("beta.baggage.connector")
 	beta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		betaCalled = true
-		tt.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
-		tt.Equal("en-US", r.Header.Get("Accept-Language"))
-		tt.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
+		assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
+		assert.Equal("en-US", r.Header.Get("Accept-Language"))
+		assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
 		// Call gamma without making changes
 		beta.Request(r.Context(),
 			pub.GET("https://gamma.baggage.connector/noop"),
@@ -1507,9 +1507,9 @@ func TestConnector_Baggage(t *testing.T) {
 	gamma := New("gamma.baggage.connector")
 	gamma.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		gammaCalled = true
-		tt.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
-		tt.Equal("en-US", r.Header.Get("Accept-Language"))
-		tt.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
+		assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
+		assert.Equal("en-US", r.Header.Get("Accept-Language"))
+		assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
 		gamma.Request(r.Context(),
 			// Call delta making changes to non-empty values
 			pub.GET("https://delta.baggage.connector/noop"),
@@ -1524,9 +1524,9 @@ func TestConnector_Baggage(t *testing.T) {
 	delta := New("delta.baggage.connector")
 	delta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		deltaCalled = true
-		tt.Equal("Books", frame.Of(r).Baggage("Suitcase"))
-		tt.Equal("en-UK", r.Header.Get("Accept-Language"))
-		tt.Equal("11.22.33.44", r.Header.Get("X-Forwarded-For"))
+		assert.Equal("Books", frame.Of(r).Baggage("Suitcase"))
+		assert.Equal("en-UK", r.Header.Get("Accept-Language"))
+		assert.Equal("11.22.33.44", r.Header.Get("X-Forwarded-For"))
 		delta.Request(r.Context(),
 			// Call epsilon making changes to empty values
 			pub.GET("https://epsilon.baggage.connector/noop"),
@@ -1541,27 +1541,27 @@ func TestConnector_Baggage(t *testing.T) {
 	epsilon := New("epsilon.baggage.connector")
 	epsilon.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
 		epsilonCalled = true
-		tt.Equal("", frame.Of(r).Baggage("Suitcase"))
-		tt.Equal("", r.Header.Get("Accept-Language"))
-		tt.Equal("", r.Header.Get("X-Forwarded-For"))
+		assert.Equal("", frame.Of(r).Baggage("Suitcase"))
+		assert.Equal("", r.Header.Get("Accept-Language"))
+		assert.Equal("", r.Header.Get("X-Forwarded-For"))
 		return nil
 	})
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 	err = gamma.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer gamma.Shutdown()
 	err = delta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer delta.Shutdown()
 	err = epsilon.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer epsilon.Shutdown()
 
 	// Send message and validate that it's echoed back
@@ -1572,16 +1572,16 @@ func TestConnector_Baggage(t *testing.T) {
 		pub.Header("Accept-Language", "en-US"),
 		pub.Header("X-Forwarded-For", "1.2.3.4"),
 	)
-	tt.NoError(err)
-	tt.True(betaCalled)
-	tt.True(gammaCalled)
-	tt.True(deltaCalled)
-	tt.True(epsilonCalled)
+	assert.NoError(err)
+	assert.True(betaCalled)
+	assert.True(gammaCalled)
+	assert.True(deltaCalled)
+	assert.True(epsilonCalled)
 }
 
 func TestConnector_MultiValueHeader(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -1590,17 +1590,17 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 
 	beta := New("beta.multi.value.header.connector")
 	beta.Subscribe("GET", "receive", func(w http.ResponseWriter, r *http.Request) error {
-		tt.Len(r.Header["Multi-Value-In"], 3)
+		assert.Len(r.Header["Multi-Value-In"], 3)
 		w.Header()["Multi-Value-Out"] = []string{"1", "2", "3"}
 		return nil
 	})
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// Send message and validate that it's echoed back
@@ -1610,6 +1610,6 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 		pub.AddHeader("Multi-Value-In", "2"),
 		pub.AddHeader("Multi-Value-In", "3"),
 	)
-	tt.NoError(err)
-	tt.Len(response.Header["Multi-Value-Out"], 3)
+	assert.NoError(err)
+	assert.Len(response.Header["Multi-Value-Out"], 3)
 }

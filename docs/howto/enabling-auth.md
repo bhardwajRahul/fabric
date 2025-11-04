@@ -2,7 +2,7 @@
 
 Enabling [authentication and authorization](../blocks/authorization.md) in a `Microbus` application requires an initial setup. Thereafter though, restricting endpoints to only authorized actors is typically a one-liner declaration in `service.yaml`.
 
-### Step 1: Actor
+#### Step 1: Actor
 
 An actor represents the user context of a request. Start by creating an `Actor` struct that defines the actor in your application.
 
@@ -40,7 +40,7 @@ The `Actor` should also include the security claims used as basis for the author
 
 The `Actor` may also include preferences that are under the control of the actor, such as time zone, locale, name or email.
 
-### Step 2: Token Issuer and Validator
+#### Step 2: Token Issuer and Validator
 
 To be authorized, requests must include a JWT token. On the backend, the JWT is validated and converted to an actor that is propagated downstream along the call stack. The [token issuer](../structure/coreservices-tokenissuer.md) core microservice is capable of issuing and validating [JWTs](https://jwt.io/introduction). If the core microservice is insufficient to your needs, you may implement your own token issuer that provides a similar interface.
 
@@ -79,13 +79,13 @@ app.Add(
 )
 ```
 
-### Step 3: Middleware
+#### Step 3: Middleware
 
 The authorization [middleware](../structure/coreservices-httpingress-middleware.md) looks for a JWT in the `Authorization: Bearer` header or in a cookie named `Authorization`. It contacts the token issuer microservice named in the `validator` claim to validate the token and obtain the actor associated with it. The actor is then propagated downstream to the target microservice and the rest of the call stack thereafter. 
 
 If your custom token issuer does not set the `validator` claim or if you want to look for the token in different request headers, you may change the middleware accordingly when initializing the [HTTP ingress proxy](../structure/coreservices-httpingress.md).
 
-### Step 4: Authorization Requirements
+#### Step 4: Authorization Requirements
 
 Enter the authorization requirements for each of your restricted endpoints in the [`service.yaml`](../tech/service-yaml.md) of their corresponding microservices. Requirements are stipulated as a boolean expression over the properties of the actor.
 
@@ -109,7 +109,7 @@ func (svc *Service) SalesReport(ctx context.Context, from time.Time, to time.Tim
 }
 ```
 
-### Step 5: Authenticator
+#### Step 5: Authenticator
 
 Create a microservice that authenticates a user given their credentials and returns a JWT back to them. The [login example](../structure/examples-login.md) microservice is an example of an authenticator that accepts a username and a password via a web form and returns a JWT via a `Set-Cookie` header. Single-page applications may be better served by a functional endpoint such as the following.
 

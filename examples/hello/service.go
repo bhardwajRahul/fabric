@@ -219,7 +219,7 @@ Localization prints hello in the language best matching the request's Accept-Lan
 */
 func (svc *Service) Localization(w http.ResponseWriter, r *http.Request) (err error) {
 	ctx := r.Context()
-	hello, _ := svc.LoadResString(ctx, "hello")
+	hello, _ := svc.LoadResString(ctx, "Hello")
 	w.Write([]byte(hello))
 	return nil
 }

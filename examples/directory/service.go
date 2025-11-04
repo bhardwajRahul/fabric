@@ -369,6 +369,6 @@ func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) {
 		return errors.Trace(err)
 	}
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(output))
+	w.Write(output)
 	return nil
 }

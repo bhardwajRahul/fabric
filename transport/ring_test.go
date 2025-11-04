@@ -24,7 +24,7 @@ import (
 
 func TestTransport_Ring(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var ring ringList
 	called := make([]bool, 5)
@@ -34,60 +34,60 @@ func TestTransport_Ring(t *testing.T) {
 	h4 := func(msg *Msg) { called[4] = true }
 
 	// Insert
-	tt.True(ring.IsEmpty())
+	assert.True(ring.IsEmpty())
 	gem1 := ring.Insert(h1)
 	gem2 := ring.Insert(h2)
 	gem3 := ring.Insert(h3)
-	tt.Equal("{1,2,3}", ring.String())
-	tt.False(ring.IsEmpty())
+	assert.Equal("{1,2,3}", ring.String())
+	assert.False(ring.IsEmpty())
 
-	tt.False(called[1])
+	assert.False(called[1])
 	gem1.Handler(nil)
-	tt.True(called[1])
-	tt.False(called[2])
+	assert.True(called[1])
+	assert.False(called[2])
 	gem2.Handler(nil)
-	tt.True(called[2])
-	tt.False(called[3])
+	assert.True(called[2])
+	assert.False(called[3])
 	gem3.Handler(nil)
-	tt.True(called[3])
+	assert.True(called[3])
 
 	// Rotate
-	tt.Equal(gem1, ring.Head())
-	tt.Equal(gem1, ring.Rotate())
-	tt.Equal(gem2, ring.Head())
+	assert.Equal(gem1, ring.Head())
+	assert.Equal(gem1, ring.Rotate())
+	assert.Equal(gem2, ring.Head())
 
-	tt.Equal("{2,3,1}", ring.String())
-	tt.Equal(gem2, ring.Rotate())
-	tt.Equal("{3,1,2}", ring.String())
-	tt.Equal(gem3, ring.Rotate())
-	tt.Equal("{1,2,3}", ring.String())
-	tt.Equal(gem1, ring.Rotate())
-	tt.Equal("{2,3,1}", ring.String())
+	assert.Equal("{2,3,1}", ring.String())
+	assert.Equal(gem2, ring.Rotate())
+	assert.Equal("{3,1,2}", ring.String())
+	assert.Equal(gem3, ring.Rotate())
+	assert.Equal("{1,2,3}", ring.String())
+	assert.Equal(gem1, ring.Rotate())
+	assert.Equal("{2,3,1}", ring.String())
 
 	// Remove
-	tt.True(ring.Remove(gem3))
-	tt.Equal("{2,1}", ring.String())
-	tt.False(ring.Remove(gem3))
-	tt.True(ring.Remove(gem1))
-	tt.Equal("{2}", ring.String())
-	tt.True(ring.Remove(gem2))
-	tt.Equal("{}", ring.String())
-	tt.True(ring.IsEmpty())
+	assert.True(ring.Remove(gem3))
+	assert.Equal("{2,1}", ring.String())
+	assert.False(ring.Remove(gem3))
+	assert.True(ring.Remove(gem1))
+	assert.Equal("{2}", ring.String())
+	assert.True(ring.Remove(gem2))
+	assert.Equal("{}", ring.String())
+	assert.True(ring.IsEmpty())
 
 	// Rotate empty ring
-	tt.Nil(ring.Rotate())
-	tt.Equal("{}", ring.String())
+	assert.Nil(ring.Rotate())
+	assert.Equal("{}", ring.String())
 
 	// Rotate single gem
 	gem4 := ring.Insert(h4)
-	tt.Equal("{4}", ring.String())
-	tt.Equal(gem4, ring.Rotate())
-	tt.Equal("{4}", ring.String())
+	assert.Equal("{4}", ring.String())
+	assert.Equal(gem4, ring.Rotate())
+	assert.Equal("{4}", ring.String())
 }
 
 func TestTransport_Remove(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var ring ringList
 	h1 := func(msg *Msg) {}
@@ -101,27 +101,27 @@ func TestTransport_Remove(t *testing.T) {
 	gem3 := ring.Insert(h3)
 	gem4 := ring.Insert(h4)
 
-	tt.Equal(gem1, ring.Head())
-	tt.Equal("{1,2,3,4}", ring.String())
-	tt.Equal(gem1, ring.Head())
+	assert.Equal(gem1, ring.Head())
+	assert.Equal("{1,2,3,4}", ring.String())
+	assert.Equal(gem1, ring.Head())
 
 	// Delete non-head gem
 	ring.Remove(gem3)
-	tt.Equal(gem1, ring.Head())
-	tt.Equal("{1,2,4}", ring.String())
-	tt.Equal(gem1, ring.Head())
+	assert.Equal(gem1, ring.Head())
+	assert.Equal("{1,2,4}", ring.String())
+	assert.Equal(gem1, ring.Head())
 
 	// Delete head node
 	ring.Remove(gem1)
-	tt.Equal(gem2, ring.Head())
-	tt.Equal("{2,4}", ring.String())
-	tt.Equal(gem2, ring.Head())
+	assert.Equal(gem2, ring.Head())
+	assert.Equal("{2,4}", ring.String())
+	assert.Equal(gem2, ring.Head())
 
 	// Delete all nodes
 	ring.Remove(gem2)
 	ring.Remove(gem4)
-	tt.Equal("{}", ring.String())
-	tt.Nil(ring.Head())
+	assert.Equal("{}", ring.String())
+	assert.Nil(ring.Head())
 	ring.Rotate()
-	tt.Nil(ring.Head())
+	assert.Nil(ring.Head())
 }

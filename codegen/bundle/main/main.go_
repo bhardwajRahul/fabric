@@ -1,0 +1,43 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/microbus-io/fabric/application"
+	"github.com/microbus-io/fabric/coreservices/configurator"
+	"github.com/microbus-io/fabric/coreservices/httpegress"
+	"github.com/microbus-io/fabric/coreservices/httpingress"
+	"github.com/microbus-io/fabric/coreservices/openapiportal"
+)
+
+/*
+main runs the application.
+*/
+func main() {
+	app := application.New()
+	app.Add(
+		// Configurator should start first
+		configurator.NewService(),
+	)
+	app.Add(
+		// Core microservices
+		httpegress.NewService(),
+		openapiportal.NewService(),
+		// metrics.NewService(),
+		// tokenissuer.NewService(),
+	)
+	app.Add(
+		// Add solution microservices here
+	)
+	app.Add(
+		// When everything is ready, begin to accept external requests
+		httpingress.NewService(),
+		// smtpingress.NewService(),
+	)
+	err := app.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v", err)
+		os.Exit(19)
+	}
+}

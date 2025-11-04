@@ -73,7 +73,7 @@ func Compress() Middleware {
 			switch {
 			case strings.Contains(acceptEncoding, "br"):
 				encoding = "br"
-				compressor = brotli.NewWriter(w)
+				compressor = brotli.NewWriterLevel(w, brotli.BestSpeed)
 			case strings.Contains(acceptEncoding, "deflate"):
 				encoding = "deflate"
 				compressor, _ = flate.NewWriter(w, flate.DefaultCompression)

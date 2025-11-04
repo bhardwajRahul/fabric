@@ -238,52 +238,52 @@ func TestHttpingress_Incoming(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("ports", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := httpClient.Get("http://localhost:4040/ports/ok")
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 			}
 		}
 		res, err = httpClient.Get("http://localhost:40443/ports/ok")
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 			}
 		}
 	})
 
 	t.Run("request_memory_limit", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		origLimit := svc.RequestMemoryLimit()
 		svc.SetRequestMemoryLimit(1) // 1MB
 		defer svc.SetRequestMemoryLimit(origLimit)
 
 		// Small request at 25% of capacity
-		tt.Zero(svc.reqMemoryUsed)
+		assert.Zero(svc.reqMemoryUsed)
 		payload := rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 / 4)
 		res, err := httpClient.Post("http://localhost:4040/request.memory.limit/ok", "text/plain", strings.NewReader(payload))
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal(payload, string(b))
+			if assert.NoError(err) {
+				assert.Equal(payload, string(b))
 			}
 		}
 
 		// Big request at 55% of capacity
-		tt.Zero(svc.reqMemoryUsed)
+		assert.Zero(svc.reqMemoryUsed)
 		payload = rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 * 55 / 100)
 		res, err = httpClient.Post("http://localhost:4040/request.memory.limit/ok", "text/plain", strings.NewReader(payload))
-		if tt.NoError(err) {
-			tt.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
 		}
 
 		// Two small requests that together are over 50% of capacity
-		tt.Zero(svc.reqMemoryUsed)
+		assert.Zero(svc.reqMemoryUsed)
 		payload = rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 / 3)
 		returned := make(chan bool)
 		go func() {
@@ -291,184 +291,184 @@ func TestHttpingress_Incoming(t *testing.T) {
 			returned <- true
 		}()
 		<-entered
-		tt.NotZero(svc.reqMemoryUsed)
+		assert.NotZero(svc.reqMemoryUsed)
 		res, err = httpClient.Post("http://localhost:4040/request.memory.limit/ok", "text/plain", strings.NewReader(payload))
-		if tt.NoError(err) {
-			tt.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
 		}
 		done <- true
 		<-returned
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("done", string(b))
+			if assert.NoError(err) {
+				assert.Equal("done", string(b))
 			}
 		}
 
-		tt.Zero(svc.reqMemoryUsed)
+		assert.Zero(svc.reqMemoryUsed)
 	})
 
 	t.Run("compression", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/compression/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Accept-Encoding", "gzip")
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal("gzip", res.Header.Get("Content-Encoding"))
+		if assert.NoError(err) {
+			assert.Equal("gzip", res.Header.Get("Content-Encoding"))
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.True(len(b) < 8*1024)
+			if assert.NoError(err) {
+				assert.True(len(b) < 8*1024)
 			}
-			tt.Equal(strconv.Itoa(len(b)), res.Header.Get("Content-Length"))
+			assert.Equal(strconv.Itoa(len(b)), res.Header.Get("Content-Length"))
 		}
 	})
 
 	t.Run("port_mapping", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// External port 4040 grants access to all internal ports
 		res, err := httpClient.Get("http://localhost:4040/port.mapping/ok443")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
 		}
 		res, err = httpClient.Get("http://localhost:4040/port.mapping:555/ok555")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
 		}
 		res, err = httpClient.Get("http://localhost:4040/port.mapping:555/ok443")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusNotFound, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
 
 		// External port 40443 maps all requests to internal port 443
 		res, err = httpClient.Get("http://localhost:40443/port.mapping/ok443")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
 		}
 		res, err = httpClient.Get("http://localhost:40443/port.mapping:555/ok555")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusNotFound, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
 		res, err = httpClient.Get("http://localhost:40443/port.mapping:555/ok443")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
 		}
 	})
 
 	t.Run("forwarded_headers", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Make a standard request
 		req, err := http.NewRequest("GET", "http://localhost:4040/forwarded.headers/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				body := string(b)
-				tt.True(strings.Contains(body, "X-Forwarded-Host: localhost:4040\n"))
-				tt.False(strings.Contains(body, "X-Forwarded-Prefix:"))
-				tt.True(strings.Contains(body, "X-Forwarded-Proto: http\n"))
-				tt.True(strings.Contains(body, "X-Forwarded-For: "))
-				tt.True(strings.Contains(body, "X-Forwarded-Path: /forwarded.headers/ok"))
+				assert.True(strings.Contains(body, "X-Forwarded-Host: localhost:4040\n"))
+				assert.False(strings.Contains(body, "X-Forwarded-Prefix:"))
+				assert.True(strings.Contains(body, "X-Forwarded-Proto: http\n"))
+				assert.True(strings.Contains(body, "X-Forwarded-For: "))
+				assert.True(strings.Contains(body, "X-Forwarded-Path: /forwarded.headers/ok"))
 			}
 		}
 
 		// Make a request appear to be coming through an upstream proxy server
 		req, err = http.NewRequest("GET", "http://localhost:4040/forwarded.headers/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("X-Forwarded-Host", "www.example.com")
 		req.Header.Set("X-Forwarded-Prefix", "/app")
 		req.Header.Set("X-Forwarded-For", "1.2.3.4")
 		req.Header.Set("X-Forwarded-Proto", "https")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				body := string(b)
-				tt.True(strings.Contains(body, "X-Forwarded-Host: www.example.com\n"))
-				tt.True(strings.Contains(body, "X-Forwarded-Prefix: /app\n"))
-				tt.True(strings.Contains(body, "X-Forwarded-Proto: https\n"))
-				tt.True(strings.Contains(body, "X-Forwarded-For: 1.2.3.4"))
-				tt.True(strings.Contains(body, "X-Forwarded-Path: /forwarded.headers/ok"))
+				assert.True(strings.Contains(body, "X-Forwarded-Host: www.example.com\n"))
+				assert.True(strings.Contains(body, "X-Forwarded-Prefix: /app\n"))
+				assert.True(strings.Contains(body, "X-Forwarded-Proto: https\n"))
+				assert.True(strings.Contains(body, "X-Forwarded-For: 1.2.3.4"))
+				assert.True(strings.Contains(body, "X-Forwarded-Path: /forwarded.headers/ok"))
 			}
 		}
 	})
 
 	t.Run("root", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := httpClient.Get("http://localhost:4040/")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Expect(body, []byte("Root"))
+			if assert.NoError(err) {
+				assert.Expect(body, []byte("Root"))
 			}
 		}
 	})
 
 	t.Run("cors", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Request with no origin header
 		count := callCount
 		req, err := http.NewRequest("GET", "http://localhost:4040/cors/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
-			tt.Equal(count+1, callCount)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
+			assert.Equal(count+1, callCount)
 		}
 
 		// Request with disallowed origin header
 		count = callCount
 		req, err = http.NewRequest("GET", "http://localhost:4040/cors/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Origin", "disallowed.origin")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusForbidden, res.StatusCode)
-			tt.Equal(count, callCount)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusForbidden, res.StatusCode)
+			assert.Equal(count, callCount)
 		}
 
 		// Request with allowed origin header
 		count = callCount
 		req, err = http.NewRequest("GET", "http://localhost:4040/cors/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Origin", "allowed.origin")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
-			tt.Equal("allowed.origin", res.Header.Get("Access-Control-Allow-Origin"))
-			tt.Equal(count+1, callCount)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
+			assert.Equal("allowed.origin", res.Header.Get("Access-Control-Allow-Origin"))
+			assert.Equal(count+1, callCount)
 		}
 
 		// Preflight request with allowed origin header
 		count = callCount
 		req, err = http.NewRequest("OPTIONS", "http://localhost:4040/cors/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Origin", "allowed.origin")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusNoContent, res.StatusCode)
-			tt.Equal(count, callCount)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusNoContent, res.StatusCode)
+			assert.Equal(count, callCount)
 		}
 	})
 
 	t.Run("parse_form", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Under 10MB
 		var buf bytes.Buffer
 		buf.WriteString("x=")
 		buf.WriteString(rand.AlphaNum64(9 * 1024 * 1024))
 		res, err := httpClient.Post("http://localhost:4040/parse.form/ok", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 			}
 		}
 
@@ -476,138 +476,138 @@ func TestHttpingress_Incoming(t *testing.T) {
 		// https://go.dev/src/net/http/request.go#L1258
 		buf.WriteString(rand.AlphaNum64(2 * 1024 * 1024)) // Now 11MB
 		res, err = httpClient.Post("http://localhost:4040/parse.form/ok", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
-		if tt.NoError(err) {
-			tt.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
 		}
 
 		// MaxBytesReader can be used to extend the limit
 		res, err = httpClient.Post("http://localhost:4040/parse.form/more", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 			}
 		}
 
 		// Going above the MaxBytesReader limit
 		buf.WriteString(rand.AlphaNum64(2 * 1024 * 1024)) // Now 13MB
 		res, err = httpClient.Post("http://localhost:4040/parse.form/more", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
-		if tt.NoError(err) {
-			tt.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
 		}
 	})
 
 	t.Run("block_internal_headers", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/internal.headers:555/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set(frame.HeaderPrefix+"In-Request", "STOP")
 		req.Header.Set(strings.ToUpper(frame.HeaderPrefix)+"In-Request-Upper", "STOP")
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			// No Microbus headers should be accepted from client
-			tt.Equal("", request.Header.Get(frame.HeaderPrefix+"In-Request"))
-			tt.Equal("", request.Header.Get(strings.ToUpper(frame.HeaderPrefix+"In-Request-Upper")))
+			assert.Equal("", request.Header.Get(frame.HeaderPrefix+"In-Request"))
+			assert.Equal("", request.Header.Get(strings.ToUpper(frame.HeaderPrefix+"In-Request-Upper")))
 			// Microbus headers generated internally should pass through the middleware chain
-			tt.Equal(Hostname, frame.Of(request).FromHost())
+			assert.Equal(Hostname, frame.Of(request).FromHost())
 
 			// No Microbus headers should leak outside
-			tt.Equal("", res.Header.Get(frame.HeaderPrefix+"In-Response"))
-			tt.Equal("", res.Header.Get(strings.ToUpper(frame.HeaderPrefix+"In-Request-Upper")))
+			assert.Equal("", res.Header.Get(frame.HeaderPrefix+"In-Response"))
+			assert.Equal("", res.Header.Get(strings.ToUpper(frame.HeaderPrefix+"In-Request-Upper")))
 			for h := range res.Header {
-				tt.False(strings.HasPrefix(h, frame.HeaderPrefix))
+				assert.False(strings.HasPrefix(h, frame.HeaderPrefix))
 			}
 		}
 	})
 
 	t.Run("on_route", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/greeting:555/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer 123456")
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 				// Headers should pass through
-				tt.Equal("Bearer 123456", request.Header.Get("Authorization"))
+				assert.Equal("Bearer 123456", request.Header.Get("Authorization"))
 				// Middleware added a request header
-				tt.Equal("Hello", request.Header.Get("Middleware"))
+				assert.Equal("Hello", request.Header.Get("Middleware"))
 				// Middleware added a response header
-				tt.Equal("Goodbye", res.Header.Get("Middleware"))
+				assert.Equal("Goodbye", res.Header.Get("Middleware"))
 			}
 		}
 
 		req, err = http.NewRequest("GET", "http://localhost:4040/greeting:500/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer 123456")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Equal("ok", string(b))
+			if assert.NoError(err) {
+				assert.Equal("ok", string(b))
 				// Headers should pass through
-				tt.Equal("Bearer 123456", request.Header.Get("Authorization"))
+				assert.Equal("Bearer 123456", request.Header.Get("Authorization"))
 				// Middleware did not run on this route
-				tt.Equal("", request.Header.Get("Middleware"))
-				tt.Equal("", res.Header.Get("Middleware"))
+				assert.Equal("", request.Header.Get("Middleware"))
+				assert.Equal("", res.Header.Get("Middleware"))
 			}
 		}
 	})
 
 	t.Run("blocked_paths", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := httpClient.Get("http://localhost:4040/blocked.paths/admin.php")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusNotFound, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
 		res, err = httpClient.Get("http://localhost:4040/blocked.paths/admin.ppp")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
 		}
 	})
 
 	t.Run("default_fav_icon", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := httpClient.Get("http://localhost:4040/favicon.ico")
-		if tt.NoError(err) {
-			tt.Equal(http.StatusOK, res.StatusCode)
-			tt.Equal("image/x-icon", res.Header.Get("Content-Type"))
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
+			assert.Equal("image/x-icon", res.Header.Get("Content-Type"))
 			icon, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.NotZero(len(icon))
+			if assert.NoError(err) {
+				assert.NotZero(len(icon))
 			}
 		}
 	})
 
 	t.Run("no_cache_response_headers", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := httpClient.Get("http://localhost:4040/no.cache/ok")
-		if tt.NoError(err) {
-			tt.Contains(res.Header.Get("Cache-Control"), "no-cache")
-			tt.Contains(res.Header.Get("Cache-Control"), "no-store")
-			tt.Contains(res.Header.Get("Cache-Control"), "max-age=0")
+		if assert.NoError(err) {
+			assert.Contains(res.Header.Get("Cache-Control"), "no-cache")
+			assert.Contains(res.Header.Get("Cache-Control"), "no-store")
+			assert.Contains(res.Header.Get("Cache-Control"), "max-age=0")
 		}
 	})
 
 	t.Run("auth_token_entry", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		now := time.Now().Truncate(time.Second)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/auth.token.entry/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		// No token
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(0, countActors)
+		assert.NoError(err)
+		assert.Equal(0, countActors)
 
 		// Token by unknown issuer
 		jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -616,12 +616,12 @@ func TestHttpingress_Incoming(t *testing.T) {
 			"exp": now.Add(time.Hour).Unix(),
 		})
 		signedJWT, err := jwtToken.SignedString([]byte("some-key"))
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer "+signedJWT)
 
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(0, countActors)
+		assert.NoError(err)
+		assert.Equal(0, countActors)
 
 		// Attempt to impersonate issuer (wrong key)
 		jwtToken = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -630,30 +630,30 @@ func TestHttpingress_Incoming(t *testing.T) {
 			"exp": now.Add(time.Hour).Unix(),
 		})
 		signedJWT, err = jwtToken.SignedString([]byte("wrong-key"))
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer "+signedJWT)
 
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(0, countActors)
+		assert.NoError(err)
+		assert.Equal(0, countActors)
 
 		// Do not accept incoming Microbus-Actor header
 		req.Header.Del("Authorization")
 		req.Header.Set(frame.HeaderActor, `{"iss":"`+tokenissuerapi.Hostname+`"}`)
 
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(0, countActors)
+		assert.NoError(err)
+		assert.Equal(0, countActors)
 
 		// Valid as Authorization Bearer header
 		signedJWT, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Del(frame.HeaderActor)
 		req.Header.Set("Authorization", "Bearer "+signedJWT)
 
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(1, countActors)
+		assert.NoError(err)
+		assert.Equal(1, countActors)
 
 		// Also in Authorization cookie
 		req.Header.Del("Authorization")
@@ -667,20 +667,20 @@ func TestHttpingress_Incoming(t *testing.T) {
 		})
 
 		_, err = httpClient.Do(req)
-		tt.NoError(err)
-		tt.Equal(2, countActors)
+		assert.NoError(err)
+		assert.Equal(2, countActors)
 	})
 
 	t.Run("authorization", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/authorization/protected", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		// Request not originating from a browser should be denied
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusUnauthorized, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusUnauthorized, res.StatusCode)
 		}
 
 		// Request origination from a browser should be redirected to the login page
@@ -688,14 +688,14 @@ func TestHttpingress_Incoming(t *testing.T) {
 		req.Header.Set("Sec-Fetch-Mode", "navigate")
 		req.Header.Set("Sec-Fetch-Dest", "document")
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			body, _ := io.ReadAll(res.Body)
-			tt.Equal("Login", string(body))
+			assert.Equal("Login", string(body))
 		}
 
 		// Request with insufficient auth token should be rejected
 		signedToken, err := tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{"role": "minor"})
-		tt.NoError(err)
+		assert.NoError(err)
 		req.AddCookie(&http.Cookie{
 			Name:     "Authorization",
 			Value:    signedToken,
@@ -704,15 +704,15 @@ func TestHttpingress_Incoming(t *testing.T) {
 			Secure:   false,
 			Path:     "/",
 		})
-		tt.Len(req.Cookies(), 1)
+		assert.Len(req.Cookies(), 1)
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
-			tt.Equal(http.StatusForbidden, res.StatusCode)
+		if assert.NoError(err) {
+			assert.Equal(http.StatusForbidden, res.StatusCode)
 		}
 
 		// Request with valid auth token should be served
 		signedToken, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{"role": "major"})
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header.Del("Cookie")
 		req.AddCookie(&http.Cookie{
 			Name:     "Authorization",
@@ -722,34 +722,34 @@ func TestHttpingress_Incoming(t *testing.T) {
 			Secure:   false,
 			Path:     "/",
 		})
-		tt.Len(req.Cookies(), 1)
+		assert.Len(req.Cookies(), 1)
 		res, err = httpClient.Do(req)
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			body, _ := io.ReadAll(res.Body)
-			tt.Equal("Access Granted", string(body))
+			assert.Equal("Access Granted", string(body))
 		}
 	})
 
 	t.Run("multi_value_headers", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		req, err := http.NewRequest("GET", "http://localhost:4040/multi.value.headers/ok", nil)
-		tt.NoError(err)
+		assert.NoError(err)
 		req.Header["Multi-Value"] = []string{
 			"Send 1",
 			"Send 2",
 			"Send 3",
 		}
 		res, err := httpClient.Do(req)
-		if tt.NoError(err) {
-			if tt.Len(request.Header["Multi-Value"], 3) {
-				tt.Equal("Send 1", request.Header["Multi-Value"][0])
-				tt.Equal("Send 2", request.Header["Multi-Value"][1])
-				tt.Equal("Send 3", request.Header["Multi-Value"][2])
+		if assert.NoError(err) {
+			if assert.Len(request.Header["Multi-Value"], 3) {
+				assert.Equal("Send 1", request.Header["Multi-Value"][0])
+				assert.Equal("Send 2", request.Header["Multi-Value"][1])
+				assert.Equal("Send 3", request.Header["Multi-Value"][2])
 			}
-			if tt.Len(res.Header["Multi-Value"], 2) {
-				tt.Equal("Return 1", res.Header["Multi-Value"][0])
-				tt.Equal("Return 2", res.Header["Multi-Value"][1])
+			if assert.Len(res.Header["Multi-Value"], 2) {
+				assert.Equal("Return 1", res.Header["Multi-Value"][0])
+				assert.Equal("Return 2", res.Header["Multi-Value"][1])
 			}
 		}
 	})
@@ -757,7 +757,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 func TestHttpingress_ResolveInternalURL(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	portMappings := map[string]string{
 		"8080:*": "*",
@@ -795,12 +795,12 @@ func TestHttpingress_ResolveInternalURL(t *testing.T) {
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		x, err := url.Parse(testCases[i])
-		tt.NoError(err)
+		assert.NoError(err)
 		u, err := url.Parse(testCases[i+1])
-		tt.NoError(err)
+		assert.NoError(err)
 		ru, err := resolveInternalURL(x, portMappings)
-		tt.NoError(err)
-		tt.Equal(u, ru)
+		assert.NoError(err)
+		assert.Equal(u, ru)
 	}
 }
 

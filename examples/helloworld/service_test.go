@@ -31,9 +31,7 @@ import (
 func TestHelloworld_HelloWorld(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	tt := testarossa.For(t)
-	_ = ctx
-	_ = tt
+	assert := testarossa.For(t)
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -56,22 +54,22 @@ func TestHelloworld_HelloWorld(t *testing.T) {
 		Recommended pattern:
 
 		res, err := client.HelloWorld(ctx, "")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				// For HTML responses
-				tt.HTMLMatch(body, `DIV.class > DIV#id`, "")
+				assert.HTMLMatch(body, `DIV.class > DIV#id`, "")
 				// For text responses
-				tt.Contains(body, "")
+				assert.Contains(body, "")
 			}
 		}
 	*/
 
 	res, err := client.HelloWorld(ctx, "")
-	if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+	if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 		body, err := io.ReadAll(res.Body)
-		if tt.NoError(err) {
-			tt.Contains(body, "Hello, World!")
+		if assert.NoError(err) {
+			assert.Contains(body, "Hello, World!")
 		}
 	}
 }

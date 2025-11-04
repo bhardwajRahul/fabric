@@ -93,11 +93,19 @@ func (gen *Generator) Run() (err error) {
 
 // runRoot performs code generation inside the root directory.
 func (gen *Generator) runRoot() (err error) {
+	err = gen.makeRoot()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = gen.makeMain()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	err = gen.makeVSCode()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = gen.makeClaude()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -176,10 +184,6 @@ func (gen *Generator) runService() (err error) {
 	gen.Printer.Debug("Service.yaml parsed")
 
 	// Process specs
-	err = gen.makeApp()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	err = gen.makeAPI()
 	if err != nil {
 		return errors.Trace(err)

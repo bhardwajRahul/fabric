@@ -35,7 +35,7 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 	env.Push("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "nil")
 	defer env.Pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -49,13 +49,13 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 
 		// The request attributes should not be added until and unless there's an error
 		attributes := spanAttributes(span)
-		tt.Zero(len(attributes["http.method"]))
-		tt.Zero(len(attributes["url.scheme"]))
-		tt.Zero(len(attributes["server.address"]))
-		tt.Zero(len(attributes["server.port"]))
-		tt.Zero(len(attributes["url.path"]))
+		assert.Zero(len(attributes["http.method"]))
+		assert.Zero(len(attributes["url.scheme"]))
+		assert.Zero(len(attributes["server.address"]))
+		assert.Zero(len(attributes["server.port"]))
+		assert.Zero(len(attributes["url.path"]))
 
-		tt.Equal(0, spanStatus(span))
+		assert.Equal(0, spanStatus(span))
 
 		if r.URL.Query().Get("err") != "" {
 			return errors.New("oops")
@@ -65,44 +65,44 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// A request that returns with an error
 	_, err = alpha.GET(ctx, "https://beta.test.request.attributes.connector/handle?err=1")
-	if tt.Error(err) {
+	if assert.Error(err) {
 		// The request attributes should be added since there was an error
 		attributes := spanAttributes(span)
-		tt.Equal("GET", attributes["http.method"])
-		tt.Equal("https", attributes["url.scheme"])
-		tt.Equal("beta.test.request.attributes.connector", attributes["server.address"])
-		tt.Equal("443", attributes["server.port"])
-		tt.Equal("/handle", attributes["url.path"])
+		assert.Equal("GET", attributes["http.method"])
+		assert.Equal("https", attributes["url.scheme"])
+		assert.Equal("beta.test.request.attributes.connector", attributes["server.address"])
+		assert.Equal("443", attributes["server.port"])
+		assert.Equal("/handle", attributes["url.path"])
 
-		tt.Equal(1, spanStatus(span))
+		assert.Equal(1, spanStatus(span))
 	}
 
 	// A request that returns OK
 	_, err = alpha.GET(ctx, "https://beta.test.request.attributes.connector/handle")
-	if tt.NoError(err) {
+	if assert.NoError(err) {
 		// The request attributes should not be added since there was no error
 		attributes := spanAttributes(span)
-		tt.Zero(len(attributes["http.method"]))
-		tt.Zero(len(attributes["url.scheme"]))
-		tt.Zero(len(attributes["server.address"]))
-		tt.Zero(len(attributes["server.port"]))
-		tt.Zero(len(attributes["url.path"]))
+		assert.Zero(len(attributes["http.method"]))
+		assert.Zero(len(attributes["url.scheme"]))
+		assert.Zero(len(attributes["server.address"]))
+		assert.Zero(len(attributes["server.port"]))
+		assert.Zero(len(attributes["url.path"]))
 
-		tt.Equal(2, spanStatus(span))
+		assert.Equal(2, spanStatus(span))
 	}
 }
 
 func TestConnector_GoTracingSpan(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	alpha := New("go.tracing.span.connector")
 	var topSpan trc.Span
@@ -121,11 +121,11 @@ func TestConnector_GoTracingSpan(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 
 	wg.Wait()
-	tt.Equal(topSpan.TraceID(), goSpan.TraceID())
+	assert.Equal(topSpan.TraceID(), goSpan.TraceID())
 }
 
 // spanAttributes returns the attributes set on the span.

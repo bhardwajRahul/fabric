@@ -36,26 +36,26 @@ func BenchmarkRand_AlphaNum64(b *testing.B) {
 
 func TestRand_AlphaNum64(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	re := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an64 := AlphaNum64(i)
-		tt.Len(an64, i)
+		assert.Len(an64, i)
 		match := re.MatchString(an64)
-		tt.True(match)
+		assert.True(match)
 	}
 }
 
 func TestRand_AlphaNum32(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	re := regexp.MustCompile(`^[A-Z0-9]+$`)
 	for i := 1; i < 1024; i++ {
 		an32 := AlphaNum32(i)
-		tt.Len(an32, i)
+		assert.Len(an32, i)
 		match := re.MatchString(an32)
-		tt.True(match)
+		assert.True(match)
 	}
 }

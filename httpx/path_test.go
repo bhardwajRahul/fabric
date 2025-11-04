@@ -25,21 +25,21 @@ import (
 
 func TestHttpx_JoinHostAndPath(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
-	tt.Equal("https://example.com:443", JoinHostAndPath("example.com", ""))
-	tt.Equal("https://example.com:443/", JoinHostAndPath("example.com", "/"))
-	tt.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "/path"))
-	tt.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "path"))
-	tt.Equal("https://example.com:123", JoinHostAndPath("example.com", ":123"))
-	tt.Equal("https://example.com:123/path", JoinHostAndPath("example.com", ":123/path"))
-	tt.Equal("https://example.org:123/path", JoinHostAndPath("example.com", "https://example.org:123/path"))
-	tt.Equal("https://example.org:123/path", JoinHostAndPath("example.com", "//example.org:123/path"))
+	assert.Equal("https://example.com:443", JoinHostAndPath("example.com", ""))
+	assert.Equal("https://example.com:443/", JoinHostAndPath("example.com", "/"))
+	assert.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "/path"))
+	assert.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "path"))
+	assert.Equal("https://example.com:123", JoinHostAndPath("example.com", ":123"))
+	assert.Equal("https://example.com:123/path", JoinHostAndPath("example.com", ":123/path"))
+	assert.Equal("https://example.org:123/path", JoinHostAndPath("example.com", "https://example.org:123/path"))
+	assert.Equal("https://example.org:123/path", JoinHostAndPath("example.com", "//example.org:123/path"))
 }
 
 func TestHttpx_ParseURLValid(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	valid := map[string]string{
 		"https://example.com:123/path":         "https://example.com:123/path",
@@ -55,14 +55,14 @@ func TestHttpx_ParseURLValid(t *testing.T) {
 
 	for k, v := range valid {
 		u, err := ParseURL(k)
-		tt.NoError(err, "%s", k)
-		tt.Equal(v, u.String())
+		assert.NoError(err, "%s", k)
+		assert.Equal(v, u.String())
 	}
 }
 
 func TestHttpx_ParseURLInvalid(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	invalid := []string{
 		"https://example.com:BAD/path",
@@ -76,14 +76,14 @@ func TestHttpx_ParseURLInvalid(t *testing.T) {
 	}
 	for _, x := range invalid {
 		u, err := ParseURL(x)
-		tt.Error(err, "%s", x)
-		tt.Nil(u)
+		assert.Error(err, "%s", x)
+		assert.Nil(u)
 	}
 }
 
 func TestHttpx_FillPathArguments(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := []string{
 		"https://example.com/article/{user}/comment/{comment}?user=123&comment=456", "https://example.com/article/123/comment/456",
@@ -95,8 +95,8 @@ func TestHttpx_FillPathArguments(t *testing.T) {
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		resolved, err := FillPathArguments(testCases[i])
-		if tt.NoError(err) {
-			tt.Equal(testCases[i+1], resolved)
+		if assert.NoError(err) {
+			assert.Equal(testCases[i+1], resolved)
 		}
 	}
 }
@@ -200,9 +200,9 @@ func TestHttpx_ResolveURL(t *testing.T) {
 		},
 	}
 
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	for _, tc := range testCases {
 		resolved, err := ResolveURL(tc.base, tc.rel)
-		tt.Expect(resolved, tc.expected, err, nil)
+		assert.Expect(resolved, tc.expected, err, nil)
 	}
 }

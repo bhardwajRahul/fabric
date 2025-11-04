@@ -29,9 +29,9 @@ A test of `TestHelloworld_HelloWorld` in `service_test.go`:
 
 ```go
 res, err := client.HelloWorld(ctx, "")
-if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 	body, err := io.ReadAll(res.Body)
-	tt.Expect(body, []string("Hello, World!"), err, nil)
+	assert.Expect(body, []string("Hello, World!"), err, nil)
 }
 ```
 

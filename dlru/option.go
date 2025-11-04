@@ -22,6 +22,7 @@ type cacheOptions struct {
 	Bump             bool
 	ConsistencyCheck bool
 	Replicate        bool
+	Compress         bool
 	MaxAge           time.Duration
 }
 
@@ -69,5 +70,12 @@ type StoreOption func(opts *cacheOptions)
 func Replicate(replicate bool) StoreOption {
 	return func(opts *cacheOptions) {
 		opts.Replicate = replicate
+	}
+}
+
+// Compress indicates whether to compress the stored data.
+func Compress(compress bool) StoreOption {
+	return func(opts *cacheOptions) {
+		opts.Compress = compress
 	}
 }

@@ -52,14 +52,14 @@ func TestMessaging_Home(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("both_replicas_found", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.Home(ctx, "")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, svc1.ID())
-				tt.Contains(body, svc2.ID())
+			if assert.NoError(err) {
+				assert.Contains(body, svc1.ID())
+				assert.Contains(body, svc2.ID())
 			}
 		}
 	})
@@ -88,14 +88,14 @@ func TestMessaging_NoQueue(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("no_queue", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.NoQueue(ctx, "")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "NoQueue")
-				tt.True(bytes.Contains(body, []byte(svc1.ID())) || bytes.Contains(body, []byte(svc2.ID())))
+			if assert.NoError(err) {
+				assert.Contains(body, "NoQueue")
+				assert.True(bytes.Contains(body, []byte(svc1.ID())) || bytes.Contains(body, []byte(svc2.ID())))
 			}
 		}
 	})
@@ -124,14 +124,14 @@ func TestMessaging_DefaultQueue(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("default_queue", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.DefaultQueue(ctx, "")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "DefaultQueue")
-				tt.True(bytes.Contains(body, []byte(svc1.ID())) || bytes.Contains(body, []byte(svc2.ID())))
+			if assert.NoError(err) {
+				assert.Contains(body, "DefaultQueue")
+				assert.True(bytes.Contains(body, []byte(svc1.ID())) || bytes.Contains(body, []byte(svc2.ID())))
 			}
 		}
 	})
@@ -160,36 +160,36 @@ func TestMessaging_CacheLoad(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("store_and_load", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.CacheLoad(ctx, "?key=key1")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "key: key1")
-				tt.Contains(body, "found: no")
+			if assert.NoError(err) {
+				assert.Contains(body, "key: key1")
+				assert.Contains(body, "found: no")
 			}
 		}
 
 		_, err = client.CacheStore(ctx, "?key=key1&value=value1")
-		tt.NoError(err)
+		assert.NoError(err)
 
 		res, err = client.CacheLoad(ctx, "?key=key1")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "key: key1")
-				tt.Contains(body, "found: yes")
-				tt.Contains(body, "value: value1")
+			if assert.NoError(err) {
+				assert.Contains(body, "key: key1")
+				assert.Contains(body, "found: yes")
+				assert.Contains(body, "value: value1")
 			}
 		}
 	})
 
 	t.Run("missing_key", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		_, err := client.CacheLoad(ctx, "")
-		tt.Contains(err, "missing")
+		assert.Contains(err, "missing")
 	})
 }
 
@@ -216,69 +216,69 @@ func TestMessaging_CacheStore(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("store_and_get", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.CacheStore(ctx, "?key=aaa&value=111")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "key: aaa")
-				tt.Contains(body, "value: 111")
+			if assert.NoError(err) {
+				assert.Contains(body, "key: aaa")
+				assert.Contains(body, "value: 111")
 			}
 		}
 		res, err = client.CacheStore(ctx, "?key=bbb&value=222")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "key: bbb")
-				tt.Contains(body, "value: 222")
+			if assert.NoError(err) {
+				assert.Contains(body, "key: bbb")
+				assert.Contains(body, "value: 222")
 			}
 		}
 
 		res, err = client.CacheLoad(ctx, "?key=aaa")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "found: yes")
+			if assert.NoError(err) {
+				assert.Contains(body, "found: yes")
 			}
 		}
 		res, err = client.CacheLoad(ctx, "?key=bbb")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "found: yes")
+			if assert.NoError(err) {
+				assert.Contains(body, "found: yes")
 			}
 		}
 		res, err = client.CacheLoad(ctx, "?key=ccc")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "found: no")
+			if assert.NoError(err) {
+				assert.Contains(body, "found: no")
 			}
 		}
 	})
 
 	t.Run("missing_key", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		_, err := client.CacheStore(ctx, "")
-		tt.Contains(err, "missing")
+		assert.Contains(err, "missing")
 
 		_, err = client.CacheStore(ctx, "?value=nokey")
-		tt.Contains(err, "missing")
+		assert.Contains(err, "missing")
 	})
 
 	t.Run("missing_value", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		_, err := client.CacheStore(ctx, "?key=novalue")
-		tt.Contains(err, "missing")
+		assert.Contains(err, "missing")
 
 		res, err := client.CacheLoad(ctx, "?key=novalue")
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "found: no")
+			if assert.NoError(err) {
+				assert.Contains(body, "found: no")
 			}
 		}
 	})

@@ -27,15 +27,16 @@ var FS embed.FS
 Files placed in the resources directory are bundled with the executable and are accessible via svc.ResFS or
 any of the convenience methods svc.ReadResFile, svc.ReadResTextFile, svc.ExecuteResTemplate, svc.ServeResFile, etc.
 
-A file named strings.yaml can be used to store internationalized strings that can be loaded via svc.LoadResString
-to best match the locale in the context. The YAML is expected to be in the following format:
+A file named text.yaml can be used to store localized strings that can be loaded via svc.LoadResString to best match
+the locale of the context. The YAML should map a string key to its localized values on a per language basis:
 
-stringKey:
-  default: Localized
+Localized:
   en: Localized
   en-GB: Localised
   fr: Localisée
+  it: Localizzato
+  default: Localized
 
-If a default is not provided, English (en) is used as the fallback language.
-String keys and locale names are case insensitive.
+If a default language is not explicitly provided, English (en) is used as the fallback language.
+String keys and ISO 639 language codes are case sensitive.
 */

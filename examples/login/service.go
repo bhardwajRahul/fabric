@@ -137,7 +137,7 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) {
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
-	w.Write([]byte(rendered))
+	w.Write(rendered)
 	return nil
 }
 
@@ -184,7 +184,7 @@ func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) 
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
-	w.Write([]byte(rendered))
+	w.Write(rendered)
 	return nil
 }
 
@@ -198,7 +198,7 @@ func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
-	w.Write([]byte(rendered))
+	w.Write(rendered)
 	return nil
 }
 
@@ -212,6 +212,6 @@ func (svc *Service) ManagerOnly(w http.ResponseWriter, r *http.Request) (err err
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
-	w.Write([]byte(rendered))
+	w.Write(rendered)
 	return nil
 }

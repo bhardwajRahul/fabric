@@ -26,7 +26,7 @@ import (
 
 func TestHttpx_RequestParserOverrideJSON(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var data struct {
 		X int
@@ -37,23 +37,23 @@ func TestHttpx_RequestParserOverrideJSON(t *testing.T) {
 
 	r, err := http.NewRequest("POST", `/path`, &buf)
 	r.Header.Set("Content-Type", "application/json")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = ParseRequestData(r, &data)
-	tt.NoError(err)
-	tt.Equal(1, data.X)
-	tt.Equal(1, data.Y)
+	assert.NoError(err)
+	assert.Equal(1, data.X)
+	assert.Equal(1, data.Y)
 
 	r, err = http.NewRequest("POST", `/path?x=2`, &buf)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = ParseRequestData(r, &data)
-	tt.NoError(err)
-	tt.Equal(2, data.X)
-	tt.Equal(1, data.Y)
+	assert.NoError(err)
+	assert.Equal(2, data.X)
+	assert.Equal(1, data.Y)
 }
 
 func TestHttpx_RequestParserOverrideFormData(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var data struct {
 		X int
@@ -64,16 +64,16 @@ func TestHttpx_RequestParserOverrideFormData(t *testing.T) {
 
 	r, err := http.NewRequest("POST", `/path`, &buf)
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = ParseRequestData(r, &data)
-	tt.NoError(err)
-	tt.Equal(1, data.X)
-	tt.Equal(1, data.Y)
+	assert.NoError(err)
+	assert.Equal(1, data.X)
+	assert.Equal(1, data.Y)
 
 	r, err = http.NewRequest("POST", `/path?x=2`, &buf)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = ParseRequestData(r, &data)
-	tt.NoError(err)
-	tt.Equal(2, data.X)
-	tt.Equal(1, data.Y)
+	assert.NoError(err)
+	assert.Equal(2, data.X)
+	assert.Equal(1, data.Y)
 }

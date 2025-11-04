@@ -17,6 +17,7 @@ limitations under the License.
 //go:generate go run github.com/microbus-io/copyrighter
 // - testdata/*
 // - .*
+// - /codegen/bundle/*
 
 package fabric
 

@@ -28,40 +28,40 @@ import (
 
 func TestConnector_DefineMetrics(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("define.metrics.connector")
-	tt.False(con.IsStarted())
+	assert.False(con.IsStarted())
 
 	// Define all three collector types before starting up
 	err := con.DescribeCounter(
 		"my_counter",
 		"my counter",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeHistogram(
 		"my_histogram",
 		"my historgram",
 		[]float64{1, 2, 3, 4, 5},
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeGauge(
 		"my_gauge",
 		"my gauge",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Duplicate key
 	err = con.DescribeCounter(
 		"my_counter",
 		"my counter",
 	)
-	tt.Error(err)
+	assert.Error(err)
 
 	// Startup
 	con.initErr = nil
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	// Describe all three collector types after starting up
@@ -69,25 +69,25 @@ func TestConnector_DefineMetrics(t *testing.T) {
 		"my_counter_2",
 		"my counter 2",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeHistogram(
 		"my_histogram_2",
 		"my historgram 2",
 		[]float64{1, 2, 3, 4, 5},
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeGauge(
 		"my_gauge_2",
 		"my gauge 2",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Duplicate key
 	err = con.DescribeCounter(
 		"my_counter_2",
 		"my counter 2",
 	)
-	tt.Error(err)
+	assert.Error(err)
 }
 
 func TestConnector_ObserveMetrics(t *testing.T) {
@@ -95,74 +95,74 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	ctx := t.Context()
 
 	con := New("observe.metrics.connector")
-	tt.False(con.IsStarted())
+	assert.False(con.IsStarted())
 
 	// Define all three collector types before starting up
 	err := con.DescribeCounter(
 		"my_counter",
 		"my counter",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeHistogram(
 		"my_histogram",
 		"my histogram",
 		[]float64{1, 2, 3, 4, 5},
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.DescribeGauge(
 		"my_gauge",
 		"my gauge",
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Startup
 	con.initErr = nil
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	// Histogram
 	err = con.RecordHistogram(ctx, "my_histogram", 2.5, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.RecordHistogram(ctx, "my_histogram", 0, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.RecordHistogram(ctx, "my_histogram", -2.5, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 
 	err = con.AddCounter(ctx, "my_histogram", 1.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 	err = con.RecordGauge(ctx, "my_histogram", 1.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 
 	// Gauge
 	err = con.RecordGauge(ctx, "my_gauge", 2.5, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.RecordGauge(ctx, "my_gauge", -2.5, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.RecordGauge(ctx, "my_gauge", 0, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 
 	err = con.AddCounter(ctx, "my_gauge", 1.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 	err = con.RecordHistogram(ctx, "my_gauge", 2.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 
 	// Counter
 	err = con.AddCounter(ctx, "my_counter", 1.5, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.AddCounter(ctx, "my_counter", 0, "a", "1")
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.AddCounter(ctx, "my_counter", -1.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 
 	err = con.RecordHistogram(ctx, "my_counter", 2.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 	err = con.RecordGauge(ctx, "my_counter", 2.5, "a", "1")
-	tt.Error(err)
+	assert.Error(err)
 }
 
 func TestConnector_StandardMetrics(t *testing.T) {
@@ -170,31 +170,31 @@ func TestConnector_StandardMetrics(t *testing.T) {
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("standard.metrics.connector")
-	tt.Len(con.metricInstruments, 0)
+	assert.Len(con.metricInstruments, 0)
 
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
-	tt.Len(con.metricInstruments, 10)
-	tt.NotNil(con.metricInstruments["microbus_callback_duration_seconds"])
-	tt.NotNil(con.metricInstruments["microbus_server_request_duration_seconds"])
-	tt.NotNil(con.metricInstruments["microbus_server_response_body_bytes"])
-	tt.NotNil(con.metricInstruments["microbus_client_timeout_requests"])
-	tt.NotNil(con.metricInstruments["microbus_client_ack_roundtrip_latency_seconds"])
-	tt.NotNil(con.metricInstruments["microbus_log_messages"])
-	tt.NotNil(con.metricInstruments["microbus_uptime_duration_seconds"])
-	tt.NotNil(con.metricInstruments["microbus_cache_memory_bytes"])
-	tt.NotNil(con.metricInstruments["microbus_cache_elements"])
-	tt.NotNil(con.metricInstruments["microbus_cache_operations"])
+	assert.Len(con.metricInstruments, 10)
+	assert.NotNil(con.metricInstruments["microbus_callback_duration_seconds"])
+	assert.NotNil(con.metricInstruments["microbus_server_request_duration_seconds"])
+	assert.NotNil(con.metricInstruments["microbus_server_response_body_bytes"])
+	assert.NotNil(con.metricInstruments["microbus_client_timeout_requests"])
+	assert.NotNil(con.metricInstruments["microbus_client_ack_roundtrip_latency_seconds"])
+	assert.NotNil(con.metricInstruments["microbus_log_messages"])
+	assert.NotNil(con.metricInstruments["microbus_uptime_duration_seconds"])
+	assert.NotNil(con.metricInstruments["microbus_cache_memory_bytes"])
+	assert.NotNil(con.metricInstruments["microbus_cache_elements"])
+	assert.NotNil(con.metricInstruments["microbus_cache_operations"])
 }
 
 func TestConnector_InferUnit(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("infer.unit.connector")
 	type testCase struct {
@@ -213,13 +213,13 @@ func TestConnector_InferUnit(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		unit := con.inferMetricUnit(tc.name, tc.desc)
-		tt.Equal(tc.unit, unit, "Expected %s, got %s, for %s", tc.unit, unit, tc.name)
+		assert.Equal(tc.unit, unit, "Expected %s, got %s, for %s", tc.unit, unit, tc.name)
 	}
 }
 
 func TestConnector_MetricExporters(t *testing.T) {
 	// No parallel
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Create the web server
 	var counter atomic.Int32
@@ -240,10 +240,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 
 	con := New("metric.exporters.connector")
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.Shutdown()
-	tt.NoError(err)
-	tt.Equal(2, int(counter.Load()))
+	assert.NoError(err)
+	assert.Equal(2, int(counter.Load()))
 
 	// Only Prometheus exporter
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
@@ -251,9 +251,9 @@ func TestConnector_MetricExporters(t *testing.T) {
 
 	con = New("metric.exporters.connector")
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.Shutdown()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Only OTel exporter
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
@@ -261,10 +261,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 
 	con = New("metric.exporters.connector")
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.Shutdown()
-	tt.NoError(err)
-	tt.Equal(4, int(counter.Load()))
+	assert.NoError(err)
+	assert.Equal(4, int(counter.Load()))
 
 	// No exporters
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
@@ -272,9 +272,9 @@ func TestConnector_MetricExporters(t *testing.T) {
 
 	con = New("metric.exporters.connector")
 	err = con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.Shutdown()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	for range 4 {
 		env.Pop("MICROBUS_PROMETHEUS_EXPORTER")

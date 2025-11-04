@@ -1,12 +1,11 @@
-# Layered Architecture
+# Architecture
 
-Onions have layers, ogres have layers, and so does a good software architecture.
-
-`Microbus` solutions are constructed in 5 layers:
+`Microbus` solutions can be 6 layers:
 
 * At the bottom of the stack is a curated selection of OSS technologies that are utilized and abstracted away by the next layer, the connector
 * The [connector](../blocks/structure/connector.md) construct is the base class from which all microservices are derived. It provides a consistent API to most of the building blocks that are required for a microservice to operate and mesh with other microservices. Quite often they rely on OSS under the hood
 * A [code generator](../blocks/codegen.md) brings type-safe RAD that is specific to the semantics of each individual microservice
+* [Coding agents](../blocks/coding-agents.md) such as Claude are trained to work hand in hand with the code generator. Since the agents need to focus only on the business logic, they require a smaller context window and produce higher quality code in quicker iterations
 * The core microservices and the solution microservices are built using the code generator
 * Microservices are bundled together into [applications](../structure/application.md) according to the desired [topology](../blocks/topology.md)
 
@@ -26,7 +25,7 @@ Applications can contain any number of microservices, making them a flexible veh
 
 ## Solution Microservices
 
-These are the microservices that implement the business logic of the solution.
+These are the microservices that implement the business logic of the your solution.
 
 ## Core Microservices
 
@@ -46,7 +45,13 @@ The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice re
 
 The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs. Tokens enable the authentication of actors and the authorization of their requests based on a set of claims.
 
-## Code Generator
+## Coding Agents
+
+[Coding agents](../blocks/coding-agents.md) develop on top of the generated code. When compared to doing things from scratch, they require a smaller context window thus producing higher quality code quicker.
+
+[AGENTS.md](../blocks/agents-md.md) files train the coding agents how to work correctly on a `Microbus` solution in general, and on each individual microservice.
+
+## Code Generation
 
 [Code generation](../blocks/codegen.md) facilitates rapid application development (RAD) by generating boilerplate and skeleton code from declarations in a [`service.yaml`](../tech/service-yaml.md) file. The developer needs only fill in the gaps and implement the business logic.
 
@@ -60,7 +65,9 @@ The [integration test harness](../blocks/integration-testing.md) spins up the mi
 
 An [OpenAPI document](../blocks/openapi.md) is automatically created with descriptors for each of the microservice's endpoints.
 
-A [uniform code structure](../blocks/uniform-code.md) is a byproduct of using code generation. A familiar code structure helps engineers get oriented quickly also when they are not the original authors of the code.
+A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of using code generation. A familiar code structure helps engineers get oriented quickly also when they are not the original authors of the code.
+
+The [bootstrapping of new projects](../blocks/project-bootstrapping.md) is automated.
 
 ## Connector Construct
 
@@ -108,7 +115,7 @@ Microservices may stipulate that incoming requests be authenticated and authoriz
 
 Images, scripts, templates and any other [static resources](../blocks/embedded-res.md) are made available to each microservice by association of a file system (`FS`).
 
-A specially-named resource `strings.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
+A specially-named resource `text.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
 
 The [distributed cache](../blocks/distrib-cache.md) is an in-memory cache that is shared among the replica peers of microservice.
 

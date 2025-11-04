@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/microbus-io/fabric/application"
@@ -82,5 +84,9 @@ func main() {
 		}),
 		// smtpingress.NewService(),
 	)
-	app.Run()
+	err := app.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v", err)
+		os.Exit(19)
+	}
 }

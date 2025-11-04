@@ -6,7 +6,7 @@ By default, a DLRU is created and assigned for each microservice and made availa
 
 ```go
 var obj MyObject
-ok, err := svc.DistribCache().LoadJSON(ctx, cacheKey, &obj)
+ok, err := svc.DistribCache().Get(ctx, cacheKey, &obj)
 if err != nil {
     return errors.Trace(err)
 }
@@ -15,7 +15,7 @@ if !ok {
     if err != nil {
         return errors.Trace(err)
     }
-    err = svc.DistribCache().StoreJSON(ctx, cacheKey, obj)
+    err = svc.DistribCache().Set(ctx, cacheKey, obj)
     if err != nil {
         return errors.Trace(err)
     }

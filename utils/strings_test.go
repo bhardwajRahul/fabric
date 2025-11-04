@@ -26,7 +26,7 @@ import (
 
 func TestUtils_ToKebabCase(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	testCases := map[string]string{
 		"fooBar":     "foo-bar",
@@ -62,13 +62,13 @@ func TestUtils_ToKebabCase(t *testing.T) {
 	}
 	for id, expected := range testCases {
 		actual := ToKebabCase(id)
-		tt.Equal(expected, actual, "expected %s, got %s, in %s", expected, actual, id)
+		assert.Equal(expected, actual, "expected %s, got %s, in %s", expected, actual, id)
 	}
 }
 
 func TestUtils_LooksLikeJWT(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	newSignedToken := func(claims jwt.MapClaims) string {
 		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -76,34 +76,34 @@ func TestUtils_LooksLikeJWT(t *testing.T) {
 		return s
 	}
 
-	tt.True(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	tt.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{})))
-	tt.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{"claim": "something"})))
-	tt.True(LooksLikeJWT(newSignedToken(nil)))
+	assert.True(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{})))
+	assert.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{"claim": "something"})))
+	assert.True(LooksLikeJWT(newSignedToken(nil)))
 
 	// Bad characters
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e$$.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e==.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // No padding
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e+/.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // Base64 URL
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e$$.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e==.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // No padding
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e+/.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")) // Base64 URL
 
 	// Incorrect dots
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX:eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
 
 	// Too short
-	tt.False(LooksLikeJWT("eyXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e30.XXX"))
-	tt.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.X.X"))
-	tt.False(LooksLikeJWT("eyX.X.X"))
+	assert.False(LooksLikeJWT("eyXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e30.XXX"))
+	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.X.X"))
+	assert.False(LooksLikeJWT("eyX.X.X"))
 
 	// No ey
-	tt.False(LooksLikeJWT("xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
+	assert.False(LooksLikeJWT("xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
 }
 
 func TestUtil_StringClaimFromJWT(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	newSignedToken := func(claims jwt.MapClaims) string {
 		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -113,17 +113,17 @@ func TestUtil_StringClaimFromJWT(t *testing.T) {
 
 	token := newSignedToken(jwt.MapClaims{"sub": "123456", "claim": "something", "roles": 12345})
 	val, ok := StringClaimFromJWT(token, "claim")
-	tt.True(ok)
-	tt.Equal("something", val)
+	assert.True(ok)
+	assert.Equal("something", val)
 	val, ok = StringClaimFromJWT(token, "sub")
-	tt.True(ok)
-	tt.Equal("123456", val)
+	assert.True(ok)
+	assert.Equal("123456", val)
 	val, ok = StringClaimFromJWT(token, "roles")
-	tt.False(ok)
-	tt.Equal("", val)
+	assert.False(ok)
+	assert.Equal("", val)
 	val, ok = StringClaimFromJWT(token, "nosuchclaim")
-	tt.False(ok)
-	tt.Equal("", val)
+	assert.False(ok)
+	assert.Equal("", val)
 }
 
 func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
@@ -155,7 +155,7 @@ func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
 
 func TestUtil_AnyToString(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	tc := map[string]any{
 		"string":        "string",
@@ -169,7 +169,7 @@ func TestUtil_AnyToString(t *testing.T) {
 	}
 	for expected, o := range tc {
 		actual := AnyToString(o)
-		tt.Equal(expected, actual)
+		assert.Equal(expected, actual)
 	}
 }
 

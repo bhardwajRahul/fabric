@@ -182,12 +182,8 @@ func (gen *Generator) makeIntermediate() error {
 	gen.Specs.FullyQualifyTypes()
 
 	// Create the directory
-	dir := filepath.Join(gen.WorkDir, "intermediate")
-	_, err := os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir intermediate")
-	} else if err != nil {
+	_, err := gen.mkdir("intermediate")
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -231,12 +227,8 @@ func (gen *Generator) makeResources() error {
 	defer gen.Printer.Unindent()
 
 	// Create the directory
-	dir := filepath.Join(gen.WorkDir, "resources")
-	_, err := os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir resources")
-	} else if err != nil {
+	_, err := gen.mkdir("resources")
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -255,46 +247,6 @@ func (gen *Generator) makeResources() error {
 	return nil
 }
 
-// makeApp creates the app directory and main.
-func (gen *Generator) makeApp() error {
-	gen.Printer.Debug("Generating application")
-	gen.Printer.Indent()
-	defer gen.Printer.Unindent()
-
-	// Create the directories
-	dir := filepath.Join(gen.WorkDir, "app")
-	_, err := os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir app")
-	} else if err != nil {
-		return errors.Trace(err)
-	}
-
-	dir = filepath.Join(gen.WorkDir, "app", gen.Specs.PackageDirSuffix())
-	_, err = os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir app/%s", gen.Specs.PackageDirSuffix())
-	} else if err != nil {
-		return errors.Trace(err)
-	}
-
-	// main-gen.go
-	fileName := filepath.Join(gen.WorkDir, "app", gen.Specs.PackageDirSuffix(), "main-gen.go")
-	tt, err := LoadTemplate("service/app/main-gen.txt")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = tt.Overwrite(fileName, gen.Specs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	gen.Printer.Debug("app/%s/main-gen.go", gen.Specs.PackageDirSuffix())
-
-	return nil
-}
-
 // makeAPI creates the API directory and files.
 func (gen *Generator) makeAPI() error {
 	gen.Printer.Debug("Generating client API")
@@ -304,15 +256,12 @@ func (gen *Generator) makeAPI() error {
 	// Should not fully qualify types when generating inside the API directory
 	gen.Specs.ShorthandTypes()
 
-	// Create the directories
-	dir := filepath.Join(gen.WorkDir, gen.Specs.PackageDirSuffix()+"api")
-	_, err := os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir %sapi", gen.Specs.PackageDirSuffix())
-	} else if err != nil {
+	// Create the directory
+	_, err := gen.mkdir(gen.Specs.PackageDirSuffix() + "api")
+	if err != nil {
 		return errors.Trace(err)
 	}
+	dir := filepath.Join(gen.WorkDir, gen.Specs.PackageDirSuffix()+"api")
 
 	// Types
 	if len(gen.Specs.Types) > 0 {
@@ -449,6 +398,23 @@ func (gen *Generator) makeImplementation() error {
 		err = gen.makeAddToMainApp()
 		if err != nil {
 			return errors.Trace(err)
+		}
+	}
+
+	// Create AGENTS.md and CLAUDE.md if they do not exist
+	for _, filename := range []string{"AGENTS.md", "CLAUDE.md"} {
+		fullPath := filepath.Join(gen.WorkDir, filename)
+		_, err = os.Stat(fullPath)
+		if errors.Is(err, os.ErrNotExist) {
+			tt, err = LoadTemplate("service/" + filename)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err := tt.Overwrite(fullPath, gen.Specs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			gen.Printer.Debug(filename)
 		}
 	}
 
@@ -894,6 +860,67 @@ func (gen *Generator) makeVersion(version int) error {
 	return nil
 }
 
+// makeClaude populates the .claude directory with files.
+func (gen *Generator) makeClaude() (err error) {
+	gen.Printer.Debug("Generating .claude")
+	gen.Printer.Indent()
+	defer gen.Printer.Unindent()
+
+	err = gen.copy(".claude", ".claude", true)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// makeRoot populates the root directory with files.
+func (gen *Generator) makeRoot() (err error) {
+	gen.Printer.Debug("Generating project root")
+	gen.Printer.Indent()
+	defer gen.Printer.Unindent()
+
+	// Always overwrite
+	err = gen.copy("AGENTS-MICROBUS.md", "AGENTS-MICROBUS.md", true)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Add to coding assistant file
+	for _, filename := range []string{"AGENTS.md", "CLAUDE.md"} {
+		tt, err := LoadTemplate(filename)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		fullPath := filepath.Join(gen.WorkDir, filename)
+		_, err = os.Stat(fullPath)
+		if errors.Is(err, os.ErrNotExist) {
+			err = tt.Overwrite(filename, gen.Specs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			gen.Printer.Debug(filename)
+		} else {
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			executed, err := tt.Execute(gen.WorkDir)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !bytes.Contains(content, executed) {
+				err = tt.AppendTo(filename, gen.Specs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				gen.Printer.Debug(filename)
+			}
+		}
+	}
+
+	return nil
+}
+
 // makeMain creates the main directory and files.
 func (gen *Generator) makeMain() (err error) {
 	gen.Printer.Debug("Generating main")
@@ -901,32 +928,16 @@ func (gen *Generator) makeMain() (err error) {
 	defer gen.Printer.Unindent()
 
 	// Create the directory
-	dir := filepath.Join(gen.WorkDir, "main")
-	_, err = os.Stat(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir main")
-	} else if err != nil {
+	created, err := gen.mkdir("main")
+	if err != nil {
 		return errors.Trace(err)
 	}
-
-	// Create files
-	for _, fn := range []string{"main.go", "env.yaml", "config.yaml"} {
-		fileName := filepath.Join(gen.WorkDir, "main/", fn)
-		_, err = os.Stat(fileName)
-		if errors.Is(err, os.ErrNotExist) {
-			tt, err := LoadTemplate("main/" + strings.TrimSuffix(fn, ".go") + ".txt")
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = tt.Overwrite(fileName, gen.Specs)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			gen.Printer.Debug("main/" + fn)
+	if created {
+		err = gen.copy("main", "main", true)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
-
 	return nil
 }
 
@@ -936,31 +947,92 @@ func (gen *Generator) makeVSCode() (err error) {
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 
-	// Create the directory
-	dir := filepath.Join(gen.WorkDir, ".vscode")
-	_, err = os.Stat(dir)
+	err = gen.copy(".vscode", ".vscode", false)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// mkdir creates a directory, if it doesn't exist.
+// The path is relative to the working directory.
+func (gen *Generator) mkdir(dirPath string) (created bool, err error) {
+	fullPath := filepath.Join(gen.WorkDir, dirPath)
+	_, err = os.Stat(fullPath)
 	if errors.Is(err, os.ErrNotExist) {
-		os.Mkdir(dir, os.ModePerm)
-		gen.Printer.Debug("mkdir .vscode")
+		err = os.Mkdir(fullPath, os.ModePerm)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		gen.Printer.Debug("mkdir %s", dirPath)
+		return true, nil
 	} else if err != nil {
+		return false, errors.Trace(err)
+	}
+	return false, nil
+}
+
+// copy copies a file from the resource to disk.
+// The path is relative to the working directory.
+func (gen *Generator) copy(filePath string, resourcePath string, overwrite bool) (err error) {
+	// Detect if the resource is a file or a directory
+	fsFile, err := bundle.Open(filepath.Join("bundle", resourcePath))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	fsFileStat, err := fsFile.Stat()
+	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// Create launch.json
-	fileName := filepath.Join(gen.WorkDir, ".vscode/launch.json")
-	_, err = os.Stat(fileName)
-	if errors.Is(err, os.ErrNotExist) {
-		tt, err := LoadTemplate("vscode/launch.json.txt")
+	// Copy directory
+	if fsFileStat.IsDir() {
+		_, err = gen.mkdir(filePath)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = tt.Overwrite(fileName, gen.Specs)
+		entries, err := bundle.ReadDir(filepath.Join("bundle", resourcePath))
 		if err != nil {
 			return errors.Trace(err)
 		}
-		gen.Printer.Debug(".vscode/launch.json")
+		for _, entry := range entries {
+			entryBase := filepath.Base(entry.Name())
+			err = gen.copy(filepath.Join(filePath, strings.TrimRight(entryBase, "_")), filepath.Join(resourcePath, entryBase), overwrite)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
 	}
 
+	fullFilePath := filepath.Join(gen.WorkDir, filePath)
+	currentContent, err := os.ReadFile(fullFilePath)
+	notExists := errors.Is(err, os.ErrNotExist)
+	if err != nil && !notExists {
+		return errors.Trace(err)
+	}
+	if !overwrite && !notExists {
+		return nil
+	}
+
+	// Copy single file
+	newContent, err := bundle.ReadFile(filepath.Join("bundle", resourcePath))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if bytes.Equal(newContent, currentContent) {
+		return nil
+	}
+	file, err := os.Create(fullFilePath) // Overwrite
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer file.Close()
+	_, err = file.Write(newContent)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	gen.Printer.Debug("%s", filePath)
 	return nil
 }
 

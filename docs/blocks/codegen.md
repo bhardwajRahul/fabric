@@ -1,8 +1,8 @@
 # Code Generation
 
-Code generation is one of `Microbus`'s most powerful tools. It facilitates rapid development (RAD) of microservices and significantly increases developer productivity. Although it's possible to create a microservice by working directly with the `Connector`, the abstraction added by the code generator makes things simpler by taking care of much of the repetitive boilerplate code.
+Code generation is one of `Microbus`'s most powerful tools. It works hand in hand with the [coding agent](../blocks/coding-agents.md) to facilitate rapid development (RAD) and significantly increase developer productivity.
 
-In `Microbus`, everything starts with a `service.yaml` file that semantically defines the microservice. The code generator then takes this definition and produces a code skeleton for the implementation of microservice itself, a client stub that is used by upstream microservices to call it, an integration test harness that helps to thoroughly test it along with its downstream dependencies, and an OpenAPI document that describes its API.
+In `Microbus`, every microservice starts with a `service.yaml` file that defines it semantically. The code generator takes this definition and produces a code skeleton for the implementation of the microservice itself, a client stub that is used by upstream microservices to call it, an integration test harness that helps to thoroughly test it along with its downstream dependencies, and an OpenAPI document that describes its API.
 
 <img src="./codegen-1.drawio.svg">
 <p></p>
@@ -27,7 +27,7 @@ go generate
 
 ### `service.yaml`
 
-[`service.yaml`](../tech/service-yaml.md) contains sections that define the characteristics of the microservice in a declarative fashion. These definitions serve as the input to the code generator to produces the skeleton and boilerplate code. It is then up to the developer to fill in the gaps.
+[`service.yaml`](../tech/service-yaml.md) contains sections that define the features of the microservice in a declarative fashion. These definitions serve as the input to the code generator to produces the skeleton and boilerplate code. It is then up to the developer to fill in the gaps.
 
 ### Client Stubs
 

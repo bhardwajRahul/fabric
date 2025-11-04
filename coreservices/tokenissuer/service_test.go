@@ -59,7 +59,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("issue_and_validate_token", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		claims := map[string]any{
 			"sub":   "harry@hogwarts.edu",
@@ -68,12 +68,12 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 		}
 
 		signedToken, err := client.IssueToken(ctx, claims)
-		tt.Expect(
+		assert.Expect(
 			strings.HasPrefix(signedToken, "ey"), true,
 			err, nil,
 		)
 		actor, valid, err := client.ValidateToken(ctx, signedToken)
-		tt.Expect(
+		assert.Expect(
 			actor, claims,
 			valid, true,
 			err, nil,
@@ -81,17 +81,17 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 
 		token, _ := jwt.Parse(signedToken, nil)
 		mc := token.Claims.(jwt.MapClaims)
-		tt.True(mc.VerifyIssuer(issClaim, true))
-		tt.Equal(issClaim, mc["iss"])
-		tt.NotNil(mc["iat"])
-		tt.NotNil(mc["exp"])
-		tt.NotNil(mc["roles"])
-		tt.Equal("harry@hogwarts.edu", mc["sub"])
-		tt.Nil(mc["foo"])
+		assert.True(mc.VerifyIssuer(issClaim, true))
+		assert.Equal(issClaim, mc["iss"])
+		assert.NotNil(mc["iat"])
+		assert.NotNil(mc["exp"])
+		assert.NotNil(mc["roles"])
+		assert.Equal("harry@hogwarts.edu", mc["sub"])
+		assert.Nil(mc["foo"])
 	})
 
 	t.Run("reject_tampered_token", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		signedToken, err := client.IssueToken(
 			ctx,
@@ -101,7 +101,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 				"iss":   issClaim,
 			},
 		)
-		tt.Expect(
+		assert.Expect(
 			strings.HasPrefix(signedToken, "ey"), true,
 			err, nil,
 		)
@@ -109,16 +109,16 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 		// A tampered token should get rejected
 		parts := strings.Split(signedToken, ".")
 		claims, err := base64.RawStdEncoding.DecodeString(parts[1])
-		tt.NoError(err)
+		assert.NoError(err)
 		claims = bytes.ReplaceAll(claims, []byte("harry@hogwarts.edu"), []byte("dumbledore@hogwarts.edu"))
 		parts[1] = base64.RawStdEncoding.EncodeToString(claims)
 		tamperedToken, _ := jwt.Parse(strings.Join(parts, "."), nil)
-		if tt.NotNil(tamperedToken) {
-			tt.NotEqual("", tamperedToken.Raw)
+		if assert.NotNil(tamperedToken) {
+			assert.NotEqual("", tamperedToken.Raw)
 		}
 
 		actor, valid, err := client.ValidateToken(ctx, tamperedToken.Raw)
-		tt.Expect(
+		assert.Expect(
 			actor, nil,
 			valid, false,
 			err, nil,
@@ -126,7 +126,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	})
 
 	t.Run("reject_if_key_changes", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		signedToken, err := client.IssueToken(
 			ctx,
@@ -136,19 +136,19 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 				"iss":   issClaim,
 			},
 		)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		_, valid, err := client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, true, err, nil)
+		assert.Expect(valid, true, err, nil)
 
 		svc.SetSecretKey(rand.AlphaNum64(64))
 
 		_, valid, err = client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, false, err, nil)
+		assert.Expect(valid, false, err, nil)
 	})
 
 	t.Run("key_rotation", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		signedToken, err := client.IssueToken(
 			ctx,
@@ -158,20 +158,20 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 				"iss":   issClaim,
 			},
 		)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		_, valid, err := client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, true, err, nil)
+		assert.Expect(valid, true, err, nil)
 
 		svc.SetAltSecretKey(svc.SecretKey())
 		svc.SetSecretKey(rand.AlphaNum64(64))
 
 		_, valid, err = client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, true, err, nil)
+		assert.Expect(valid, true, err, nil)
 	})
 
 	t.Run("token_expiration", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		signedToken, err := client.IssueToken(
 			ctx,
@@ -181,20 +181,20 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 				"iss":   issClaim,
 			},
 		)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		_, valid, err := client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, true, err, nil)
+		assert.Expect(valid, true, err, nil)
 
 		futureCtx := frame.CloneContext(ctx)
 		frame.Of(futureCtx).SetClockShift(time.Hour + time.Minute)
 
 		_, valid, err = client.ValidateToken(futureCtx, signedToken)
-		tt.Expect(valid, false, err, nil)
+		assert.Expect(valid, false, err, nil)
 	})
 
 	t.Run("dev_only_secret_key", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		svc.SetSecretKey("")
 		svc.SetAltSecretKey("")
@@ -207,14 +207,14 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 				"iss":   issClaim,
 			},
 		)
-		tt.NoError(err)
+		assert.NoError(err)
 
 		_, valid, err := client.ValidateToken(ctx, signedToken)
-		tt.Expect(valid, true, err, nil)
+		assert.Expect(valid, true, err, nil)
 
 		token, _ := jwt.Parse(signedToken, nil)
 		mc := token.Claims.(jwt.MapClaims)
-		tt.True(mc.VerifyIssuer(issClaim, true))
+		assert.True(mc.VerifyIssuer(issClaim, true))
 
 		svc.SetSecretKey(rand.AlphaNum64(64))
 	})

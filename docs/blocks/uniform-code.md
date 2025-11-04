@@ -4,9 +4,6 @@ The code generator creates numerous files and subdirectories in the directory of
 
 ```
 {name}
-├── app
-│   └── {name}
-│       └── main-gen.go
 ├── {name}api
 │   ├── clients-gen.go
 │   ├── imports-gen.go
@@ -16,6 +13,9 @@ The code generator creates numerous files and subdirectories in the directory of
 │   └── mock-gen.go
 ├── resources
 │   └── embed-gen.go
+├── AGENTS.md
+├── CLAUDE.md
+├── doc.go
 ├── service_test.go
 ├── service-gen.go
 ├── service.go
@@ -26,11 +26,11 @@ The code generator creates numerous files and subdirectories in the directory of
 
 Files that include `-gen` in their name are fully code generated and should not be edited. The are also marked with a `DO NOT EDIT` comment.
 
-The `app` directory hosts `package main` of an `Application` that runs the microservice, and only the microservice. The executable will be named like the package name of the microservice. If you choose to deploy each microservice as a separate executable, this will be it.
-
 The `{name}api` directory (and package) defines the `Client` and `MulticastClient` of the microservice and the complex types (structs) that they use. `MulticastTrigger` and `Hook` are defined if the microservice is a source of events. Together these represent the public-facing API of the microservice to upstream microservices. The name of the directory `{name}api` is derived from that of the microservice in order to make it easily distinguishable in code completion tools.
 
 The `intermediate` directory (and package) defines the `Intermediate` and the `Mock`. The `Intermediate` serves as the base of the microservice via anonymous inclusion and in turn extends the [`Connector`](../structure/connector.md). The `Mock` is a mockable stub of the microservices that can be used in [integration testing](../blocks/integration-testing.md) when a live version of the microservice cannot.
+
+`AGENTS.md` allows setting instructions to coding agents that should be respected in the context of this microservice only. `CLAUDE.md` refers Claude Code to `Agents.md`.
 
 A test harness is created in `service_test.go` for each testable web handler, functional endpoint, event, event sink ticker, config callback and metric callback of the microservice. The logic of each test is left to the solution developer to implement.
 
@@ -59,12 +59,12 @@ In addition to the standard `OnStartup` and `OnShutdown` callbacks, the code gen
 ```go
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
-    return
+    return nil
 }
 
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-    return
+    return nil
 }
 ```
 

@@ -24,7 +24,7 @@ import (
 
 func TestCfg_Options(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	c, err := NewConfig(
 		"int",
@@ -33,35 +33,35 @@ func TestCfg_Options(t *testing.T) {
 		DefaultValue("7"),
 		Secret(),
 	)
-	tt.NoError(err)
-	tt.Equal(c.Name, "int")
-	tt.Equal(c.Description, "int config")
-	tt.Equal(c.Validation, "int [6,7]")
-	tt.Equal(c.DefaultValue, "7")
-	tt.Equal(c.Secret, true)
+	assert.NoError(err)
+	assert.Equal(c.Name, "int")
+	assert.Equal(c.Description, "int config")
+	assert.Equal(c.Validation, "int [6,7]")
+	assert.Equal(c.DefaultValue, "7")
+	assert.Equal(c.Secret, true)
 }
 
 func TestCfg_BadValidation(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	_, err := NewConfig(
 		"bad",
 		Validation("invalid rule here"),
 	)
-	tt.Error(err)
+	assert.Error(err)
 }
 
 func TestCfg_DefaultValueValidation(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Empty default values are tolerated
 	_, err := NewConfig(
 		"int",
 		Validation("int [6,7]"),
 	)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Order of setting default value and validation shouldn't matter
 	_, err = NewConfig(
@@ -69,12 +69,12 @@ func TestCfg_DefaultValueValidation(t *testing.T) {
 		DefaultValue("8"),
 		Validation("int [6,7]"),
 	)
-	tt.Error(err)
+	assert.Error(err)
 
 	_, err = NewConfig(
 		"int",
 		Validation("int [6,7]"),
 		DefaultValue("8"),
 	)
-	tt.Error(err)
+	assert.Error(err)
 }

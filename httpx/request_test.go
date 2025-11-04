@@ -29,57 +29,57 @@ import (
 
 func TestHttpx_Request(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	req, err := NewRequest("GET", "https://example.com", nil)
-	if tt.NoError(err) {
-		tt.Equal("GET", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
+	if assert.NoError(err) {
+		assert.Equal("GET", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
 	}
 
 	req, err = NewRequest("POST", "https://example.com", []byte("hello"))
-	if tt.NoError(err) {
-		tt.Equal("POST", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("text/plain; charset=utf-8", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("POST", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("text/plain; charset=utf-8", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal("hello", string(body))
+		assert.Equal("hello", string(body))
 	}
 
 	req, err = NewRequest("POST", "https://example.com", "<html><body>hello</body></html>")
-	if tt.NoError(err) {
-		tt.Equal("POST", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("text/html; charset=utf-8", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("POST", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("text/html; charset=utf-8", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal("<html><body>hello</body></html>", string(body))
+		assert.Equal("<html><body>hello</body></html>", string(body))
 	}
 
 	req, err = NewRequest("POST", "https://example.com", `{"foo":"bar"}`)
-	if tt.NoError(err) {
-		tt.Equal("POST", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("application/json", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("POST", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("application/json", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal(`{"foo":"bar"}`, string(body))
+		assert.Equal(`{"foo":"bar"}`, string(body))
 	}
 
 	req, err = NewRequest("POST", "https://example.com", []byte(`[1,2,3,4]`))
-	if tt.NoError(err) {
-		tt.Equal("POST", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("application/json", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("POST", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("application/json", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal(`[1,2,3,4]`, string(body))
+		assert.Equal(`[1,2,3,4]`, string(body))
 	}
 
 	req, err = NewRequest("PUT", "https://example.com", strings.NewReader("hello"))
-	if tt.NoError(err) {
-		tt.Equal("PUT", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("PUT", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal("hello", string(body))
+		assert.Equal("hello", string(body))
 	}
 
 	req, err = NewRequest("PUT", "https://example.com", url.Values{
@@ -87,12 +87,12 @@ func TestHttpx_Request(t *testing.T) {
 		"b": []string{"b1", "b2"},
 		"c": []string{"c1"},
 	})
-	if tt.NoError(err) {
-		tt.Equal("PUT", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("application/x-www-form-urlencoded", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("PUT", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("application/x-www-form-urlencoded", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal("a=a1&b=b1&b=b2&c=c1", string(body))
+		assert.Equal("a=a1&b=b1&b=b2&c=c1", string(body))
 	}
 
 	req, err = NewRequest("PUT", "https://example.com", QArgs{
@@ -100,12 +100,12 @@ func TestHttpx_Request(t *testing.T) {
 		"b": "b1",
 		"c": "c1",
 	})
-	if tt.NoError(err) {
-		tt.Equal("PUT", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("application/x-www-form-urlencoded", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("PUT", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("application/x-www-form-urlencoded", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal("a=a1&b=b1&c=c1", string(body))
+		assert.Equal("a=a1&b=b1&c=c1", string(body))
 	}
 
 	j := struct {
@@ -118,34 +118,34 @@ func TestHttpx_Request(t *testing.T) {
 		B: true,
 	}
 	req, err = NewRequest("PUT", "https://example.com", &j)
-	if tt.NoError(err) {
-		tt.Equal("PUT", req.Method)
-		tt.Equal("https://example.com", req.URL.String())
-		tt.Equal("application/json", req.Header.Get("Content-Type"))
+	if assert.NoError(err) {
+		assert.Equal("PUT", req.Method)
+		assert.Equal("https://example.com", req.URL.String())
+		assert.Equal("application/json", req.Header.Get("Content-Type"))
 		body, _ := io.ReadAll(req.Body)
-		tt.Equal(`{"s":"String","i":123,"b":true}`, string(body))
+		assert.Equal(`{"s":"String","i":123,"b":true}`, string(body))
 	}
 }
 
 func TestHttpx_MustRequest(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
 	req := MustNewRequest("POST", "https://example.com", nil)
-	tt.NotNil(req)
+	assert.NotNil(req)
 	err := errors.CatchPanic(func() error {
 		MustNewRequest("POST", "@$^%&", nil)
 		return nil
 	})
-	tt.Error(err)
+	assert.Error(err)
 
 	req = MustNewRequestWithContext(ctx, "POST", "https://example.com", nil)
-	tt.NotNil(req)
+	assert.NotNil(req)
 	err = errors.CatchPanic(func() error {
 		MustNewRequestWithContext(ctx, "POST", "@$^%&", nil)
 		return nil
 	})
-	tt.Error(err)
+	assert.Error(err)
 }

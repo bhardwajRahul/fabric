@@ -23,36 +23,47 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 )
 
 func TestConnector_ReadResFile(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Create the microservices
 	con := New("read.res.file.connector")
 	con.SetResFSDir("testdata")
 
-	tt.Equal("<html>{{ . }}</html>\n", string(con.MustReadResFile("res.txt")))
-	tt.Equal("<html>{{ . }}</html>\n", con.MustReadResTextFile("res.txt"))
+	assert.Equal("<html>{{ . }}</html>\n", string(con.MustReadResFile("res.txt")))
+	assert.Equal("<html>{{ . }}</html>\n", con.MustReadResTextFile("res.txt"))
 
-	tt.Nil(con.MustReadResFile("nothing.txt"))
-	tt.Equal("", con.MustReadResTextFile("nothing.txt"))
+	err := errors.CatchPanic(func() error {
+		con.MustReadResFile("nothing.txt")
+		assert.False(true, "Should panic")
+		return nil
+	})
+	assert.Error(err)
+	err = errors.CatchPanic(func() error {
+		con.MustReadResTextFile("nothing.txt")
+		assert.False(true, "Should panic")
+		return nil
+	})
+	assert.Error(err)
 
 	v, err := con.ExecuteResTemplate("res.txt", "<body></body>")
-	tt.NoError(err)
-	tt.Equal("<html><body></body></html>\n", v)
+	assert.NoError(err)
+	assert.Equal("<html><body></body></html>\n", string(v))
 
 	v, err = con.ExecuteResTemplate("res.html", "<body></body>")
-	tt.NoError(err)
-	tt.Equal("<html>"+html.EscapeString("<body></body>")+"</html>\n", v)
+	assert.NoError(err)
+	assert.Equal("<html>"+html.EscapeString("<body></body>")+"</html>\n", string(v))
 }
 
 func TestConnector_LoadResString(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	ctx := context.Background()
 
@@ -61,7 +72,7 @@ func TestConnector_LoadResString(t *testing.T) {
 
 	beta := New("beta.load.res.string.connector")
 	beta.Subscribe("GET", "localized", func(w http.ResponseWriter, r *http.Request) error {
-		s, _ := beta.LoadResString(r.Context(), "hello")
+		s, _ := beta.LoadResString(r.Context(), "Hello")
 		w.Write([]byte(s))
 		return nil
 	})
@@ -69,10 +80,10 @@ func TestConnector_LoadResString(t *testing.T) {
 
 	// Startup the microservices
 	err := alpha.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer alpha.Shutdown()
 	err = beta.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer beta.Shutdown()
 
 	// Send message and validate the correct language
@@ -88,11 +99,32 @@ func TestConnector_LoadResString(t *testing.T) {
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		response, err := alpha.Request(ctx, pub.GET("https://beta.load.res.string.connector/localized"), pub.Header("Accept-Language", testCases[i]))
-		if tt.NoError(err) {
+		if assert.NoError(err) {
 			body, err := io.ReadAll(response.Body)
-			if tt.NoError(err) {
-				tt.Equal(testCases[i+1], string(body))
+			if assert.NoError(err) {
+				assert.Equal(testCases[i+1], string(body))
 			}
 		}
 	}
+}
+
+func TestConnector_LoadResStrings(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := context.Background()
+
+	// Create the microservices
+	con := New("load.res.strings.connector")
+	con.SetResFSDir("testdata")
+
+	// Startup the microservices
+	err := con.Startup()
+	assert.NoError(err)
+	defer con.Shutdown()
+
+	textMap, err := con.LoadResStrings(ctx)
+	assert.NoError(err)
+	assert.Contains(textMap, "Hello")
+	assert.Equal("Hello", textMap["Hello"])
 }

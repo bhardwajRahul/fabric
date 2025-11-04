@@ -2,7 +2,7 @@
 
 Follow these steps to create a new project based on the `Microbus` framework.
 
-### Step 1: Init the Go Project
+#### Step 1: Init the Go Project
 
 Make a directory to hold your projects files.
 
@@ -17,7 +17,7 @@ cd mysolution
 go mod init github.com/mycompany/mysolution
 ```
 
-### Step 2: Code Generate the Project Structure
+#### Step 2: Code Generate the Project Structure
 
 Add `Microbus`'s code generator to `go.mod` using:
 
@@ -41,12 +41,17 @@ go generate
 
 ```
 mysolution/
+├── .claude/                     # Claude Code setup
+│   └── skills/				     # Claude Code skills
 ├── .vscode/
 │   └── launch.json				 # VSCode launch file
-└── main/
-    ├── config.yaml              # Configuration file
-    ├── env.yaml                 # Environment settings
-    └── main.go                  # Main application
+├── main/
+│   ├── config.yaml              # Configuration file
+│   ├── env.yaml                 # Environment settings
+│   └── main.go                  # Main application
+├── AGENTS-MICROBUS.md           # Instructions to coding agents for Microbus
+├── AGENTS.md                    # Instructions to coding agents for this project
+└── CLAUDE.md                    # Refer Claude to AGENTS.md
 ```
 
 Fetch the dependencies.
@@ -55,6 +60,6 @@ Fetch the dependencies.
 go mod tidy
 ```
 
-### Step 3: Create Microservices
+#### Step 3: Create Microservices
 
 [Create a microservice](../howto/create-microservice.md), rinse and repeat.

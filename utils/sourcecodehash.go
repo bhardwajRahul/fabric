@@ -34,14 +34,14 @@ import (
 // Use "." to hash the current working directory.
 func SourceCodeSHA256(directory string) (string, error) {
 	h := sha256.New()
-	err := hashDir(h, directory)
+	err := hashDir(h, directory, 0)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func hashDir(h hash.Hash, dir string) error {
+func hashDir(h hash.Hash, dir string, depth int) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return errors.Trace(err)
@@ -52,16 +52,18 @@ func hashDir(h hash.Hash, dir string) error {
 			if file.Name() == "data" || file.Name() == "testdata" {
 				continue
 			}
-			err = hashDir(h, fileName)
+			err = hashDir(h, fileName, depth+1)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			continue
 		}
 		if strings.HasSuffix(file.Name(), "_test.go") ||
+			depth == 0 && file.Name() == "AGENTS.md" ||
+			depth == 0 && file.Name() == "CLAUDE.md" ||
 			strings.HasPrefix(file.Name(), ".") ||
 			file.Name() == "debug.test" ||
-			file.Name() == "version-gen.go" {
+			depth == 0 && file.Name() == "version-gen.go" {
 			continue
 		}
 		f, err := os.Open(fileName)

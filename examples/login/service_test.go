@@ -54,37 +54,37 @@ func TestLogin_Login(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("login_form_displayed", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		res, err := client.Login(ctx, "GET", "", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
+			if assert.NoError(err) {
 				// Check basic HTML structure
-				tt.HTMLMatch(body, "HTML", "")
-				tt.HTMLMatch(body, "HEAD", "")
-				tt.HTMLMatch(body, "BODY", "")
-				tt.HTMLMatch(body, "TITLE", "Login")
+				assert.HTMLMatch(body, "HTML", "")
+				assert.HTMLMatch(body, "HEAD", "")
+				assert.HTMLMatch(body, "BODY", "")
+				assert.HTMLMatch(body, "TITLE", "Login")
 
 				// Check form structure
-				tt.HTMLMatch(body, "FORM", "")
-				tt.HTMLMatch(body, `FORM[method="POST"]`, "")
+				assert.HTMLMatch(body, "FORM", "")
+				assert.HTMLMatch(body, `FORM[method="POST"]`, "")
 
 				// Check input elements
-				tt.HTMLMatch(body, `INPUT[type="text"][name="u"]`, "")
-				tt.HTMLMatch(body, `INPUT[type="password"][name="p"]`, "")
-				tt.HTMLMatch(body, `INPUT[type="submit"][name="l"]`, "")
-				tt.HTMLMatch(body, `INPUT[type="hidden"][name="src"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="text"][name="u"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="password"][name="p"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="submit"][name="l"]`, "")
+				assert.HTMLMatch(body, `INPUT[type="hidden"][name="src"]`, "")
 
 				// Check labels
-				tt.HTMLMatch(body, "BODY", "Username")
-				tt.HTMLMatch(body, "BODY", "Password")
+				assert.HTMLMatch(body, "BODY", "Username")
+				assert.HTMLMatch(body, "BODY", "Password")
 			}
 		}
 	})
 
 	t.Run("successful_login", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		formData := url.Values{
 			"u": {"manager@example.com"},
@@ -92,13 +92,13 @@ func TestLogin_Login(t *testing.T) {
 			"l": {"Login"},
 		}
 		res, err := client.Login(ctx, "POST", "", "", formData)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
 			// Check that a cookie was set with the authorization token
 			cookies := res.Header.Values("Set-Cookie")
 			found := slices.ContainsFunc(cookies, func(cookie string) bool {
 				return strings.HasPrefix(cookie, "Authorization=ey")
 			})
-			tt.True(found, "Expected Authorization cookie to be set with JWT token")
+			assert.True(found, "Expected Authorization cookie to be set with JWT token")
 		}
 	})
 }
@@ -125,7 +125,7 @@ func TestLogin_Logout(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("logout_clears_cookie", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set the actor
 		actor := Actor{
@@ -133,13 +133,13 @@ func TestLogin_Logout(t *testing.T) {
 			Roles:   []string{"m", "u"},
 		}
 		res, err := client.WithOptions(pub.Actor(actor)).Logout(ctx, "GET", "", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
 			// Check that the Authorization cookie is cleared
 			cookies := res.Header.Values("Set-Cookie")
 			found := slices.ContainsFunc(cookies, func(cookie string) bool {
 				return strings.Contains(cookie, "Authorization=; Path=/; Max-Age=0;")
 			})
-			tt.True(found, "Expected Authorization cookie to be cleared")
+			assert.True(found, "Expected Authorization cookie to be cleared")
 		}
 	})
 }
@@ -166,7 +166,7 @@ func TestLogin_Welcome(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("manager_and_user_welcome", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with manager and user roles
 		actor := Actor{
@@ -174,16 +174,16 @@ func TestLogin_Welcome(t *testing.T) {
 			Roles:   []string{"m", "u"},
 		}
 		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "YES, you rule")
+			if assert.NoError(err) {
+				assert.Contains(body, "YES, you rule")
 			}
 		}
 	})
 
 	t.Run("admin_welcome", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with admin role
 		actor := Actor{
@@ -191,10 +191,10 @@ func TestLogin_Welcome(t *testing.T) {
 			Roles:   []string{"a"},
 		}
 		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", "", nil)
-		if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
-			if tt.NoError(err) {
-				tt.Contains(body, "YES, you're all powerful")
+			if assert.NoError(err) {
+				assert.Contains(body, "YES, you're all powerful")
 			}
 		}
 	})
@@ -222,15 +222,15 @@ func TestLogin_AdminOnly(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("no_actor_denied", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// No actor set - should be denied
 		_, err := client.AdminOnly(ctx, "")
-		tt.Error(err)
+		assert.Error(err)
 	})
 
 	t.Run("manager_and_user_denied", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with manager and user roles - should be denied
 		actor := Actor{
@@ -238,11 +238,11 @@ func TestLogin_AdminOnly(t *testing.T) {
 			Roles:   []string{"m", "u"},
 		}
 		_, err := client.WithOptions(pub.Actor(actor)).AdminOnly(ctx, "")
-		tt.Error(err)
+		assert.Error(err)
 	})
 
 	t.Run("admin_allowed", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with admin role - should be allowed
 		actor := Actor{
@@ -250,7 +250,7 @@ func TestLogin_AdminOnly(t *testing.T) {
 			Roles:   []string{"a"},
 		}
 		_, err := client.WithOptions(pub.Actor(actor)).AdminOnly(ctx, "")
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 }
 
@@ -276,15 +276,15 @@ func TestLogin_ManagerOnly(t *testing.T) {
 	app.RunInTest(t)
 
 	t.Run("no_actor_denied", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// No actor set - should be denied
 		_, err := client.ManagerOnly(ctx, "")
-		tt.Error(err)
+		assert.Error(err)
 	})
 
 	t.Run("admin_denied", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with admin role - should be denied (admin is not a manager)
 		actor := Actor{
@@ -292,11 +292,11 @@ func TestLogin_ManagerOnly(t *testing.T) {
 			Roles:   []string{"a"},
 		}
 		_, err := client.WithOptions(pub.Actor(actor)).ManagerOnly(ctx, "")
-		tt.Error(err)
+		assert.Error(err)
 	})
 
 	t.Run("manager_allowed", func(t *testing.T) {
-		tt := testarossa.For(t)
+		assert := testarossa.For(t)
 
 		// Set actor with manager role - should be allowed
 		actor := Actor{
@@ -304,6 +304,6 @@ func TestLogin_ManagerOnly(t *testing.T) {
 			Roles:   []string{"m"},
 		}
 		_, err := client.WithOptions(pub.Actor(actor)).ManagerOnly(ctx, "")
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 }

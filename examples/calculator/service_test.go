@@ -96,14 +96,14 @@ func TestCalculator_Arithmetic(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 			xEcho, opEcho, yEcho, result, err := client.Arithmetic(ctx, tc.x, tc.op, tc.y)
 
 			if tc.expectError {
-				tt.Contains(err, tc.errorContains)
+				assert.Contains(err, tc.errorContains)
 				// When an error occurs, service returns zero values for echo params
 			} else {
-				tt.Expect(
+				assert.Expect(
 					xEcho, tc.expectedXEcho,
 					opEcho, tc.expectedOpEcho,
 					yEcho, tc.expectedYEcho,
@@ -154,9 +154,9 @@ func TestCalculator_Square(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 			xEcho, result, err := client.Square(ctx, tc.x)
-			tt.Expect(
+			assert.Expect(
 				xEcho, tc.expectedXEcho,
 				result, tc.expectedResult,
 				err, nil,
@@ -256,9 +256,9 @@ func TestCalculator_Distance(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 			d, err := client.Distance(ctx, tc.p1, tc.p2)
-			tt.Expect(d, tc.expectedDistance, err, nil)
+			assert.Expect(d, tc.expectedDistance, err, nil)
 		})
 	}
 }
@@ -266,7 +266,7 @@ func TestCalculator_Distance(t *testing.T) {
 func TestCalculator_OnObserveSumOperations(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -286,47 +286,47 @@ func TestCalculator_OnObserveSumOperations(t *testing.T) {
 
 	// Test initial state - should succeed without any operations performed
 	err := svc.OnObserveSumOperations(ctx)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Perform some arithmetic operations to update the sums
 	_, _, _, _, err = client.Arithmetic(ctx, 10, "+", 5) // sumAdd = 15
-	tt.NoError(err)
+	assert.NoError(err)
 	_, _, _, _, err = client.Arithmetic(ctx, 20, "+", 10) // sumAdd = 45
-	tt.NoError(err)
+	assert.NoError(err)
 
 	_, _, _, _, err = client.Arithmetic(ctx, 10, "-", 3) // sumSubtract = 7
-	tt.NoError(err)
+	assert.NoError(err)
 	_, _, _, _, err = client.Arithmetic(ctx, 5, "-", 8) // sumSubtract = 4
-	tt.NoError(err)
+	assert.NoError(err)
 
 	_, _, _, _, err = client.Arithmetic(ctx, 3, "*", 4) // sumMultiply = 12
-	tt.NoError(err)
+	assert.NoError(err)
 	_, _, _, _, err = client.Arithmetic(ctx, 5, "*", 2) // sumMultiply = 22
-	tt.NoError(err)
+	assert.NoError(err)
 
 	_, _, _, _, err = client.Arithmetic(ctx, 20, "/", 4) // sumDivide = 5
-	tt.NoError(err)
+	assert.NoError(err)
 	_, _, _, _, err = client.Arithmetic(ctx, 15, "/", 3) // sumDivide = 10
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Test after operations - should successfully observe the accumulated sums
 	err = svc.OnObserveSumOperations(ctx)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Perform more operations
 	_, _, _, _, err = client.Arithmetic(ctx, 100, "+", 200) // sumAdd = 345
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Test again to ensure repeated calls work correctly
 	err = svc.OnObserveSumOperations(ctx)
-	tt.NoError(err)
+	assert.NoError(err)
 }
 
 // TestCalculator_ConcurrentOperations tests thread safety of arithmetic operations
 func TestCalculator_ConcurrentOperations(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -364,12 +364,12 @@ func TestCalculator_ConcurrentOperations(t *testing.T) {
 		go func(x int, operator string, y int) {
 			defer wg.Done()
 			_, _, _, _, err := client.Arithmetic(ctx, x, operator, y)
-			tt.NoError(err)
+			assert.NoError(err)
 		}(op.x, op.op, op.y)
 	}
 	wg.Wait()
 
 	// Verify the observer still works after concurrent operations
 	err := svc.OnObserveSumOperations(ctx)
-	tt.NoError(err)
+	assert.NoError(err)
 }

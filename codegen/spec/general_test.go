@@ -25,7 +25,7 @@ import (
 
 func TestSpec_General(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var gen General
 
@@ -33,22 +33,22 @@ func TestSpec_General(t *testing.T) {
 host: super.service
 description: foo
 `), &gen)
-	tt.NoError(err)
+	assert.NoError(err)
 
 	err = yaml.Unmarshal([]byte(`
 host: $uper.$ervice
 description: foo
 `), &gen)
-	tt.Contains(err, "invalid host")
+	assert.Contains(err, "invalid host")
 
 	err = yaml.Unmarshal([]byte(`
 host:
 description: foo
 `), &gen)
-	tt.Error(err, "invalid host")
+	assert.Error(err, "invalid host")
 
 	err = yaml.Unmarshal([]byte(`
 description: foo
 `), &gen)
-	tt.Error(err, "invalid host")
+	assert.Error(err, "invalid host")
 }

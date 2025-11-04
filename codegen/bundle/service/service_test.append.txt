@@ -24,10 +24,10 @@ func Test{{ CapitalizeIdentifier $pkg }}_OnChanged{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			err := svc.Set{{ .Name }}({{ .Out "name" }})
-			tt.NoError(err)
+			assert.NoError(err)
 		})
 	*/
 
@@ -66,20 +66,20 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			{{ if .Actor }}// Actor claims required: {{ .Actor }}
 			{{ end }}
 			{{- .Out "name," -}} err := client{{ if .Actor }}.WithOptions(pub.Actor(actor)){{ end }}.{{ .Name }}(ctx {{- .In ", name" }})
 			{{- if .Signature.OutputArgs }}
-			tt.Expect(
+			assert.Expect(
 				{{- range .Signature.OutputArgs }}
 				{{ .Name }}, expected{{ CapitalizeIdentifier .Name }},
 				{{- end }}
 				err, nil,
 			)
 			{{- else }}
-			tt.NoError(err)
+			assert.NoError(err)
 			{{- end }}
 		})
 	*/
@@ -123,11 +123,11 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			hook.{{ .Name }}(func(ctx context.Context {{- .In ", name type"}}) ({{ .Out "name type," -}} err error) {
 				{{- if .Signature.InputArgs }}
-				tt.Expect(
+				assert.Expect(
 					{{- range .Signature.InputArgs }}
 					{{ .Name }}, expected{{ CapitalizeIdentifier .Name }},
 					{{- end }}
@@ -142,14 +142,14 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 				if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
 					{{ .Out "name," -}} err := e.Get()
 					{{- if .Signature.OutputArgs }}
-					tt.Expect(
+					assert.Expect(
 						{{- range .Signature.OutputArgs }}
 						{{ .Name }}, expected{{ CapitalizeIdentifier .Name }},
 						{{- end }}
 						err, nil,
 					)
 					{{- else }}
-					tt.NoError(err)
+					assert.NoError(err)
 					{{- end }}
 				}
 			}
@@ -193,7 +193,7 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			{{ if .Actor }}// Actor claims required: {{ .Actor }}
 			{{ end -}}
@@ -201,14 +201,14 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 				{{ .Out "name," -}} err := e.Get()
 				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
 					{{- if .Signature.OutputArgs }}
-					tt.Expect(
+					assert.Expect(
 						{{- range .Signature.OutputArgs }}
 						{{ .Name }}, expected{{ CapitalizeIdentifier .Name }},
 						{{- end }}
 						err, nil,
 					)
 					{{- else }}
-					tt.NoError(err)
+					assert.NoError(err)
 					{{- end }}
 				}
 			}
@@ -249,7 +249,7 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		Recommended patterns:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			{{ if .Actor }}// Actor claims required: {{ .Actor }}
 			{{ end -}}
@@ -261,11 +261,11 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 			{{- else -}}
 			(ctx, "")
 			{{- end }}
-			if tt.NoError(err) && tt.Expect(res.StatusCode, http.StatusOK) {
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 				body, err := io.ReadAll(res.Body)
-				if tt.NoError(err) {
-					tt.HTMLMatch(body, "DIV.class > DIV#id", "")
-					tt.Contains(body, "")
+				if assert.NoError(err) {
+					assert.HTMLMatch(body, "DIV.class > DIV#id", "")
+					assert.Contains(body, "")
 				}
 			}
 		})
@@ -300,10 +300,10 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			err := svc.{{ .Name }}(ctx)
-			tt.NoError(err)
+			assert.NoError(err)
 		})
 	*/
 
@@ -335,10 +335,10 @@ func Test{{ CapitalizeIdentifier $pkg }}_OnObserve{{ .Name }}(t *testing.T) {
 		Recommended pattern:
 
 		t.Run("subtest_name", func(t *testing.T) {
-			tt := testarossa.For(t)
+			assert := testarossa.For(t)
 
 			err := svc.OnObserve{{ .Name }}(ctx)
-			tt.NoError(err)
+			assert.NoError(err)
 		})
 	*/
 

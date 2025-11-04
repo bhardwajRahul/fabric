@@ -45,6 +45,8 @@ import (
 	"github.com/microbus-io/fabric/utils"
 )
 
+var brotliMagicWord = []byte{0x91, 0x19, 0x62, 0x66}
+
 /*
 Cache is an LRU cache that is distributed among the peers of a microservice.
 The cache is tied to the microservice and is typically constructed in the OnStartup
@@ -442,6 +444,21 @@ func (c *Cache) Store(ctx context.Context, key string, value []byte, options ...
 		opt(&opts)
 	}
 
+	if opts.Compress {
+		var buf bytes.Buffer
+		buf.Write(brotliMagicWord)
+		br := brotli.NewWriterLevel(&buf, brotli.BestSpeed)
+		_, err := br.Write(value)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = br.Close()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		value = buf.Bytes()
+	}
+
 	// Delete locally
 	c.localCache.Delete(key)
 
@@ -554,6 +571,15 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 				"hit", "miss",
 			)
 		}
+		if ok && bytes.HasPrefix(value, brotliMagicWord) {
+			var buf bytes.Buffer
+			br := brotli.NewReader(bytes.NewReader(value[len(brotliMagicWord):]))
+			_, err = io.Copy(&buf, br)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
+			value = buf.Bytes()
+		}
 		return value, ok, nil
 	}
 
@@ -596,6 +622,15 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 			"op", "load",
 			"hit", "miss",
 		)
+	}
+	if ok && bytes.HasPrefix(value, brotliMagicWord) {
+		var buf bytes.Buffer
+		br := brotli.NewReader(bytes.NewReader(value[len(brotliMagicWord):]))
+		_, err = io.Copy(&buf, br)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+		value = buf.Bytes()
 	}
 	return value, ok, nil
 }
@@ -740,6 +775,8 @@ func (c *Cache) Clear(ctx context.Context) error {
 
 // LoadJSON loads a JSON element from the cache.
 // If the element is found, it is bumped to the head of the cache.
+//
+// Deprecated: Use Load or Get.
 func (c *Cache) LoadJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
@@ -761,6 +798,8 @@ func (c *Cache) LoadJSON(ctx context.Context, key string, value any, options ...
 // StoreJSON marshals the value as JSON and stores it in the cache.
 // JSON marshalling is not memory efficient and should be avoided if the cache is
 // expected to store a lot of data.
+//
+// Deprecated: Use Store or Set.
 func (c *Cache) StoreJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
 	if key == "" {
 		return errors.New("missing key")
@@ -778,6 +817,8 @@ func (c *Cache) StoreJSON(ctx context.Context, key string, value any, options ..
 
 // LoadCompressedJSON loads a compressed JSON element from the cache.
 // If the element is found, it is bumped to the head of the cache.
+//
+// Deprecated: Use Load or Get.
 func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
@@ -789,7 +830,7 @@ func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, o
 	if !ok {
 		return false, nil
 	}
-	err = json.NewDecoder(brotli.NewReader(bytes.NewReader(data))).Decode(value)
+	err = json.Unmarshal(data, value)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -799,21 +840,18 @@ func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, o
 // StoreCompressedJSON marshals the value as JSON and stores it in the cache compressed.
 // JSON marshalling is not memory efficient and should be avoided if the cache is
 // expected to store a lot of data.
+//
+// Deprecated: Use Store or Set.
 func (c *Cache) StoreCompressedJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
 	if key == "" {
 		return errors.New("missing key")
 	}
-	var data bytes.Buffer
-	br := brotli.NewWriter(&data)
-	err := json.NewEncoder(br).Encode(value)
+	data, err := json.Marshal(value)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = br.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = c.Store(ctx, key, data.Bytes(), options...)
+	options = append(options, Compress(true))
+	err = c.Store(ctx, key, data, options...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -832,4 +870,107 @@ func (c *Cache) Hits() int {
 func (c *Cache) Misses() int {
 	misses := atomic.LoadInt64(&c.misses)
 	return int(misses)
+}
+
+// valueToData converts untyped value into bytes.
+// The value must be either []byte or an object that can be marshaled to JSON.
+func (c *Cache) valueToData(value any) (data []byte, err error) {
+	switch v := value.(type) {
+	case string:
+		data = utils.UnsafeStringToBytes(v)
+	case []byte:
+		data = v
+	default:
+		data, err = json.Marshal(value)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return data, nil
+}
+
+// dataToValue converts bytes to an untyped value.
+// The value must be either a pointer to []byte, string or object that can be unmarshaled from JSON.
+func (c *Cache) dataToValue(data []byte, value any) (err error) {
+	switch v := value.(type) {
+	case *string:
+		*v = string(data)
+	case *[]byte:
+		*v = data
+	default:
+		err = json.Unmarshal(data, value)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// CacheSet puts an element in the cache, marking it as the most recently used.
+// The value must be either []byte or an object that can be marshaled to JSON.
+func (c *Cache) Set(ctx context.Context, key string, value any) (err error) {
+	if key == "" {
+		return errors.New("missing key")
+	}
+	data, err := c.valueToData(value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.Store(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// Get retrieves an element from the cache, marking it as the most recently used.
+// The value must be either a pointer to []byte, string or object that can be unmarshaled from JSON.
+func (c *Cache) Get(ctx context.Context, key string, value any) (found bool, err error) {
+	if key == "" {
+		return false, errors.New("missing key")
+	}
+	data, ok, err := c.Load(ctx, key)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
+	}
+	err = c.dataToValue(data, value)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
+}
+
+// Peek retrieves an element from the cache, without marking it as the most recently used.
+// The value must be either a pointer to []byte, string or object that can be unmarshaled from JSON.
+func (c *Cache) Peek(ctx context.Context, key string, value any) (found bool, err error) {
+	if key == "" {
+		return false, errors.New("missing key")
+	}
+	data, ok, err := c.Load(ctx, key, NoBump()) // <- NoBump
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !ok {
+		return false, nil
+	}
+	err = c.dataToValue(data, value)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
+}
+
+// Has checks if an element is in the cache, without marking it as the most recently used.
+func (c *Cache) Has(ctx context.Context, key string) (found bool, err error) {
+	if key == "" {
+		return false, errors.New("missing key")
+	}
+	_, ok, err := c.Load(ctx, key, NoBump()) // <- NoBump
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return ok, nil
 }

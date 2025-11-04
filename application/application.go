@@ -226,15 +226,15 @@ func (app *Application) Run() error {
 // RunInTest starts up all microservices included in this app, waits for the test to finish, then shuts them down.
 // Errors in startup or shutdown will fail the test.
 func (app *Application) RunInTest(t testing.TB) error {
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	err := app.Startup()
-	if !tt.NoError(err) {
+	if !assert.NoError(err) {
 		t.FailNow()
 		return errors.Trace(err)
 	}
 	t.Cleanup(func() {
 		err := app.Shutdown()
-		tt.NoError(err)
+		assert.NoError(err)
 	})
 	return nil
 }

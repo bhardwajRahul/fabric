@@ -25,11 +25,11 @@ import (
 
 func TestUtils_SourceCodeHash(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	h, err := SourceCodeSHA256(".")
-	tt.NoError(err)
+	assert.NoError(err)
 	b, err := hex.DecodeString(h)
-	tt.NoError(err)
-	tt.Len(b, 256/8)
+	assert.NoError(err)
+	assert.Len(b, 256/8)
 }

@@ -46,7 +46,7 @@ func TestHttpx_FragRequest(t *testing.T) {
 }
 
 func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	body := []byte(rand.AlphaNum64(int(bodySize)))
 	var bodyReader io.Reader
@@ -59,24 +59,24 @@ func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 	req, err := http.NewRequest("GET", "https://www.example.com", bodyReader)
 	req.Header.Add("Foo", "Bar 1")
 	req.Header.Add("Foo", "Bar 2")
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Fragment
 	remaining := bodySize
 	fragReqs := []*http.Request{}
 	frag, err := NewFragRequest(req, fragmentSize)
-	tt.NoError(err)
+	assert.NoError(err)
 	for i := 1; i <= frag.N(); i++ {
 		r, err := frag.Fragment(i)
-		tt.NoError(err)
-		tt.NotNil(r)
+		assert.NoError(err)
+		assert.NotNil(r)
 		fragReqs = append(fragReqs, r)
 
 		contentLen := r.Header.Get("Content-Length")
 		if remaining > fragmentSize {
-			tt.Equal(strconv.FormatInt(fragmentSize, 10), contentLen)
+			assert.Equal(strconv.FormatInt(fragmentSize, 10), contentLen)
 		} else {
-			tt.Equal(strconv.FormatInt(remaining, 10), contentLen)
+			assert.Equal(strconv.FormatInt(remaining, 10), contentLen)
 		}
 		remaining -= fragmentSize
 	}
@@ -89,7 +89,7 @@ func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 		wg.Add(1)
 		go func() {
 			final, err := defrag.Add(r)
-			tt.NoError(err)
+			assert.NoError(err)
 			if final {
 				countInt.Add(1)
 			}
@@ -97,21 +97,21 @@ func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 		}()
 	}
 	wg.Wait()
-	tt.Equal(int32(1), countInt.Load())
+	assert.Equal(int32(1), countInt.Load())
 	intReq, err := defrag.Integrated()
-	tt.NoError(err)
-	tt.NotNil(intReq)
+	assert.NoError(err)
+	assert.NotNil(intReq)
 
 	intBody, err := io.ReadAll(intReq.Body)
-	tt.NoError(err)
-	tt.Equal(body, intBody)
+	assert.NoError(err)
+	assert.Equal(body, intBody)
 
 	contentLen := intReq.Header.Get("Content-Length")
-	tt.True(contentLen == strconv.Itoa(len(body)))
+	assert.True(contentLen == strconv.Itoa(len(body)))
 
-	if tt.Len(intReq.Header["Foo"], 2) {
-		tt.Equal("Bar 1", intReq.Header["Foo"][0])
-		tt.Equal("Bar 2", intReq.Header["Foo"][1])
+	if assert.Len(intReq.Header["Foo"], 2) {
+		assert.Equal("Bar 1", intReq.Header["Foo"][0])
+		assert.Equal("Bar 2", intReq.Header["Foo"][1])
 	}
 }
 
@@ -130,7 +130,7 @@ func TestHttpx_FragResponse(t *testing.T) {
 }
 
 func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	body := []byte(rand.AlphaNum64(int(bodySize)))
 
@@ -140,16 +140,16 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 		rec.Header().Add("Foo", "Bar 1")
 		rec.Header().Add("Foo", "Bar 2")
 		n, err := rec.Write(body)
-		tt.NoError(err)
-		tt.Equal(len(body), n)
+		assert.NoError(err)
+		assert.Equal(len(body), n)
 		res = rec.Result()
 	} else {
 		rec := httptest.NewRecorder()
 		rec.Header().Add("Foo", "Bar 1")
 		rec.Header().Add("Foo", "Bar 2")
 		n, err := rec.Write(body)
-		tt.NoError(err)
-		tt.Equal(len(body), n)
+		assert.NoError(err)
+		assert.Equal(len(body), n)
 		res = rec.Result()
 	}
 
@@ -157,18 +157,18 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 	remaining := bodySize
 	fragRess := []*http.Response{}
 	frag, err := NewFragResponse(res, fragmentSize)
-	tt.NoError(err)
+	assert.NoError(err)
 	for i := 1; i <= frag.N(); i++ {
 		r, err := frag.Fragment(i)
-		tt.NoError(err)
-		tt.NotNil(r)
+		assert.NoError(err)
+		assert.NotNil(r)
 		fragRess = append(fragRess, r)
 
 		contentLen := r.Header.Get("Content-Length")
 		if remaining > fragmentSize {
-			tt.Equal(strconv.FormatInt(fragmentSize, 10), contentLen)
+			assert.Equal(strconv.FormatInt(fragmentSize, 10), contentLen)
 		} else {
-			tt.Equal(strconv.FormatInt(remaining, 10), contentLen)
+			assert.Equal(strconv.FormatInt(remaining, 10), contentLen)
 		}
 		remaining -= fragmentSize
 	}
@@ -181,7 +181,7 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 		wg.Add(1)
 		go func() {
 			final, err := defrag.Add(r)
-			tt.NoError(err)
+			assert.NoError(err)
 			if final {
 				countInt.Add(1)
 			}
@@ -189,42 +189,42 @@ func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) 
 		}()
 	}
 	wg.Wait()
-	tt.Equal(int32(1), countInt.Load())
+	assert.Equal(int32(1), countInt.Load())
 	intRes, err := defrag.Integrated()
-	tt.NoError(err)
-	tt.NotNil(intRes)
+	assert.NoError(err)
+	assert.NotNil(intRes)
 
 	intBody, err := io.ReadAll(intRes.Body)
-	tt.NoError(err)
-	tt.Equal(body, intBody)
+	assert.NoError(err)
+	assert.Equal(body, intBody)
 
 	contentLen := intRes.Header.Get("Content-Length")
-	tt.True(contentLen == strconv.Itoa(len(body)))
+	assert.True(contentLen == strconv.Itoa(len(body)))
 
-	if tt.Len(intRes.Header["Foo"], 2) {
-		tt.Equal("Bar 1", intRes.Header["Foo"][0])
-		tt.Equal("Bar 2", intRes.Header["Foo"][1])
+	if assert.Len(intRes.Header["Foo"], 2) {
+		assert.Equal("Bar 1", intRes.Header["Foo"][0])
+		assert.Equal("Bar 2", intRes.Header["Foo"][1])
 	}
 }
 
 func TestHttpx_DefragRequestNoContentLen(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	bodySize := 128*1024 + 16
 	body := []byte(rand.AlphaNum64(int(bodySize)))
 	req, err := http.NewRequest("GET", "https://www.example.com", bytes.NewReader(body))
-	tt.NoError(err)
+	assert.NoError(err)
 
 	// Fragment the request
 	frag, err := NewFragRequest(req, 1024)
-	tt.NoError(err)
+	assert.NoError(err)
 	for i := 1; i <= frag.N(); i++ {
 		r, err := frag.Fragment(i)
-		tt.NoError(err)
-		tt.NotNil(r)
-		tt.True(r.ContentLength > 0)
-		tt.NotEqual("", r.Header.Get("Content-Length"))
+		assert.NoError(err)
+		assert.NotNil(r)
+		assert.True(r.ContentLength > 0)
+		assert.NotEqual("", r.Header.Get("Content-Length"))
 	}
 
 	// Defrag should still work without knowing the content length
@@ -234,40 +234,40 @@ func TestHttpx_DefragRequestNoContentLen(t *testing.T) {
 		r.Header.Del("Content-Length")
 		r.ContentLength = -1
 		_, err := defrag.Add(r)
-		tt.NoError(err)
+		assert.NoError(err)
 	}
 	intReq, err := defrag.Integrated()
-	tt.NoError(err)
-	tt.NotNil(intReq)
-	tt.Equal(-1, int(intReq.ContentLength))
-	tt.Equal("", intReq.Header.Get("Content-Length"))
+	assert.NoError(err)
+	assert.NotNil(intReq)
+	assert.Equal(-1, int(intReq.ContentLength))
+	assert.Equal("", intReq.Header.Get("Content-Length"))
 	intBody, err := io.ReadAll(intReq.Body)
-	tt.NoError(err)
-	tt.Equal(body, intBody)
+	assert.NoError(err)
+	assert.Equal(body, intBody)
 }
 
 func TestHttpx_DefragResponseNoContentLen(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	bodySize := 128*1024 + 16
 	body := []byte(rand.AlphaNum64(int(bodySize)))
 
 	rec := httptest.NewRecorder()
 	n, err := rec.Write(body)
-	tt.NoError(err)
-	tt.Equal(len(body), n)
+	assert.NoError(err)
+	assert.Equal(len(body), n)
 	res := rec.Result()
 
 	// Fragment the request
 	frag, err := NewFragResponse(res, 1024)
-	tt.NoError(err)
+	assert.NoError(err)
 	for i := 1; i <= frag.N(); i++ {
 		r, err := frag.Fragment(i)
-		tt.NoError(err)
-		tt.NotNil(r)
-		tt.True(r.ContentLength > 0)
-		tt.NotEqual("", r.Header.Get("Content-Length"))
+		assert.NoError(err)
+		assert.NotNil(r)
+		assert.True(r.ContentLength > 0)
+		assert.NotEqual("", r.Header.Get("Content-Length"))
 	}
 
 	// Defrag should still work without knowing the content length
@@ -277,35 +277,35 @@ func TestHttpx_DefragResponseNoContentLen(t *testing.T) {
 		r.Header.Del("Content-Length")
 		r.ContentLength = -1
 		_, err := defrag.Add(r)
-		tt.NoError(err)
+		assert.NoError(err)
 	}
 	intRes, err := defrag.Integrated()
-	tt.NoError(err)
-	tt.NotNil(intRes)
-	tt.Equal(-1, int(intRes.ContentLength))
-	tt.Equal("", intRes.Header.Get("Content-Length"))
+	assert.NoError(err)
+	assert.NotNil(intRes)
+	assert.Equal(-1, int(intRes.ContentLength))
+	assert.Equal("", intRes.Header.Get("Content-Length"))
 	intBody, err := io.ReadAll(intRes.Body)
-	tt.NoError(err)
-	tt.Equal(body, intBody)
+	assert.NoError(err)
+	assert.Equal(body, intBody)
 }
 
 func TestHttpx_FragRequestZero(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	r, err := http.NewRequest("POST", "/", strings.NewReader("hello"))
-	tt.NoError(err)
+	assert.NoError(err)
 	_, err = NewFragRequest(r, 0)
-	tt.Contains(err, "non-positive")
+	assert.Contains(err, "non-positive")
 }
 
 func TestHttpx_FragResponseZero(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	rec := NewResponseRecorder()
 	rec.Write([]byte("hello"))
 	r := rec.Result()
 	_, err := NewFragResponse(r, 0)
-	tt.Contains(err, "non-positive")
+	assert.Contains(err, "non-positive")
 }

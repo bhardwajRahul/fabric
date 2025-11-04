@@ -8,7 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/invopop/jsonschema v0.13.0
 	github.com/microbus-io/copyrighter v1.2.0
-	github.com/microbus-io/testarossa v0.7.2
+	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.6
 	github.com/nats-io/nats.go v1.46.1
 	github.com/phires/go-guerrilla v1.6.7

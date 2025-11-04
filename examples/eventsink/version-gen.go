@@ -18,12 +18,12 @@ limitations under the License.
 
 package eventsink
 
-const Version = 242
-const SourceCodeSHA256 = "fac6c1d7cfebc0c2f69b5a9bee3ef7e1819a552f9141e8710d6724a3b115bebb"
-const Timestamp = "2025-10-12T21:58:12.113675Z"
+const Version = 248
+const SourceCodeSHA256 = "1c6058b645becfbdb303625f33f50efc33b8173db1e5205108e396d4118528cb"
+const Timestamp = "2025-11-02T17:28:51.339117Z"
 
 /* {
-	"ver": 242,
-	"sha256": "fac6c1d7cfebc0c2f69b5a9bee3ef7e1819a552f9141e8710d6724a3b115bebb",
-	"ts": "2025-10-12T21:58:12.113675Z"
+	"ver": 248,
+	"sha256": "1c6058b645becfbdb303625f33f50efc33b8173db1e5205108e396d4118528cb",
+	"ts": "2025-11-02T17:28:51.339117Z"
 } */

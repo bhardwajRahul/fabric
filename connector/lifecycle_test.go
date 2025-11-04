@@ -32,7 +32,7 @@ import (
 
 func TestConnector_StartupShutdown(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var startupCalled, shutdownCalled bool
 
@@ -46,26 +46,26 @@ func TestConnector_StartupShutdown(t *testing.T) {
 		return nil
 	})
 
-	tt.False(startupCalled)
-	tt.False(shutdownCalled)
-	tt.False(con.IsStarted())
+	assert.False(startupCalled)
+	assert.False(shutdownCalled)
+	assert.False(con.IsStarted())
 
 	err := con.Startup()
-	tt.NoError(err)
-	tt.True(startupCalled)
-	tt.False(shutdownCalled)
-	tt.True(con.IsStarted())
+	assert.NoError(err)
+	assert.True(startupCalled)
+	assert.False(shutdownCalled)
+	assert.True(con.IsStarted())
 
 	err = con.Shutdown()
-	tt.NoError(err)
-	tt.True(startupCalled)
-	tt.True(shutdownCalled)
-	tt.False(con.IsStarted())
+	assert.NoError(err)
+	assert.True(startupCalled)
+	assert.True(shutdownCalled)
+	assert.False(con.IsStarted())
 }
 
 func TestConnector_StartupError(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var startupCalled, shutdownCalled bool
 
@@ -79,54 +79,54 @@ func TestConnector_StartupError(t *testing.T) {
 		return nil
 	})
 
-	tt.False(startupCalled)
-	tt.False(shutdownCalled)
-	tt.False(con.IsStarted())
+	assert.False(startupCalled)
+	assert.False(shutdownCalled)
+	assert.False(con.IsStarted())
 
 	err := con.Startup()
-	tt.Error(err)
-	tt.True(startupCalled)
-	tt.True(shutdownCalled)
-	tt.False(con.IsStarted())
+	assert.Error(err)
+	assert.True(startupCalled)
+	assert.True(shutdownCalled)
+	assert.False(con.IsStarted())
 
 	err = con.Shutdown()
-	tt.Error(err)
-	tt.True(startupCalled)
-	tt.True(shutdownCalled)
-	tt.False(con.IsStarted())
+	assert.Error(err)
+	assert.True(startupCalled)
+	assert.True(shutdownCalled)
+	assert.False(con.IsStarted())
 }
 
 func TestConnector_StartupPanic(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("startup.panic.connector")
 	con.SetOnStartup(func(ctx context.Context) error {
 		panic("really bad")
 	})
 	err := con.Startup()
-	tt.Error(err)
-	tt.Equal("really bad", err.Error())
+	assert.Error(err)
+	assert.Equal("really bad", err.Error())
 }
 
 func TestConnector_ShutdownPanic(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("shutdown.panic.connector")
 	con.SetOnShutdown(func(ctx context.Context) error {
 		panic("really bad")
 	})
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.Shutdown()
-	tt.Error(err)
-	tt.Equal("really bad", err.Error())
+	assert.Error(err)
+	assert.Equal("really bad", err.Error())
 }
 
 func TestConnector_StartupTimeout(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("startup.timeout.connector")
 
@@ -140,17 +140,17 @@ func TestConnector_StartupTimeout(t *testing.T) {
 
 	go func() {
 		err := con.Startup()
-		tt.Error(err)
+		assert.Error(err)
 		done <- true
 	}()
 	time.Sleep(600 * time.Millisecond)
 	<-done
-	tt.False(con.IsStarted())
+	assert.False(con.IsStarted())
 }
 
 func TestConnector_ShutdownTimeout(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("shutdown.timeout.connector")
 
@@ -163,57 +163,57 @@ func TestConnector_ShutdownTimeout(t *testing.T) {
 	})
 
 	err := con.Startup()
-	tt.NoError(err)
-	tt.True(con.IsStarted())
+	assert.NoError(err)
+	assert.True(con.IsStarted())
 
 	go func() {
 		err := con.Shutdown()
-		tt.Error(err)
+		assert.Error(err)
 		done <- true
 	}()
 	time.Sleep(600 * time.Millisecond)
 	<-done
-	tt.False(con.IsStarted())
+	assert.False(con.IsStarted())
 }
 
 func TestConnector_InitError(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("init.error.connector")
 	err := con.DefineConfig("Hundred", cfg.DefaultValue("101"), cfg.Validation("int [1,100]"))
-	tt.Error(err)
+	assert.Error(err)
 	err = con.Startup()
-	tt.Error(err)
+	assert.Error(err)
 
 	con = New("init.error.connector")
 	err = con.DefineConfig("Hundred", cfg.DefaultValue("1"), cfg.Validation("int [1,100]"))
-	tt.NoError(err)
+	assert.NoError(err)
 	err = con.SetConfig("Hundred", "101")
-	tt.Error(err)
+	assert.Error(err)
 	err = con.Startup()
-	tt.Error(err)
+	assert.Error(err)
 
 	con = New("init.error.connector")
 	err = con.Subscribe("GET", ":BAD/path", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
-	tt.Error(err)
+	assert.Error(err)
 	err = con.Startup()
-	tt.Error(err)
+	assert.Error(err)
 
 	con = New("init.error.connector")
 	err = con.StartTicker("ticktock", -time.Minute, func(ctx context.Context) error {
 		return nil
 	})
-	tt.Error(err)
+	assert.Error(err)
 	err = con.Startup()
-	tt.Error(err)
+	assert.Error(err)
 }
 
 func TestConnector_Restart(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	var startupCalled atomic.Int32
 	var shutdownCalled atomic.Int32
@@ -227,7 +227,7 @@ func TestConnector_Restart(t *testing.T) {
 	configurator.SetPlane(plane)
 
 	err := configurator.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer configurator.Shutdown()
 
 	// Set up the connector
@@ -252,7 +252,7 @@ func TestConnector_Restart(t *testing.T) {
 	})
 	con.DefineConfig("config", cfg.DefaultValue("default"))
 
-	tt.Equal("default", con.configs["config"].Value)
+	assert.Equal("default", con.configs["config"].Value)
 
 	// Startup
 	configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
@@ -260,20 +260,20 @@ func TestConnector_Restart(t *testing.T) {
 		return nil
 	})
 	err = con.Startup()
-	tt.NoError(err)
-	tt.Equal(int32(1), startupCalled.Load())
-	tt.Zero(shutdownCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), startupCalled.Load())
+	assert.Zero(shutdownCalled.Load())
 	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
-	tt.NoError(err)
-	tt.Equal(int32(1), endpointCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
-	tt.True(tickerCalled.Load() > 0)
-	tt.Equal("overriden", con.Config("config"))
+	assert.True(tickerCalled.Load() > 0)
+	assert.Equal("overriden", con.Config("config"))
 
 	// Shutdown
 	err = con.Shutdown()
-	tt.NoError(err)
-	tt.Equal(int32(1), shutdownCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), shutdownCalled.Load())
 
 	// Restart
 	configurator.Unsubscribe("POST", ":888/values")
@@ -287,30 +287,30 @@ func TestConnector_Restart(t *testing.T) {
 	tickerCalled.Store(0)
 
 	err = con.Startup()
-	tt.NoError(err)
-	tt.Equal(int32(1), startupCalled.Load())
-	tt.Zero(shutdownCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), startupCalled.Load())
+	assert.Zero(shutdownCalled.Load())
 	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
-	tt.NoError(err)
-	tt.Equal(int32(1), endpointCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
-	tt.True(tickerCalled.Load() > 0)
-	tt.Equal("default", con.Config("config"))
+	assert.True(tickerCalled.Load() > 0)
+	assert.Equal("default", con.Config("config"))
 
 	// Shutdown
 	err = con.Shutdown()
-	tt.NoError(err)
-	tt.Equal(int32(1), shutdownCalled.Load())
+	assert.NoError(err)
+	assert.Equal(int32(1), shutdownCalled.Load())
 }
 
 func TestConnector_GoGracefulShutdown(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	ctx := context.Background()
 
 	con := New("go.graceful.shutdown.connector")
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 
 	done500 := false
 	con.Go(ctx, func(ctx context.Context) (err error) {
@@ -326,20 +326,20 @@ func TestConnector_GoGracefulShutdown(t *testing.T) {
 	})
 	started := time.Now()
 	err = con.Shutdown()
-	tt.NoError(err)
+	assert.NoError(err)
 	dur := time.Since(started)
-	tt.True(dur >= 500*time.Millisecond)
-	tt.True(done500)
-	tt.True(done300)
+	assert.True(dur >= 500*time.Millisecond)
+	assert.True(done500)
+	assert.True(done300)
 }
 
 func TestConnector_Parallel(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	con := New("parallel.connector")
 	err := con.Startup()
-	tt.NoError(err)
+	assert.NoError(err)
 	defer con.Shutdown()
 
 	j1 := false
@@ -364,9 +364,9 @@ func TestConnector_Parallel(t *testing.T) {
 		},
 	)
 	dur := time.Since(started)
-	tt.True(dur >= 300*time.Millisecond)
-	tt.NoError(err)
-	tt.True(j1)
-	tt.True(j2)
-	tt.True(j3)
+	assert.True(dur >= 300*time.Millisecond)
+	assert.NoError(err)
+	assert.True(j1)
+	assert.True(j2)
+	assert.True(j3)
 }

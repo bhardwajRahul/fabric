@@ -27,7 +27,7 @@ import (
 
 func TestTransport_ConcurrentSub(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	var trie trie
 
 	handler := func(msg *Msg) {}
@@ -50,7 +50,7 @@ func TestTransport_ConcurrentSub(t *testing.T) {
 		h := ring.Rotate()
 		found[h.Index] = true
 	}
-	tt.Len(found, n)
+	assert.Len(found, n)
 
 	// Unsub from all but the last one
 	for range n - 1 {
@@ -69,16 +69,16 @@ func TestTransport_ConcurrentSub(t *testing.T) {
 		h := ring.Rotate()
 		found[h.Index] = true
 	}
-	tt.Len(found, 1)
+	assert.Len(found, 1)
 
 	// Unsub from all should trim the trie back to empty
 	(<-unsubs)()
-	tt.Nil(trie.children["my"])
+	assert.Nil(trie.children["my"])
 }
 
 func TestTransport_Handlers(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	var trie trie
 	var msg *Msg
 
@@ -105,11 +105,11 @@ func TestTransport_Handlers(t *testing.T) {
 			h(msg)
 			found[id] = true
 		}
-		tt.Len(handlers, 4)
-		tt.Len(found, 4)
-		tt.True(found[1] || found[2] || found[3])
-		tt.False(found[1] && found[2] && found[3])
-		tt.True(found[4] && found[5] && found[6])
+		assert.Len(handlers, 4)
+		assert.Len(found, 4)
+		assert.True(found[1] || found[2] || found[3])
+		assert.False(found[1] && found[2] && found[3])
+		assert.True(found[4] && found[5] && found[6])
 	}
 
 	// Concurrent
@@ -118,7 +118,7 @@ func TestTransport_Handlers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			handlers := trie.Handlers("my.subject")
-			if !tt.Len(handlers, 4) {
+			if !assert.Len(handlers, 4) {
 				for _, h := range handlers {
 					h(msg)
 				}
@@ -131,7 +131,7 @@ func TestTransport_Handlers(t *testing.T) {
 
 func TestTransport_Wildcards(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	var trie trie
 	var msg *Msg
 
@@ -142,35 +142,35 @@ func TestTransport_Wildcards(t *testing.T) {
 
 	// >
 	trie.Sub("alpha.443.com.example.|.POST.foo.>", "alpha", h1)
-	tt.Len(trie.Handlers("alpha.443.com.example.|.POST.foo"), 0)
-	tt.Len(trie.Handlers("alpha.443.com.example.|.POST.foo.bar"), 1)
-	tt.Len(trie.Handlers("alpha.443.com.example.|.POST.foo.bar.baz"), 1)
-	tt.Len(trie.Handlers("alpha.123.com.example.|.POST.foo.bar"), 0)
+	assert.Len(trie.Handlers("alpha.443.com.example.|.POST.foo"), 0)
+	assert.Len(trie.Handlers("alpha.443.com.example.|.POST.foo.bar"), 1)
+	assert.Len(trie.Handlers("alpha.443.com.example.|.POST.foo.bar.baz"), 1)
+	assert.Len(trie.Handlers("alpha.123.com.example.|.POST.foo.bar"), 0)
 	trie.Handlers("alpha.443.com.example.|.POST.foo.bar.baz")[0](msg)
-	tt.Equal(1, id)
+	assert.Equal(1, id)
 
 	// *
 	trie.Sub("beta.*.com.example.|.GET.foo", "beta", h2)
-	tt.Len(trie.Handlers("beta.443.com.example.|.POST.foo"), 0)
-	tt.Len(trie.Handlers("beta.443.com.example.|.GET.foo"), 1)
-	tt.Len(trie.Handlers("beta.123.com.example.|.GET.foo"), 1)
-	tt.Len(trie.Handlers("beta.123.com.example.|.GET.foo.bar"), 0)
+	assert.Len(trie.Handlers("beta.443.com.example.|.POST.foo"), 0)
+	assert.Len(trie.Handlers("beta.443.com.example.|.GET.foo"), 1)
+	assert.Len(trie.Handlers("beta.123.com.example.|.GET.foo"), 1)
+	assert.Len(trie.Handlers("beta.123.com.example.|.GET.foo.bar"), 0)
 	trie.Handlers("beta.443.com.example.|.GET.foo")[0](msg)
-	tt.Equal(2, id)
+	assert.Equal(2, id)
 
 	// * *
 	trie.Sub("gamma.*.com.example.|.*.foo", "gamma", h3)
 	trie.Sub("gamma.888.com.example.|.*.foo", "gamma", h3)
-	tt.Len(trie.Handlers("gamma.456.com.example.|.PATCH.foo"), 1)
-	tt.Len(trie.Handlers("gamma.888.com.example.|.PATCH.foo"), 2)
-	tt.Len(trie.Handlers("gamma.456.edu.example.|.PATCH.foo"), 0)
+	assert.Len(trie.Handlers("gamma.456.com.example.|.PATCH.foo"), 1)
+	assert.Len(trie.Handlers("gamma.888.com.example.|.PATCH.foo"), 2)
+	assert.Len(trie.Handlers("gamma.456.edu.example.|.PATCH.foo"), 0)
 	trie.Handlers("gamma.456.com.example.|.PATCH.foo")[0](msg)
-	tt.Equal(3, id)
+	assert.Equal(3, id)
 }
 
 func TestTransport_SubUnsub(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	var trie trie
 	var msg *Msg
 
@@ -180,39 +180,39 @@ func TestTransport_SubUnsub(t *testing.T) {
 	h3 := func(msg *Msg) { id = 3 }
 
 	unsub1 := trie.Sub("foo.bar", "myqueue", h1)
-	tt.NotNil(unsub1)
+	assert.NotNil(unsub1)
 	unsub2 := trie.Sub("foo.bar", "myqueue", h2)
-	tt.NotNil(unsub2)
+	assert.NotNil(unsub2)
 
 	handlers := trie.Handlers("foo.bar")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(1, id)
+		assert.Equal(1, id)
 	}
 	handlers = trie.Handlers("foo.baz")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 
 	unsub3 := trie.Sub("foo.bar.moo.baz", "myqueue", h3)
-	tt.NotNil(unsub3)
+	assert.NotNil(unsub3)
 
 	handlers = trie.Handlers("foo.bar.moo.baz")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(3, id)
+		assert.Equal(3, id)
 	}
 	handlers = trie.Handlers("foo.bar.moo")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 	handlers = trie.Handlers("foo.bar")
-	tt.Len(handlers, 1)
+	assert.Len(handlers, 1)
 	handlers = trie.Handlers("foo")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 	handlers = trie.Handlers("")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 }
 
 func TestTransport_Trim(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 	var trie trie
 	var msg *Msg
 
@@ -223,63 +223,63 @@ func TestTransport_Trim(t *testing.T) {
 
 	unsub1 := trie.Sub("foo.bar", "myqueue", h1)
 	unsub1()
-	tt.True(trie.IsEmpty())
+	assert.True(trie.IsEmpty())
 
 	unsub1 = trie.Sub("foo.bar", "myqueue", h1)
 	unsub2 := trie.Sub("foo.bar.moo.baz", "myqueue", h2)
 	unsub3 := trie.Sub("foo.bar.too.bat", "myqueue", h3)
 
 	handlers := trie.Handlers("foo.bar.moo.baz")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(2, id)
+		assert.Equal(2, id)
 	}
 	handlers = trie.Handlers("foo.bar.too.bat")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(3, id)
+		assert.Equal(3, id)
 	}
 	handlers = trie.Handlers("foo.bar.moo")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 	handlers = trie.Handlers("foo.bar")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(1, id)
+		assert.Equal(1, id)
 	}
 
 	unsub2()
 	unsub2()
 	handlers = trie.Handlers("foo.bar.moo.baz")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 	handlers = trie.Handlers("foo.bar.too.bat")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(3, id)
+		assert.Equal(3, id)
 	}
 	handlers = trie.Handlers("foo.bar.moo")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 	handlers = trie.Handlers("foo.bar")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(1, id)
+		assert.Equal(1, id)
 	}
 
 	unsub1()
 	handlers = trie.Handlers("foo.bar.too.bat")
-	if tt.Len(handlers, 1) {
+	if assert.Len(handlers, 1) {
 		handlers[0](msg)
-		tt.Equal(3, id)
+		assert.Equal(3, id)
 	}
 	handlers = trie.Handlers("foo.bar")
-	tt.Len(handlers, 0)
+	assert.Len(handlers, 0)
 
 	unsub3()
-	tt.True(trie.IsEmpty())
+	assert.True(trie.IsEmpty())
 }
 
 func TestTransport_RandomSubUnsub(t *testing.T) {
 	t.Parallel()
-	tt := testarossa.For(t)
+	assert := testarossa.For(t)
 
 	n := 32000
 	var trie trie
@@ -310,8 +310,8 @@ func TestTransport_RandomSubUnsub(t *testing.T) {
 	wg.Wait()
 	close(ch)
 	for f := range ch {
-		tt.False(trie.IsEmpty())
+		assert.False(trie.IsEmpty())
 		f()
 	}
-	tt.True(trie.IsEmpty())
+	assert.True(trie.IsEmpty())
 }
