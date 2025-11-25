@@ -194,7 +194,7 @@ func TestDLRU_Replicate(t *testing.T) {
 }
 
 func TestDLRU_Rescue(t *testing.T) {
-	t.Parallel()
+	// No parallel
 	assert := testarossa.For(t)
 
 	ctx := context.Background()
@@ -206,19 +206,19 @@ func TestDLRU_Rescue(t *testing.T) {
 
 	// Store values in alpha before starting beta and gamma
 	n := 2048
-	numChan := make(chan int, n)
-	for i := range n {
-		numChan <- i
-	}
-	close(numChan)
+	numChan := make(chan int, runtime.NumCPU()*4)
+	go func() {
+		for i := range n {
+			numChan <- i
+		}
+		close(numChan)
+	}()
 	var wg sync.WaitGroup
-	for range runtime.NumCPU() * 4 {
+	for i := range numChan {
 		wg.Add(1)
 		go func() {
-			for i := range numChan {
-				err := alphaLRU.Store(ctx, strconv.Itoa(i), []byte(strconv.Itoa(i)))
-				assert.NoError(err)
-			}
+			err := alphaLRU.Store(ctx, strconv.Itoa(i), []byte(strconv.Itoa(i)))
+			assert.NoError(err)
 			wg.Done()
 		}()
 	}
