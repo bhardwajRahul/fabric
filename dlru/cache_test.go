@@ -194,7 +194,7 @@ func TestDLRU_Replicate(t *testing.T) {
 }
 
 func TestDLRU_Rescue(t *testing.T) {
-	t.Parallel()
+	// No parallel: sensitive to timeouts
 	assert := testarossa.For(t)
 
 	ctx := context.Background()
