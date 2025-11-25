@@ -194,7 +194,7 @@ func TestDLRU_Replicate(t *testing.T) {
 }
 
 func TestDLRU_Rescue(t *testing.T) {
-	// No parallel: sensitive to timeouts
+	t.Parallel()
 	assert := testarossa.For(t)
 
 	ctx := context.Background()
@@ -245,26 +245,26 @@ func TestDLRU_Rescue(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(n, betaLRU.LocalCache().Len()+gammaLRU.LocalCache().Len())
 
-	numChan = make(chan int, n)
-	for i := range n {
-		numChan <- i
-	}
-	close(numChan)
-	for range runtime.NumCPU() * 4 {
-		for i := range numChan {
-			wg.Add(1)
-			go func() {
-				val, ok, err := betaLRU.Load(ctx, strconv.Itoa(i))
-				if assert.NoError(err) && assert.True(ok, i) {
-					assert.Equal(strconv.Itoa(i), string(val))
-				}
-				val, ok, err = gammaLRU.Load(ctx, strconv.Itoa(i))
-				if assert.NoError(err) && assert.True(ok, i) {
-					assert.Equal(strconv.Itoa(i), string(val))
-				}
-				wg.Done()
-			}()
+	numChan = make(chan int, runtime.NumCPU()*4)
+	go func() {
+		for i := range n {
+			numChan <- i
 		}
+		close(numChan)
+	}()
+	for i := range numChan {
+		wg.Add(1)
+		go func() {
+			val, ok, err := betaLRU.Load(ctx, strconv.Itoa(i))
+			if assert.NoError(err) && assert.True(ok, i) {
+				assert.Equal(strconv.Itoa(i), string(val))
+			}
+			val, ok, err = gammaLRU.Load(ctx, strconv.Itoa(i))
+			if assert.NoError(err) && assert.True(ok, i) {
+				assert.Equal(strconv.Itoa(i), string(val))
+			}
+			wg.Done()
+		}()
 	}
 	wg.Wait()
 }
