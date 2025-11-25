@@ -215,6 +215,8 @@ func QueryArg(name string, value any) Option {
 			}
 			u.RawQuery += url.QueryEscape(name) + "=" + url.QueryEscape(v)
 			req.URL = u.String()
+			req.URL = strings.ReplaceAll(req.URL, "%7B", "{")
+			req.URL = strings.ReplaceAll(req.URL, "%7D", "}")
 		}
 		return nil
 	}
@@ -241,6 +243,8 @@ func QueryString(encodedQueryArgs string) Option {
 			}
 			u.RawQuery += encodedQueryArgs
 			req.URL = u.String()
+			req.URL = strings.ReplaceAll(req.URL, "%7B", "{")
+			req.URL = strings.ReplaceAll(req.URL, "%7D", "}")
 		}
 		return nil
 	}

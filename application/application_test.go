@@ -143,8 +143,6 @@ func TestApplication_DependencyStart(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	startupTimeout := time.Second * 2
-
 	// Alpha is dependent on beta to start
 	failCount := 0
 	alpha := connector.New("alpha.dependency.start.application")
@@ -157,25 +155,24 @@ func TestApplication_DependencyStart(t *testing.T) {
 		return nil
 	})
 
-	// Beta takes a bit of time to start
+	// Beta takes half a second to start
 	beta := connector.New("beta.dependency.start.application")
 	beta.Subscribe("GET", "/ok", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	beta.SetOnStartup(func(ctx context.Context) error {
-		time.Sleep(startupTimeout / 2)
+		time.Sleep(time.Millisecond * 500)
 		return nil
 	})
 
 	app := NewTesting()
 	app.Add(alpha, beta)
-	app.startupTimeout = startupTimeout
 	t0 := time.Now()
 	err := app.Startup()
 	dur := time.Since(t0)
 	assert.NoError(err)
-	assert.True(failCount > 0)
-	assert.True(dur >= startupTimeout/2)
+	assert.NotZero(failCount)
+	assert.True(dur >= time.Millisecond*500)
 
 	app.Shutdown()
 }

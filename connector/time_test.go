@@ -338,3 +338,54 @@ func TestConnector_TickerStop(t *testing.T) {
 	assert.Equal(int32(2), count.Load())
 	<-exit
 }
+
+func TestConnector_Sleep(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	con := New("sleep.connector")
+	err := con.Startup()
+	assert.NoError(err)
+	defer con.Shutdown()
+
+	// Natural expiration
+	ctx := context.Background()
+	t0 := time.Now()
+	v := con.Sleep(ctx, time.Millisecond*100)
+	dur := time.Since(t0)
+	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.True(v)
+
+	// Context timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	t0 = time.Now()
+	v = con.Sleep(ctx, time.Millisecond*1000)
+	dur = time.Since(t0)
+	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.False(v)
+	cancel()
+
+	// Context cancellation
+	ctx, cancel = context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+	t0 = time.Now()
+	v = con.Sleep(ctx, time.Millisecond*1000)
+	dur = time.Since(t0)
+	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.False(v)
+
+	// Lifetime cancellation
+	ctx = context.Background()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		con.Shutdown()
+	}()
+	t0 = time.Now()
+	v = con.Sleep(ctx, time.Millisecond*1000)
+	dur = time.Since(t0)
+	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.False(v)
+}

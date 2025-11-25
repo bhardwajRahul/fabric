@@ -83,15 +83,14 @@ type Connector struct {
 	tracer         trace.Tracer
 	traceProcessor *selectiveProcessor
 
-	transportConn *transport.Conn
+	transportConn transport.Conn
 	responseSub   *transport.Subscription
-	subs          map[string]*sub.Subscription
-	subsLock      sync.Mutex
-	started       atomic.Bool
+	subs          utils.SyncMap[string, *sub.Subscription]
+	phase         atomic.Int32
 	plane         string
 
 	reqs             utils.SyncMap[string, *transferChan]
-	networkHop       time.Duration
+	networkRoundtrip time.Duration
 	maxCallDepth     int
 	maxFragmentSize  int64
 	multicastChanCap int
@@ -124,10 +123,9 @@ func NewConnector() *Connector {
 	c := &Connector{
 		id:                strings.ToLower(rand.AlphaNum32(10)),
 		configs:           map[string]*cfg.Config{},
-		networkHop:        250 * time.Millisecond,
-		ackTimeout:        250 * time.Millisecond,
+		networkRoundtrip:  300 * time.Millisecond,
+		ackTimeout:        300 * time.Millisecond,
 		maxCallDepth:      64,
-		subs:              map[string]*sub.Subscription{},
 		tickers:           map[string]*tickerCallback{},
 		lifetimeCtx:       context.Background(),
 		knownResponders:   lru.New[string, map[string]bool](64<<10, 24*time.Hour), // 64KB
@@ -175,7 +173,7 @@ func (c *Connector) ID() string {
 // Segments are separated by dots.
 // For example, this.is.a.valid.host-name.123.local
 func (c *Connector) SetHostname(hostname string) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	hostname = strings.TrimSpace(hostname)
@@ -210,7 +208,7 @@ func (c *Connector) Description() string {
 
 // SetVersion sets the sequential version number of the microservice.
 func (c *Connector) SetVersion(version int) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown, startingUp) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	if version < 0 {
@@ -252,7 +250,7 @@ func (c *Connector) Deployment() string {
 // LOCAL when developing on the local machine;
 // TESTING when running inside a testing app.
 func (c *Connector) SetDeployment(deployment string) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown, startingUp) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	deployment = strings.ToUpper(deployment)
@@ -278,7 +276,7 @@ func (c *Connector) Plane() string {
 // The plane can only contain alphanumeric case-sensitive characters.
 // Setting an empty value will clear this override
 func (c *Connector) SetPlane(plane string) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown, startingUp) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	if match, _ := regexp.MatchString(`^[0-9a-zA-Z]*$`, plane); !match {
@@ -294,7 +292,7 @@ func (c *Connector) SetPlane(plane string) error {
 // Localities are case-insensitive. Each segment of the hostname may contain letters, numbers, hyphens or underscores only.
 // The special values "AWS" or "GCP" can be set to determine the locality automatically from the cloud provider's meta-data servers.
 func (c *Connector) SetLocality(locality string) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown, startingUp) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	locality = strings.TrimSpace(locality)

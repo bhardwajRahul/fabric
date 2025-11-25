@@ -62,7 +62,7 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 		Handler:  handler,
 		Interval: interval,
 	}
-	if c.IsStarted() {
+	if c.isPhase(startedUp) {
 		c.runTicker(c.tickers[name])
 	}
 	c.tickersLock.Unlock()
@@ -75,9 +75,6 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 func (c *Connector) StopTicker(name string) error {
 	if err := utils.ValidateTickerName(name); err != nil {
 		return c.captureInitErr(errors.Trace(err))
-	}
-	if !c.IsStarted() {
-		return nil
 	}
 	name = utils.ToKebabCase(name)
 
@@ -142,7 +139,7 @@ func (c *Connector) runTicker(job *tickerCallback) {
 			"name", job.Name,
 		)
 		for range ticker.C {
-			if !c.IsStarted() {
+			if !c.isPhase(startedUp) {
 				continue
 			}
 
@@ -207,4 +204,23 @@ func (c *Connector) runTicker(job *tickerCallback) {
 func (c *Connector) Now(ctx context.Context) time.Time {
 	offset := frame.Of(ctx).ClockShift()
 	return time.Now().UTC().Add(offset)
+}
+
+// Sleep pauses the current goroutine for the specified duration,
+// or until the provided context or the lifetime context of the microservice is canceled or its deadline is exceeded.
+// It returns true if the sleep completed, false if interrupted by the context.
+func (c *Connector) Sleep(ctx context.Context, duration time.Duration) bool {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		// The duration has elapsed
+		return true
+	case <-ctx.Done():
+		// The context was canceled or its deadline was exceeded
+		return false
+	case <-c.Lifetime().Done():
+		// The context was canceled or its deadline was exceeded
+		return false
+	}
 }

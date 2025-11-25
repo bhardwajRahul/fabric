@@ -285,19 +285,23 @@ func TestConnector_DifferentPlanes(t *testing.T) {
 	// Alpha should never see beta
 	for range 32 {
 		response, err := alpha.GET(ctx, "https://different.planes.connector/id")
-		assert.NoError(err)
-		body, err := io.ReadAll(response.Body)
-		assert.NoError(err)
-		assert.Equal("alpha", string(body))
+		if assert.NoError(err) {
+			body, err := io.ReadAll(response.Body)
+			if assert.NoError(err) {
+				assert.Equal("alpha", string(body))
+			}
+		}
 	}
 
 	// Beta should never see alpha
 	for range 32 {
 		response, err := beta.GET(ctx, "https://different.planes.connector/id")
-		assert.NoError(err)
-		body, err := io.ReadAll(response.Body)
-		assert.NoError(err)
-		assert.Equal("beta", string(body))
+		if assert.NoError(err) {
+			body, err := io.ReadAll(response.Body)
+			if assert.NoError(err) {
+				assert.Equal("beta", string(body))
+			}
+		}
 	}
 }
 

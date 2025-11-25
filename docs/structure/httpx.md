@@ -6,7 +6,7 @@ Package `httpx` includes various HTTP utilities.
 
 `ResponseRecorder` implements the `http.ResponseWriter` interface and is used as the underlying struct passed in to the request handlers in the `w *http.ResponseWriter` argument. The `ResponseRecorder` uses a `BodyReader` to contain the body of the generated response. Contrary to the `httptest.ResponseRecorder`, the `utils.ResponseRecorder` allows for multiple `Write` operations.
 
-`ParseRequestData` parses the body and query arguments of an incoming request and populates a data object that represents its input arguments. This type of parsing is used in the generated code of the microservice to process functional requests.
+`SetPathValues` and `PathValues` are utility functions that help with the parsing of parameterized URL paths such as `/obj/{id}`.
 
 `DecodeDeepObject` and `EncodeDeepObject` handle the decoding and encoding of an object into a query string with bracketed nested argument names. Deep object encoding is used to pass nested objects in query arguments of a request.
 

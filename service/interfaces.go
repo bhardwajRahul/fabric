@@ -153,6 +153,12 @@ type Executor interface {
 	Parallel(jobs ...func() (err error)) error
 }
 
+// Timer are actions related to time management.
+type Timer interface {
+	Now(ctx context.Context) time.Time
+	Sleep(ctx context.Context, duration time.Duration) bool
+}
+
 // Service are all the actions that a connector provides.
 type Service interface {
 	Publisher
@@ -166,5 +172,6 @@ type Service interface {
 	Configurable
 	Resourcer
 	Ticker
+	Timer
 	Executor
 }

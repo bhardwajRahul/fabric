@@ -79,7 +79,10 @@ func (svc *Service) DeleteUser(ctx context.Context, id int) (err error) {
     }
 
     // Trigger an event: fire and forget, don't wait for responses
-    myserviceapi.NewMulticastTrigger(svc).OnUserDeleted(ctx, id)
+	svc.Go(ctx, func(ctx context.Context) (err error) {
+        myserviceapi.NewMulticastTrigger(svc).OnUserDeleted(ctx, id)
+        return nil
+    })
     
     return nil
 }

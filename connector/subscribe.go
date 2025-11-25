@@ -29,6 +29,7 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/trc"
@@ -70,30 +71,30 @@ func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandle
 	if err != nil {
 		return c.captureInitErr(errors.Trace(err))
 	}
-	if c.IsStarted() {
+	key := method + "|" + newSub.Canonical()
+	if oldSub, deleted := c.subs.Delete(key); deleted {
+		err = c.deactivateSub(oldSub)
+		if err != nil {
+			return c.captureInitErr(errors.Trace(err))
+		}
+	}
+	c.subs.Store(key, newSub)
+	if c.isPhase(startedUp) {
 		err := c.activateSub(newSub)
 		if err != nil {
 			return c.captureInitErr(errors.Trace(err))
 		}
+		c.notifyOnNewSubs(newSub)
 		c.transportConn.WaitForSub()
 	}
-	key := method + "|" + newSub.Canonical()
-	c.subsLock.Lock()
-	if sub, ok := c.subs[key]; ok {
-		err = c.deactivateSub(sub)
-		if err == nil {
-			delete(c.subs, key)
-		} else {
-			return errors.New("unable to deactivate subscription '%s %s'", method, newSub.Canonical())
-		}
-	}
-	c.subs[key] = newSub
-	c.subsLock.Unlock()
 	return nil
 }
 
 // Unsubscribe removes the handler for the specified path
 func (c *Connector) Unsubscribe(method string, path string) error {
+	if c.hostname == "" {
+		return errors.New("hostname is not set")
+	}
 	if method == "" {
 		method = "ANY"
 	}
@@ -102,18 +103,16 @@ func (c *Connector) Unsubscribe(method string, path string) error {
 		return errors.Trace(err)
 	}
 	key := method + "|" + newSub.Canonical()
-	c.subsLock.Lock()
-	if sub, ok := c.subs[key]; ok {
-		err = c.deactivateSub(sub)
-		if err == nil {
-			delete(c.subs, key)
+	if oldSub, deleted := c.subs.Delete(key); deleted {
+		err = c.deactivateSub(oldSub)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
-	c.subsLock.Unlock()
-	if c.IsStarted() {
-		time.Sleep(20 * time.Millisecond) // Give time for subscription deactivation by NATS
+	if c.isPhase(startedUp) {
+		c.transportConn.WaitForSub()
 	}
-	return errors.Trace(err)
+	return nil
 }
 
 // onRequest handles an incoming request. It acks it, then calls the handler to process it and responds to the caller.
@@ -149,7 +148,24 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 	}()
 }
 
-// activateSub will subscribe to NATS
+// activateSubs subscribes all subscriptions with the transport.
+// It is called during startup.
+func (c *Connector) activateSubs() (err error) {
+	subs := c.subs.Values()
+	for _, sub := range subs {
+		err = c.activateSub(sub)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	if c.isPhase(startingUp) {
+		c.notifyOnNewSubs(subs...)
+	}
+	c.transportConn.WaitForSub()
+	return nil
+}
+
+// activateSub subscribes a single subscription with the transport.
 func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 	if len(s.Subs) > 0 {
 		return nil
@@ -159,7 +175,7 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Create the NATS subscriptions
+	// Create the subscriptions
 	handler := func(msg *transport.Msg) {
 		c.onRequest(msg, s)
 	}
@@ -174,19 +190,19 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		}
 	}
 	for _, prefix := range prefixes {
-		var natsSub *transport.Subscription
+		var transportSub *transport.Subscription
 		if prefix != "" {
 			prefix += "."
 		}
 		if s.Queue != "" {
-			natsSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), s.Queue, handler)
+			transportSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), s.Queue, handler)
 		} else {
-			natsSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), handler)
+			transportSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), handler)
 		}
 		if err != nil {
 			break
 		}
-		s.Subs = append(s.Subs, natsSub)
+		s.Subs = append(s.Subs, transportSub)
 	}
 	if err != nil {
 		c.LogError(c.Lifetime(), "Activating sub",
@@ -204,21 +220,21 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 	return nil
 }
 
-// deactivateSubs unsubscribes from NATS.
+// deactivateSubs unsubscribes all subscriptions with the transport.
+// It is called during shutdown.
 func (c *Connector) deactivateSubs() error {
-	c.subsLock.Lock()
 	var lastErr error
-	for _, sub := range c.subs {
-		lastErr = c.deactivateSub(sub)
+	for _, sub := range c.subs.Values() {
+		err := c.deactivateSub(sub)
+		if err != nil {
+			lastErr = errors.Trace(err)
+		}
 	}
-	c.subsLock.Unlock()
-	if c.IsStarted() {
-		time.Sleep(20 * time.Millisecond) // Give time for subscription deactivation by NATS
-	}
-	return errors.Trace(lastErr)
+	c.transportConn.WaitForSub()
+	return lastErr // No trace
 }
 
-// deactivateSub unsubscribes from NATS.
+// deactivateSub unsubscribes a single subscription with the transport.
 func (c *Connector) deactivateSub(s *sub.Subscription) error {
 	var lastErr error
 	for _, sub := range s.Subs {
@@ -274,9 +290,6 @@ func (c *Connector) ackRequest(msg *transport.Msg, s *sub.Subscription) (err err
 		return errors.New("empty " + frame.HeaderMsgId + " header")
 	}
 	queue := s.Queue
-	if queue == "" {
-		queue = c.id + "." + c.hostname
-	}
 	_, fragmentMax := frm.Fragment()
 
 	// Prepare and send the ack
@@ -322,10 +335,11 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 			return errors.Trace(err)
 		}
 	}
-	// Remove the default user-agent set by the http package
 	if httpReq.Header.Get("User-Agent") == "Go-http-client/1.1" {
+		// Remove the default user-agent set by the http package
 		httpReq.Header.Del("User-Agent")
 	}
+	httpx.SetPathValues(httpReq, s.Path)
 	if br, ok := httpReq.Body.(*httpx.BodyReader); ok {
 		br.Reset()
 	}
@@ -335,9 +349,6 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	fromId := frame.Of(httpReq).FromID()
 	msgID := frame.Of(httpReq).MessageID()
 	queue := s.Queue
-	if queue == "" {
-		queue = c.id + "." + c.hostname
-	}
 
 	c.LogDebug(c.Lifetime(), "Handling",
 		"msg", msgID,
@@ -347,7 +358,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 
 	// Time budget
 	budget := frame.Of(httpReq).TimeBudget()
-	if budget > 0 && budget <= c.networkHop {
+	if budget > 0 && budget <= c.networkRoundtrip {
 		return errors.New("timeout", http.StatusRequestTimeout)
 	}
 
@@ -389,7 +400,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	cancel := func() {}
 	if budget > 0 {
 		// Set the context's timeout to the time budget reduced by a network hop
-		ctx, cancel = context.WithTimeout(ctx, budget-c.networkHop)
+		ctx, cancel = context.WithTimeout(ctx, budget-c.networkRoundtrip)
 	}
 	httpReq = httpReq.WithContext(ctx)
 	httpReq.Header = frame.Of(ctx).Header()
@@ -531,5 +542,57 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		}
 	}
 
+	return nil
+}
+
+// notifyOnNewSubs notifies all microservices of this microservice's new subscriptions,
+// allowing them to invalidate their known responders cache appropriately.
+func (c *Connector) notifyOnNewSubs(subs ...*sub.Subscription) error {
+	if len(subs) == 0 {
+		return nil
+	}
+	hosts := make([]string, 0, len(subs))
+	added := map[string]bool{}
+	for _, s := range subs {
+		if added[s.Host] {
+			continue
+		}
+		hosts = append(hosts, s.Host)
+		added[s.Host] = true
+	}
+	if len(hosts) == 0 {
+		return nil
+	}
+	payload := struct {
+		Hosts []string `json:"hosts"`
+	}{
+		Hosts: hosts,
+	}
+	ch := c.Publish(c.Lifetime(),
+		pub.POST("https://all:888/on-new-subs"),
+		pub.Body(payload),
+		pub.Multicast(),
+	)
+	for range ch {
+	}
+	return nil
+}
+
+// invalidateKnownRespondersCache clears known responder cache for any of the indicated hosts.
+// It is called in response to a notification from other microservices on new subscriptions.
+func (c *Connector) invalidateKnownRespondersCache(hosts []string) error {
+	if len(hosts) == 0 {
+		return nil
+	}
+	c.knownResponders.DeletePredicate(func(key string) bool {
+		for _, host := range hosts {
+			revHost := "." + reverseHostname(host) + ".|"
+			if strings.Contains(key, revHost) {
+				c.LogDebug(c.Lifetime(), "Invalidating known responders cache", "host", host)
+				return true
+			}
+		}
+		return false
+	})
 	return nil
 }

@@ -159,17 +159,19 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.ValuesIn
 	var o configuratorapi.ValuesOut
-	if strings.ContainsAny(`:888/values`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/values`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/values`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -196,17 +198,19 @@ func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error 
 func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.RefreshIn
 	var o configuratorapi.RefreshOut
-	if strings.ContainsAny(`:444/refresh`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/refresh`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/refresh`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -232,17 +236,19 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.SyncRepoIn
 	var o configuratorapi.SyncRepoOut
-	if strings.ContainsAny(`:888/sync-repo`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/sync-repo`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/sync-repo`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -270,17 +276,19 @@ func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) erro
 func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Values443In
 	var o configuratorapi.Values443Out
-	if strings.ContainsAny(`:443/values`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/values`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/values`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -307,17 +315,19 @@ func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) err
 func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Refresh443In
 	var o configuratorapi.Refresh443Out
-	if strings.ContainsAny(`:443/refresh`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/refresh`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/refresh`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -343,17 +353,19 @@ func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) error {
 	var i configuratorapi.Sync443In
 	var o configuratorapi.Sync443Out
-	if strings.ContainsAny(`:443/sync`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/sync`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/sync`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
@@ -281,10 +282,12 @@ func TestEventsource_OnRegistered(t *testing.T) {
 
 	t.Run("allowed_registration_triggers_event", func(t *testing.T) {
 		assert := testarossa.For(t)
+		done := make(chan bool)
 
 		// Verify the OnRegistered event is fired with the correct email
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			assert.Expect(email, "peter@example.com")
+			done <- true
 			return nil
 		})
 		defer hook.OnRegistered(nil)
@@ -295,6 +298,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 			allowed, true,
 			err, nil,
 		)
+		<-done // OnRegistered is firing async, so need to wait
 	})
 
 	t.Run("blocked_registration_no_event", func(t *testing.T) {
@@ -303,7 +307,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		// OnRegistered should NOT fire for blocked registrations
 		// The service only fires the event after successful registration
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
-			t.Fatal("OnRegistered should not fire for blocked registrations")
+			assert.True(false, "OnRegistered should not fire for blocked registrations")
 			return nil
 		})
 		defer hook.OnRegistered(nil)
@@ -314,43 +318,55 @@ func TestEventsource_OnRegistered(t *testing.T) {
 			allowed, false,
 			err, nil,
 		)
+		time.Sleep(50 * time.Millisecond)
 	})
 
 	t.Run("multiple_registrations", func(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Track that events are fired for each registration
-		expectedEmails := []string{"alice@example.com", "bob@company.org", "carol@test.io"}
-		emailIndex := 0
+		expectedEmails := map[string]bool{
+			"alice@example.com": true,
+			"bob@company.org":   true,
+			"carol@test.io":     true,
+			"paul@nowhere.cc":   true,
+			"john@somewhere.cc": true,
+		}
+		done := make(chan bool, len(expectedEmails))
 
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// Verify each email matches expected order
-			if emailIndex < len(expectedEmails) {
-				assert.Expect(email, expectedEmails[emailIndex])
-				emailIndex++
-			}
+			found := expectedEmails[email]
+			expectedEmails[email] = false
+			assert.True(found, "%s", email)
+			done <- true
 			return nil
 		})
 		defer hook.OnRegistered(nil)
 
 		// Register multiple users
-		for _, email := range expectedEmails {
+		for email := range expectedEmails {
 			allowed, err := client.Register(ctx, email)
 			assert.Expect(
 				allowed, true,
 				err, nil,
 			)
 		}
+		for range expectedEmails {
+			<-done // OnRegistered is firing async, so need to wait
+		}
 	})
 
 	t.Run("event_receives_original_email", func(t *testing.T) {
 		assert := testarossa.For(t)
+		done := make(chan bool)
 
 		// Verify the event receives the email as submitted (not normalized)
 		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// The service passes the email as-is to the event
 			// Normalization happens in the event sink
 			assert.Expect(email, "David@EXAMPLE.com")
+			done <- true
 			return nil
 		})
 		defer hook.OnRegistered(nil)
@@ -361,5 +377,6 @@ func TestEventsource_OnRegistered(t *testing.T) {
 			allowed, true,
 			err, nil,
 		)
+		<-done // OnRegistered is firing async, so need to wait
 	})
 }

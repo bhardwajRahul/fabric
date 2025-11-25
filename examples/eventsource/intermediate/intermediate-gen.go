@@ -160,17 +160,19 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doRegister(w http.ResponseWriter, r *http.Request) error {
 	var i eventsourceapi.RegisterIn
 	var o eventsourceapi.RegisterOut
-	if strings.ContainsAny(`:443/register`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:443/register`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/register`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

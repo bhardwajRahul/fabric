@@ -54,6 +54,8 @@ func ParseRequestBody(r *http.Request, data any) error {
 // Use json tags to designate the name of the argument to map to each field.
 // An argument name can be hierarchical using either notation "a[b][c]" or "a.b.c",
 // in which case it is read into the corresponding nested field.
+//
+// Deprecated: No longer used.
 func ParseRequestData(r *http.Request, data any) error {
 	err := ParseRequestBody(r, data)
 	if err == nil {

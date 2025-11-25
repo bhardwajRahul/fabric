@@ -18,12 +18,12 @@ limitations under the License.
 
 package browser
 
-const Version = 121
-const SourceCodeSHA256 = "39952f327ed9d4d182ec5f7325293f3088a6169d09a31f8d83fe9c3aa3613a89"
-const Timestamp = "2025-11-02T17:28:51.02454Z"
+const Version = 124
+const SourceCodeSHA256 = "4405764854a0da9ae22ee6fade1537d50dbbf4238246217240ca167176ca4f88"
+const Timestamp = "2025-11-08T21:18:36.496685Z"
 
 /* {
-	"ver": 121,
-	"sha256": "39952f327ed9d4d182ec5f7325293f3088a6169d09a31f8d83fe9c3aa3613a89",
-	"ts": "2025-11-02T17:28:51.02454Z"
+	"ver": 124,
+	"sha256": "4405764854a0da9ae22ee6fade1537d50dbbf4238246217240ca167176ca4f88",
+	"ts": "2025-11-08T21:18:36.496685Z"
 } */

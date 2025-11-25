@@ -907,7 +907,7 @@ func (c *Cache) dataToValue(data []byte, value any) (err error) {
 }
 
 // CacheSet puts an element in the cache, marking it as the most recently used.
-// The value must be either []byte or an object that can be marshaled to JSON.
+// The value must be either []byte, string or an object that can be marshaled to JSON.
 func (c *Cache) Set(ctx context.Context, key string, value any) (err error) {
 	if key == "" {
 		return errors.New("missing key")

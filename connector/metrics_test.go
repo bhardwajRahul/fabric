@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/testarossa"
@@ -220,6 +221,7 @@ func TestConnector_InferUnit(t *testing.T) {
 func TestConnector_MetricExporters(t *testing.T) {
 	// No parallel
 	assert := testarossa.For(t)
+	delay := time.Millisecond * 100
 
 	// Create the web server
 	var counter atomic.Int32
@@ -228,6 +230,7 @@ func TestConnector_MetricExporters(t *testing.T) {
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			counter.Add(1)
 			io.ReadAll(r.Body)
+			r.Body.Close()
 			w.WriteHeader(http.StatusOK)
 		}),
 	}
@@ -241,8 +244,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	con := New("metric.exporters.connector")
 	err := con.Startup()
 	assert.NoError(err)
+	time.Sleep(delay)
 	err = con.Shutdown()
 	assert.NoError(err)
+	time.Sleep(delay)
 	assert.Equal(2, int(counter.Load()))
 
 	// Only Prometheus exporter
@@ -252,8 +257,11 @@ func TestConnector_MetricExporters(t *testing.T) {
 	con = New("metric.exporters.connector")
 	err = con.Startup()
 	assert.NoError(err)
+	time.Sleep(delay)
 	err = con.Shutdown()
 	assert.NoError(err)
+	time.Sleep(delay)
+	assert.Equal(2, int(counter.Load()))
 
 	// Only OTel exporter
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
@@ -262,8 +270,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	con = New("metric.exporters.connector")
 	err = con.Startup()
 	assert.NoError(err)
+	time.Sleep(delay)
 	err = con.Shutdown()
 	assert.NoError(err)
+	time.Sleep(delay)
 	assert.Equal(4, int(counter.Load()))
 
 	// No exporters
@@ -273,8 +283,11 @@ func TestConnector_MetricExporters(t *testing.T) {
 	con = New("metric.exporters.connector")
 	err = con.Startup()
 	assert.NoError(err)
+	time.Sleep(delay)
 	err = con.Shutdown()
 	assert.NoError(err)
+	time.Sleep(delay)
+	assert.Equal(4, int(counter.Load()))
 
 	for range 4 {
 		env.Pop("MICROBUS_PROMETHEUS_EXPORTER")

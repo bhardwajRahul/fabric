@@ -18,6 +18,7 @@ limitations under the License.
 // - testdata/*
 // - .*
 // - /codegen/bundle/*
+// - resources/*
 
 package fabric
 

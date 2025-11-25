@@ -17,6 +17,7 @@ limitations under the License.
 package connector
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/fabric/errors"
@@ -49,6 +50,11 @@ func (c *Connector) subscribeControl() error {
 		{
 			path:    "trace",
 			handler: c.handleTrace,
+			options: []sub.Option{sub.NoQueue()},
+		},
+		{
+			path:    "on-new-subs",
+			handler: c.handleOnNewSubs,
 			options: []sub.Option{sub.NoQueue()},
 		},
 	}
@@ -100,12 +106,29 @@ func (c *Connector) handleMetrics(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-// handleTrace responds to the :888/trace control request
-// to force exporting the indicated tracing span.
+// handleTrace responds to the :888/trace control request to force exporting the indicated tracing span.
 func (c *Connector) handleTrace(w http.ResponseWriter, r *http.Request) error {
 	if c.traceProcessor != nil {
 		traceID := r.URL.Query().Get("id")
 		c.traceProcessor.Select(traceID)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte("{}"))
+	return nil
+}
+
+// handleOnNewSubs responds to the :888/on-new-subs control request to update the known responders cache.
+func (c *Connector) handleOnNewSubs(w http.ResponseWriter, r *http.Request) error {
+	var payload struct {
+		Hosts []string `json:"hosts"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.invalidateKnownRespondersCache(payload.Hosts)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte("{}"))

@@ -1468,10 +1468,11 @@ func TestTester_UnnamedWebPathArguments(t *testing.T) {
 		assert := testarossa.For(t)
 
 		res, err := tester.Request(ctx, pub.GET("https://"+Hostname+"/unnamed-web-path-arguments/x123/foo/y345/bar/z1/z2/z3"))
-		assert.NoError(err)
-		body, err := io.ReadAll(res.Body)
 		if assert.NoError(err) {
-			assert.Contains(body, "x123 y345 z1/z2/z3")
+			body, err := io.ReadAll(res.Body)
+			if assert.NoError(err) {
+				assert.Contains(body, "x123 y345 z1/z2/z3")
+			}
 		}
 	})
 

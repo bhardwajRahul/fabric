@@ -32,15 +32,21 @@ import (
 	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/trc"
 	"go.opentelemetry.io/otel/trace"
+)
+
+const (
+	shutDown = iota
+	startingUp
+	startedUp
+	shuttingDown
 )
 
 // SetOnStartup adds a function to be called during the starting up of the microservice.
 // Startup callbacks are called in the order they were added.
 func (c *Connector) SetOnStartup(handler service.StartupHandler) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	c.onStartup = append(c.onStartup, handler)
@@ -48,21 +54,21 @@ func (c *Connector) SetOnStartup(handler service.StartupHandler) error {
 }
 
 // SetOnShutdown adds a function to be called during the shutting down of the microservice.
-// Shutdown callbacks are called in the reverse order they were added,
-// whether of the status of a corresponding startup callback.
+// Shutdown callbacks are called in the reverse order they were added.
 func (c *Connector) SetOnShutdown(handler service.ShutdownHandler) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	c.onShutdown = append(c.onShutdown, handler)
 	return nil
 }
 
-// Startup the microservice by connecting to the NATS bus and activating the subscriptions.
+// Startup the microservice by connecting to the transport and activating the subscriptions.
 func (c *Connector) Startup() (err error) {
-	if c.IsStarted() {
-		return errors.New("already started")
+	if !c.phase.CompareAndSwap(shutDown, startingUp) {
+		return errors.New("not shut down")
 	}
+	defer func() { c.phase.CompareAndSwap(startingUp, shutDown) }()
 	if c.hostname == "" {
 		return errors.New("hostname is not set")
 	}
@@ -135,10 +141,10 @@ func (c *Connector) Startup() (err error) {
 		}
 		if c.deployment == "" {
 			c.deployment = LOCAL
-			if nats := env.Get("MICROBUS_NATS"); nats != "" {
-				if !strings.Contains(nats, "/127.0.0.1:") &&
-					!strings.Contains(nats, "/0.0.0.0:") &&
-					!strings.Contains(nats, "/localhost:") {
+			if natsURL := env.Get("MICROBUS_NATS"); natsURL != "" {
+				if !strings.Contains(natsURL, "/127.0.0.1:") &&
+					!strings.Contains(natsURL, "/0.0.0.0:") &&
+					!strings.Contains(natsURL, "/localhost:") {
 					c.deployment = PROD
 				}
 			}
@@ -201,20 +207,19 @@ func (c *Connector) Startup() (err error) {
 	}
 	c.LogInfo(ctx, "Startup")
 
-	// Connect to NATS
-	c.transportConn = &transport.Conn{}
+	// Connect to the transport
 	err = c.transportConn.Open(context.Background(), c)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
 	}
-	c.started.Store(true)
-
 	c.maxFragmentSize = c.transportConn.MaxPayload() - 64<<10 // Up to 64K for headers
 	if c.maxFragmentSize < 64<<10 {
 		err = errors.New("message size limit is too restrictive")
 		return err
 	}
+	c.networkRoundtrip = c.transportConn.Latency()
+	c.ackTimeout = c.networkRoundtrip
 
 	// Subscribe to the response subject
 	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponses(c.plane, c.hostname, c.id), c.id, c.onResponse)
@@ -231,7 +236,7 @@ func (c *Connector) Startup() (err error) {
 	}
 	c.logConfigs(ctx)
 
-	// Start the distributed cache
+	// Set up the distributed cache (before the callbacks)
 	c.distribCache, err = dlru.NewCache(ctx, c, ":888/dcache")
 	if err != nil {
 		err = errors.Trace(err)
@@ -261,29 +266,26 @@ func (c *Connector) Startup() (err error) {
 	}
 
 	// Activate subscriptions
-	for _, sub := range c.subs {
-		err = c.activateSub(sub)
-		if err != nil {
-			err = errors.Trace(err)
-			return err
-		}
+	err = c.activateSubs()
+	if err != nil {
+		err = errors.Trace(err)
+		return err
 	}
-	c.transportConn.WaitForSub()
 
 	// Run all tickers
 	c.runTickers()
 
 	c.startupTime = time.Now().UTC()
+	c.phase.Store(startedUp)
 
 	return nil
 }
 
-// Shutdown the microservice by deactivating subscriptions and disconnecting from the NATS bus.
+// Shutdown the microservice by deactivating subscriptions and disconnecting from the transport.
 func (c *Connector) Shutdown() (err error) {
-	if !c.IsStarted() {
+	if !c.phase.CompareAndSwap(startedUp, shuttingDown) && !c.phase.CompareAndSwap(startingUp, shuttingDown) {
 		return errors.New("not started")
 	}
-	c.started.Store(false)
 
 	// OpenTelemetry: create a span for the callback
 	ctx, span := c.StartSpan(context.Background(), "shutdown", trc.Internal())
@@ -297,7 +299,7 @@ func (c *Connector) Shutdown() (err error) {
 		lastErr = errors.Trace(err)
 	}
 
-	// Unsubscribe all handlers
+	// Deactivate subscriptions
 	err = c.deactivateSubs()
 	if err != nil {
 		lastErr = errors.Trace(err)
@@ -365,11 +367,8 @@ func (c *Connector) Shutdown() (err error) {
 		c.responseSub = nil
 	}
 
-	// Disconnect from NATS
-	if c.transportConn != nil {
-		c.transportConn.Close()
-		c.transportConn = nil
-	}
+	// Disconnect the transport
+	c.transportConn.Close()
 
 	// Last chance to log an error
 	if lastErr != nil {
@@ -397,13 +396,25 @@ func (c *Connector) Shutdown() (err error) {
 	_ = c.termMeter(ctx)
 
 	c.LogInfo(ctx, "Shutdown")
+	c.phase.Store(shutDown)
 
 	return lastErr
 }
 
-// IsStarted indicates if the microservice has been successfully started.
+// IsStarted indicates if the microservice has been successfully started up.
 func (c *Connector) IsStarted() bool {
-	return c.started.Load()
+	return c.isPhase(startedUp)
+}
+
+// isPhase checks if the microservice is in any of the indicates lifecycle phases.
+func (c *Connector) isPhase(phase ...int) bool {
+	actual := int(c.phase.Load())
+	for _, p := range phase {
+		if p == actual {
+			return true
+		}
+	}
+	return false
 }
 
 // Lifetime returns a context that gets cancelled when the microservice is shutdown.
@@ -417,7 +428,7 @@ func (c *Connector) Lifetime() context.Context {
 // If such an error occurs, the connector fails to start.
 // This is useful since errors can be ignored during initialization.
 func (c *Connector) captureInitErr(err error) error {
-	if err != nil && c.initErr == nil && !c.IsStarted() {
+	if err != nil && c.initErr == nil && c.isPhase(shutDown) {
 		c.initErr = err
 	}
 	return err
@@ -427,7 +438,7 @@ func (c *Connector) captureInitErr(err error) error {
 // Errors and panics are automatically captured and logged.
 // On shutdown, the microservice will attempt to gracefully end a pending goroutine before termination.
 func (c *Connector) Go(ctx context.Context, f func(ctx context.Context) (err error)) error {
-	if !c.IsStarted() {
+	if !c.isPhase(startedUp, startingUp) {
 		return errors.New("not started")
 	}
 	c.pendingOps.Add(1)

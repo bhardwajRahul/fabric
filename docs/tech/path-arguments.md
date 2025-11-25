@@ -107,7 +107,7 @@ functions:
 
 ### Web Handlers
 
-Path arguments work also for web handlers but they must be parsed manually from the request's path. Consider the following example of a web handler:
+Path arguments work also for web handlers. Consider the following example of a web handler:
 
 ```yaml
 web:
@@ -119,11 +119,10 @@ web:
 
 ```go
 func (svc *Service) AvatarImage(w http.ResponseWriter, r *http.Request) (err error) {
-    // Path arguments must be manually extracted from the path
-    parts := strings.Split(r.URL.Path, "/") // ["", "avatar", "{uid}", "{size}", "{name}", "..."]
-    uid = parts[2]
-    size = parts[3]
-    name = strings.Join(parts[4:], "/")
+    // Use r.PathValue to obtain the value of a path argument
+    uid := r.PathValue("uid")
+    size, _ := strconv.Atoi(r.PathValue("size"))
+    name := r.PathValue("name")
 
     return serveImage(uid, size)
 }

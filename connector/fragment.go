@@ -45,12 +45,12 @@ func (c *Connector) defragRequest(r *http.Request) (integrated *http.Request, er
 		// Timeout if fragments stop arriving
 		go func() {
 			for {
-				time.Sleep(c.networkHop)
+				time.Sleep(c.networkRoundtrip / 2)
 				if _, ok := c.requestDefrags.Load(fragKey); !ok {
 					break
 				}
-				if defragger.LastActivity() > fragTimeoutMultiplier*c.networkHop {
-					c.requestDefrags.Store(fragKey, nil) // Nil indicates a timeouts
+				if defragger.LastActivity() > fragTimeoutMultiplier*c.networkRoundtrip {
+					c.requestDefrags.Store(fragKey, nil) // Nil indicates a timeout
 					break
 				}
 			}
@@ -91,12 +91,12 @@ func (c *Connector) defragResponse(r *http.Response) (integrated *http.Response,
 		// Timeout if fragments stop arriving
 		go func() {
 			for {
-				time.Sleep(c.networkHop)
+				time.Sleep(c.networkRoundtrip / 2)
 				if _, ok := c.responseDefrags.Load(fragKey); !ok {
 					break
 				}
-				if defragger.LastActivity() > fragTimeoutMultiplier*c.networkHop {
-					c.responseDefrags.Store(fragKey, nil) // Nil indicates a timeouts
+				if defragger.LastActivity() > fragTimeoutMultiplier*c.networkRoundtrip {
+					c.responseDefrags.Store(fragKey, nil) // Nil indicates a timeout
 					break
 				}
 			}

@@ -491,10 +491,6 @@ StringCut tests a function that takes primitive input arguments and returns prim
 */
 func (_c MulticastClient) StringCut(ctx context.Context, s string, sep string) <-chan *StringCutResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/string-cut`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`s`: s,
-		`sep`: sep,
-	})
 	_in := StringCutIn{
 		s,
 		sep,
@@ -535,10 +531,6 @@ StringCut tests a function that takes primitive input arguments and returns prim
 func (_c Client) StringCut(ctx context.Context, s string, sep string) (before string, after string, found bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/string-cut`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`s`: s,
-		`sep`: sep,
-	})
 	_in := StringCutIn{
 		s,
 		sep,
@@ -599,10 +591,6 @@ PointDistance tests a function that takes non-primitive input arguments.
 */
 func (_c MulticastClient) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) <-chan *PointDistanceResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/point-distance`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`p1`: p1,
-		`p2`: p2,
-	})
 	_in := PointDistanceIn{
 		p1,
 		p2,
@@ -649,10 +637,6 @@ PointDistance tests a function that takes non-primitive input arguments.
 func (_c Client) PointDistance(ctx context.Context, p1 XYCoord, p2 *XYCoord) (d float64, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/point-distance`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`p1`: p1,
-		`p2`: p2,
-	})
 	_in := PointDistanceIn{
 		p1,
 		p2,
@@ -716,11 +700,6 @@ ShiftPoint tests passing pointers of non-primitive types.
 */
 func (_c MulticastClient) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) <-chan *ShiftPointResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/shift-point`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`p`: p,
-		`x`: x,
-		`y`: y,
-	})
 	_in := ShiftPointIn{
 		p,
 		x,
@@ -762,11 +741,6 @@ ShiftPoint tests passing pointers of non-primitive types.
 func (_c Client) ShiftPoint(ctx context.Context, p *XYCoord, x float64, y float64) (shifted *XYCoord, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/shift-point`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`p`: p,
-		`x`: x,
-		`y`: y,
-	})
 	_in := ShiftPointIn{
 		p,
 		x,
@@ -826,10 +800,6 @@ LinesIntersection tests nested non-primitive types.
 */
 func (_c MulticastClient) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) <-chan *LinesIntersectionResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/lines-intersection`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`l1`: l1,
-		`l2`: l2,
-	})
 	_in := LinesIntersectionIn{
 		l1,
 		l2,
@@ -870,10 +840,6 @@ LinesIntersection tests nested non-primitive types.
 func (_c Client) LinesIntersection(ctx context.Context, l1 XYLine, l2 *XYLine) (b bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/lines-intersection`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`l1`: l1,
-		`l2`: l2,
-	})
 	_in := LinesIntersectionIn{
 		l1,
 		l2,
@@ -931,9 +897,6 @@ EchoAnything tests arguments of type any.
 */
 func (_c MulticastClient) EchoAnything(ctx context.Context, original any) <-chan *EchoAnythingResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`original`: original,
-	})
 	_in := EchoAnythingIn{
 		original,
 	}
@@ -973,9 +936,6 @@ EchoAnything tests arguments of type any.
 func (_c Client) EchoAnything(ctx context.Context, original any) (echoed any, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/echo-anything`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`original`: original,
-	})
 	_in := EchoAnythingIn{
 		original,
 	}
@@ -1038,10 +998,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 */
 func (_c MulticastClient) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) <-chan *SubArrayRangeResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sub-array-range/{max}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`min`: min,
-		`max`: max,
-	})
 	_in := SubArrayRangeIn{
 		httpRequestBody,
 		min,
@@ -1092,10 +1048,6 @@ An httpResponseBody argument prevents returning additional values, except for th
 func (_c Client) SubArrayRange(ctx context.Context, httpRequestBody []int, min int, max int) (httpResponseBody []int, httpStatusCode int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sub-array-range/{max}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`min`: min,
-		`max`: max,
-	})
 	_in := SubArrayRangeIn{
 		httpRequestBody,
 		min,
@@ -1163,10 +1115,6 @@ SumTwoIntegers tests returning a status code from a function.
 */
 func (_c MulticastClient) SumTwoIntegers(ctx context.Context, x int, y int) <-chan *SumTwoIntegersResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sum-two-integers`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`x`: x,
-		`y`: y,
-	})
 	_in := SumTwoIntegersIn{
 		x,
 		y,
@@ -1208,10 +1156,6 @@ SumTwoIntegers tests returning a status code from a function.
 func (_c Client) SumTwoIntegers(ctx context.Context, x int, y int) (sum int, httpStatusCode int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sum-two-integers`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`x`: x,
-		`y`: y,
-	})
 	_in := SumTwoIntegersIn{
 		x,
 		y,
@@ -1273,11 +1217,6 @@ FunctionPathArguments tests path arguments in functions.
 */
 func (_c MulticastClient) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) <-chan *FunctionPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`named`: named,
-		`path2`: path2,
-		`suffix`: suffix,
-	})
 	_in := FunctionPathArgumentsIn{
 		named,
 		path2,
@@ -1325,11 +1264,6 @@ FunctionPathArguments tests path arguments in functions.
 func (_c Client) FunctionPathArguments(ctx context.Context, named string, path2 string, suffix string) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`named`: named,
-		`path2`: path2,
-		`suffix`: suffix,
-	})
 	_in := FunctionPathArgumentsIn{
 		named,
 		path2,
@@ -1394,11 +1328,6 @@ NonStringPathArguments tests path arguments that are not strings.
 */
 func (_c MulticastClient) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) <-chan *NonStringPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`named`: named,
-		`path2`: path2,
-		`suffix`: suffix,
-	})
 	_in := NonStringPathArgumentsIn{
 		named,
 		path2,
@@ -1446,11 +1375,6 @@ NonStringPathArguments tests path arguments that are not strings.
 func (_c Client) NonStringPathArguments(ctx context.Context, named int, path2 bool, suffix float64) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`named`: named,
-		`path2`: path2,
-		`suffix`: suffix,
-	})
 	_in := NonStringPathArgumentsIn{
 		named,
 		path2,
@@ -1515,11 +1439,6 @@ UnnamedFunctionPathArguments tests path arguments that are not named.
 */
 func (_c MulticastClient) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) <-chan *UnnamedFunctionPathArgumentsResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`path1`: path1,
-		`path2`: path2,
-		`path3`: path3,
-	})
 	_in := UnnamedFunctionPathArgumentsIn{
 		path1,
 		path2,
@@ -1567,11 +1486,6 @@ UnnamedFunctionPathArguments tests path arguments that are not named.
 func (_c Client) UnnamedFunctionPathArguments(ctx context.Context, path1 string, path2 string, path3 string) (joined string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`path1`: path1,
-		`path2`: path2,
-		`path3`: path3,
-	})
 	_in := UnnamedFunctionPathArgumentsIn{
 		path1,
 		path2,
@@ -1634,9 +1548,6 @@ PathArgumentsPriority tests the priority of path arguments in functions.
 */
 func (_c MulticastClient) PathArgumentsPriority(ctx context.Context, foo string) <-chan *PathArgumentsPriorityResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/path-arguments-priority/{foo}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`foo`: foo,
-	})
 	_in := PathArgumentsPriorityIn{
 		foo,
 	}
@@ -1676,9 +1587,6 @@ PathArgumentsPriority tests the priority of path arguments in functions.
 func (_c Client) PathArgumentsPriority(ctx context.Context, foo string) (echo string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/path-arguments-priority/{foo}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`foo`: foo,
-	})
 	_in := PathArgumentsPriorityIn{
 		foo,
 	}
@@ -1734,8 +1642,6 @@ WhatTimeIsIt tests shifting the clock.
 */
 func (_c MulticastClient) WhatTimeIsIt(ctx context.Context) <-chan *WhatTimeIsItResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/what-time-is-it`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := WhatTimeIsItIn{
 	}
 	var _query url.Values
@@ -1774,8 +1680,6 @@ WhatTimeIsIt tests shifting the clock.
 func (_c Client) WhatTimeIsIt(ctx context.Context) (t time.Time, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/what-time-is-it`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := WhatTimeIsItIn{
 	}
 	var _query url.Values
@@ -1828,8 +1732,6 @@ AuthzRequired tests authorization.
 */
 func (_c MulticastClient) AuthzRequired(ctx context.Context) <-chan *AuthzRequiredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := AuthzRequiredIn{
 	}
 	var _query url.Values
@@ -1868,8 +1770,6 @@ AuthzRequired tests authorization.
 func (_c Client) AuthzRequired(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/authz-required`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := AuthzRequiredIn{
 	}
 	var _query url.Values
@@ -1927,10 +1827,6 @@ OnDiscovered tests firing events.
 */
 func (_c MulticastTrigger) OnDiscovered(ctx context.Context, p XYCoord, n int) <-chan *OnDiscoveredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-discovered`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`p`: p,
-		`n`: n,
-	})
 	_in := OnDiscoveredIn{
 		p,
 		n,
@@ -1972,17 +1868,19 @@ func (_c Hook) OnDiscovered(handler func(ctx context.Context, p XYCoord, n int) 
 	doOnDiscovered := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnDiscoveredIn
 		var o OnDiscoveredOut
-		if strings.ContainsAny(`:417/on-discovered`, "{}") {
-			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-discovered`), r.URL.Path)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = httpx.DecodeDeepObject(pathArgs, &i)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:417/on-discovered`))
+		if err != nil {
+			return errors.Trace(err)
 		}
-		err := httpx.ParseRequestData(r, &i)
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 		if err != nil {
 			return errors.Trace(err)
 		}

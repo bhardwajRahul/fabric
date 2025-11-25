@@ -210,9 +210,6 @@ Register attempts to register a new user.
 */
 func (_c MulticastClient) Register(ctx context.Context, email string) <-chan *RegisterResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/register`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`email`: email,
-	})
 	_in := RegisterIn{
 		email,
 	}
@@ -252,9 +249,6 @@ Register attempts to register a new user.
 func (_c Client) Register(ctx context.Context, email string) (allowed bool, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/register`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`email`: email,
-	})
 	_in := RegisterIn{
 		email,
 	}
@@ -312,9 +306,6 @@ Event sinks are given the opportunity to block the registration.
 */
 func (_c MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <-chan *OnAllowRegisterResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-allow-register`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`email`: email,
-	})
 	_in := OnAllowRegisterIn{
 		email,
 	}
@@ -356,17 +347,19 @@ func (_c Hook) OnAllowRegister(handler func(ctx context.Context, email string) (
 	doOnAllowRegister := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnAllowRegisterIn
 		var o OnAllowRegisterOut
-		if strings.ContainsAny(`:417/on-allow-register`, "{}") {
-			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-allow-register`), r.URL.Path)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = httpx.DecodeDeepObject(pathArgs, &i)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:417/on-allow-register`))
+		if err != nil {
+			return errors.Trace(err)
 		}
-		err := httpx.ParseRequestData(r, &i)
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -419,9 +412,6 @@ OnRegistered is called when a user is successfully registered.
 */
 func (_c MulticastTrigger) OnRegistered(ctx context.Context, email string) <-chan *OnRegisteredResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-registered`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`email`: email,
-	})
 	_in := OnRegisteredIn{
 		email,
 	}
@@ -462,17 +452,19 @@ func (_c Hook) OnRegistered(handler func(ctx context.Context, email string) (err
 	doOnRegistered := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnRegisteredIn
 		var o OnRegisteredOut
-		if strings.ContainsAny(`:417/on-registered`, "{}") {
-			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-registered`), r.URL.Path)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = httpx.DecodeDeepObject(pathArgs, &i)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:417/on-registered`))
+		if err != nil {
+			return errors.Trace(err)
 		}
-		err := httpx.ParseRequestData(r, &i)
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 		if err != nil {
 			return errors.Trace(err)
 		}

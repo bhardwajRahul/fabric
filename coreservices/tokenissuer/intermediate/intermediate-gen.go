@@ -260,17 +260,19 @@ func (svc *Intermediate) SetAltSecretKey(key string) error {
 func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) error {
 	var i tokenissuerapi.IssueTokenIn
 	var o tokenissuerapi.IssueTokenOut
-	if strings.ContainsAny(`:444/issue-token`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/issue-token`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/issue-token`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -297,17 +299,19 @@ func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) er
 func (svc *Intermediate) doValidateToken(w http.ResponseWriter, r *http.Request) error {
 	var i tokenissuerapi.ValidateTokenIn
 	var o tokenissuerapi.ValidateTokenOut
-	if strings.ContainsAny(`:444/validate-token`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:444/validate-token`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/validate-token`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

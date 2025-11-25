@@ -25,11 +25,6 @@ import (
 	"github.com/microbus-io/fabric/coreservices/control/intermediate"
 )
 
-var (
-	_ errors.TracedError
-	_ http.Request
-)
-
 /*
 Service implements the control.core microservice.
 
@@ -58,7 +53,7 @@ func (svc *Service) Ping(ctx context.Context) (pong int, err error) {
 }
 
 /*
-ConfigRefresh pulls the latest config values from the configurator service.
+ConfigRefresh pulls the latest config values from the configurator microservice.
 */
 func (svc *Service) ConfigRefresh(ctx context.Context) (err error) {
 	return nil
@@ -68,5 +63,12 @@ func (svc *Service) ConfigRefresh(ctx context.Context) (err error) {
 Trace forces exporting the indicated tracing span.
 */
 func (svc *Service) Trace(ctx context.Context, id string) (err error) {
+	return nil
+}
+
+/*
+Metrics returns the Prometheus metrics collected by the microservice.
+*/
+func (svc *Service) Metrics(w http.ResponseWriter, r *http.Request) (err error) {
 	return nil
 }

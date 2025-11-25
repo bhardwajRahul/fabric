@@ -18,12 +18,12 @@ limitations under the License.
 
 package login
 
-const Version = 76
-const SourceCodeSHA256 = "67131479018c173d55c016e19ebca8061ea8c22252eb2b425cf50dbc1fc87e10"
-const Timestamp = "2025-11-02T17:28:51.770328Z"
+const Version = 79
+const SourceCodeSHA256 = "c5563f21e46a1c74684f913d27ae5bd9b49f860649acec6a77b9e0dfae3cdacf"
+const Timestamp = "2025-11-08T21:18:37.546996Z"
 
 /* {
-	"ver": 76,
-	"sha256": "67131479018c173d55c016e19ebca8061ea8c22252eb2b425cf50dbc1fc87e10",
-	"ts": "2025-11-02T17:28:51.770328Z"
+	"ver": 79,
+	"sha256": "c5563f21e46a1c74684f913d27ae5bd9b49f860649acec6a77b9e0dfae3cdacf",
+	"ts": "2025-11-08T21:18:37.546996Z"
 } */

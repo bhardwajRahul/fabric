@@ -43,6 +43,7 @@ type Mock struct {
 	mockPing func(ctx context.Context) (pong int, err error)
 	mockConfigRefresh func(ctx context.Context) (err error)
 	mockTrace func(ctx context.Context, id string) (err error)
+	mockMetrics func(w http.ResponseWriter, r *http.Request) (err error)
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -108,4 +109,19 @@ func (svc *Mock) Trace(ctx context.Context, id string) (err error) {
 		return
 	}
 	return svc.mockTrace(ctx, id)
+}
+
+// MockMetrics sets up a mock handler for the Metrics endpoint.
+func (svc *Mock) MockMetrics(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock {
+	svc.mockMetrics = handler
+	return svc
+}
+
+// Metrics runs the mock handler set by MockMetrics.
+func (svc *Mock) Metrics(w http.ResponseWriter, r *http.Request) (err error) {
+	if svc.mockMetrics == nil {
+		return errors.New("mocked endpoint 'Metrics' not implemented")
+	}
+	err = svc.mockMetrics(w, r)
+	return errors.Trace(err)
 }

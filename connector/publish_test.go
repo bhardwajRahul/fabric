@@ -804,7 +804,6 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 
 	// Create the microservice
 	con := New("timeout.drawdown.connector")
-	budget := con.networkHop * 8
 	con.Subscribe("GET", "next", func(w http.ResponseWriter, r *http.Request) error {
 		depth++
 		_, err := con.GET(r.Context(), "https://timeout.drawdown.connector/next")
@@ -815,6 +814,8 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 	err := con.Startup()
 	assert.NoError(err)
 	defer con.Shutdown()
+	con.networkRoundtrip = 100 * time.Millisecond
+	budget := con.networkRoundtrip * 8
 
 	budgetedCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -994,12 +995,8 @@ func TestConnector_Multicast(t *testing.T) {
 		return nil
 	}, sub.DefaultQueue())
 
-	ackTimeout := New("").ackTimeout
-
 	// Startup the microservices
 	for _, i := range []*Connector{noqueue1, noqueue2, named1, named2, def1, def2} {
-		i.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
-
 		err := i.Startup()
 		assert.NoError(err)
 		defer i.Shutdown()
@@ -1007,6 +1004,7 @@ func TestConnector_Multicast(t *testing.T) {
 
 	// Make the first request
 	client := named1
+	ackTimeout := client.ackTimeout
 	t0 := time.Now()
 	responded := map[string]bool{}
 	ch := client.Publish(ctx, pub.GET("https://multicast.connector/cast"), pub.Multicast())
@@ -1263,27 +1261,32 @@ func TestConnector_KnownResponders(t *testing.T) {
 	ctx := context.Background()
 
 	// Create the microservices
-	alpha := New("known.responders.connector")
-	alpha.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
-	alpha.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+	alpha1 := New("alpha.known.responders.connector")
+	alpha1.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
-	}, sub.NoQueue())
-	err := alpha.Startup()
+	})
+	err := alpha1.Startup()
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha1.Shutdown()
 
-	beta := New("known.responders.connector")
-	beta.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
-	beta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+	alpha2 := New("alpha.known.responders.connector")
+	alpha2.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
+		return nil
+	})
+	err = alpha2.Startup()
+	assert.NoError(err)
+	defer alpha2.Shutdown()
+
+	beta := New("beta.known.responders.connector")
+	beta.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}, sub.NoQueue())
 	err = beta.Startup()
 	assert.NoError(err)
 	defer beta.Shutdown()
 
-	gamma := New("known.responders.connector")
-	gamma.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
-	gamma.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+	gamma := New("gamma.known.responders.connector")
+	gamma.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}, sub.NoQueue())
 	err = gamma.Startup()
@@ -1293,7 +1296,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 	check := func() (count int, quick bool) {
 		responded := map[string]bool{}
 		t0 := time.Now()
-		ch := alpha.Publish(ctx, pub.GET("https://known.responders.connector/cast"), pub.Multicast())
+		ch := alpha1.Publish(ctx, pub.GET("https://known.responders.connector/cast"), pub.Multicast())
 		for i := range ch {
 			res, err := i.Get()
 			if assert.NoError(err) {
@@ -1301,7 +1304,7 @@ func TestConnector_KnownResponders(t *testing.T) {
 			}
 		}
 		dur := time.Since(t0)
-		return len(responded), dur < alpha.ackTimeout
+		return len(responded), dur < alpha1.ackTimeout
 	}
 
 	// First request should be slower, consecutive requests should be quick
@@ -1316,9 +1319,8 @@ func TestConnector_KnownResponders(t *testing.T) {
 	assert.True(quick)
 
 	// Add a new microservice
-	delta := New("known.responders.connector")
-	delta.SetDeployment(LAB) // Known responders optimization is disabled in TESTING so use LAB
-	delta.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
+	delta := New("delta.known.responders.connector")
+	delta.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}, sub.NoQueue())
 	err = delta.Startup()

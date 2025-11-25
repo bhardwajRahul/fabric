@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/fabric/env"
@@ -43,8 +44,8 @@ type Logger interface {
 
 // Conn abstracts the connection to the transport.
 type Conn struct {
-	natsConn            *nats.Conn
-	shortCircuitEnabled bool
+	natsConn            atomic.Pointer[nats.Conn]
+	shortCircuitEnabled atomic.Bool
 	head                *Subscription
 	mux                 sync.Mutex
 }
@@ -52,14 +53,15 @@ type Conn struct {
 // Open opens the transport.
 // It optionally connects to the NATS cluster based on settings in the environment variables.
 func (c *Conn) Open(ctx context.Context, logger Logger) error {
-	c.shortCircuitEnabled = true
 	if v := env.Get("MICROBUS_SHORT_CIRCUIT"); v == "0" || strings.EqualFold(v, "false") {
-		c.shortCircuitEnabled = false
+		c.shortCircuitEnabled.Store(false)
+	} else {
+		c.shortCircuitEnabled.Store(true)
 	}
 
 	// URL
 	u := env.Get("MICROBUS_NATS")
-	if u == "" && !c.shortCircuitEnabled {
+	if u == "" && !c.shortCircuitEnabled.Load() {
 		u = "nats://127.0.0.1:4222"
 	}
 	if u == "" {
@@ -135,7 +137,7 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 		})
 	}
 
-	c.natsConn = cn
+	c.natsConn.Store(cn)
 	return nil
 }
 
@@ -153,18 +155,20 @@ func (c *Conn) Close() error {
 		_ = c.unsubscribe(sub)
 	}
 	// Disconnect from NATS
-	natsConn := c.natsConn
+	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		natsConn.Close()
-		c.natsConn = nil
+		c.natsConn.Store(nil)
 	}
+	// Disable short circuit
+	c.shortCircuitEnabled.Store(false)
 	return nil
 }
 
 // MaxPayload returns the size limit that a message payload can have.
 // In NATS's case, this is set by the server configuration and delivered to the client upon connect.
 func (c *Conn) MaxPayload() int64 {
-	natsConn := c.natsConn
+	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		return natsConn.MaxPayload()
 	} else {
@@ -174,8 +178,9 @@ func (c *Conn) MaxPayload() int64 {
 
 // Publish sends data to a subject, allowing for multiple recipients.
 func (c *Conn) Publish(subject string, httpReq *http.Request) (err error) {
-	natsConn := c.natsConn
-	if !c.shortCircuitEnabled && natsConn == nil {
+	natsConn := c.natsConn.Load()
+	shortCircuitEnabled := c.shortCircuitEnabled.Load()
+	if !shortCircuitEnabled && natsConn == nil {
 		return errors.New("no transport")
 	}
 
@@ -196,7 +201,7 @@ func (c *Conn) Publish(subject string, httpReq *http.Request) (err error) {
 	}
 
 	// Use short-circuit for multicast only if NATS is disabled, because all subscribers, not just local ones, must be reached
-	if c.shortCircuitEnabled {
+	if shortCircuitEnabled {
 		_, err = c.deliverWithShortCircuit(subject, &Msg{Request: httpReq})
 		if err != nil {
 			return errors.Trace(err)
@@ -209,12 +214,13 @@ func (c *Conn) Publish(subject string, httpReq *http.Request) (err error) {
 
 // Request sends data to a subject, targeting only a single recipient.
 func (c *Conn) Request(subject string, httpReq *http.Request) (err error) {
-	natsConn := c.natsConn
-	if !c.shortCircuitEnabled && natsConn == nil {
+	natsConn := c.natsConn.Load()
+	shortCircuitEnabled := c.shortCircuitEnabled.Load()
+	if !shortCircuitEnabled && natsConn == nil {
 		return errors.New("no transport")
 	}
 
-	if c.shortCircuitEnabled {
+	if shortCircuitEnabled {
 		// Try over short circuit
 		ok, err := c.deliverWithShortCircuit(subject, &Msg{Request: httpReq})
 		if err != nil {
@@ -248,12 +254,13 @@ func (c *Conn) Request(subject string, httpReq *http.Request) (err error) {
 
 // Response sends a response to a subject, targeting only a single recipient.
 func (c *Conn) Response(subject string, httpRes *http.Response) (err error) {
-	natsConn := c.natsConn
-	if !c.shortCircuitEnabled && natsConn == nil {
+	natsConn := c.natsConn.Load()
+	shortCircuitEnabled := c.shortCircuitEnabled.Load()
+	if !shortCircuitEnabled && natsConn == nil {
 		return errors.New("no transport")
 	}
 
-	if c.shortCircuitEnabled {
+	if shortCircuitEnabled {
 		// Try over short circuit
 		ok, err := c.deliverWithShortCircuit(subject, &Msg{Response: httpRes})
 		if err != nil {
@@ -287,9 +294,6 @@ func (c *Conn) Response(subject string, httpRes *http.Response) (err error) {
 
 // deliverWithShortCircuit delivers the message via the short-circuit, if appropriate.
 func (c *Conn) deliverWithShortCircuit(subject string, msg *Msg) (delivered bool, err error) {
-	if !c.shortCircuitEnabled {
-		return false, nil
-	}
 	handlers := shortCircuit.Handlers(subject)
 	if len(handlers) == 0 {
 		// No handlers available locally, try via NATS
@@ -342,7 +346,7 @@ func (c *Conn) QueueSubscribe(subject string, queue string, handler MsgHandler) 
 		conn: c,
 	}
 
-	natsConn := c.natsConn
+	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		sub.natsSub, err = natsConn.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
 			handler(&Msg{Data: msg.Data})
@@ -353,7 +357,7 @@ func (c *Conn) QueueSubscribe(subject string, queue string, handler MsgHandler) 
 		sub.natsSub.SetPendingLimits(-1, -1)
 	}
 
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		sub.shortCircuitUnsub = shortCircuit.Sub(subject, queue, handler)
 	}
 
@@ -381,7 +385,7 @@ func (c *Conn) Subscribe(subject string, handler MsgHandler) (sub *Subscription,
 		conn: c,
 	}
 
-	natsConn := c.natsConn
+	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		sub.natsSub, err = natsConn.Subscribe(subject, func(msg *nats.Msg) {
 			handler(&Msg{Data: msg.Data})
@@ -392,7 +396,7 @@ func (c *Conn) Subscribe(subject string, handler MsgHandler) (sub *Subscription,
 		sub.natsSub.SetPendingLimits(-1, -1)
 	}
 
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		sub.shortCircuitUnsub = shortCircuit.Sub(subject, "", handler)
 	}
 
@@ -412,7 +416,8 @@ func (c *Conn) Subscribe(subject string, handler MsgHandler) (sub *Subscription,
 // WaitForSub gives a bit of time for the subscription to be registered with NATS.
 // It is a no op if NATS is not enabled.
 func (c *Conn) WaitForSub() {
-	if c.natsConn != nil {
+	natsConn := c.natsConn.Load()
+	if natsConn != nil {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
@@ -453,4 +458,26 @@ func (c *Conn) unsubscribe(sub *Subscription) (err error) {
 
 	sub.done = true
 	return nil
+}
+
+// Latency returns an estimate of the max roundtrip time between any publisher and subscriber.
+func (c *Conn) Latency() time.Duration {
+	natsConn := c.natsConn.Load()
+	if natsConn != nil {
+		if len(natsConn.Servers()) == 1 {
+			// Single NATS server
+			rtt, err := natsConn.RTT()
+			if err != nil {
+				return time.Millisecond * 250
+			}
+			// Add 50ms and round up to nearest 100ms
+			roundTo := time.Duration(100)
+			return (rtt*2 + (roundTo/2+roundTo-1)*time.Millisecond) / roundTo / time.Millisecond * roundTo * time.Millisecond
+		}
+	} else if c.shortCircuitEnabled.Load() {
+		// Short circuit only
+		return time.Millisecond * 5
+	}
+	// Default to 300ms
+	return time.Millisecond * 300
 }

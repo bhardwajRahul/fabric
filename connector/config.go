@@ -32,7 +32,7 @@ import (
 // SetOnConfigChanged adds a function to be called when a new config was received from the configurator.
 // Callbacks are called in the order they were added.
 func (c *Connector) SetOnConfigChanged(handler service.ConfigChangedHandler) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	c.onConfigChanged = append(c.onConfigChanged, handler)
@@ -43,7 +43,7 @@ func (c *Connector) SetOnConfigChanged(handler service.ConfigChangedHandler) err
 // Properties must be defined before the service starts.
 // Config property names are case-insensitive.
 func (c *Connector) DefineConfig(name string, options ...cfg.Option) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 
@@ -81,8 +81,8 @@ func (c *Connector) Config(name string) (value string) {
 // This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 // Configuration property names are case-insensitive.
 func (c *Connector) SetConfig(name string, value any) error {
-	if c.IsStarted() && c.Deployment() != TESTING {
-		return errors.New("setting value of config property '%s' is not allowed outside a %s deployment", name, TESTING)
+	if !c.isPhase(shutDown) && c.Deployment() != TESTING {
+		return errors.New("setting value of config property '%s' is not allowed outside %s deployment", name, TESTING)
 	}
 	c.configLock.Lock()
 	config, ok := c.configs[utils.ToKebabCase(name)]
@@ -98,7 +98,7 @@ func (c *Connector) SetConfig(name string, value any) error {
 	config.Value = v
 
 	// Call the callback functions, if provided
-	if c.IsStarted() && config.Value != origValue {
+	if c.isPhase(startedUp) && config.Value != origValue {
 		for _, callback := range c.onConfigChanged {
 			err := errors.CatchPanic(func() error {
 				return callback(
@@ -144,7 +144,7 @@ func (c *Connector) logConfigs(ctx context.Context) {
 
 // refreshConfig contacts the configurator microservices to fetch values for the config properties.
 func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
-	if !c.IsStarted() {
+	if !c.isPhase(startedUp, startingUp) {
 		return errors.New("not started")
 	}
 	var fetchedValues struct {

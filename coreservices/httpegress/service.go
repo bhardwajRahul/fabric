@@ -18,25 +18,20 @@ package httpegress
 
 import (
 	"bufio"
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
+	"io"
 	"net/http"
-	"time"
+	"strconv"
 
+	"github.com/andybalholm/brotli"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/trc"
 
-	"github.com/microbus-io/fabric/coreservices/httpegress/httpegressapi"
 	"github.com/microbus-io/fabric/coreservices/httpegress/intermediate"
-)
-
-var (
-	_ context.Context
-	_ *http.Request
-	_ time.Duration
-	_ *errors.TracedError
-	_ *httpegressapi.Client
 )
 
 /*
@@ -69,13 +64,15 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 		return errors.Trace(err)
 	}
 	if req.URL.Port() == "" {
-		if req.URL.Scheme == "https" {
+		switch req.URL.Scheme {
+		case "https":
 			req.URL.Host += ":443"
-		} else if req.URL.Scheme == "http" {
+		case "http":
 			req.URL.Host += ":80"
 		}
 	}
 	req.RequestURI = "" // Avoid "http: Request.RequestURI can't be set in client requests"
+	req.Header.Set("Accept-Encoding", "br;q=1.0,deflate;q=0.8,gzip;q=0.6")
 
 	// OpenTelemetry: create a child span
 	spanOptions := []trc.Option{
@@ -96,6 +93,57 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 
 	client := http.Client{}
 	resp, err := client.Do(req)
+	if err == nil {
+		// Decompress as required
+		var decompressed bytes.Buffer
+		isCompressed := true
+		switch resp.Header.Get("Content-Encoding") {
+		case "br":
+			rdr := brotli.NewReader(resp.Body)
+			_, err = io.Copy(&decompressed, rdr)
+			if err != nil {
+				err = errors.Trace(err)
+			}
+		case "deflate":
+			rdr := flate.NewReader(resp.Body)
+			_, err = io.Copy(&decompressed, rdr)
+			if err != nil {
+				err = errors.Trace(err)
+			}
+			rdr.Close()
+		case "gzip":
+			var rdr *gzip.Reader
+			rdr, err = gzip.NewReader(resp.Body)
+			if err != nil {
+				err = errors.Trace(err)
+			} else {
+				_, err = io.Copy(&decompressed, rdr)
+				if err != nil {
+					err = errors.Trace(err)
+				}
+				rdr.Close()
+			}
+		default:
+			isCompressed = false
+		}
+		if err == nil {
+			if isCompressed {
+				resp.Header.Del("Content-Encoding")
+				resp.Header.Set("Content-Length", strconv.Itoa(decompressed.Len()))
+			}
+			for k, vv := range resp.Header {
+				for _, v := range vv {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(resp.StatusCode)
+			if isCompressed {
+				_, err = io.Copy(w, &decompressed)
+			} else {
+				_, err = io.Copy(w, resp.Body)
+			}
+		}
+	}
 	if err != nil {
 		// OpenTelemetry: record the error, adding the request attributes
 		span.SetRequest(req)
@@ -103,7 +151,6 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 		svc.ForceTrace(ctx)
 	} else {
 		span.SetOK(http.StatusOK)
-		err = httpx.Copy(w, resp)
 	}
 	span.End()
 	spanEnded = true

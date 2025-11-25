@@ -207,7 +207,7 @@ func (c *Connector) termMeter(ctx context.Context) (err error) {
 // SetOnObserveMetrics adds a function to be called just before metrics are produced to allow observing them just in time.
 // Callbacks are called in the order they were added.
 func (c *Connector) SetOnObserveMetrics(handler service.ObserveMetricsHandler) error {
-	if c.IsStarted() {
+	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	c.onObserveMetrics = append(c.onObserveMetrics, handler)
@@ -226,7 +226,7 @@ func (p *jitProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetrics, e
 
 // observeMetricsJustInTime observes metrics just before they are shipped to OpenTelemetry.
 func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
-	if !c.IsStarted() {
+	if !c.isPhase(startedUp) {
 		return nil
 	}
 	c.metricLock.RLock()

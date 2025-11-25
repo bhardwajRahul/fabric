@@ -61,6 +61,7 @@ var (
 	URLOfPing = httpx.JoinHostAndPath(Hostname, `:888/ping`)
 	URLOfConfigRefresh = httpx.JoinHostAndPath(Hostname, `:888/config-refresh`)
 	URLOfTrace = httpx.JoinHostAndPath(Hostname, `:888/trace`)
+	URLOfMetrics = httpx.JoinHostAndPath(Hostname, `:888/metrics`)
 )
 
 // Client is a lightweight proxy for making unicast calls to the control.core microservice.
@@ -129,6 +130,116 @@ func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 	}
 }
 
+// MulticastTrigger is a lightweight proxy for triggering the events of the control.core microservice.
+type MulticastTrigger struct {
+	svc  service.Publisher
+	host string
+	opts []pub.Option
+}
+
+// NewMulticastTrigger creates a new multicast trigger of events of the control.core microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  caller,
+		host: "control.core",
+	}
+}
+
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: host,
+		opts: _c.opts,
+	}
+}
+
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{
+		svc:  _c.svc,
+		host: _c.host,
+		opts: append(_c.opts, opts...),
+	}
+}
+
+// Hook assists in the subscription to the events of the control.core microservice.
+type Hook struct {
+	svc  service.Subscriber
+	host string
+}
+
+// NewHook creates a new hook to the events of the control.core microservice.
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{
+		svc:  listener,
+		host: "control.core",
+	}
+}
+
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (_c Hook) ForHost(host string) Hook {
+	return Hook{
+		svc:  _c.svc,
+		host: host,
+	}
+}
+
+// errChan returns a response channel with a single error response.
+func (_c MulticastClient) errChan(err error) <-chan *pub.Response {
+	ch := make(chan *pub.Response, 1)
+	ch <- pub.NewErrorResponse(err)
+	close(ch)
+	return ch
+}
+
+/*
+Metrics returns the Prometheus metrics collected by the microservice.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body if of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+If a content type is not explicitly provided, an attempt will be made to derive it from the body.
+*/
+func (_c Client) Metrics(ctx context.Context, method string, relURL string, contentType string, body any) (res *http.Response, err error) {
+	if method == "" {
+		method = "POST"
+	}
+	res, err = _c.svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(URLOfMetrics),
+		pub.RelativeURL(relURL),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+	return res, err // No trace
+}
+
+/*
+Metrics returns the Prometheus metrics collected by the microservice.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body if of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+If a content type is not explicitly provided, an attempt will be made to derive it from the body.
+*/
+func (_c MulticastClient) Metrics(ctx context.Context, method string, relURL string, contentType string, body any) <-chan *pub.Response {
+	if method == "" {
+		method = "POST"
+	}
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(URLOfMetrics),
+		pub.RelativeURL(relURL),
+		pub.ContentType(contentType),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
 // PingIn are the input arguments of Ping.
 type PingIn struct {
 }
@@ -157,8 +268,6 @@ Ping responds to the message with a pong.
 */
 func (_c MulticastClient) Ping(ctx context.Context) <-chan *PingResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/ping`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := PingIn{
 	}
 	var _query url.Values
@@ -197,8 +306,6 @@ Ping responds to the message with a pong.
 func (_c Client) Ping(ctx context.Context) (pong int, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/ping`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := PingIn{
 	}
 	var _query url.Values
@@ -247,12 +354,10 @@ func (_out *ConfigRefreshResponse) Get() (err error) {
 }
 
 /*
-ConfigRefresh pulls the latest config values from the configurator service.
+ConfigRefresh pulls the latest config values from the configurator microservice.
 */
 func (_c MulticastClient) ConfigRefresh(ctx context.Context) <-chan *ConfigRefreshResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/config-refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := ConfigRefreshIn{
 	}
 	var _query url.Values
@@ -286,13 +391,11 @@ func (_c MulticastClient) ConfigRefresh(ctx context.Context) <-chan *ConfigRefre
 }
 
 /*
-ConfigRefresh pulls the latest config values from the configurator service.
+ConfigRefresh pulls the latest config values from the configurator microservice.
 */
 func (_c Client) ConfigRefresh(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/config-refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := ConfigRefreshIn{
 	}
 	var _query url.Values
@@ -345,9 +448,6 @@ Trace forces exporting the indicated tracing span.
 */
 func (_c MulticastClient) Trace(ctx context.Context, id string) <-chan *TraceResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/trace`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`id`: id,
-	})
 	_in := TraceIn{
 		id,
 	}
@@ -387,9 +487,6 @@ Trace forces exporting the indicated tracing span.
 func (_c Client) Trace(ctx context.Context, id string) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/trace`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`id`: id,
-	})
 	_in := TraceIn{
 		id,
 	}
@@ -414,4 +511,109 @@ func (_c Client) Trace(ctx context.Context, id string) (err error) {
 		return
 	}
 	return
+}
+
+// OnNewSubsIn are the input arguments of OnNewSubs.
+type OnNewSubsIn struct {
+	Hosts []string `json:"hosts"`
+}
+
+// OnNewSubsOut are the return values of OnNewSubs.
+type OnNewSubsOut struct {
+}
+
+// OnNewSubsResponse is the response to OnNewSubs.
+type OnNewSubsResponse struct {
+	data OnNewSubsOut
+	HTTPResponse *http.Response
+	err error
+}
+
+// Get retrieves the return values.
+func (_out *OnNewSubsResponse) Get() (err error) {
+	err = _out.err
+	return
+}
+
+/*
+OnNewSubs informs other microservices of new subscriptions, enabling them to update their known responders cache appropriately.
+*/
+func (_c MulticastTrigger) OnNewSubs(ctx context.Context, hosts []string) <-chan *OnNewSubsResponse {
+	_url := httpx.JoinHostAndPath(_c.host, `:888/on-new-subs`)
+	_in := OnNewSubsIn{
+		hosts,
+	}
+	var _query url.Values
+	_body := _in
+	_ch := _c.svc.Publish(
+		ctx,
+		pub.Method(`POST`),
+		pub.URL(_url),
+		pub.Query(_query),
+		pub.Body(_body),
+		pub.Options(_c.opts...),
+	)
+
+	_res := make(chan *OnNewSubsResponse, cap(_ch))
+	for _i := range _ch {
+		var _r OnNewSubsResponse
+		_httpRes, _err := _i.Get()
+		_r.HTTPResponse = _httpRes
+		if _err != nil {
+			_r.err = _err // No trace
+		} else {
+			_err = json.NewDecoder(_httpRes.Body).Decode(&(_r.data))
+			if _err != nil {
+				_r.err = errors.Trace(_err)
+			}
+		}
+		_res <- &_r
+	}
+	close(_res)
+	return _res
+}
+
+/*
+OnNewSubs informs other microservices of new subscriptions, enabling them to update their known responders cache appropriately.
+*/
+func (_c Hook) OnNewSubs(handler func(ctx context.Context, hosts []string) (err error)) error {
+	doOnNewSubs := func(w http.ResponseWriter, r *http.Request) error {
+		var i OnNewSubsIn
+		var o OnNewSubsOut
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/on-new-subs`))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = handler(
+			r.Context(),
+			i.Hosts,
+		)
+		if err != nil {
+			return err // No trace
+		}
+		w.Header().Set("Content-Type", "application/json")
+		encoder := json.NewEncoder(w)
+		err = encoder.Encode(o)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}
+	path := httpx.JoinHostAndPath(_c.host, `:888/on-new-subs`)
+	if handler == nil {
+		return _c.svc.Unsubscribe(`POST`, path)
+	}
+	return _c.svc.Subscribe(`POST`, path, doOnNewSubs)
 }

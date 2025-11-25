@@ -18,6 +18,7 @@ package httpx
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -98,8 +99,10 @@ func ParseURL(rawURL string) (canonical *url.URL, err error) {
 
 // InsertPathArguments fills URL path arguments such as {arg} from the named value.
 // If the argument is not named, e.g. {}, then a default name of path1, path2, etc. is assumed.
+//
+// Deprecated: No longer used.
 func InsertPathArguments(u string, values QArgs) string {
-	if !strings.ContainsAny(u, "{}") {
+	if !strings.Contains(u, "{") {
 		return u
 	}
 	parts := strings.Split(u, "/")
@@ -126,7 +129,7 @@ func InsertPathArguments(u string, values QArgs) string {
 
 // FillPathArguments transfers query arguments into path arguments, if present.
 func FillPathArguments(u string) (resolved string, err error) {
-	if !strings.Contains(u, "{") || !strings.Contains(u, "}") {
+	if !strings.Contains(u, "{") {
 		return u, nil
 	}
 	var query url.Values
@@ -172,8 +175,10 @@ func FillPathArguments(u string) (resolved string, err error) {
 
 // ExtractPathArguments extracts path arguments from a URL or path given a spec such as /obj/{id}/{} that identified them.
 // Unnamed args are assigned the names path1, path2, etc.
+//
+// Deprecated: No longer used.
 func ExtractPathArguments(spec string, path string) (args url.Values, err error) {
-	if !strings.ContainsAny(spec, "{}") {
+	if !strings.Contains(spec, "{") {
 		return nil, nil
 	}
 	if _, after, cut := strings.Cut(spec, "://"); cut {
@@ -223,4 +228,68 @@ func ExtractPathArguments(spec string, path string) (args url.Values, err error)
 		args.Set(name, pathParts[i])
 	}
 	return args, nil
+}
+
+// SetPathValues compares the request's actual path against a parameterized route path such as /obj/{id}/{},
+// and sets the path values of the request appropriately.
+func SetPathValues(r *http.Request, routePath string) error {
+	if !strings.Contains(routePath, "{") {
+		return nil
+	}
+	unnamedIndex := 0
+	routeParts := strings.Split(routePath, "/")
+	actualParts := strings.Split(r.URL.Path, "/")
+	for i := range routeParts {
+		if !strings.HasPrefix(routeParts[i], "{") || !strings.HasSuffix(routeParts[i], "}") {
+			continue
+		}
+		unnamedIndex++
+		if i >= len(actualParts) {
+			break
+		}
+		greedy := strings.HasSuffix(routeParts[i], "+}")
+		routeParts[i] = strings.TrimPrefix(routeParts[i], "{")
+		routeParts[i] = strings.TrimSuffix(routeParts[i], "}")
+		routeParts[i] = strings.TrimSuffix(routeParts[i], "+")
+		routeParts[i] = strings.TrimSpace(routeParts[i])
+		if routeParts[i] == "" {
+			routeParts[i] = fmt.Sprintf("path%d", unnamedIndex)
+		}
+		if greedy {
+			r.SetPathValue(routeParts[i], strings.Join(actualParts[i:], "/"))
+		} else {
+			r.SetPathValue(routeParts[i], actualParts[i])
+		}
+	}
+	return nil
+}
+
+// PathValues pulls the path values from the request given a parameterized route path such as /obj/{id}/{}.
+// The path values should have been previously set on the request with SetPathValue.
+func PathValues(r *http.Request, routePath string) (result url.Values, err error) {
+	if !strings.Contains(routePath, "{") {
+		return nil, nil
+	}
+	unnamedIndex := 0
+	routeParts := strings.Split(routePath, "/")
+	for i := range routeParts {
+		if !strings.HasPrefix(routeParts[i], "{") || !strings.HasSuffix(routeParts[i], "}") {
+			continue
+		}
+		unnamedIndex++
+		routeParts[i] = strings.TrimPrefix(routeParts[i], "{")
+		routeParts[i] = strings.TrimSuffix(routeParts[i], "}")
+		routeParts[i] = strings.TrimSuffix(routeParts[i], "+")
+		if routeParts[i] == "" {
+			routeParts[i] = fmt.Sprintf("path%d", unnamedIndex)
+		}
+		val := r.PathValue(routeParts[i])
+		if val != "" {
+			if result == nil {
+				result = url.Values{}
+			}
+			result[routeParts[i]] = []string{val}
+		}
+	}
+	return result, nil
 }

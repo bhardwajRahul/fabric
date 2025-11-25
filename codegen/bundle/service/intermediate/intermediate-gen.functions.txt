@@ -3,18 +3,15 @@
 func (svc *Intermediate) do{{ .Name }}(w http.ResponseWriter, r *http.Request) error {
 	var i {{ $shortPackage }}api.{{ .Name }}In
 	var o {{ $shortPackage }}api.{{ .Name }}Out
-	if strings.ContainsAny(`{{ .Path }}`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `{{ .Path }}`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `{{ .Path }}`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	{{- if .Signature.InputArg "httpRequestBody" }}
-	err := httpx.ParseRequestBody(r, &i.{{ CapitalizeIdentifier "httpRequestBody" }})
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i{{- if .Signature.InputArg "httpRequestBody" }}.{{ CapitalizeIdentifier "httpRequestBody" }}{{ end }})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -22,12 +19,6 @@ func (svc *Intermediate) do{{ .Name }}(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return errors.Trace(err)
 	}
-	{{- else }}
-	err := httpx.ParseRequestData(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	{{- end }}
 	{{ range .Signature.OutputArgs }}o.{{ CapitalizeIdentifier .Name }}, {{ end }}err = svc.impl.{{ .Name }}(
 		r.Context(),
 		{{- range .Signature.InputArgs }}

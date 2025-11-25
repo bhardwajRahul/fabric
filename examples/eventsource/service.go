@@ -72,8 +72,7 @@ func (svc *Service) Register(ctx context.Context, email string) (allowed bool, e
 
 	// Trigger an asynchronous fire-and-forget event to inform all event sinks of the new registration
 	svc.Go(ctx, func(ctx context.Context) (err error) {
-		for range eventsourceapi.NewMulticastTrigger(svc).OnRegistered(ctx, email) {
-		}
+		eventsourceapi.NewMulticastTrigger(svc).OnRegistered(ctx, email)
 		return nil
 	})
 

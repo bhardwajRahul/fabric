@@ -84,7 +84,7 @@ functions:
     queue: none
   - signature: ConfigRefresh()
     path: :888/...
-    description: ConfigRefresh pulls the latest config values from the configurator service.
+    description: ConfigRefresh pulls the latest config values from the configurator microservice.
     queue: none
   - signature: Trace(id string)
     path: :888/...
@@ -115,19 +115,10 @@ functions:
 # actor - Authorization requirements as a boolean expression over actor properties
 # openApi - Whether or not to include this endpoint in the OpenAPI document (defaults to true)
 webs:
-  # - signature:
-  #   description:
-
-# Tickers
-#
-# signature - Go-style method signature (no arguments or return values)
-#   MyTicker()
-# description - Documentation
-# interval - Duration between iterations (e.g. 15m)
-tickers:
-  # - signature:
-  #   description:
-  #   interval:
+  - signature: Metrics()
+    path: :888/...
+    description: Metrics returns the Prometheus metrics collected by the microservice.
+    queue: none
 
 # Event sources
 #
@@ -150,8 +141,10 @@ tickers:
 #   https://example.com:417/path
 #   //root - Root path of the web server
 events:
-  # - signature:
-  #   description:
+  - signature: OnNewSubs(hosts []string)
+    path: :888/...
+    description: OnNewSubs informs other microservices of new subscriptions, enabling them to update their known responders cache appropriately.
+    queue: none
 
 # Event sinks
 #
@@ -189,3 +182,14 @@ metrics:
   # - signature:
   #   description:
   #   kind:
+
+# Tickers
+#
+# signature - Go-style method signature (no arguments or return values)
+#   MyTicker()
+# description - Documentation
+# interval - Duration between iterations (e.g. 15m)
+tickers:
+  # - signature:
+  #   description:
+  #   interval:

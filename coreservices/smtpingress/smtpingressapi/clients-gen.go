@@ -207,9 +207,6 @@ OnIncomingEmail is triggered when a new email message is received.
 */
 func (_c MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Email) <-chan *OnIncomingEmailResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:417/on-incoming-email`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`mailMessage`: mailMessage,
-	})
 	_in := OnIncomingEmailIn{
 		mailMessage,
 	}
@@ -250,17 +247,19 @@ func (_c Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Em
 	doOnIncomingEmail := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnIncomingEmailIn
 		var o OnIncomingEmailOut
-		if strings.ContainsAny(`:417/on-incoming-email`, "{}") {
-			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:417/on-incoming-email`), r.URL.Path)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = httpx.DecodeDeepObject(pathArgs, &i)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:417/on-incoming-email`))
+		if err != nil {
+			return errors.Trace(err)
 		}
-		err := httpx.ParseRequestData(r, &i)
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 		if err != nil {
 			return errors.Trace(err)
 		}

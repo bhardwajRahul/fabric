@@ -99,7 +99,7 @@ func TestTransport_LingeringSubscriptions(t *testing.T) {
 	assert.Nil(s1.next)
 
 	assert.False(s2.done)
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		assert.NotNil(s2.shortCircuitUnsub)
 	}
 	err = s2.Unsubscribe()
@@ -107,7 +107,7 @@ func TestTransport_LingeringSubscriptions(t *testing.T) {
 	err = s2.Unsubscribe()
 	assert.NoError(err)
 	assert.True(s2.done)
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		assert.Nil(s2.shortCircuitUnsub)
 	}
 	// 3 -> 1
@@ -139,13 +139,13 @@ func TestTransport_LingeringSubscriptions(t *testing.T) {
 	assert.Nil(s1.prev)
 	assert.Nil(s1.next)
 
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		assert.False(shortCircuit.IsEmpty())
 	}
 	err = c.Close()
 	assert.NoError(err)
 	assert.Nil(c.head)
-	if c.shortCircuitEnabled {
+	if c.shortCircuitEnabled.Load() {
 		assert.True(shortCircuit.IsEmpty())
 	}
 }

@@ -19,13 +19,17 @@ package httpegress
 import (
 	"bufio"
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/testarossa"
@@ -60,6 +64,27 @@ func TestHttpegress_MakeRequest(t *testing.T) {
 	})
 	http.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second)
+	})
+	http.HandleFunc("/br-compressed", func(w http.ResponseWriter, r *http.Request) {
+		// Egress proxy should know to decompress
+		w.Header().Set("Content-Encoding", "br")
+		compressor := brotli.NewWriterLevel(w, brotli.BestSpeed)
+		compressor.Write([]byte("The quick brown fox jumps over the lazy dog"))
+		compressor.Close()
+	})
+	http.HandleFunc("/gzip-compressed", func(w http.ResponseWriter, r *http.Request) {
+		// Egress proxy should know to decompress
+		w.Header().Set("Content-Encoding", "gzip")
+		compressor := gzip.NewWriter(w)
+		compressor.Write([]byte("The quick brown fox jumps over the lazy dog"))
+		compressor.Close()
+	})
+	http.HandleFunc("/deflate-compressed", func(w http.ResponseWriter, r *http.Request) {
+		// Egress proxy should know to decompress
+		w.Header().Set("Content-Encoding", "deflate")
+		compressor, _ := flate.NewWriter(w, flate.BestSpeed)
+		compressor.Write([]byte("The quick brown fox jumps over the lazy dog"))
+		compressor.Close()
 	})
 	httpServer := &http.Server{
 		Addr: "127.0.0.1:5050",
@@ -168,6 +193,32 @@ func TestHttpegress_MakeRequest(t *testing.T) {
 		req.Header.Set("Content-Type", "text/plain")
 
 		_, err = client.Do(ctx, req)
+		assert.Error(err)
+	})
+
+	t.Run("compression", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		for _, algo := range []string{"br", "gzip", "deflate"} {
+			req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:5050/"+algo+"-compressed", nil)
+			assert.NoError(err)
+			req.Header.Set("Accept-Encoding", "gzip")
+
+			resp, err := client.Do(ctx, req)
+			if assert.NoError(err) {
+				assert.Equal(http.StatusOK, resp.StatusCode)
+				raw, _ := io.ReadAll(resp.Body)
+				// Response is never encoded
+				assert.Equal("", resp.Header.Get("Content-Encoding"))
+				assert.Equal("The quick brown fox jumps over the lazy dog", string(raw))
+				assert.Equal(strconv.Itoa(len("The quick brown fox jumps over the lazy dog")), resp.Header.Get("Content-Length"))
+			}
+		}
+	})
+
+	t.Run("error", func(t *testing.T) {
+		assert := testarossa.For(t)
+		_, err := client.Get(ctx, "!@#$^")
 		assert.Error(err)
 	})
 }

@@ -81,6 +81,7 @@ type ToDo interface {
 	Ping(ctx context.Context) (pong int, err error)
 	ConfigRefresh(ctx context.Context) (err error)
 	Trace(ctx context.Context, id string) (err error)
+	Metrics(w http.ResponseWriter, r *http.Request) (err error)
 }
 
 // Intermediate extends and customizes the generic base connector.
@@ -111,6 +112,9 @@ The microservice itself does nothing and should not be included in applications.
 	svc.Subscribe(`ANY`, `:888/ping`, svc.doPing, sub.NoQueue())
 	svc.Subscribe(`ANY`, `:888/config-refresh`, svc.doConfigRefresh, sub.NoQueue())
 	svc.Subscribe(`ANY`, `:888/trace`, svc.doTrace, sub.NoQueue())
+
+	// Webs
+	svc.Subscribe(`ANY`, `:888/metrics`, svc.impl.Metrics, sub.NoQueue())
 
 	// Resources file system
 	svc.SetResFS(resources.FS)
@@ -150,17 +154,19 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.PingIn
 	var o controlapi.PingOut
-	if strings.ContainsAny(`:888/ping`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/ping`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/ping`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -186,17 +192,19 @@ func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) error {
 func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.ConfigRefreshIn
 	var o controlapi.ConfigRefreshOut
-	if strings.ContainsAny(`:888/config-refresh`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/config-refresh`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/config-refresh`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -222,17 +230,19 @@ func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request)
 func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) error {
 	var i controlapi.TraceIn
 	var o controlapi.TraceOut
-	if strings.ContainsAny(`:888/trace`, "{}") {
-		pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `:888/trace`), r.URL.Path)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/trace`))
+	if err != nil {
+		return errors.Trace(err)
 	}
-	err := httpx.ParseRequestData(r, &i)
+	err = httpx.DecodeDeepObject(pathArgs, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.ParseRequestBody(r, &i)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

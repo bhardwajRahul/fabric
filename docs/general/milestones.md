@@ -325,3 +325,11 @@ Note: These milestones are maintained in separate branches in order to demonstra
 
 - Instructions for coding agents
 - Deprecated the individual app of each microservice
+
+[Milestone 40](https://github.com/microbus-io/fabric/tree/milestone/40):
+
+- Fill in path values in HTTP request
+- New subscription notification to invalidate known responders cache
+- Transport-dependent latency duration
+- HTTP egress proxy compression
+- `svc.Sleep`

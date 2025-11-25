@@ -76,7 +76,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	defer close(errOutput)
 
 	// Check if there's enough time budget
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkHop {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkRoundtrip {
 		err := errors.New("timeout", http.StatusRequestTimeout, c.Span(ctx).TraceID())
 		errOutput <- pub.NewErrorResponse(err)
 		return errOutput
@@ -262,7 +262,8 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	if httpReq.URL.Port() != "" {
 		port = httpReq.URL.Port()
 	}
-	subject := subjectOfRequest(c.plane, httpReq.Method, httpReq.URL.Hostname(), port, httpReq.URL.Path)
+	host := httpReq.URL.Hostname()
+	subject := subjectOfRequest(c.plane, httpReq.Method, host, port, httpReq.URL.Path)
 
 	frame.Of(httpReq).SetMessageID(msgID)
 
@@ -299,9 +300,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	var expectedResponders map[string]bool
 	if req.Multicast {
 		// Known responders optimization
-		if c.Deployment() != TESTING { // To avoid non-determinism in tests
-			expectedResponders, _ = c.knownResponders.Load(subject, lru.Bump(true))
-		}
+		expectedResponders, _ = c.knownResponders.Load(subject, lru.Bump(true))
 		if len(expectedResponders) > 0 {
 			c.LogDebug(ctx, "Expecting responders",
 				"msg", msgID,
@@ -335,6 +334,9 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			opCode := frame.Of(response).OpCode()
 			fromID := frame.Of(response).FromID()
 			queue := frame.Of(response).Queue()
+			if queue == "" {
+				queue = fromID + "." + frame.Of(response).FromHost()
+			}
 
 			// Known responders optimization
 			if req.Multicast {
@@ -360,8 +362,8 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 						ctx,
 						"microbus_client_ack_roundtrip_latency_seconds",
 						time.Since(publishTime).Seconds(),
-						"host", httpReq.URL.Hostname(),
-						"port", httpReq.URL.Port(),
+						"host", host,
+						"port", port,
 					)
 					seenIDs[fromID] = frame.OpCodeAck
 				}

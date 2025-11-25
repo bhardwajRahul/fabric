@@ -160,9 +160,6 @@ Values returns the values associated with the specified config property names fo
 */
 func (_c MulticastClient) Values(ctx context.Context, names []string) <-chan *ValuesResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`names`: names,
-	})
 	_in := ValuesIn{
 		names,
 	}
@@ -202,9 +199,6 @@ Values returns the values associated with the specified config property names fo
 func (_c Client) Values(ctx context.Context, names []string) (values map[string]string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/values`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`names`: names,
-	})
 	_in := ValuesIn{
 		names,
 	}
@@ -259,8 +253,6 @@ An error is returned if any of the values sent to the microservices fails valida
 */
 func (_c MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := RefreshIn{
 	}
 	var _query url.Values
@@ -300,8 +292,6 @@ An error is returned if any of the values sent to the microservices fails valida
 func (_c Client) Refresh(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:444/refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := RefreshIn{
 	}
 	var _query url.Values
@@ -355,10 +345,6 @@ SyncRepo is used to synchronize values among replica peers of the configurator.
 */
 func (_c MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncRepoResponse {
 	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`timestamp`: timestamp,
-		`values`: values,
-	})
 	_in := SyncRepoIn{
 		timestamp,
 		values,
@@ -399,10 +385,6 @@ SyncRepo is used to synchronize values among replica peers of the configurator.
 func (_c Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:888/sync-repo`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`timestamp`: timestamp,
-		`values`: values,
-	})
 	_in := SyncRepoIn{
 		timestamp,
 		values,
@@ -459,9 +441,6 @@ Values443 is deprecated.
 */
 func (_c MulticastClient) Values443(ctx context.Context, names []string) <-chan *Values443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`names`: names,
-	})
 	_in := Values443In{
 		names,
 	}
@@ -501,9 +480,6 @@ Values443 is deprecated.
 func (_c Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/values`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`names`: names,
-	})
 	_in := Values443In{
 		names,
 	}
@@ -557,8 +533,6 @@ Refresh443 is deprecated.
 */
 func (_c MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := Refresh443In{
 	}
 	var _query url.Values
@@ -597,8 +571,6 @@ Refresh443 is deprecated.
 func (_c Client) Refresh443(ctx context.Context) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/refresh`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-	})
 	_in := Refresh443In{
 	}
 	var _query url.Values
@@ -652,10 +624,6 @@ Sync443 is deprecated.
 */
 func (_c MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *Sync443Response {
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`timestamp`: timestamp,
-		`values`: values,
-	})
 	_in := Sync443In{
 		timestamp,
 		values,
@@ -696,10 +664,6 @@ Sync443 is deprecated.
 func (_c Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `:443/sync`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		`timestamp`: timestamp,
-		`values`: values,
-	})
 	_in := Sync443In{
 		timestamp,
 		values,

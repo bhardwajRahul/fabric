@@ -36,11 +36,6 @@ func (_c Multicast
 {{- if eq .Type "function" }}Client{{ else }}Trigger{{ end -}}
 ) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) <-chan *{{ .Name }}Response {
 	_url := httpx.JoinHostAndPath(_c.host, `{{ .Path }}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		{{- range .Signature.InputArgs }}{{- if ne .Name "httpRequestBody" }}
-		`{{ .Name }}`: {{ .Name }},
-		{{- end }}{{ end }}
-	})
 	_in := {{ .Name }}In{
 		{{- range .Signature.InputArgs }}
 		{{ .Name }},
@@ -107,11 +102,6 @@ func (_c Multicast
 func (_c Client) {{ .Name }}(ctx context.Context {{- .In ", name type" }}) ({{ .Out "name type," -}} err error) {
 	var _err error
 	_url := httpx.JoinHostAndPath(_c.host, `{{ .Path }}`)
-	_url = httpx.InsertPathArguments(_url, httpx.QArgs{
-		{{- range .Signature.InputArgs }}{{- if ne .Name "httpRequestBody" }}
-		`{{ .Name }}`: {{ .Name }},
-		{{- end }}{{ end }}
-	})
 	_in := {{ .Name }}In{
 		{{- range .Signature.InputArgs }}
 		{{ .Name }},
@@ -171,18 +161,15 @@ func (_c Hook) {{ .Name }}(handler func(ctx context.Context {{- .In ", name type
 	do{{ .Name }} := func(w http.ResponseWriter, r *http.Request) error {
 		var i {{ .Name }}In
 		var o {{ .Name }}Out
-		if strings.ContainsAny(`{{ .Path }}`, "{}") {
-			pathArgs, err := httpx.ExtractPathArguments(httpx.JoinHostAndPath("host", `{{ .Path }}`), r.URL.Path)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = httpx.DecodeDeepObject(pathArgs, &i)
-			if err != nil {
-				return errors.Trace(err)
-			}
+		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `{{ .Path }}`))
+		if err != nil {
+			return errors.Trace(err)
 		}
-		{{- if .Signature.InputArg "httpRequestBody" }}
-		err := httpx.ParseRequestBody(r, &i.{{ CapitalizeIdentifier "httpRequestBody" }})
+		err = httpx.DecodeDeepObject(pathArgs, &i)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = httpx.ParseRequestBody(r, &i{{- if .Signature.InputArg "httpRequestBody" }}.{{ CapitalizeIdentifier "httpRequestBody" }}{{ end }})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -190,12 +177,6 @@ func (_c Hook) {{ .Name }}(handler func(ctx context.Context {{- .In ", name type
 		if err != nil {
 			return errors.Trace(err)
 		}
-		{{- else }}
-		err := httpx.ParseRequestData(r, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		{{- end }}
 		{{ range .Signature.OutputArgs }}o.{{ CapitalizeIdentifier .Name }}, {{ end }}err = handler(
 			r.Context(),
 			{{- range .Signature.InputArgs }}
