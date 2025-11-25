@@ -206,20 +206,20 @@ func TestDLRU_Rescue(t *testing.T) {
 
 	// Store values in alpha before starting beta and gamma
 	n := 2048
-	numChan := make(chan int, runtime.NumCPU()*4)
-	go func() {
-		for i := range n {
-			numChan <- i
-		}
-		close(numChan)
-	}()
+	numChan := make(chan int, n)
+	for i := range n {
+		numChan <- i
+	}
+	close(numChan)
 	var wg sync.WaitGroup
-	for i := range numChan {
+	for range runtime.NumCPU() {
 		wg.Add(1)
 		go func() {
-			err := alphaLRU.Store(ctx, strconv.Itoa(i), []byte(strconv.Itoa(i)))
-			assert.NoError(err)
-			wg.Done()
+			defer wg.Done()
+			for i := range numChan {
+				err := alphaLRU.Store(ctx, strconv.Itoa(i), []byte(strconv.Itoa(i)))
+				assert.NoError(err)
+			}
 		}()
 	}
 	wg.Wait()
@@ -245,25 +245,25 @@ func TestDLRU_Rescue(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(n, betaLRU.LocalCache().Len()+gammaLRU.LocalCache().Len())
 
-	numChan = make(chan int, runtime.NumCPU()*4)
-	go func() {
-		for i := range n {
-			numChan <- i
-		}
-		close(numChan)
-	}()
-	for i := range numChan {
+	numChan = make(chan int, n)
+	for i := range n {
+		numChan <- i
+	}
+	close(numChan)
+	for range runtime.NumCPU() {
 		wg.Add(1)
 		go func() {
-			val, ok, err := betaLRU.Load(ctx, strconv.Itoa(i))
-			if assert.NoError(err) && assert.True(ok, i) {
-				assert.Equal(strconv.Itoa(i), string(val))
+			defer wg.Done()
+			for i := range numChan {
+				val, ok, err := betaLRU.Load(ctx, strconv.Itoa(i))
+				if assert.NoError(err) && assert.True(ok, i) {
+					assert.Equal(strconv.Itoa(i), string(val))
+				}
+				val, ok, err = gammaLRU.Load(ctx, strconv.Itoa(i))
+				if assert.NoError(err) && assert.True(ok, i) {
+					assert.Equal(strconv.Itoa(i), string(val))
+				}
 			}
-			val, ok, err = gammaLRU.Load(ctx, strconv.Itoa(i))
-			if assert.NoError(err) && assert.True(ok, i) {
-				assert.Equal(strconv.Itoa(i), string(val))
-			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()

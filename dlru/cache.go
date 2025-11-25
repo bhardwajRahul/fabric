@@ -405,10 +405,11 @@ func (c *Cache) offload(ctx context.Context) {
 	var wg sync.WaitGroup
 	var offloaded atomic.Int64
 	t0 := time.Now()
-	concurrent := runtime.NumCPU() * 4
+	concurrent := runtime.NumCPU()
 	for range concurrent {
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for kv := range queue {
 				if time.Since(t0) >= 4*time.Second {
 					break
@@ -420,7 +421,6 @@ func (c *Cache) offload(ctx context.Context) {
 				}
 				offloaded.Add(1)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()

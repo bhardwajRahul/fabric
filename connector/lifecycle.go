@@ -220,6 +220,7 @@ func (c *Connector) Startup() (err error) {
 	}
 	c.networkRoundtrip = c.transportConn.Latency()
 	c.ackTimeout = c.networkRoundtrip
+	c.LogInfo(ctx, "Transport latency", "latency", c.networkRoundtrip)
 
 	// Subscribe to the response subject
 	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponses(c.plane, c.hostname, c.id), c.id, c.onResponse)
