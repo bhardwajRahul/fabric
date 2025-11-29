@@ -694,7 +694,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 
 		// Request with insufficient auth token should be rejected
-		signedToken, err := tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{"role": "minor"})
+		signedToken, err := tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{
+			"role": "minor",
+		})
 		assert.NoError(err)
 		req.AddCookie(&http.Cookie{
 			Name:     "Authorization",
@@ -711,7 +713,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 
 		// Request with valid auth token should be served
-		signedToken, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{"role": "major"})
+		signedToken, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{
+			"role": "major",
+		})
 		assert.NoError(err)
 		req.Header.Del("Cookie")
 		req.AddCookie(&http.Cookie{

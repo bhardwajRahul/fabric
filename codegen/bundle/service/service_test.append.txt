@@ -68,8 +68,11 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		t.Run("subtest_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			{{ if .Actor }}// Actor claims required: {{ .Actor }}
-			{{ end }}
+			{{ if .Actor -}}
+			actor := jwt.MapClaims{
+				// Claims required: {{ .Actor }}
+			}
+			{{ end -}}
 			{{- .Out "name," -}} err := client{{ if .Actor }}.WithOptions(pub.Actor(actor)){{ end }}.{{ .Name }}(ctx {{- .In ", name" }})
 			{{- if .Signature.OutputArgs }}
 			assert.Expect(
@@ -195,7 +198,10 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		t.Run("subtest_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			{{ if .Actor }}// Actor claims required: {{ .Actor }}
+			{{ if .Actor -}}
+			actor := jwt.MapClaims{
+				// Claims required: {{ .Actor }}
+			}
 			{{ end -}}
 			for e := range {{ ToLower .SourceSuffix }}Trigger{{ if .Actor }}.WithOptions(pub.Actor(actor)){{ end }}.{{ if .Event }}{{ .Event }}{{ else }}{{ .Name }}{{ end }}(ctx {{- .In ", name" }}) {
 				{{ .Out "name," -}} err := e.Get()
@@ -251,7 +257,10 @@ func Test{{ CapitalizeIdentifier $pkg }}_{{ .Name }}(t *testing.T) {
 		t.Run("subtest_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			{{ if .Actor }}// Actor claims required: {{ .Actor }}
+			{{ if .Actor -}}
+			actor := jwt.MapClaims{
+				// Claims required: {{ .Actor }}
+			}
 			{{ end -}}
 			res, err := client{{ if .Actor }}.WithOptions(pub.Actor(actor)){{ end }}.{{ .Name }}
 			{{- if eq .Method "ANY" -}}

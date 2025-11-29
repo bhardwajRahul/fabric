@@ -82,8 +82,14 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 		return svc.TimeBudget()
 	}))
 	m.Append(Authorization, middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
-		if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok {
-			actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(validator).ValidateToken(ctx, token)
+		host := ""
+		if issuer, ok := utils.StringClaimFromJWT(token, "iss"); ok && strings.HasPrefix(issuer, "microbus://") {
+			host = issuer[len("microbus://"):]
+		} else if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok { // Backward compatibility
+			host = validator
+		}
+		if host != "" {
+			actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(host).ValidateToken(ctx, token)
 			if errors.StatusCode(err) == http.StatusNotFound {
 				return nil, false, nil
 			}

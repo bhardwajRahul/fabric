@@ -89,9 +89,9 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) {
 	ok := submitted && userRoles[u] != nil && p == "password"
 	if ok {
 		// Use the core issuer to create a JWT
-		signedJWT, err := tokenissuerapi.NewClient(svc).IssueToken(ctx, Actor{
-			Subject: u,
-			Roles:   userRoles[u],
+		signedJWT, err := tokenissuerapi.NewClient(svc).IssueToken(ctx, jwt.MapClaims{
+			"sub":   u,
+			"roles": userRoles[u],
 		})
 		if err != nil {
 			return errors.Trace(err)

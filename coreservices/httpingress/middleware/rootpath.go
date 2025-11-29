@@ -33,7 +33,22 @@ func RootPath(rootPath string) Middleware {
 			if r.URL.Path == "/" {
 				r.URL.Path = rootPath
 			}
-			return next(w, r) // No trace
+			err = next(w, r)
+			if loc := w.Header().Get("Location"); loc != "" && strings.Contains(loc, rootPath) {
+				loc, _, _ = strings.Cut(loc, "?")
+				loc, _, _ = strings.Cut(loc, "#")
+				if strings.HasSuffix(loc, rootPath) {
+					loc = strings.Replace(loc, "://", ":::", 1)
+					firstSlash := strings.Index(loc, "/")
+					p := strings.Index(loc, rootPath)
+					if firstSlash >= 0 && p >= 0 && p == firstSlash {
+						loc = w.Header().Get("Location")
+						loc = strings.Replace(loc, rootPath, "/", 1)
+						w.Header().Set("Location", loc)
+					}
+				}
+			}
+			return err // No trace
 		}
 	}
 }

@@ -40,8 +40,8 @@ var (
 // Mock is a mockable version of the tokenissuer.core microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockIssueToken func(ctx context.Context, claims any) (signedToken string, err error)
-	mockValidateToken func(ctx context.Context, signedToken string) (actor any, valid bool, err error)
+	mockIssueToken func(ctx context.Context, claims tokenissuerapi.MapClaims) (signedToken string, err error)
+	mockValidateToken func(ctx context.Context, signedToken string) (claims tokenissuerapi.MapClaims, valid bool, err error)
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -65,13 +65,13 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 }
 
 // MockIssueToken sets up a mock handler for the IssueToken endpoint.
-func (svc *Mock) MockIssueToken(handler func(ctx context.Context, claims any) (signedToken string, err error)) *Mock {
+func (svc *Mock) MockIssueToken(handler func(ctx context.Context, claims tokenissuerapi.MapClaims) (signedToken string, err error)) *Mock {
 	svc.mockIssueToken = handler
 	return svc
 }
 
 // IssueToken runs the mock handler set by MockIssueToken.
-func (svc *Mock) IssueToken(ctx context.Context, claims any) (signedToken string, err error) {
+func (svc *Mock) IssueToken(ctx context.Context, claims tokenissuerapi.MapClaims) (signedToken string, err error) {
 	if svc.mockIssueToken == nil {
 		err = errors.New("mocked endpoint 'IssueToken' not implemented")
 		return
@@ -80,13 +80,13 @@ func (svc *Mock) IssueToken(ctx context.Context, claims any) (signedToken string
 }
 
 // MockValidateToken sets up a mock handler for the ValidateToken endpoint.
-func (svc *Mock) MockValidateToken(handler func(ctx context.Context, signedToken string) (actor any, valid bool, err error)) *Mock {
+func (svc *Mock) MockValidateToken(handler func(ctx context.Context, signedToken string) (claims tokenissuerapi.MapClaims, valid bool, err error)) *Mock {
 	svc.mockValidateToken = handler
 	return svc
 }
 
 // ValidateToken runs the mock handler set by MockValidateToken.
-func (svc *Mock) ValidateToken(ctx context.Context, signedToken string) (actor any, valid bool, err error) {
+func (svc *Mock) ValidateToken(ctx context.Context, signedToken string) (claims tokenissuerapi.MapClaims, valid bool, err error) {
 	if svc.mockValidateToken == nil {
 		err = errors.New("mocked endpoint 'ValidateToken' not implemented")
 		return

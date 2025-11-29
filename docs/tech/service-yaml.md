@@ -122,7 +122,7 @@ Along with the hostname of the microservice, the `path` defines the URL to this 
 
 `queue` defines whether a request is routed to one of the replicas of the microservice (load-balanced) or to all (pervasive).
 
-`actor` stipulates authorization requirements as a boolean expression over the properties of the actor associated with the request. If no actor is associated with the request, it is rejected with a `401 Unauthorized` error. If an actor is associated but it does not satisfy the requirements, the request is rejected with a `403 Forbidden` error.
+`actor` stipulates authorization requirements as a boolean expression over the claims of the actor associated with the request. If no actor is associated with the request, it is rejected with a `401 Unauthorized` error. If an actor is associated but it does not satisfy the requirements, the request is rejected with a `403 Forbidden` error.
 
 The `actor` boolean expression supports the following syntax:
 - Boolean operators `&&`, `||` and `!`
@@ -131,7 +131,7 @@ The `actor` boolean expression supports the following syntax:
 - Regexp operators `=~` and `!~`. The regular expression must be quoted and on the right, e.g. `prop=~"regexp"`
 - Grouping operators `(` and `)`
 - String quotation marks `"` or `'`
-- Dot notation `.` for traversing nested objects. For this purpose, arrays are construed as `map[string]bool`, enabling expressions such as `array.value` to match the property `"array": ["value", "another_value"]`
+- Dot notation `.` for traversing nested objects. For this purpose, arrays are construed as `map[string]bool`, enabling expressions such as `array.value` to match the claim `"array": ["value", "another_value"]`
 
 `openApi` controls whether or not to expose the function in the `/openapi.json` endpoint.
 

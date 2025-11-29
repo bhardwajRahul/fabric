@@ -333,3 +333,10 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Transport-dependent latency duration
 - HTTP egress proxy compression
 - `svc.Sleep`
+
+[Milestone 41](https://github.com/microbus-io/fabric/tree/milestone/41):
+
+- Use `jwt.MapClaims` in token issuer API instead of `any`
+- Claims transformer extension to the token issuer
+- Use `iss` claim instead of `validator` claim to identify the token issuer of a JWT
+- Handle `Location` response header in root path middleware
