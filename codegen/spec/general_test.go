@@ -45,10 +45,10 @@ description: foo
 host:
 description: foo
 `), &gen)
-	assert.Error(err, "invalid host")
+	assert.Contains(err, "invalid host")
 
 	err = yaml.Unmarshal([]byte(`
 description: foo
 `), &gen)
-	assert.Error(err, "invalid host")
+	assert.Contains(err, "invalid host")
 }

@@ -101,58 +101,6 @@ func TestUtils_LooksLikeJWT(t *testing.T) {
 	assert.False(LooksLikeJWT("xxXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.eyABCDEFGHIJKLMNOPQRSTUVWZYZabcdefghijklmnopqrstuvwzyz01234567890-_.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))
 }
 
-func TestUtil_StringClaimFromJWT(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	newSignedToken := func(claims jwt.MapClaims) string {
-		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		s, _ := x.SignedString([]byte("0123456789abcdef0123456789abcdef"))
-		return s
-	}
-
-	token := newSignedToken(jwt.MapClaims{"sub": "123456", "claim": "something", "roles": 12345})
-	val, ok := StringClaimFromJWT(token, "claim")
-	assert.True(ok)
-	assert.Equal("something", val)
-	val, ok = StringClaimFromJWT(token, "sub")
-	assert.True(ok)
-	assert.Equal("123456", val)
-	val, ok = StringClaimFromJWT(token, "roles")
-	assert.False(ok)
-	assert.Equal("", val)
-	val, ok = StringClaimFromJWT(token, "nosuchclaim")
-	assert.False(ok)
-	assert.Equal("", val)
-}
-
-func BenchmarkUtil_StringClaimFromJWT(b *testing.B) {
-	newSignedToken := func(claims jwt.MapClaims) string {
-		x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		s, _ := x.SignedString([]byte("0123456789abcdef0123456789abcdef"))
-		return s
-	}
-	token := newSignedToken(jwt.MapClaims{
-		"sub":   "harry@hogwarts.edu",
-		"claim": "something",
-		"roles": "wizard student",
-		"groups": []string{
-			"Gryffindor",
-		},
-		"born": 1980,
-	})
-
-	b.ResetTimer()
-	for range b.N {
-		StringClaimFromJWT(token, "claim")
-	}
-	// goos: darwin
-	// goarch: arm64
-	// pkg: github.com/microbus-io/fabric/utils
-	// cpu: Apple M1 Pro
-	// BenchmarkUtil_StringClaimFromJWT-10    	 2037859	       575.3 ns/op	      40 B/op	       2 allocs/op
-}
-
 func TestUtil_AnyToString(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)

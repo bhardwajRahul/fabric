@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
@@ -82,12 +83,36 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 		return svc.TimeBudget()
 	}))
 	m.Append(Authorization, middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
-		host := ""
-		if issuer, ok := utils.StringClaimFromJWT(token, "iss"); ok && strings.HasPrefix(issuer, "microbus://") {
-			host = issuer[len("microbus://"):]
-		} else if validator, ok := utils.StringClaimFromJWT(token, "validator"); ok { // Backward compatibility
-			host = validator
-		}
+		host := func() string {
+			if !utils.LooksLikeJWT(token) {
+				return ""
+			}
+			parsedToken, _ := jwt.Parse(token, nil)
+			if parsedToken == nil {
+				return ""
+			}
+			claims, ok := parsedToken.Claims.(jwt.MapClaims)
+			if !ok {
+				return ""
+			}
+			iss, ok := claims["iss"]
+			if ok {
+				issStr, ok := iss.(string)
+				if ok {
+					if strings.HasPrefix(issStr, "microbus://") {
+						return issStr[len("microbus://"):]
+					}
+				}
+			}
+			validator, ok := claims["validator"] // Backward compatibility
+			if ok {
+				validatorStr, ok := validator.(string)
+				if ok {
+					return validatorStr
+				}
+			}
+			return ""
+		}()
 		if host != "" {
 			actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(host).ValidateToken(ctx, token)
 			if errors.StatusCode(err) == http.StatusNotFound {

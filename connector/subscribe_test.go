@@ -747,7 +747,7 @@ func TestConnector_InvalidPathArguments(t *testing.T) {
 			return nil
 		})
 		err := con.Startup()
-		if !assert.Error(err, path) {
+		if !assert.Error(err, "%", path) {
 			con.Shutdown()
 		}
 	}

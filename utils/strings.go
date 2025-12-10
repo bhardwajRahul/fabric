@@ -17,16 +17,12 @@ limitations under the License.
 package utils
 
 import (
-	"bytes"
 	"encoding"
-	"encoding/base64"
 	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
 	"unsafe"
-
-	"github.com/microbus-io/fabric/mem"
 )
 
 var reUpperCaseIdentifier = regexp.MustCompile(`^[A-Z][a-zA-Z0-9]*$`)
@@ -132,43 +128,6 @@ func LooksLikeJWT(token string) bool {
 		return false
 	}
 	return true
-}
-
-// StringClaimFromJWT extracts a claim from a JWT with minimal memory allocations without fully parsing it.
-// The claim must be a string, i.e. appear as "name":"value" in the claim part.
-func StringClaimFromJWT(token string, name string) (value string, ok bool) {
-	if !LooksLikeJWT(token) {
-		return "", false
-	}
-	dot1 := strings.Index(token, ".")
-	dot2 := strings.LastIndex(token, ".")
-	if dot1 < 0 || dot2 <= dot1 {
-		return "", false
-	}
-	tokenBytes := UnsafeStringToBytes(token[dot1+1 : dot2])
-	block := mem.Alloc(len(tokenBytes))
-	defer mem.Free(block)
-	decoded := block[:len(tokenBytes)]
-	n, err := base64.RawURLEncoding.Decode(decoded, tokenBytes)
-	if err != nil {
-		return "", false
-	}
-	decoded = decoded[:n]
-	nameAsBytes := UnsafeStringToBytes(name)
-	p := bytes.Index(decoded, nameAsBytes)
-	if p < 0 || p > len(decoded)-5 {
-		return "", false
-	}
-	p += len(nameAsBytes)
-	if !bytes.HasPrefix(decoded[p:], []byte(`":"`)) {
-		return "", false
-	}
-	p += 3
-	q := bytes.Index(decoded[p:], []byte(`"`))
-	if q < 0 {
-		return "", false
-	}
-	return string(decoded[p : p+q]), true
 }
 
 // UnsafeStringToBytes converts a string to a slice of bytes with no memory allocation.

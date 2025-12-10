@@ -27,7 +27,7 @@ import (
 )
 
 func TestCodeGen_FullGeneration(t *testing.T) {
-	// No parallel
+	// No parallel because changing working directory
 	assert := testarossa.For(t)
 
 	serviceYaml := `
@@ -95,19 +95,19 @@ metrics:
 	dir := "testing" + rand.AlphaNum32(12)
 	os.Mkdir(dir, os.ModePerm)
 	defer os.RemoveAll(dir)
-	err := os.WriteFile(filepath.Join(dir, "service.yaml"), []byte(serviceYaml), 0666)
+	os.Chdir(dir)
+	defer os.Chdir("..")
+	err := os.WriteFile("service.yaml", []byte(serviceYaml), 0666)
 	assert.NoError(err)
 
 	// Generate
 	gen := NewGenerator()
-	gen.WorkDir = dir
-	gen.AddToMainApp = false
 	err = gen.Run()
 	assert.NoError(err)
 
 	// Validate
 	fileContains := func(fileName string, terms ...string) {
-		body, err := os.ReadFile(filepath.Join(dir, fileName))
+		body, err := os.ReadFile(fileName)
 		if assert.NoError(err, "%s", fileName) {
 			for _, term := range terms {
 				assert.Contains(body, term, "%s does not contain '%s'", fileName, term)

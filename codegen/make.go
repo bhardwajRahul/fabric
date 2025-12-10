@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/microbus-io/fabric/codegen/spec"
@@ -1042,8 +1043,8 @@ func (gen *Generator) makeAddToMainApp() (err error) {
 	gen.Printer.Indent()
 	defer gen.Printer.Unindent()
 
-	if !gen.AddToMainApp {
-		gen.Printer.Debug("Skipped")
+	if testing.Testing() {
+		gen.Printer.Debug("Skipped while testing")
 		return nil
 	}
 
