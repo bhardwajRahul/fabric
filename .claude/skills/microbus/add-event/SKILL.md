@@ -11,11 +11,11 @@ Copy this checklist and track your progress:
 Creating or modifying an event endpoint:
 - [ ] Step 1: Read local AGENTS.md file
 - [ ] Step 2: Define in service.yaml
-- [ ] Step 3: Generate Boilerplate Code
-- [ ] Step 4: Define Custom Types
-- [ ] Step 5: Triggering an Outbound Event
-- [ ] Step 6: Test the Trigger
-- [ ] Step 7: Document the Microservice
+- [ ] Step 3: Generate boilerplate code
+- [ ] Step 4: Define custom types
+- [ ] Step 5: Triggering an outbound event
+- [ ] Step 6: Test the trigger
+- [ ] Step 7: Document the microservice
 - [ ] Step 8: Versioning
 ```
 
@@ -35,11 +35,11 @@ events:
     description: OnMyNewEvent does X, Y and Z.
 ```
 
-#### Step 3: Generate Boilerplate Code
+#### Step 3: Generate boilerplate code
 
 If you've made changes to `service.yaml`, run `go generate` to generate the boilerplate code.
 
-#### Step 4: Define Custom Types
+#### Step 4: Define custom types
 
 If the new event is using non-primitive custom types such as structs, look for their definition in the API directory.
 - Define the properties of any custom types as needed. Property names should be in PascalCase.
@@ -52,7 +52,7 @@ type CustomType struct {
 }
 ```
 
-#### Step 5: Triggering an Outbound Event
+#### Step 5: Triggering an outbound event
 
 Use the `MulticastTrigger` in the API package to trigger an outbound event and publish it to all subscribers.
 
@@ -88,7 +88,9 @@ func (svc *Service) DeleteUser(ctx context.Context, id int) (err error) {
 }
 ```
 
-#### Step 6: Test the Trigger
+#### Step 6: Test the trigger
+
+Skip this step if integration tests were skipped for this microservice, or if instructed to be "quick".
 
 Look for the integration test created in `service_test.go` for the outbound event and implement or adjust it appropriately.
 - Follow the pattern recommendation in the code
@@ -100,9 +102,11 @@ func TestMyservice_OnMyNewEvent(t *testing.T) {
 }
 ```
 
-#### Step 7: Document the Microservice
+#### Step 7: Document the microservice
 
-Generate documentation for this microservice that captures its purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future. Store the result in the microservice's local `AGENTS.md` file.
+Skip this step if instructed to be "quick".
+
+Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
 
 #### Step 8: Versioning
 

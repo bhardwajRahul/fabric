@@ -61,9 +61,9 @@ func TestBrowser_Browse(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		httpegress.NewMock().
 			MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
 				req, _ := http.ReadRequest(bufio.NewReader(r.Body))

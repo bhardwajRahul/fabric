@@ -126,17 +126,10 @@ type Configurable interface {
 	SetOnConfigChanged(handler ConfigChangedHandler) error
 }
 
-// FS is a file system that can be associated with the connector.
-type FS interface {
-	fs.FS
-	fs.ReadDirFS
-	fs.ReadFileFS
-}
-
 // Resourcer provides access to the connector's FS.
 type Resourcer interface {
-	SetResFS(resFS FS) error
-	ResFS() FS
+	SetResFS(resFS fs.FS) error
+	ResFS() fs.FS
 }
 
 // TickerHandler handles the ticker callbacks.

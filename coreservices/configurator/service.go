@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,16 +20,17 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/frame"
-
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
 	"github.com/microbus-io/fabric/coreservices/configurator/intermediate"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
+	"github.com/microbus-io/fabric/frame"
 )
 
 var (
@@ -43,7 +44,7 @@ Service implements the configurator.core microservice.
 The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	repo          *repository
 	repoTimestamp time.Time
@@ -56,25 +57,45 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 		svc.repo = &repository{}
 	}
 
-	// Load values from config.yaml if present in current working directory
+	// Load values from config.yaml or config.local.yaml, in current working directory or ancestor directory
 	exists := func(fileName string) bool {
 		_, err := os.Stat(fileName)
 		return err == nil
 	}
-	if exists("config.yaml") {
-		y, err := os.ReadFile("config.yaml")
-		if err != nil {
-			return errors.Trace(err)
+	wd, err := os.Getwd()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	dir := ""
+	split := strings.Split(wd, string(os.PathSeparator))
+	for p := range split {
+		dir = string(os.PathSeparator) + path.Join(split[:p+1]...)
+		for _, fileName := range []string{
+			path.Join(dir, "config.yaml"),
+			path.Join(dir, "config.local.yaml"),
+		} {
+			if !exists(fileName) {
+				continue
+			}
+			data, err := os.ReadFile(fileName)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			svc.lock.Lock()
+			err = svc.repo.LoadYAML(data)
+			svc.repoTimestamp = time.Now()
+			svc.lock.Unlock()
+			if err != nil {
+				svc.LogError(ctx, "Parsing config file",
+					"error", err,
+					"file", fileName,
+				)
+			} else {
+				svc.LogDebug(ctx, "Read config file",
+					"file", fileName,
+				)
+			}
 		}
-		svc.lock.Lock()
-		err = svc.repo.LoadYAML(y)
-		svc.repoTimestamp = time.Now()
-		svc.lock.Unlock()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		svc.LogWarn(ctx, "config.yaml not found in CWD")
 	}
 
 	// Sync the current repo to peers before microservices pull the new config

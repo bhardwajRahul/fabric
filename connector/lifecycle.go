@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,17 +22,17 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/dlru"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/trc"
+	"github.com/microbus-io/fabric/utils"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -78,7 +78,6 @@ func (c *Connector) Startup() (err error) {
 	}
 
 	// Determine the communication plane
-	defaultPlane := false
 	if c.plane == "" {
 		if plane := env.Get("MICROBUS_PLANE"); plane != "" {
 			err := c.SetPlane(plane)
@@ -87,8 +86,16 @@ func (c *Connector) Startup() (err error) {
 			}
 		}
 		if c.plane == "" {
+			testingFuncName, underTest := utils.Testing()
+			if underTest {
+				// Generate a unique plane from the test name
+				h := sha256.New()
+				h.Write([]byte(testingFuncName))
+				c.plane = strings.ToLower(hex.EncodeToString(h.Sum(nil)[:8]))
+			}
+		}
+		if c.plane == "" {
 			c.plane = "microbus"
-			defaultPlane = true
 		}
 	}
 
@@ -115,28 +122,9 @@ func (c *Connector) Startup() (err error) {
 			}
 		}
 		if c.deployment == "" {
-			testNameHash := ""
-			for lvl := 0; true; lvl++ {
-				pc, _, _, ok := runtime.Caller(lvl)
-				if !ok {
-					break
-				}
-				runtimeFunc := runtime.FuncForPC(pc)
-				funcName := runtimeFunc.Name()
-				// testing.tRunner is the test runner
-				// testing.(*B).runN is the benchmark runner
-				if strings.HasPrefix(funcName, "testing.") {
-					c.deployment = TESTING
-					if defaultPlane && testNameHash != "" {
-						c.plane = testNameHash
-					}
-					break
-				} else if strings.Contains(funcName, ".Test") || strings.Contains(funcName, ".Benchmark") {
-					// Generate a unique name for the test to be used as plane if none is explicitly specified
-					h := sha256.New()
-					h.Write([]byte(funcName))
-					testNameHash = hex.EncodeToString(h.Sum(nil)[:8])
-				}
+			_, underTest := utils.Testing()
+			if underTest {
+				c.deployment = TESTING
 			}
 		}
 		if c.deployment == "" {

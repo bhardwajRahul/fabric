@@ -58,9 +58,9 @@ func TestEventsource_Register(t *testing.T) {
 	hook := eventsourceapi.NewHook(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		eventsink.NewService(), // Disallows gmail.com and hotmail.com registrations
 		svc,
 		tester,
@@ -173,9 +173,9 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		eventsink.NewService(), // Disallows gmail.com and hotmail.com registrations
 		svc,
 		tester,
@@ -271,9 +271,9 @@ func TestEventsource_OnRegistered(t *testing.T) {
 	_ = trigger
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		eventsink.NewService(), // Disallows gmail.com and hotmail.com registrations
 		svc,
 		tester,

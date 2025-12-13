@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ import (
 	"time"
 
 	"github.com/andybalholm/brotli"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
@@ -84,19 +84,16 @@ type Service interface {
 func NewCache(ctx context.Context, svc Service, path string) (*Cache, error) {
 	basePath := httpx.JoinHostAndPath(svc.Hostname(), path)
 	basePath = strings.TrimSuffix(basePath, "/")
-
 	c := &Cache{
-		basePath: basePath,
-		svc:      svc,
+		basePath:   basePath,
+		svc:        svc,
+		localCache: lru.New[string, []byte](32<<20, time.Hour),
 	}
-	c.localCache = lru.New[string, []byte](32<<20, time.Hour)
-
 	err := c.start(ctx)
 	if err != nil {
 		c.stop(ctx)
 		return nil, errors.Trace(err)
 	}
-
 	return c, nil
 }
 
@@ -776,7 +773,7 @@ func (c *Cache) Clear(ctx context.Context) error {
 // LoadJSON loads a JSON element from the cache.
 // If the element is found, it is bumped to the head of the cache.
 //
-// Deprecated: Use Load or Get.
+// Deprecated: Use [Cache.Load] or [Cache.Get].
 func (c *Cache) LoadJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
@@ -799,7 +796,7 @@ func (c *Cache) LoadJSON(ctx context.Context, key string, value any, options ...
 // JSON marshalling is not memory efficient and should be avoided if the cache is
 // expected to store a lot of data.
 //
-// Deprecated: Use Store or Set.
+// Deprecated: Use [Cache.Store] or [Cache.Set].
 func (c *Cache) StoreJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
 	if key == "" {
 		return errors.New("missing key")
@@ -818,7 +815,7 @@ func (c *Cache) StoreJSON(ctx context.Context, key string, value any, options ..
 // LoadCompressedJSON loads a compressed JSON element from the cache.
 // If the element is found, it is bumped to the head of the cache.
 //
-// Deprecated: Use Load or Get.
+// Deprecated: Use [Cache.Load] or [Cache.Get].
 func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
@@ -841,7 +838,7 @@ func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, o
 // JSON marshalling is not memory efficient and should be avoided if the cache is
 // expected to store a lot of data.
 //
-// Deprecated: Use Store or Set.
+// Deprecated: Use [Cache.Store] or [Cache.Set].
 func (c *Cache) StoreCompressedJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
 	if key == "" {
 		return errors.New("missing key")

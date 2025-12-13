@@ -17,7 +17,6 @@ Learn about each of the project's packages to get familiar with the `Microbus` c
     * [tokenissuer](../structure/coreservices-tokenissuer.md) - The token issuer microservice issues and validates tokens in the form of JWTs.
 * [dlru](../structure/dlru.md) - A distributed LRU cache that is shared among all peers of a microservice
 * [env](../structure/env.md) - Manages the loading of environment variables, with the option of overriding values for testing
-* [errors](../structure/errors.md) - An enhancement of Go's standard `errors` package that adds stack tracing and status codes
 * [examples](../structure/examples.md) - Demo microservices
     * [browser](../structure/examples-browser.md) is an example of a microservice that uses the [HTTP egress core microservice](../structure/coreservices-httpegress.md)
     * [calculator](../structure/examples-calculator.md) demonstrates functional handlers

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -391,7 +391,7 @@ func TestDLRU_Options(t *testing.T) {
 }
 
 func TestDLRU_MulticastOptim(t *testing.T) {
-	t.Parallel()
+	// No parallel
 	assert := testarossa.For(t)
 
 	ctx := context.Background()
@@ -414,11 +414,14 @@ func TestDLRU_MulticastOptim(t *testing.T) {
 	durSlow := time.Since(t0)
 
 	// Second operation is fast, even if not the same action, because of the known responders optimization
-	t0 = time.Now()
-	err = alphaLRU.Clear(ctx)
-	assert.NoError(err)
-	durFast := time.Since(t0)
-	assert.True(durFast*2 < durSlow)
+	var totalDurFast time.Duration
+	for range 10 {
+		t0 = time.Now()
+		err = alphaLRU.Clear(ctx)
+		assert.NoError(err)
+		totalDurFast += time.Since(t0)
+	}
+	assert.True(totalDurFast*2/10 < durSlow)
 }
 
 func TestDLRU_InvalidRequests(t *testing.T) {

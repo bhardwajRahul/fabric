@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -51,13 +51,14 @@ func main() {
 		configurator.NewService(),
 	)
 	app.Add(
+		// Core microservices
 		httpegress.NewService(),
 		openapiportal.NewService(),
 		metrics.NewService(),
 		tokenissuer.NewService(),
 	)
 	app.Add(
-		// Add solution microservices here
+		// HINT: Add solution microservices here
 		helloworld.NewService(),
 		hello.NewService(),
 		messaging.NewService(),

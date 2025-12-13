@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package transport
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"os"
 	"strings"
@@ -26,15 +28,24 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/mem"
 	"github.com/nats-io/nats.go"
 )
 
 var (
 	shortCircuit trie
+	pool         = map[string]*refCountedNATSConn{}
+	poolLock     sync.Mutex
 )
+
+// refCountedNATSConn counts references to the real NATS connection.
+type refCountedNATSConn struct {
+	*nats.Conn
+	refCount int
+	cacheKey string
+}
 
 // Logger is used by the transport to log messages in the caller's context.
 type Logger interface {
@@ -44,7 +55,7 @@ type Logger interface {
 
 // Conn abstracts the connection to the transport.
 type Conn struct {
-	natsConn            atomic.Pointer[nats.Conn]
+	natsConn            atomic.Pointer[refCountedNATSConn]
 	shortCircuitEnabled atomic.Bool
 	head                *Subscription
 	mux                 sync.Mutex
@@ -72,15 +83,34 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 	}
 	opts := []nats.Option{}
 
+	hasher := sha256.New()
+	hasher.Write([]byte(u))
+	hasher.Write([]byte{'|'})
+
 	// Credentials
 	user := env.Get("MICROBUS_NATS_USER")
 	pw := env.Get("MICROBUS_NATS_PASSWORD")
 	token := env.Get("MICROBUS_NATS_TOKEN")
+	userJWT := env.Get("MICROBUS_NATS_USER_JWT")
+	seed := env.Get("MICROBUS_NATS_NKEY_SEED")
 	if user != "" && pw != "" {
+		hasher.Write([]byte(user))
+		hasher.Write([]byte{'|'})
+		hasher.Write([]byte(pw))
+		hasher.Write([]byte{'|'})
 		opts = append(opts, nats.UserInfo(user, pw))
 	}
 	if token != "" {
+		hasher.Write([]byte(token))
+		hasher.Write([]byte{'|'})
 		opts = append(opts, nats.Token(token))
+	}
+	if userJWT != "" && seed != "" {
+		hasher.Write([]byte(userJWT))
+		hasher.Write([]byte{'|'})
+		hasher.Write([]byte(seed))
+		hasher.Write([]byte{'|'})
+		opts = append(opts, nats.UserJWTAndSeed(userJWT, seed))
 	}
 
 	// Root CA and client certs
@@ -89,11 +119,30 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 		return err == nil
 	}
 	if exists("ca.pem") {
+		content, _ := os.ReadFile("ca.pem")
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
 		opts = append(opts, nats.RootCAs("ca.pem"))
 	}
 	if exists("cert.pem") && exists("key.pem") {
+		content, _ := os.ReadFile("cert.pem")
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
+		content, _ = os.ReadFile("key.pem")
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
 		opts = append(opts, nats.ClientCert("cert.pem", "key.pem"))
 	}
+
+	// Creds file
+	if exists("nats.creds") {
+		content, _ := os.ReadFile("nats.creds")
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
+		opts = append(opts, nats.UserCredentials("nats.creds"))
+	}
+
+	// Other options
 	if logger != nil {
 		opts = append(opts, nats.ErrorHandler(func(c *nats.Conn, s *nats.Subscription, err error) {
 			sub := ""
@@ -107,10 +156,23 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 		}))
 	}
 
+	// Check connection pool first
+	cacheKey := hex.EncodeToString(hasher.Sum(nil))
+	poolLock.Lock()
+	cached := pool[cacheKey]
+	if cached != nil {
+		cached.refCount++
+	}
+	poolLock.Unlock()
+	if cached != nil {
+		c.natsConn.Store(cached)
+		return nil
+	}
+
 	// Connect
 	cn, err := nats.Connect(u, opts...)
 	if err != nil {
-		return errors.Trace(err, u)
+		return errors.Trace(err, "url", u)
 	}
 
 	// Log connection events
@@ -137,7 +199,17 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 		})
 	}
 
-	c.natsConn.Store(cn)
+	// Pool the connection for later
+	poolLock.Lock()
+	cached = &refCountedNATSConn{
+		Conn:     cn,
+		refCount: 1,
+		cacheKey: cacheKey,
+	}
+	pool[cacheKey] = cached
+	poolLock.Unlock()
+
+	c.natsConn.Store(cached)
 	return nil
 }
 
@@ -157,8 +229,16 @@ func (c *Conn) Close() error {
 	// Disconnect from NATS
 	natsConn := c.natsConn.Load()
 	if natsConn != nil {
-		natsConn.Close()
-		c.natsConn.Store(nil)
+		poolLock.Lock()
+		natsConn.refCount--
+		if natsConn.refCount == 0 {
+			delete(pool, natsConn.cacheKey)
+		}
+		poolLock.Unlock()
+		if natsConn.refCount == 0 {
+			natsConn.Close()
+			c.natsConn.Store(nil)
+		}
 	}
 	// Disable short circuit
 	c.shortCircuitEnabled.Store(false)

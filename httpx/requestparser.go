@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 )
 
 // ParseRequestBody parses the body of an incoming request and populates the fields of a data object.
@@ -62,4 +62,30 @@ func ParseRequestData(r *http.Request, data any) error {
 		err = DecodeDeepObject(r.URL.Query(), data)
 	}
 	return errors.Trace(err)
+}
+
+// ParseRequest parses the body, path arguments, and query arguments of an incoming request and populates
+// the fields of the respective data objects. In most cases, all three references point to the same data object.
+// The body can contain a JSON payload or URL-encoded form data.
+// Use JSON tags to designate the name of the argument to map to each field.
+// An argument name can be hierarchical using either notation "a[b][c]" or "a.b.c",
+// in which case it is read into the corresponding nested field.
+func ParseRequest(r *http.Request, route string, pathArgs any, body any, queryArgs any) (err error) {
+	pathValues, err := PathValues(r, JoinHostAndPath("host", route))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = DecodeDeepObject(pathValues, pathArgs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = ParseRequestBody(r, body)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = DecodeDeepObject(r.URL.Query(), queryArgs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

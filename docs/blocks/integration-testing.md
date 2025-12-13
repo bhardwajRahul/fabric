@@ -32,9 +32,9 @@ func TestMyService_MyEndpoint(t *testing.T) {
 	client := myservice.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 		downstream.NewService().Init(func(svc *downstream.Service) {
@@ -237,9 +237,9 @@ func TestPayment_ChargeUser(t *testing.T) {
 	client := payment.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 		webpay.NewMock().

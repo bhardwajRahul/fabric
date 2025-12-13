@@ -9,27 +9,36 @@ Copy this checklist and track your progress:
 
 ```
 Creating a new microservice:
-- [ ] Step 1: Create a Directory for the New Microservice
-- [ ] Step 2: Create `doc.go` with Code Generation Directive
-- [ ] Step 3: Generate Initial `service.yaml`
-- [ ] Step 4: Fill in `service.yaml`
-- [ ] Step 5: Generate Microservice File Structure
-- [ ] Step 6: Add the Microservice to the Main Application
-- [ ] Step 7: Propose Features
+- [ ] Step 1: Create a directory for the new microservice
+- [ ] Step 2: Create doc.go with code generation directive
+- [ ] Step 3: Generate service.yaml
+- [ ] Step 4: Update service.yaml
+- [ ] Step 5: Generate the microservice file structure
+- [ ] Step 6: Propose microservice features
 ```
 
-#### Step 1: Create a Directory for the New Microservice
+#### Step 1: Create a directory for the new microservice
 
-Each microservice is kept in a separate directory. Create a new directory for the new microservice.
+Each microservice must be placed in a separate directory. Create a new directory for the new microservice.
+Use only lowercase letters `a` through `z` for the name of the directory.
+
+In smaller projects, place the new directory under the root directory of the project.
 
 ```bash
 mkdir -p myservice
 cd myservice
 ```
 
-#### Step 2: Create `doc.go` with Code Generation Directive
+In larger projects, consider using a nested directory structure to group similar microservices together.
 
-Create `doc.go` with the directive to trigger the code generator.
+```bash
+mkdir -p mydomain/myservice
+cd mydomain/myservice
+```
+
+#### Step 2: Create `doc.go` with the code generation directive
+
+Create `doc.go` with the `go:generate` directive to trigger the code generator. Name the package the same as the directory.
 
 ```go
 package myservice
@@ -38,73 +47,37 @@ package myservice
 
 ```
 
-#### Step 3: Generate Initial `service.yaml`
+#### Step 3: Generate `service.yaml`
 
-Run `go generate` to create the initial `service.yaml` file.
+Run `go generate` to generate `service.yaml`.
 
-**Important** Do not attempt to create `service.yaml` yourself from scratch. Always let the code generator initialize it.
+**Important**: Do not create `service.yaml` from scratch. Always let the code generator create it.
 
-#### Step 4: Fill in `service.yaml`
+#### Step 4: Update `service.yaml`
 
-The `service.yaml` file is the blueprint of your microservice. Fill in the `general` section:
+The `service.yaml` file is the blueprint of the microservice. Update the `general` section as needed:
 - The `host` defines the host name under which this microservice will be addressable. It must be unique across the application. Use reverse domain notation, e.g. `myservice.myproject.mycompany`.
 - The `description` should explain what this microservice is about.
+- Set `integrationTests` to `false` if instructed to skip integration tests, or if instructed to be "quick".
 
 ```yaml
 general:
   host: myservice.myproject.mycompany
   description: My microservice does X, Y, and Z
+  integrationTests: true
 ```
 
-**Important**: Do not fill in any other section of `service.yaml` unless explicitly asked to do so by the user.
+**Important**: Do not fill in any other sections of `service.yaml` unless explicitly asked to do so by the user.
 
-#### Step 5: Generate Microservice File Structure
+#### Step 5: Generate the microservice file structure
 
-Run `go generate` again to generate the file structure of the microservice.
+Run `go generate` to generate the file structure of the microservice.
 
-#### Step 6: Add the Microservice to the Main Application
+#### Step 6: Propose microservice features
 
-Add the new microservice to the `app` in `main.go`, if not already added.
-Note that `main.go` is typically located in the `main` directory of the project, not inside the directory of the microservice.
-The order is important: add the new microservice after the core infrastructure microservices are added, and before the HTTP ingress proxy is added.
+Skip this step if instructed to be "quick".
 
-```go
-func main() {
-	app := application.New()
-
-	// The configurator must be first
-	app.Add(
-		configurator.NewService(),
-	)
-
-	// Infrastructure services
-	app.Add(
-		httpegress.NewService(),
-		openapiportal.NewService(),
-		metrics.NewService(),
-	)
-
-	// Add your solution microservices here
-	app.Add(
-		myservice.NewService(),
-	)
-
-	// HTTP ingress proxy is last
-	app.Add(
-		httpingress.NewService(),
-	)
-
-	err := app.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v", err)
-		os.Exit(19)
-	}
-}
-```
-
-#### Step 7: Propose Features
-
-If you have an idea for what the microservice should include, prepare a proposal categorizing them by feature:
+If you have ideas of features to add to the microservice, prepare a proposal categorizing them by type:
 - Configuration properties
 - Functional endpoints (RPCs)
 - Outbound events
@@ -114,3 +87,4 @@ If you have an idea for what the microservice should include, prepare a proposal
 - Metrics
 
 Save the proposal in `AGENTS.md`, then show it to the user and seek additional instructions.
+Do not implement any of the proposals without explicit approval from the user.

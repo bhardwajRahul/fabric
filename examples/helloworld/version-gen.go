@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package helloworld
 
-const Version = 70
-const SourceCodeSHA256 = "8091944ea85f94c5a2281196e3d6ffd05c3af780e9d0a9b605e15c246aa74099"
-const Timestamp = "2025-11-08T21:18:37.404999Z"
-
-/* {
-	"ver": 70,
-	"sha256": "8091944ea85f94c5a2281196e3d6ffd05c3af780e9d0a9b605e15c246aa74099",
-	"ts": "2025-11-08T21:18:37.404999Z"
-} */
+const (
+	Version = 78
+	SourceCodeSHA256 = "3ed8130a95e50b723c467d374a0553c1f7fd3aad59dfdb3ca0245403fc2932a4"
+	Timestamp = "2026-01-29T13:04:06.059682Z"
+)

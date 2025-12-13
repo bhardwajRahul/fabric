@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -186,10 +186,8 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 /Portal0000.htm
 /docs/cplugError.html/
 /CSS/Miniweb.css
-/scripts/WPnBr.dll
-/.git/config
-/cgi-bin/.%2e/.%2e/.%2e/.%2e/bin/sh
-/cgi-bin/luci/;stok=/locale
+/.git/*
+/cgi-bin/*
 /actuator/gateway/routes
 /actuator/health
 /Public/home/js/check.js
@@ -198,7 +196,6 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 /ecp/Current/exporttool/microsoft.exchange.ediscovery.exporttool.application
 /owa/auth/x.js
 /static/admin/javascript/hetong.js
-/.git/HEAD
 /sslvpnLogin.html
 /vpn/index.html
 /wsman
@@ -209,10 +206,11 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 /cf_scripts/scripts/ajax/ckeditor/ckeditor.js
 /Temporary_Listen_Addresses/
 /manager/html
-/logon/LogonPoint/custom.html
-/logon/LogonPoint/index.html
+/logon/LogonPoint/*
 /catalog-portal/ui/oauth/verify
 /error_log/.git/HEAD
+/containers/json
+/hello.world
 *.cfm
 *.asp
 *.aspx
@@ -238,7 +236,7 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -256,7 +254,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -324,7 +322,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 TimeBudget specifies the timeout for handling a request, after it has been read.
 A value of 0 or less indicates no time budget.
 */
-func (svc *Intermediate) SetTimeBudget(budget time.Duration) error {
+func (svc *Intermediate) SetTimeBudget(budget time.Duration) (err error) {
 	return svc.SetConfig("TimeBudget", utils.AnyToString(budget))
 }
 
@@ -342,7 +340,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 Ports is a comma-separated list of HTTP ports on which to listen for requests.
 */
-func (svc *Intermediate) SetPorts(port string) error {
+func (svc *Intermediate) SetPorts(port string) (err error) {
 	return svc.SetConfig("Ports", utils.AnyToString(port))
 }
 
@@ -361,7 +359,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
 */
-func (svc *Intermediate) SetRequestMemoryLimit(megaBytes int) error {
+func (svc *Intermediate) SetRequestMemoryLimit(megaBytes int) (err error) {
 	return svc.SetConfig("RequestMemoryLimit", utils.AnyToString(megaBytes))
 }
 
@@ -381,7 +379,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
 The * origin can be used to allow CORS request from all origins.
 */
-func (svc *Intermediate) SetAllowedOrigins(origins string) error {
+func (svc *Intermediate) SetAllowedOrigins(origins string) (err error) {
 	return svc.SetConfig("AllowedOrigins", utils.AnyToString(origins))
 }
 
@@ -413,7 +411,7 @@ port y without change. Specific rules take precedence over * rules.
 The default mapping grants access to all internal ports via HTTP port 8080 but restricts
 HTTP ports 443 and 80 to only internal port 443.
 */
-func (svc *Intermediate) SetPortMappings(mappings string) error {
+func (svc *Intermediate) SetPortMappings(mappings string) (err error) {
 	return svc.SetConfig("PortMappings", utils.AnyToString(mappings))
 }
 
@@ -432,7 +430,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 ReadTimeout specifies the timeout for fully reading a request.
 */
-func (svc *Intermediate) SetReadTimeout(timeout time.Duration) error {
+func (svc *Intermediate) SetReadTimeout(timeout time.Duration) (err error) {
 	return svc.SetConfig("ReadTimeout", utils.AnyToString(timeout))
 }
 
@@ -451,7 +449,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 WriteTimeout specifies the timeout for fully writing the response to a request.
 */
-func (svc *Intermediate) SetWriteTimeout(timeout time.Duration) error {
+func (svc *Intermediate) SetWriteTimeout(timeout time.Duration) (err error) {
 	return svc.SetConfig("WriteTimeout", utils.AnyToString(timeout))
 }
 
@@ -470,7 +468,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
 */
-func (svc *Intermediate) SetReadHeaderTimeout(timeout time.Duration) error {
+func (svc *Intermediate) SetReadHeaderTimeout(timeout time.Duration) (err error) {
 	return svc.SetConfig("ReadHeaderTimeout", utils.AnyToString(timeout))
 }
 
@@ -492,6 +490,6 @@ A newline-separated list of paths or extensions to block with a 404.
 Paths should not include any arguments and are matched exactly.
 Extensions are specified with "*.ext" and are matched against the extension of the path only.
 */
-func (svc *Intermediate) SetBlockedPaths(blockedPaths string) error {
+func (svc *Intermediate) SetBlockedPaths(blockedPaths string) (err error) {
 	return svc.SetConfig("BlockedPaths", utils.AnyToString(blockedPaths))
 }

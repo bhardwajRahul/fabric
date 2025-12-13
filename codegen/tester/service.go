@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,12 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/frame"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/codegen/tester/intermediate"
 	"github.com/microbus-io/fabric/codegen/tester/testerapi"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/frame"
 )
 
 var (
@@ -47,7 +46,7 @@ Service implements the codegen.test microservice.
 The tester is used to test the code generator's functions.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.

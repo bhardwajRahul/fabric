@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -122,7 +122,7 @@ This key is required except in local development and tests.`),
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -140,7 +140,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -165,6 +165,6 @@ This action is restricted to the TESTING deployment in which the fetching of val
 SecretKey must be provided with the request to collect the metrics.
 This key is required except in local development and tests.
 */
-func (svc *Intermediate) SetSecretKey(secretKey string) error {
+func (svc *Intermediate) SetSecretKey(secretKey string) (err error) {
 	return svc.SetConfig("SecretKey", utils.AnyToString(secretKey))
 }

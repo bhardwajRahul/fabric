@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 
 	"github.com/microbus-io/fabric/examples/eventsink/eventsinkapi"
 )

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,11 +18,14 @@ package utils
 
 import (
 	"reflect"
+	"runtime"
+	"strings"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 )
 
 // CatchPanic calls the given function and returns any panic as a standard error.
+//
 // Deprecated: Use [errors.CatchPanic] instead.
 func CatchPanic(f func() error) (err error) {
 	return errors.CatchPanic(f)
@@ -32,4 +35,29 @@ func CatchPanic(f func() error) (err error) {
 func IsNil(x any) bool {
 	defer func() { recover() }()
 	return x == nil || reflect.ValueOf(x).IsNil()
+}
+
+// Testing indicates if the code is running inside a unit test, and if so, the test function name as well.
+func Testing() (testFuncName string, underTest bool) {
+	for lvl := 1; true; lvl++ {
+		pc, _, _, ok := runtime.Caller(lvl)
+		if !ok {
+			break
+		}
+		runtimeFunc := runtime.FuncForPC(pc)
+		funcName := runtimeFunc.Name()
+		if strings.HasPrefix(funcName, "testing.") {
+			// testing.tRunner is the test runner
+			// testing.(*B).runN is the benchmark runner
+			return testFuncName, true
+		} else if strings.Contains(funcName, ".Test") || strings.Contains(funcName, ".Benchmark") {
+			// Pick the top-most testing function
+			if strings.Contains(funcName, ".func") {
+				funcName = strings.TrimRight(funcName, "0123456789")
+				funcName = strings.TrimSuffix(funcName, ".func")
+			}
+			testFuncName = funcName
+		}
+	}
+	return "", false
 }

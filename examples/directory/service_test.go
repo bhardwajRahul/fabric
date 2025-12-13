@@ -59,9 +59,9 @@ func TestDirectory_Create(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -174,9 +174,9 @@ func TestDirectory_Load(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -249,9 +249,9 @@ func TestDirectory_Delete(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -322,9 +322,9 @@ func TestDirectory_Update(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -441,9 +441,9 @@ func TestDirectory_LoadByEmail(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -515,9 +515,9 @@ func TestDirectory_List(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -572,9 +572,9 @@ func TestDirectory_WebUI(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)

@@ -44,9 +44,9 @@ func TestLogin_Login(t *testing.T) {
 	tester := connector.New("login.login.tester")
 	client := loginapi.NewClient(tester)
 
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		tokenissuer.NewService(),
 		svc,
 		tester,
@@ -115,9 +115,9 @@ func TestLogin_Logout(t *testing.T) {
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		tokenissuer.NewService(),
 		svc,
 		tester,
@@ -156,9 +156,9 @@ func TestLogin_Welcome(t *testing.T) {
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		tokenissuer.NewService(),
 		svc,
 		tester,
@@ -212,9 +212,9 @@ func TestLogin_AdminOnly(t *testing.T) {
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		tokenissuer.NewService(),
 		svc,
 		tester,
@@ -266,9 +266,9 @@ func TestLogin_ManagerOnly(t *testing.T) {
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		tokenissuer.NewService(),
 		svc,
 		tester,

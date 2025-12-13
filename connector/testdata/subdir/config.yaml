@@ -1,0 +1,5 @@
+all:
+  SubDir: Child All
+
+config.connector:
+  SubDir: Child Subdomain

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -150,7 +150,7 @@ Defaults to 8.`),
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -168,7 +168,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -222,7 +222,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 Port is the TCP port to listen to.
 */
-func (svc *Intermediate) SetPort(port int) error {
+func (svc *Intermediate) SetPort(port int) (err error) {
 	return svc.SetConfig("Port", utils.AnyToString(port))
 }
 
@@ -241,7 +241,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 Enabled determines whether the email server is started.
 */
-func (svc *Intermediate) SetEnabled(enabled bool) error {
+func (svc *Intermediate) SetEnabled(enabled bool) (err error) {
 	return svc.SetConfig("Enabled", utils.AnyToString(enabled))
 }
 
@@ -262,7 +262,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 MaxSize is the maximum size of messages that will be accepted, in megabytes.
 Defaults to 10 megabytes.
 */
-func (svc *Intermediate) SetMaxSize(mb int) error {
+func (svc *Intermediate) SetMaxSize(mb int) (err error) {
 	return svc.SetConfig("MaxSize", utils.AnyToString(mb))
 }
 
@@ -283,7 +283,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 MaxClients controls how many client connection can be opened in parallel.
 Defaults to 128.
 */
-func (svc *Intermediate) SetMaxClients(clients int) error {
+func (svc *Intermediate) SetMaxClients(clients int) (err error) {
 	return svc.SetConfig("MaxClients", utils.AnyToString(clients))
 }
 
@@ -304,6 +304,6 @@ This action is restricted to the TESTING deployment in which the fetching of val
 Workers controls how many workers process incoming mail.
 Defaults to 8.
 */
-func (svc *Intermediate) SetWorkers(clients int) error {
+func (svc *Intermediate) SetWorkers(clients int) (err error) {
 	return svc.SetConfig("Workers", utils.AnyToString(clients))
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -193,7 +193,7 @@ func (s Span) SetAttributes(args ...any) {
 
 // SetString tags the span during its creation.
 //
-// Deprecated: Use SetAttributes
+// Deprecated: Use [Span.SetAttributes].
 func (s Span) SetString(k string, v string) {
 	if s.internal == nil {
 		return
@@ -203,7 +203,7 @@ func (s Span) SetString(k string, v string) {
 
 // SetStrings tags the span during its creation.
 //
-// Deprecated: Use SetAttributes
+// Deprecated: Use [Span.SetAttributes].
 func (s Span) SetStrings(k string, v []string) {
 	if s.internal == nil {
 		return
@@ -213,7 +213,7 @@ func (s Span) SetStrings(k string, v []string) {
 
 // SetBool tags the span during its creation.
 //
-// Deprecated: Use SetAttributes
+// Deprecated: Use [Span.SetAttributes].
 func (s Span) SetBool(k string, v bool) {
 	if s.internal == nil {
 		return
@@ -223,7 +223,7 @@ func (s Span) SetBool(k string, v bool) {
 
 // SetInt tags the span during its creation.
 //
-// Deprecated: Use SetAttributes
+// Deprecated: Use [Span.SetAttributes].
 func (s Span) SetInt(k string, v int) {
 	if s.internal == nil {
 		return
@@ -233,7 +233,7 @@ func (s Span) SetInt(k string, v int) {
 
 // SetFloat tags the span during its creation.
 //
-// Deprecated: Use SetAttributes
+// Deprecated: Use [Span.SetAttributes].
 func (s Span) SetFloat(k string, v float64) {
 	if s.internal == nil {
 		return

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package configurator
 import (
 	"strings"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,7 +55,7 @@ func (r *repository) LoadYAML(data []byte) error {
 			r.values[domain] = map[string]string{}
 		}
 		for name, val := range valmap {
-			name = strings.TrimSpace(strings.ToLower(name))
+			name = strings.TrimSpace(name)
 			if val == "" {
 				delete(r.values[domain], name)
 			} else {
@@ -74,7 +74,7 @@ func (r *repository) Value(host string, name string) (value string, ok bool) {
 		return "", false
 	}
 	host = strings.TrimSpace(strings.ToLower(host))
-	name = strings.TrimSpace(strings.ToLower(name))
+	name = strings.TrimSpace(name)
 	if r.values["all"] != nil {
 		value, ok = r.values["all"][name]
 	}

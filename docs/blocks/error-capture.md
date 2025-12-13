@@ -78,7 +78,7 @@ func FrameworkWrapperOfHandler(w http.ResponseWriter, r *http.Request) {
 
 ### Stack Trace
 
-Errors in Go are a simple string message and do not include a stack trace. In distributed systems that are built by distributed teams, that makes it very difficult to identify the root cause. To address that, the framework replaces the standard `errors` package with its own implementation of [augmented errors](../structure/errors.md) that support stack traces. This is not entirely transparent and app developers must use `errors.Trace` to capture the current stack frame.
+Errors in Go are a simple string message and do not include a stack trace. In distributed systems that are built by distributed teams, that makes it very difficult to identify the root cause. To address that, the framework replaces the standard `errors` package with [augmented errors](https://github.com/microbus-io/errors) that support stack traces. This is not entirely transparent and app developers must use `errors.Trace` to capture the current stack frame.
 
 ```go
 import "github.com/microbus-io/errors"

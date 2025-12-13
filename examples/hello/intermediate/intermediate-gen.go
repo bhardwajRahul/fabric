@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -144,7 +144,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -234,7 +234,7 @@ a call from one microservice to another.`,
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -257,7 +257,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 Greeting to use.
 */
-func (svc *Intermediate) SetGreeting(greeting string) error {
+func (svc *Intermediate) SetGreeting(greeting string) (err error) {
 	return svc.SetConfig("Greeting", utils.AnyToString(greeting))
 }
 
@@ -276,6 +276,6 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 Repeat indicates how many times to display the greeting.
 */
-func (svc *Intermediate) SetRepeat(count int) error {
+func (svc *Intermediate) SetRepeat(count int) (err error) {
 	return svc.SetConfig("Repeat", utils.AnyToString(count))
 }

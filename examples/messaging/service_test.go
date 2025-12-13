@@ -42,9 +42,9 @@ func TestMessaging_Home(t *testing.T) {
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc1,
 		svc2,
 		tester,
@@ -78,9 +78,9 @@ func TestMessaging_NoQueue(t *testing.T) {
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc1,
 		svc2,
 		tester,
@@ -114,9 +114,9 @@ func TestMessaging_DefaultQueue(t *testing.T) {
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc1,
 		svc2,
 		tester,
@@ -150,9 +150,9 @@ func TestMessaging_CacheLoad(t *testing.T) {
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc1,
 		svc2,
 		tester,
@@ -206,9 +206,9 @@ func TestMessaging_CacheStore(t *testing.T) {
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc1,
 		svc2,
 		tester,

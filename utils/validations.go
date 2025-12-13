@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,38 +20,19 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 )
 
 var (
 	hostnameValidator = regexp.MustCompile(`^[a-z0-9_\-]+(\.[a-z0-9_\-]+)*$`)
-	configValidator   = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
-	tickerValidator   = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 )
 
 // ValidateHostname indicates if the hostname is a valid microservice hostname.
-// Hostnames must contain only alphanumeric characters, hyphens, underscores and dot separators.
+//
+// Deprecated: Use [httpx.ValidateHostname].
 func ValidateHostname(hostname string) error {
-	if !hostnameValidator.MatchString(strings.ToLower(hostname)) {
+	if len(hostname) >= 253 || !hostnameValidator.MatchString(strings.ToLower(hostname)) {
 		return errors.New("invalid hostname '%s'", hostname)
-	}
-	return nil
-}
-
-// ValidateConfigName indicates if the name can be used for a config.
-// Config names must start with a letter and contain only alphanumeric characters, hyphens or underscores.
-func ValidateConfigName(name string) error {
-	if !configValidator.MatchString(strings.ToLower(name)) {
-		return errors.New("invalid config name '%s'", name)
-	}
-	return nil
-}
-
-// ValidateTickerName indicates if the name can be used for a ticker.
-// Ticker names must start with a letter and contain only alphanumeric characters, hyphens or underscores.
-func ValidateTickerName(name string) error {
-	if !tickerValidator.MatchString(strings.ToLower(name)) {
-		return errors.New("invalid ticker name '%s'", name)
 	}
 	return nil
 }

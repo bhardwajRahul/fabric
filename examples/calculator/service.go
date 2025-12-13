@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/microbus-io/fabric/errors"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 	"github.com/microbus-io/fabric/examples/calculator/intermediate"
 )
@@ -41,7 +40,7 @@ Service implements the calculator.example microservice.
 The Calculator microservice performs simple mathematical operations.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	sumAdd      atomic.Int64
 	sumSubtract atomic.Int64

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/trc"
@@ -38,10 +38,10 @@ type tickerCallback struct {
 
 // StartTicker initiates a recurring job at a set interval.
 // Tickers do not run when the connector is running in the TESTING deployment environment.
-// Ticker names are case-insensitive.
+// Ticker names are case sensitive.
 func (c *Connector) StartTicker(name string, interval time.Duration, handler service.TickerHandler) error {
-	if err := utils.ValidateTickerName(name); err != nil {
-		return c.captureInitErr(errors.Trace(err))
+	if name == "" {
+		return c.captureInitErr(errors.New("ticker name is required"))
 	}
 	if handler == nil {
 		return nil
@@ -49,7 +49,6 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 	if interval <= 0 {
 		return c.captureInitErr(errors.New("non-positive interval '%v'", interval))
 	}
-	name = utils.ToKebabCase(name)
 
 	c.tickersLock.Lock()
 	_, ok := c.tickers[name]
@@ -72,24 +71,20 @@ func (c *Connector) StartTicker(name string, interval time.Duration, handler ser
 
 // StopTicker stops a running ticker.
 // Ticker names are case-insensitive.
+// Ticker names are case sensitive.
 func (c *Connector) StopTicker(name string) error {
-	if err := utils.ValidateTickerName(name); err != nil {
-		return c.captureInitErr(errors.Trace(err))
-	}
-	name = utils.ToKebabCase(name)
-
 	c.tickersLock.Lock()
+	defer c.tickersLock.Unlock()
 	job, ok := c.tickers[name]
 	if !ok {
-		c.tickersLock.Unlock()
-		return errors.New("unknown ticker '%s'", name)
+		err := errors.New("unknown ticker '%s'", name)
+		return c.captureInitErr(err)
 	}
 	if job.Ticker != nil {
 		job.Ticker.Stop()
 		job.Ticker = nil
 	}
 	delete(c.tickers, name)
-	c.tickersLock.Unlock()
 	return nil
 }
 
@@ -144,7 +139,8 @@ func (c *Connector) runTicker(job *tickerCallback) {
 			}
 
 			// OpenTelemetry: create a span for the callback
-			ctx, span := c.StartSpan(c.Lifetime(), job.Name, trc.Internal())
+			handlerName := utils.ToKebabCase(job.Name)
+			ctx, span := c.StartSpan(c.Lifetime(), handlerName, trc.Internal())
 
 			c.pendingOps.Add(1)
 			startTime := time.Now()
@@ -168,7 +164,7 @@ func (c *Connector) runTicker(job *tickerCallback) {
 				ctx,
 				"microbus_callback_duration_seconds",
 				dur.Seconds(),
-				"handler", job.Name,
+				"handler", handlerName,
 				"error", func() string {
 					if err != nil {
 						return "ERROR"
@@ -191,6 +187,7 @@ func (c *Connector) runTicker(job *tickerCallback) {
 			}
 			if skipped > 0 {
 				c.LogWarn(c.Lifetime(), "Ticker skipped",
+					"name", job.Name,
 					"beats", skipped,
 					"runtime", dur,
 				)

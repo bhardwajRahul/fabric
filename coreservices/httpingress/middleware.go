@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/utils"
 )
 
@@ -61,6 +61,18 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m.Append(BlockedPaths, middleware.BlockedPaths(func(path string) bool {
 		if svc.blockedPaths[path] {
 			return true
+		}
+		p := path
+		for p != "" {
+			if svc.blockedPaths[p+"/*"] {
+				return true
+			}
+			slash := strings.LastIndex(p, "/")
+			if slash >= 0 {
+				p = p[:slash]
+			} else {
+				p = ""
+			}
 		}
 		dot := strings.LastIndex(path, ".")
 		if dot >= 0 && svc.blockedPaths["*"+path[dot:]] {

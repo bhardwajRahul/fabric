@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
@@ -79,9 +79,9 @@ func TestTester_StringCut(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -173,9 +173,9 @@ func TestTester_PointDistance(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -265,9 +265,9 @@ func TestTester_ShiftPoint(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -356,9 +356,9 @@ func TestTester_LinesIntersection(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -475,9 +475,9 @@ func TestTester_EchoAnything(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -560,9 +560,9 @@ func TestTester_SubArrayRange(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -623,9 +623,9 @@ func TestTester_SumTwoIntegers(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -675,9 +675,9 @@ func TestTester_FunctionPathArguments(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -761,9 +761,9 @@ func TestTester_NonStringPathArguments(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -830,9 +830,9 @@ func TestTester_UnnamedFunctionPathArguments(t *testing.T) {
 	tester := connector.New("tester.unnamedfunctionpatharguments.tester")
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -879,9 +879,9 @@ func TestTester_PathArgumentsPriority(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -953,9 +953,9 @@ func TestTester_WhatTimeIsIt(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1045,9 +1045,9 @@ func TestTester_AuthzRequired(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1109,9 +1109,9 @@ func TestTester_OnDiscovered(t *testing.T) {
 	hook := testerapi.NewHook(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1186,9 +1186,9 @@ func TestTester_OnDiscoveredSink(t *testing.T) {
 	_ = trigger
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1240,9 +1240,9 @@ func TestTester_Echo(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1328,9 +1328,9 @@ func TestTester_MultiValueHeaders(t *testing.T) {
 	)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1363,9 +1363,9 @@ func TestTester_WebPathArguments(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1456,9 +1456,9 @@ func TestTester_UnnamedWebPathArguments(t *testing.T) {
 	tester := connector.New("tester.unnamedwebpatharguments.tester")
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1508,9 +1508,9 @@ func TestTester_DirectoryServer(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1598,9 +1598,9 @@ func TestTester_Hello(t *testing.T) {
 	client := testerapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -1682,9 +1682,9 @@ func TestTester_OnceAMinute(t *testing.T) {
 	svc := NewService()
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 	)
 	app.RunInTest(t)
@@ -1702,9 +1702,9 @@ func TestTester_OnObserveMemoryAvailable(t *testing.T) {
 	svc := NewService()
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 	)
 	app.RunInTest(t)

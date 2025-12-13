@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -134,7 +134,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -250,7 +250,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -273,27 +273,15 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 SQL is the connection string to the database.
 */
-func (svc *Intermediate) SetSQL(dsn string) error {
+func (svc *Intermediate) SetSQL(dsn string) (err error) {
 	return svc.SetConfig("SQL", utils.AnyToString(dsn))
 }
 
 // doCreate handles marshaling for the Create function.
-func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.CreateIn
 	var o directoryapi.CreateOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i.HTTPRequestBody)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons`, &i, &i.HTTPRequestBody, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -317,22 +305,10 @@ func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) error 
 }
 
 // doLoad handles marshaling for the Load function.
-func (svc *Intermediate) doLoad(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doLoad(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.LoadIn
 	var o directoryapi.LoadOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons/key/{key}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons/key/{key}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -356,22 +332,10 @@ func (svc *Intermediate) doLoad(w http.ResponseWriter, r *http.Request) error {
 }
 
 // doDelete handles marshaling for the Delete function.
-func (svc *Intermediate) doDelete(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doDelete(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.DeleteIn
 	var o directoryapi.DeleteOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons/key/{key}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons/key/{key}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -395,22 +359,10 @@ func (svc *Intermediate) doDelete(w http.ResponseWriter, r *http.Request) error 
 }
 
 // doUpdate handles marshaling for the Update function.
-func (svc *Intermediate) doUpdate(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doUpdate(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.UpdateIn
 	var o directoryapi.UpdateOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons/key/{key}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i.HTTPRequestBody)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons/key/{key}`, &i, &i.HTTPRequestBody, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -435,22 +387,10 @@ func (svc *Intermediate) doUpdate(w http.ResponseWriter, r *http.Request) error 
 }
 
 // doLoadByEmail handles marshaling for the LoadByEmail function.
-func (svc *Intermediate) doLoadByEmail(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doLoadByEmail(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.LoadByEmailIn
 	var o directoryapi.LoadByEmailOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons/email/{email}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons/email/{email}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -474,22 +414,10 @@ func (svc *Intermediate) doLoadByEmail(w http.ResponseWriter, r *http.Request) e
 }
 
 // doList handles marshaling for the List function.
-func (svc *Intermediate) doList(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doList(w http.ResponseWriter, r *http.Request) (err error) {
 	var i directoryapi.ListIn
 	var o directoryapi.ListOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/persons`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/persons`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

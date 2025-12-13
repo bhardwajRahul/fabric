@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package smtpingress
 
-const Version = 172
-const SourceCodeSHA256 = "830afdeec4dbd4aa689001b29947e9c8555cfd183100cc00a3b93c1b9b8618db"
-const Timestamp = "2025-11-08T21:18:36.208364Z"
-
-/* {
-	"ver": 172,
-	"sha256": "830afdeec4dbd4aa689001b29947e9c8555cfd183100cc00a3b93c1b9b8618db",
-	"ts": "2025-11-08T21:18:36.208364Z"
-} */
+const (
+	Version = 179
+	SourceCodeSHA256 = "89442ffa43f67386d24628e09cfb622b391948828793a0bcd0d47feb32b0c5e7"
+	Timestamp = "2026-01-29T13:04:05.40168Z"
+)

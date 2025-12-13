@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package httpegress
 
-const Version = 147
-const SourceCodeSHA256 = "1ca92453213c3a3c6729920bf3bc3bc85c19ca6194ca79c7fa20d87e19dc634a"
-const Timestamp = "2025-11-25T01:46:34.789241Z"
-
-/* {
-	"ver": 147,
-	"sha256": "1ca92453213c3a3c6729920bf3bc3bc85c19ca6194ca79c7fa20d87e19dc634a",
-	"ts": "2025-11-25T01:46:34.789241Z"
-} */
+const (
+	Version = 155
+	SourceCodeSHA256 = "8a0eadcc5778d3482da039aa2b79d445e7122fb24618d48eb1c98a03bdccc64a"
+	Timestamp = "2026-01-29T13:04:05.056365Z"
+)

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package connector
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/microbus-io/fabric/cfg"
@@ -114,7 +115,7 @@ func TestConnector_FetchConfig(t *testing.T) {
 	assert.NoError(err)
 	callbackCalled := false
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
-		assert.True(changed("FOO"))
+		assert.True(changed("foo"))
 		assert.True(changed("int"))
 		callbackCalled = true
 		return nil
@@ -211,7 +212,7 @@ func TestConnector_CallbackWhenStarted(t *testing.T) {
 	assert.Equal(1, callbackCalled)
 }
 
-func TestConnector_CaseInsensitiveConfig(t *testing.T) {
+func TestConnector_CaseSensitiveConfig(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 	ctx := context.Background()
@@ -234,7 +235,7 @@ func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	defer mockCfg.Shutdown()
 
 	// Connector
-	con := New("case.insensitive.config.connector")
+	con := New("case.sensitive.config.connector")
 	con.SetDeployment(LAB) // Configs are disabled in TESTING
 	con.SetPlane(plane)
 	err = con.DefineConfig("foo-config_", cfg.DefaultValue("bar"))
@@ -242,16 +243,15 @@ func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	callbackCalled := false
 	err = con.SetOnConfigChanged(func(ctx context.Context, changed func(string) bool) error {
 		assert.True(changed("foo-config_"))
-		assert.True(changed("foo-CONFIG_"))
-		assert.True(changed("FOO-config_"))
+		assert.False(changed("FOO-CONFIG_"))
 		callbackCalled = true
 		return nil
 	})
-	assert.NoError(err)
-
-	assert.Equal(configValue, con.Config("foo-config_"))
-	assert.Equal(configValue, con.Config("foo-CONFIG_"))
-	assert.Equal(configValue, con.Config("FOO-config_"))
+	assert.Expect(
+		err, nil,
+		con.Config("foo-config_"), configValue,
+		con.Config("FOO-CONFIG_"), "",
+	)
 
 	err = con.Startup()
 	assert.NoError(err)
@@ -260,11 +260,67 @@ func TestConnector_CaseInsensitiveConfig(t *testing.T) {
 	assert.False(callbackCalled)
 
 	configValue = "baz"
-	_, err = mockCfg.GET(ctx, "https://case.insensitive.config.connector:888/config-refresh")
+	_, err = mockCfg.GET(ctx, "https://case.sensitive.config.connector:888/config-refresh")
+	assert.Expect(
+		err, nil,
+		callbackCalled, true,
+		con.Config("foo-config_"), configValue,
+		con.Config("FOO-CONFIG_"), "",
+	)
+}
+
+func TestConnector_ReadFromFile(t *testing.T) {
+	// No parallel
+	assert := testarossa.For(t)
+
+	plane := rand.AlphaNum64(12)
+
+	os.Chdir("testdata/subdir")
+	defer os.Chdir("..")
+	defer os.Chdir("..")
+
+	// Mock a config service
+	mockCfg := New("configurator.core")
+	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
+	mockCfg.SetPlane(plane)
+	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"values":{"Provider":"Configurator"}}`))
+		return nil
+	})
+
+	err := mockCfg.Startup()
+	assert.NoError(err)
+	defer mockCfg.Shutdown()
+
+	// Connector
+	con := New("read.from.file.config.connector")
+	con.SetDeployment(LAB) // Configs are disabled in TESTING
+	con.SetPlane(plane)
+	err = con.DefineConfig("SubDir")
+	assert.NoError(err)
+	err = con.DefineConfig("case")
+	assert.NoError(err)
+	err = con.DefineConfig("CASE")
+	assert.NoError(err)
+	err = con.DefineConfig("Domain")
+	assert.NoError(err)
+	err = con.DefineConfig("Provider")
+	assert.NoError(err)
+	err = con.DefineConfig("Empty")
 	assert.NoError(err)
 
-	assert.True(callbackCalled)
-	assert.Equal(configValue, con.Config("foo-config_"))
-	assert.Equal(configValue, con.Config("foo-CONFIG_"))
-	assert.Equal(configValue, con.Config("FOO-config_"))
+	err = con.Startup()
+	assert.NoError(err)
+	defer con.Shutdown()
+
+	assert.Expect(
+		con.Config("SubDir"), "Child Subdomain",
+		con.Config("case"), "lowercase",
+		con.Config("CASE"), "UPPERCASE",
+		con.Config("Domain"), "Subdomain",
+		con.Config("Provider"), "Configurator",
+		con.Config("Empty"), "",
+		con.Config("Undefined"), "",
+	)
 }

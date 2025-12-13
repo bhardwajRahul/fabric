@@ -55,9 +55,9 @@ func TestEventsink_Registered(t *testing.T) {
 	eventsourceTrigger := eventsourceapi.NewMulticastTrigger(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -149,9 +149,9 @@ func TestEventsink_OnAllowRegister(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)

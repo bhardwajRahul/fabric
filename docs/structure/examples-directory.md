@@ -27,7 +27,7 @@ Next, define the database connection `db *sql.DB` as a member property of the `S
 import _ "github.com/go-sql-driver/mysql"
 
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	db *sql.DB
 }

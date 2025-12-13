@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"net/mail"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -143,12 +144,7 @@ func Validate(rule string, value string) (ok bool) {
 
 	case "set":
 		set := strings.Split(spec, "|")
-		for _, s := range set {
-			if value == s {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(set, value)
 
 	case "url":
 		u, err := url.Parse(value)

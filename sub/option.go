@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ package sub
 import (
 	"regexp"
 
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/boolexp"
+	"github.com/microbus-io/errors"
 )
 
 // Option is used to construct a subscription in Connector.Subscribe
@@ -79,7 +79,7 @@ func LoadBalanced() Option {
 // A request that doesn't satisfy the constraint is denied with a 403 forbidden error.
 func Actor(boolExp string) Option {
 	return func(sub *Subscription) error {
-		_, err := utils.EvaluateBoolExp(boolExp, nil)
+		_, err := boolexp.Eval(boolExp, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}

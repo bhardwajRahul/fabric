@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,13 +25,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/pub"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/coreservices/openapiportal/intermediate"
 	"github.com/microbus-io/fabric/coreservices/openapiportal/openapiportalapi"
+	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/pub"
 )
 
 var (
@@ -49,7 +48,7 @@ The OpenAPI microservice lists links to the OpenAPI endpoint of all microservice
 on the requested port.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.
@@ -132,11 +131,10 @@ func (svc *Service) List(w http.ResponseWriter, r *http.Request) (err error) {
 		Port:  r.URL.Port(),
 		Infos: infos,
 	}
-	output, err := svc.ExecuteResTemplate("list.html", data)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err = svc.WriteResTemplate(w, "list.html", data)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, err = w.Write(output)
 	return errors.Trace(err)
 }

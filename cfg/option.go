@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ limitations under the License.
 
 package cfg
 
-import "github.com/microbus-io/fabric/errors"
+import "github.com/microbus-io/errors"
 
 // Option is used to construct a request in Connector.Publish
 type Option func(c *Config) error

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -128,7 +128,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -146,7 +146,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -156,22 +156,10 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 }
 
 // doValues handles marshaling for the Values function.
-func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.ValuesIn
 	var o configuratorapi.ValuesOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/values`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:888/values`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -195,22 +183,10 @@ func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) error 
 }
 
 // doRefresh handles marshaling for the Refresh function.
-func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.RefreshIn
 	var o configuratorapi.RefreshOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/refresh`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:444/refresh`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -233,22 +209,10 @@ func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) error
 }
 
 // doSyncRepo handles marshaling for the SyncRepo function.
-func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.SyncRepoIn
 	var o configuratorapi.SyncRepoOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/sync-repo`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:888/sync-repo`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -273,22 +237,10 @@ func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) erro
 }
 
 // doValues443 handles marshaling for the Values443 function.
-func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.Values443In
 	var o configuratorapi.Values443Out
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/values`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/values`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -312,22 +264,10 @@ func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) err
 }
 
 // doRefresh443 handles marshaling for the Refresh443 function.
-func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.Refresh443In
 	var o configuratorapi.Refresh443Out
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/refresh`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/refresh`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -350,22 +290,10 @@ func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) er
 }
 
 // doSync443 handles marshaling for the Sync443 function.
-func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) (err error) {
 	var i configuratorapi.Sync443In
 	var o configuratorapi.Sync443Out
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/sync`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/sync`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

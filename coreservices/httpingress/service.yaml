@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Microbus LLC and various contributors
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -116,10 +116,8 @@ configs:
       /Portal0000.htm
       /docs/cplugError.html/
       /CSS/Miniweb.css
-      /scripts/WPnBr.dll
-      /.git/config
-      /cgi-bin/.%2e/.%2e/.%2e/.%2e/bin/sh
-      /cgi-bin/luci/;stok=/locale
+      /.git/*
+      /cgi-bin/*
       /actuator/gateway/routes
       /actuator/health
       /Public/home/js/check.js
@@ -128,7 +126,6 @@ configs:
       /ecp/Current/exporttool/microsoft.exchange.ediscovery.exporttool.application
       /owa/auth/x.js
       /static/admin/javascript/hetong.js
-      /.git/HEAD
       /sslvpnLogin.html
       /vpn/index.html
       /wsman
@@ -139,10 +136,11 @@ configs:
       /cf_scripts/scripts/ajax/ckeditor/ckeditor.js
       /Temporary_Listen_Addresses/
       /manager/html
-      /logon/LogonPoint/custom.html
-      /logon/LogonPoint/index.html
+      /logon/LogonPoint/*
       /catalog-portal/ui/oauth/verify
       /error_log/.git/HEAD
+      /containers/json
+      /hello.world
       *.cfm
       *.asp
       *.aspx
@@ -279,7 +277,7 @@ tickers:
 # description - Documentation
 # kind - The kind of the metric, "counter" (default), "gauge" or "histogram"
 # buckets - Bucket boundaries for histograms [x,y,z,...]
-# alias - The name of the OpenTelemetry metric (defaults to module_package_function_name)
+# alias - The name to post to OpenTelemetry (defaults to the function name in snake_case)
 # callback - Whether or not to observe the metric just in time (defaults to false)
 metrics:
   # - signature:

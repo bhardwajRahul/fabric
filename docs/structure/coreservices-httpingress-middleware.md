@@ -23,7 +23,7 @@ The following middlewares are available in the `middleware` package:
 
 - `Authorization` looks for a token in the "Authorization: Bearer" header or the "Authorization" cookie,
 validates it with its issuer, and associates the corresponding actor with the request
-- `BlockedPaths` filters incoming requests based on their URL path. The default setting blocks common patterns that are obviously trying to probe the server for vulnerabilities
+- `BlockedPaths` filters incoming requests based on their URL path. The default setting blocks common patterns that are obviously trying to probe the server for vulnerabilities. Supported block patterns: `/exact/path`, `/path/subtree/*`, `*.ext` 
 - `CacheControl` sets the Cache-Control header if not otherwise specified
 - `CharsetUTF8` appends `; charset=utf-8` to the `Content-Type` header of textual responses
 - `Compress` compresses textual responses using brotli, gzip or deflate

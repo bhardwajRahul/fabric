@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/utils"
 )
 
@@ -30,7 +30,7 @@ import (
 func JoinHostAndPath(host string, path string) string {
 	if path == "" {
 		// (empty)
-		return "https://" + host + ":443"
+		return "https://" + host
 	}
 	if strings.HasPrefix(path, ":") {
 		// :1080/path
@@ -42,11 +42,11 @@ func JoinHostAndPath(host string, path string) string {
 	}
 	if strings.HasPrefix(path, "/") {
 		// /path/with/slash
-		return "https://" + host + ":443" + path
+		return "https://" + host + path
 	}
 	if !strings.Contains(path, "://") {
 		// path/with/no/slash
-		return "https://" + host + ":443/" + path
+		return "https://" + host + "/" + path
 	}
 	return path
 }
@@ -81,7 +81,7 @@ func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := utils.ValidateHostname(parsed.Hostname()); err != nil {
+	if err := ValidateHostname(parsed.Hostname()); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if parsed.Scheme == "" {

@@ -6,28 +6,30 @@ The [code generator](../blocks/codegen.md) is the primary tool in `Microbus` for
 
 #### Step 1: Create a Directory
 
-Create a new directory for the new microservice. If you expect the solution to have a large number of microservice, you might want to create a nested structure. Lowercase directory names are recommended.
+Create a new directory for the new microservice. If you expect the solution to have a large number of microservices, you might want to create a nested structure. Use only the lowercase letters `a` through `z` for the name of the directory.
 
 ```shell
-mkdir mydomain/myservice
+mkdir -p mydomain/myservice
+cd mydomain/myservice
 ```
 
 #### Step 2: Initialize the Code Generator
 
-Create `mydomain/myservice/doc.go` with the `go:generate` instruction that will run the code generator. It is recommended to echo the name of the directory for the name of the package.
+Create `doc.go` with the `go:generate` directive that will run the code generator. Set the name of the package to be the same as the name of the directory.
+
 
 ```go
+package myservice
+
 //go:generate go run github.com/microbus-io/fabric/codegen
 
-package myservice
 ```
 
-#### Step 3: Generate `service.yaml`
+#### Step 3: Generate File Structure
 
-From within the directory, run `go generate` to create an empty `service.yaml` template.
+Within the directory of the microservice, run `go generate` to generate the file structure of the microservice, including `service.yaml`.
 
 ```shell
-cd mydomain/myservice
 go generate
 ```
 
@@ -62,18 +64,12 @@ Start your coding agent, e.g.:
 claude
 ```
 
-Instruct the agent to read `AGENTS.md` at the root of the project.
-
-```
-Read @AGENTS.md
-```
-
 #### Step 2: Create a New Microservice
 
 Use a prompt similar to the following to create a new microservice.
 
 ```
-Use the appropriate skill to create a new "stripe" microservice that will process credit card payments via Stripe. Place it under the @financial directory. Set its hostname to "stripe.financial.ex".
+Create a new "stripe" microservice that will process credit card payments via Stripe. Place it under the @financial directory. Set its hostname to "stripe.financial.ex".
 ```
 
 #### Step 3: Implement the Business Logic
@@ -81,9 +77,9 @@ Use the appropriate skill to create a new "stripe" microservice that will proces
 Use prompts similar to the following to add one feature at a time to the microservice:
 
 ```
-Use the appropriate skill to add a config property for the Stripe API key.
+Add a config property for the Stripe API key.
 ```
 
 ```
-Use the appropriate skill to create a functional endpoint "CreateIntent" that accepts a credit card number, email, and a dollar amount as arguments, and calls the Stripe API to create an intent. If successful, it should return the transaction ID.
+Create a functional endpoint "CreateIntent" that accepts a credit card number, email, and a dollar amount as arguments, and calls the Stripe API to create an intent. If successful, it should return the transaction ID.
 ```

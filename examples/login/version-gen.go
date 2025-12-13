@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package login
 
-const Version = 80
-const SourceCodeSHA256 = "c013a7622db07668083117aa9b1a1c63144b7701253ecd646bf22b56d3fb7792"
-const Timestamp = "2025-11-29T02:31:02.051216Z"
-
-/* {
-	"ver": 80,
-	"sha256": "c013a7622db07668083117aa9b1a1c63144b7701253ecd646bf22b56d3fb7792",
-	"ts": "2025-11-29T02:31:02.051216Z"
-} */
+const (
+	Version = 89
+	SourceCodeSHA256 = "d6d9806be6fac9ebe8122430490e835a8afb356323d4a9e2bd8641ca570a1d7c"
+	Timestamp = "2026-01-29T13:04:06.145027Z"
+)

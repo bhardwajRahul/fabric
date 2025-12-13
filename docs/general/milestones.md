@@ -340,3 +340,15 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Claims transformer extension to the token issuer
 - Use `iss` claim instead of `validator` claim to identify the token issuer of a JWT
 - Handle `Location` response header in root path middleware
+
+[Milestone 42](https://github.com/microbus-io/fabric/tree/milestone/42):
+
+- Support a directory name that is different from the microservice's package name
+- Updated thrid-party dependencies
+- Ported the `errors` package to a separate module
+- Ported the code generator to a separate module
+- Ported the `EvalBoolExp` utility to a separate module
+- Enabled blocking entire subtrees by the `BlockedPath` middleware
+- Changed configuration property names to be case sensitive
+- Connect to NATS using user JWT and NKey seed
+- NATS connection pooling in single executable

@@ -39,9 +39,9 @@ func TestCalculator_Arithmetic(t *testing.T) {
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -127,9 +127,9 @@ func TestCalculator_Square(t *testing.T) {
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -177,9 +177,9 @@ func TestCalculator_Distance(t *testing.T) {
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -276,9 +276,9 @@ func TestCalculator_OnObserveSumOperations(t *testing.T) {
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -336,9 +336,9 @@ func TestCalculator_ConcurrentOperations(t *testing.T) {
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)

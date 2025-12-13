@@ -9,13 +9,13 @@ The `Microbus` framework uses environment variables for various purposes:
 * Configuring the URL to the OpenTelemetry collector endpoint
 * Designating a geographic locality
 
-Environment variables may also be set by placing an `env.yaml` file in the working directory of the executable running the microservice. The bundled example application includes such a file at `main/env.yaml`.
+Environment variables may also be set by placing an `env.yaml` or `env.local.yaml` file in the working directory of the executable running the microservice, or any ancestor directory thereof. The bundled example application includes such a file at `main/env.yaml`.
 
 ### Transports
 
 A microservice can't communicate with other microservices, including the configurator microservice, before connecting to the transport. [Initializing the NATS connection](../tech/nats-connection.md) therefore relies on environment variables: `MICROBUS_NATS`, `MICROBUS_NATS_USER`, `MICROBUS_NATS_PASSWORD` and `MICROBUS_NATS_TOKEN`.
 
-`MICROBUS_SHORT_CIRCUIT` can be set to `0` or `false` to disable the [short-circuit transport](../tech/short-circuit.md).
+`MICROBUS_SHORT_CIRCUIT` can be set to `0` or `false` to disable the [short-circuit transport](../tech/short-circuit.md). It is generally recommended to keep the short-circuit transport enabled.
 
 ### Deployment
 
@@ -24,14 +24,13 @@ The `MICROBUS_DEPLOYMENT` environment variable determines the [deployment enviro
 ### Plane of Communication
 
 The plane of communication is a unique prefix set for all communications sent or received over NATS.
-It is used to isolate communication among a group of microservices over a NATS cluster
-that is shared with other microservices.
+It is used to isolate communication among a group of microservices over a NATS cluster that is shared with other microservices.
 
 If not explicitly set via the `SetPlane` method of the `Connector`, the value is pulled from the `MICROBUS_PLANE` environment variable. The plane must include only alphanumeric characters and is case-sensitive.
 
 Applications created with `application.NewTesting` set a random plane to eliminate the chance of collision when tests are executed in parallel in the same NATS cluster, e.g. using `go test ./... -p=8`.
 
-This is an advanced feature and in most cases there is no need to customize the plane of communications.
+In most cases there is no need to customize the plane of communications.
 
 ### Locality
 

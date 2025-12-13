@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,12 +23,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/frame"
-
 	"github.com/microbus-io/fabric/examples/login/intermediate"
 	"github.com/microbus-io/fabric/examples/login/loginapi"
+	"github.com/microbus-io/fabric/frame"
 )
 
 var (
@@ -49,7 +48,7 @@ Service implements the login.example microservice.
 The Login microservice demonstrates usage of authentication and authorization.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.
@@ -131,13 +130,12 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) {
 		Src:    src,
 		Denied: submitted && !ok,
 	}
-	rendered, err := svc.ExecuteResTemplate("login.html", data)
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Language", "en-US")
+	err = svc.WriteResTemplate(w, "login.html", data)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Language", "en-US")
-	w.Write(rendered)
 	return nil
 }
 
@@ -178,13 +176,12 @@ func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) 
 		Actor: actor,
 		Raw:   r.Header.Get(frame.HeaderActor),
 	}
-	rendered, err := svc.ExecuteResTemplate("welcome.html", data)
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Language", "en-US")
+	err = svc.WriteResTemplate(w, "welcome.html", data)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Language", "en-US")
-	w.Write(rendered)
 	return nil
 }
 
@@ -192,13 +189,12 @@ func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) 
 AdminOnly is only accessible by admins.
 */
 func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error) {
-	rendered, err := svc.ExecuteResTemplate("admin-only.html", nil)
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Language", "en-US")
+	err = svc.WriteResTemplate(w, "admin-only.html", nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Language", "en-US")
-	w.Write(rendered)
 	return nil
 }
 
@@ -206,12 +202,11 @@ func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error
 ManagerOnly is only accessible by managers.
 */
 func (svc *Service) ManagerOnly(w http.ResponseWriter, r *http.Request) (err error) {
-	rendered, err := svc.ExecuteResTemplate("manager-only.html", nil)
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Language", "en-US")
+	err = svc.WriteResTemplate(w, "manager-only.html", nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("Content-Language", "en-US")
-	w.Write(rendered)
 	return nil
 }

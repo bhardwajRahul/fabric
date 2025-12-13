@@ -25,8 +25,6 @@ cd examples/wordly
 go generate
 ```
 
-A `service.yaml` template is generated. We'll fill it in next.
-
 #### Step 2: Service Definition
 
 Open `service.yaml`. This is your starting point and where you declare the structure of the microservice. First, name the service in the general section:
@@ -94,7 +92,7 @@ A `map[string]*Game` will keep track of all games, indexed by the game ID.
 
 ```go
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	games map[string]*Game
 }

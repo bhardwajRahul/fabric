@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -159,15 +159,15 @@ func NewService(impl ToDo, version int) *Intermediate {
 	// Metrics
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.DescribeCounter(
-		`fabric_tester_num_of_ops`,
+		`num_of_ops`,
 		`NumOfOps counts the number of operations.`,
 	)
 	svc.DescribeGauge(
-		`fabric_tester_memory_available`,
+		`memory_available`,
 		`MemoryAvailable gauges the amount of available memory.`,
 	)
 	svc.DescribeHistogram(
-		`fabric_tester_op_duration_seconds`,
+		`op_duration_seconds`,
 		`OpDurationSeconds keeps track of the duration of operations.`,
 		[]float64{0.1, 0.5, 1, 5, 10},
 	)
@@ -179,7 +179,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -477,7 +477,7 @@ An httpResponseBody argument prevents returning additional values, except for th
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -487,22 +487,10 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 }
 
 // doStringCut handles marshaling for the StringCut function.
-func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.StringCutIn
 	var o testerapi.StringCutOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/string-cut`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/string-cut`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -527,22 +515,10 @@ func (svc *Intermediate) doStringCut(w http.ResponseWriter, r *http.Request) err
 }
 
 // doPointDistance handles marshaling for the PointDistance function.
-func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.PointDistanceIn
 	var o testerapi.PointDistanceOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/point-distance`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/point-distance`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -567,22 +543,10 @@ func (svc *Intermediate) doPointDistance(w http.ResponseWriter, r *http.Request)
 }
 
 // doShiftPoint handles marshaling for the ShiftPoint function.
-func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.ShiftPointIn
 	var o testerapi.ShiftPointOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/shift-point`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/shift-point`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -608,22 +572,10 @@ func (svc *Intermediate) doShiftPoint(w http.ResponseWriter, r *http.Request) er
 }
 
 // doLinesIntersection handles marshaling for the LinesIntersection function.
-func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.LinesIntersectionIn
 	var o testerapi.LinesIntersectionOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/lines-intersection`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/lines-intersection`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -648,22 +600,10 @@ func (svc *Intermediate) doLinesIntersection(w http.ResponseWriter, r *http.Requ
 }
 
 // doEchoAnything handles marshaling for the EchoAnything function.
-func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.EchoAnythingIn
 	var o testerapi.EchoAnythingOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/echo-anything`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/echo-anything`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -687,22 +627,10 @@ func (svc *Intermediate) doEchoAnything(w http.ResponseWriter, r *http.Request) 
 }
 
 // doSubArrayRange handles marshaling for the SubArrayRange function.
-func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.SubArrayRangeIn
 	var o testerapi.SubArrayRangeOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/sub-array-range/{max}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i.HTTPRequestBody)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/sub-array-range/{max}`, &i, &i.HTTPRequestBody, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -729,22 +657,10 @@ func (svc *Intermediate) doSubArrayRange(w http.ResponseWriter, r *http.Request)
 }
 
 // doSumTwoIntegers handles marshaling for the SumTwoIntegers function.
-func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.SumTwoIntegersIn
 	var o testerapi.SumTwoIntegersOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/sum-two-integers`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/sum-two-integers`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -770,22 +686,10 @@ func (svc *Intermediate) doSumTwoIntegers(w http.ResponseWriter, r *http.Request
 }
 
 // doFunctionPathArguments handles marshaling for the FunctionPathArguments function.
-func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.FunctionPathArgumentsIn
 	var o testerapi.FunctionPathArgumentsOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/function-path-arguments/fixed/{named}/{}/{suffix+}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -811,22 +715,10 @@ func (svc *Intermediate) doFunctionPathArguments(w http.ResponseWriter, r *http.
 }
 
 // doNonStringPathArguments handles marshaling for the NonStringPathArguments function.
-func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.NonStringPathArgumentsIn
 	var o testerapi.NonStringPathArgumentsOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/non-string-path-arguments/fixed/{named}/{}/{suffix+}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -852,22 +744,10 @@ func (svc *Intermediate) doNonStringPathArguments(w http.ResponseWriter, r *http
 }
 
 // doUnnamedFunctionPathArguments handles marshaling for the UnnamedFunctionPathArguments function.
-func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.UnnamedFunctionPathArgumentsIn
 	var o testerapi.UnnamedFunctionPathArgumentsOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/unnamed-function-path-arguments/{}/foo/{}/bar/{+}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -893,22 +773,10 @@ func (svc *Intermediate) doUnnamedFunctionPathArguments(w http.ResponseWriter, r
 }
 
 // doPathArgumentsPriority handles marshaling for the PathArgumentsPriority function.
-func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.PathArgumentsPriorityIn
 	var o testerapi.PathArgumentsPriorityOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/path-arguments-priority/{foo}`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/path-arguments-priority/{foo}`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -932,22 +800,10 @@ func (svc *Intermediate) doPathArgumentsPriority(w http.ResponseWriter, r *http.
 }
 
 // doWhatTimeIsIt handles marshaling for the WhatTimeIsIt function.
-func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.WhatTimeIsItIn
 	var o testerapi.WhatTimeIsItOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/what-time-is-it`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/what-time-is-it`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -970,22 +826,10 @@ func (svc *Intermediate) doWhatTimeIsIt(w http.ResponseWriter, r *http.Request) 
 }
 
 // doAuthzRequired handles marshaling for the AuthzRequired function.
-func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doAuthzRequired(w http.ResponseWriter, r *http.Request) (err error) {
 	var i testerapi.AuthzRequiredIn
 	var o testerapi.AuthzRequiredOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/authz-required`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/authz-required`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1021,12 +865,12 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 AddNumOfOps adds to the value of the counter metric.
 NumOfOps counts the number of operations.
 */
-func (svc *Intermediate) AddNumOfOps(ctx context.Context, val int, op string, code int, success bool) error {
+func (svc *Intermediate) AddNumOfOps(ctx context.Context, val int, op string, code int, success bool) (err error) {
 	_val := float64(val)
 	_op := utils.AnyToString(op)
 	_code := utils.AnyToString(code)
 	_success := utils.AnyToString(success)
-	return svc.AddCounter(ctx, "fabric_tester_num_of_ops",
+	return svc.AddCounter(ctx, "num_of_ops",
 		_val,
 		`op`, _op,
 		`code`, _code,
@@ -1039,21 +883,21 @@ NumOfOps counts the number of operations.
 
 Deprecated: Use AddNumOfOps
 */
-func (svc *Intermediate) IncrementNumOfOps(val int, op string, code int, success bool) error {
+func (svc *Intermediate) IncrementNumOfOps(val int, op string, code int, success bool) (err error) {
 	_val := float64(val)
 	_op := utils.AnyToString(op)
 	_code := utils.AnyToString(code)
 	_success := utils.AnyToString(success)
-	return svc.IncrementMetric("fabric_tester_num_of_ops", _val, _op, _code, _success)
+	return svc.IncrementMetric("num_of_ops", _val, _op, _code, _success)
 }
 
 /*
 RecordMemoryAvailable records the current value of the gauge metric.
 MemoryAvailable gauges the amount of available memory.
 */
-func (svc *Intermediate) RecordMemoryAvailable(ctx context.Context, bytes int) error {
+func (svc *Intermediate) RecordMemoryAvailable(ctx context.Context, bytes int) (err error) {
 	_bytes := float64(bytes)
-	return svc.RecordGauge(ctx, "fabric_tester_memory_available",
+	return svc.RecordGauge(ctx, "memory_available",
 		_bytes)
 }
 
@@ -1063,9 +907,9 @@ MemoryAvailable gauges the amount of available memory.
 
 Deprecated: Use RecordMemoryAvailable
 */
-func (svc *Intermediate) ObserveMemoryAvailable(bytes int) error {
+func (svc *Intermediate) ObserveMemoryAvailable(bytes int) (err error) {
 	_bytes := float64(bytes)
-	return svc.ObserveMetric("fabric_tester_memory_available", _bytes)
+	return svc.ObserveMetric("memory_available", _bytes)
 }
 
 /*
@@ -1074,21 +918,21 @@ MemoryAvailable gauges the amount of available memory.
 
 Deprecated: Use RecordMemoryAvailable
 */
-func (svc *Intermediate) IncrementMemoryAvailable(bytes int) error {
+func (svc *Intermediate) IncrementMemoryAvailable(bytes int) (err error) {
 	_bytes := float64(bytes)
-	return svc.IncrementMetric("fabric_tester_memory_available", _bytes)
+	return svc.IncrementMetric("memory_available", _bytes)
 }
 
 /*
 RecordOpDurationSeconds records the current value of the histogram metric.
 OpDurationSeconds keeps track of the duration of operations.
 */
-func (svc *Intermediate) RecordOpDurationSeconds(ctx context.Context, d time.Duration, op string, code int, success bool) error {
+func (svc *Intermediate) RecordOpDurationSeconds(ctx context.Context, d time.Duration, op string, code int, success bool) (err error) {
 	_d := d.Seconds()
 	_op := utils.AnyToString(op)
 	_code := utils.AnyToString(code)
 	_success := utils.AnyToString(success)
-	return svc.RecordHistogram(ctx, "fabric_tester_op_duration_seconds",
+	return svc.RecordHistogram(ctx, "op_duration_seconds",
 		_d,
 		`op`, _op,
 		`code`, _code,
@@ -1101,10 +945,10 @@ OpDurationSeconds keeps track of the duration of operations.
 
 Deprecated: Use RecordOpDurationSeconds
 */
-func (svc *Intermediate) ObserveOpDurationSeconds(d time.Duration, op string, code int, success bool) error {
+func (svc *Intermediate) ObserveOpDurationSeconds(d time.Duration, op string, code int, success bool) (err error) {
 	_d := d.Seconds()
 	_op := utils.AnyToString(op)
 	_code := utils.AnyToString(code)
 	_success := utils.AnyToString(success)
-	return svc.ObserveMetric("fabric_tester_op_duration_seconds", _d, _op, _code, _success)
+	return svc.ObserveMetric("op_duration_seconds", _d, _op, _code, _success)
 }

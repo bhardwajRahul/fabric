@@ -11,12 +11,12 @@ Copy this checklist and track your progress:
 Creating or modifying a functional endpoint:
 - [ ] Step 1: Read local AGENTS.md file
 - [ ] Step 2: Define in service.yaml
-- [ ] Step 3: Generate Boilerplate Code
-- [ ] Step 4: Define Custom Types
-- [ ] Step 5: Move Implementation and Test if Renamed
-- [ ] Step 6: Implement the Business Logic
-- [ ] Step 7: Test the Function
-- [ ] Step 8: Document the Microservice
+- [ ] Step 3: Generate boilerplate code
+- [ ] Step 4: Define custom types
+- [ ] Step 5: Move implementation and test if renamed
+- [ ] Step 6: Implement the business logic
+- [ ] Step 7: Test the function
+- [ ] Step 8: Document the microservice
 - [ ] Step 9: Versioning
 ```
 
@@ -38,11 +38,11 @@ functions:
 	method: ANY
 ```
 
-#### Step 3: Generate Boilerplate Code
+#### Step 3: Generate boilerplate code
 
 If you've made changes to `service.yaml`, run `go generate` to generate the boilerplate code.
 
-#### Step 4: Define Custom Types
+#### Step 4: Define custom types
 
 If the new function is using non-primitive custom types such as structs, look for their definition in the API directory.
 - Define the properties of any custom types as needed. Property names should be in PascalCase.
@@ -55,11 +55,11 @@ type CustomType struct {
 }
 ```
 
-#### Step 5: Move Implementation and Test if Renamed
+#### Step 5: Move implementation and test if renamed
 
 If you made a change to the name of the method in the `signature` field, you need to move over its implementation in `service.go` from under the old name to the new name. Similarly, you'll need to move over the implementation of the tests in `service_test.go`. 
 
-#### Step 6: Implement the Business Logic
+#### Step 6: Implement the business logic
 
 Look for the function declaration in `service.go` and implement or adjust its logic appropriately.
 
@@ -70,7 +70,9 @@ func (svc *Service) MyNewFunction(ctx context.Context, primitiveParam string, cu
 }
 ```
 
-#### Step 7: Test the Function
+#### Step 7: Test the function
+
+Skip this step if integration tests were skipped for this microservice, or if instructed to be "quick".
 
 Look for the integration test created in `service_test.go` for the function and implement or adjust it appropriately.
 - Follow the pattern recommendation in the code
@@ -82,9 +84,11 @@ func TestMyservice_MyNewFunction(t *testing.T) {
 }
 ```
 
-#### Step 8: Document the Microservice
+#### Step 8: Document the microservice
 
-Generate documentation for this microservice that captures its purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future. Store the result in the microservice's local `AGENTS.md` file.
+Skip this step if instructed to be "quick".
+
+Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
 
 #### Step 9: Versioning
 

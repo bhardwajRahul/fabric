@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -320,14 +320,14 @@ func TestConnector_TickerStop(t *testing.T) {
 
 	<-enter
 	assert.Equal(int32(1), count.Load())
-	con.StopTicker("MY-TICKER_123")
+	con.StopTicker("my-ticker_123")
 	<-exit
 
 	time.Sleep(2 * interval)
 	assert.Equal(int32(1), count.Load())
 
 	// Restart
-	con.StartTicker("My-Ticker_123", interval, func(ctx context.Context) error {
+	con.StartTicker("my-ticker_123", interval, func(ctx context.Context) error {
 		count.Add(1)
 		enter <- true
 		exit <- true

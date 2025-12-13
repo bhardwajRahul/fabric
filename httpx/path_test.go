@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,10 +27,10 @@ func TestHttpx_JoinHostAndPath(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	assert.Equal("https://example.com:443", JoinHostAndPath("example.com", ""))
-	assert.Equal("https://example.com:443/", JoinHostAndPath("example.com", "/"))
-	assert.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "/path"))
-	assert.Equal("https://example.com:443/path", JoinHostAndPath("example.com", "path"))
+	assert.Equal("https://example.com", JoinHostAndPath("example.com", ""))
+	assert.Equal("https://example.com/", JoinHostAndPath("example.com", "/"))
+	assert.Equal("https://example.com/path", JoinHostAndPath("example.com", "/path"))
+	assert.Equal("https://example.com/path", JoinHostAndPath("example.com", "path"))
 	assert.Equal("https://example.com:123", JoinHostAndPath("example.com", ":123"))
 	assert.Equal("https://example.com:123/path", JoinHostAndPath("example.com", ":123/path"))
 	assert.Equal("https://example.org:123/path", JoinHostAndPath("example.com", "https://example.org:123/path"))

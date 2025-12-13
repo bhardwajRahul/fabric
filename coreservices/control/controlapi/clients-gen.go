@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
@@ -576,23 +576,11 @@ func (_c MulticastTrigger) OnNewSubs(ctx context.Context, hosts []string) <-chan
 /*
 OnNewSubs informs other microservices of new subscriptions, enabling them to update their known responders cache appropriately.
 */
-func (_c Hook) OnNewSubs(handler func(ctx context.Context, hosts []string) (err error)) error {
+func (_c Hook) OnNewSubs(handler func(ctx context.Context, hosts []string) (err error)) (err error) {
 	doOnNewSubs := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnNewSubsIn
 		var o OnNewSubsOut
-		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:888/on-new-subs`))
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.ParseRequestBody(r, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+		err = httpx.ParseRequest(r, `:888/on-new-subs`, &i, &i, &i)
 		if err != nil {
 			return errors.Trace(err)
 		}

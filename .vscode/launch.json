@@ -20,6 +20,6 @@
 			"program": "${workspaceFolder}/codegen",
 			"cwd": "${workspaceFolder}/examples/calculator",
 			"env": {"CODEGEN": "-f -v"}
-		}
+		},
 	]
 }

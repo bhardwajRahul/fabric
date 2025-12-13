@@ -50,9 +50,9 @@ func TestHttpegress_MakeRequest(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
@@ -246,9 +246,9 @@ func TestHttpegress_Mocked(t *testing.T) {
 	client := httpegressapi.NewClient(tester)
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		mock,
 		tester,
 	)

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/boolexp"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/utils"
 )
 
@@ -493,7 +494,7 @@ func (f Frame) ParseActor(obj any) (ok bool, err error) {
 	return true, nil
 }
 
-// IfActor evaluates the boolean expression against the properties of the actor associated with the frame.
+// IfActor evaluates the boolean expression against the claims of the actor associated with the frame.
 // The =~ and !~ operators evaluate the left operand against a regexp.
 // String constants, including regexp patterns, must be quoted using single quotes, double quotes or backticks.
 //
@@ -501,16 +502,45 @@ func (f Frame) ParseActor(obj any) (ok bool, err error) {
 // for the actor {"iss":"my_issuer","sub":"harry@hogwarts.edu","roles":["admin"],"foo":"bar","level":5,"region":"AMER US"}.
 func (f Frame) IfActor(boolExp string) (ok bool, err error) {
 	value := f.h.Get(HeaderActor)
-	var properties map[string]any
+	var claims map[string]any
 	if value != "" {
-		err = json.NewDecoder(strings.NewReader(value)).Decode(&properties)
+		err = json.NewDecoder(strings.NewReader(value)).Decode(&claims)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
 	}
-	satisfy, err := utils.EvaluateBoolExp(boolExp, properties)
+	satisfy, err := boolexp.Eval(boolExp, claims)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	return satisfy, nil
+}
+
+// Tenant returns the tenant claim of the actor, or 0 if it is not present or not numeric.
+// The tenant claim is expected to be named "tid" or "tenant".
+func (f Frame) Tenant() (tid int, err error) {
+	value := f.h.Get(HeaderActor)
+	if value == "" {
+		return 0, nil
+	}
+	var properties map[string]any
+	err = json.NewDecoder(strings.NewReader(value)).Decode(&properties)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if properties == nil {
+		return 0, nil
+	}
+	tenant, ok := properties["tid"]
+	if !ok {
+		tenant, ok = properties["tenant"]
+	}
+	if !ok {
+		return 0, nil
+	}
+	tenantNum, ok := tenant.(float64)
+	if !ok {
+		return 0, nil
+	}
+	return int(tenantNum), nil
 }

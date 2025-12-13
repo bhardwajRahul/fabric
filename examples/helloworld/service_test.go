@@ -42,16 +42,16 @@ func TestHelloworld_HelloWorld(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		tester,
 	)
 	app.RunInTest(t)
 
 	/*
-		Recommended pattern:
+		HINT: Use the following pattern for each test case
 
 		res, err := client.HelloWorld(ctx, "")
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,12 +28,10 @@ import (
 	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
-
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/pub"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/examples/directory/directoryapi"
 	"github.com/microbus-io/fabric/examples/directory/intermediate"
+	"github.com/microbus-io/fabric/pub"
 )
 
 var (
@@ -50,7 +48,7 @@ Service implements the directory.example microservice.
 The directory microservice exposes a RESTful API for persisting personal records in a SQL database.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	db *sql.DB
 }
@@ -364,11 +362,10 @@ func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) {
 			data.Response = string(b)
 		}
 	}
-	output, err := svc.ExecuteResTemplate("webui.html", data)
+	w.Header().Set("Content-Type", "text/html")
+	err = svc.WriteResTemplate(w, "webui.html", data)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(output)
 	return nil
 }

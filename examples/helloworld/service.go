@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/examples/helloworld/helloworldapi"
 	"github.com/microbus-io/fabric/examples/helloworld/intermediate"
 )
@@ -41,7 +40,7 @@ Service implements the helloworld.example microservice.
 The HelloWorld microservice demonstrates the classic minimalist example.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.

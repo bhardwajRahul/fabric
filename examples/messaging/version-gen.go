@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package messaging
 
-const Version = 219
-const SourceCodeSHA256 = "8518a969fdd4406778244447fa56744f2deefc9251d1e5391edf929cdeef8ee5"
-const Timestamp = "2025-11-08T21:18:37.69888Z"
-
-/* {
-	"ver": 219,
-	"sha256": "8518a969fdd4406778244447fa56744f2deefc9251d1e5391edf929cdeef8ee5",
-	"ts": "2025-11-08T21:18:37.69888Z"
-} */
+const (
+	Version = 227
+	SourceCodeSHA256 = "b167fb59428c8e5177c944f6d3e08cfb20b678ab2afbeb7d10921698cbc659ce"
+	Timestamp = "2026-01-29T13:04:06.224286Z"
+)

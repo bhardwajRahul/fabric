@@ -1,0 +1,9 @@
+all:
+  SubDir: Parent
+  case: lowercase
+  CASE: UPPERCASE
+  Domain: All
+  Provider: File
+
+config.connector:
+  Domain: Subdomain

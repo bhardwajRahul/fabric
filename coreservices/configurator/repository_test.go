@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ example.com:
   bbbb: 2222
   bbb: 222
 com:
-  CCC: 333
+  ccc: 333
 all:
   ddd: 444
 www.example.com:

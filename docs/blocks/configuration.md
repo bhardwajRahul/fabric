@@ -1,17 +1,40 @@
 # Configuration
 
-It's quite common for microservices to need to define properties whose values can be configured without code changes, often by non-engineers. Connection strings to a database, number of rows to display in a table, a timeout value, are all examples of configuration properties.
+It's a common practice for microservices to define properties whose values can be configured without code changes, often by operators. Connection strings to a database, number of rows to display in a table, a timeout value, are all examples of configuration properties.
 
 In `Microbus`, the microservice owns the definition of its config properties, while [the configurator core microservice](../structure/coreservices-configurator.md) owns their values. The former means that microservices are self-descriptive and independent, which is important in a distributed development environment. The latter means that managing configuration values and pushing them to a live system are centrally controlled, which is important because configs can contain secrets and because pushing the wrong config values can destabilize a deployment.
 
-Configuration properties must first be defined by the microservice using `DefineConfig`. In the following example, the property is named `Foo` and given the default value `Bar` and a regexp requirement that the value is comprised of at least one letter and only letters. The case-insensitive property name is required. Various [options](../structure/cfg.md) allow setting a default value, enforcing validation, and more.
+### Definition
+
+Configuration properties must first be defined by the microservice using `DefineConfig`. In the following example, the property is named `Foo` and given the default value `Bar` and a regexp requirement that the value is comprised of at least one letter and only letters. The case-sensitive property name is required. Various [options](../structure/cfg.md) allow setting a default value, enforcing validation, and more.
 
 ```go
 con.New("www.example.com")
 con.DefineConfig("Foo", cfg.DefaultValue("Bar"), cfg.Validation("str ^[A-Za-z]+$"))
 ```
 
-Immediately upon startup, the microservice contacts the configurator microservice to ask for the values of its configuration properties. If an override value is available at the configurator, it is set as the new value of the config property; otherwise, the default value of the config property is set instead.
+### Initial Values
+
+The initial value of any configuration property is its default value.
+
+On startup, the microservice looks for `config.yaml` or `config.local.yaml` files in the current working directory and its ancestor directories. Precedence is given to YAML files in a subdirectory over its ancestor directory. Within a given directory, `config.local.yaml` takes precedence over `config.yaml`.
+
+A property value is applicable to a microservice that defines a property with the same name, and whose hostname equals or is a sub-domain of the domain name. The special domain `all` applies to all microservices.
+
+```yaml
+www.example.com:
+  Foo: Baz
+example.com:
+  Foo: Bam
+com:
+  Foo: Bax
+all:
+  Foo: Bat
+```
+
+### Fetching Values From the Configurator
+
+On startup, the microservice contacts the configurator microservice to ask for the values of its configuration properties. If an override value is available at the configurator, it is set as the new value of the config property; otherwise, the default value of the config property is set instead.
 
 Configs are accessed using the `Config` method of the `Connector`. 
 

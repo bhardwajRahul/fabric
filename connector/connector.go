@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -26,9 +27,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/dlru"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
 	"github.com/microbus-io/fabric/rand"
@@ -114,7 +115,7 @@ type Connector struct {
 	tickersLock sync.Mutex
 
 	distribCache *dlru.Cache
-	resourcesFS  service.FS
+	resourcesFS  fs.FS
 	stringBundle map[string]map[string]string
 }
 
@@ -177,7 +178,7 @@ func (c *Connector) SetHostname(hostname string) error {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	hostname = strings.TrimSpace(hostname)
-	if err := utils.ValidateHostname(hostname); err != nil {
+	if err := httpx.ValidateHostname(hostname); err != nil {
 		return c.captureInitErr(errors.Trace(err))
 	}
 	hn := strings.ToLower(hostname)
@@ -296,7 +297,7 @@ func (c *Connector) SetLocality(locality string) error {
 		return c.captureInitErr(errors.New("already started"))
 	}
 	locality = strings.TrimSpace(locality)
-	if err := utils.ValidateHostname(locality); err != nil {
+	if err := httpx.ValidateHostname(locality); err != nil {
 		return c.captureInitErr(errors.Trace(err))
 	}
 	c.locality = strings.ToLower(locality)

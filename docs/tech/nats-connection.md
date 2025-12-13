@@ -6,7 +6,9 @@ NATS supports [various authentication methods](https://docs.nats.io/using-nats/d
 
 The `MICROBUS_NATS_USER` and `MICROBUS_NATS_PASSWORD` [environment variables](../tech/envars.md), when present, are used to authenticate with simple [username and password](https://docs.nats.io/using-nats/developer/connecting/userpass) credentials.
 
-The `MICROBUS_NATS_TOKEN` [environment variable](../tech/envars.md), when present, is used to authenticate with an [API token](https://docs.nats.io/using-nats/developer/connecting/token#connecting-with-a-token) credential.
+The `MICROBUS_NATS_TOKEN` [environment variable](../tech/envars.md), when present, is used to authenticate with an [API token](https://docs.nats.io/using-nats/developer/connecting/token) credential.
+
+The `MICROBUS_NATS_USER_JWT` and `MICROBUS_NATS_NKEY_SEED` [environment variable](../tech/envars.md), when present, are used to authenticate with a JWT and [NKey](https://docs.nats.io/using-nats/developer/connecting/nkey) credentials. The user JWT and NKey seed can also be placed in a file `nats.creds` located in the current working directory.  
 
 NATS needs a public certificate and a private key in order to [secure the connection to NATS with TLS](https://docs.nats.io/using-nats/developer/connecting/tls). `Microbus` looks for the certs in the current working directory under the names `cert.pem` and `key.pem`.
 

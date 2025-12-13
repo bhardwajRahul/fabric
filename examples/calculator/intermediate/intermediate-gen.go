@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -114,11 +114,11 @@ func NewService(impl ToDo, version int) *Intermediate {
 	// Metrics
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.DescribeCounter(
-		`fabric_calculator_used_operators`,
+		`used_operators`,
 		`UsedOperators tracks the types of the arithmetic operators used.`,
 	)
 	svc.DescribeGauge(
-		`fabric_calculator_sum_operations`,
+		`sum_operations`,
 		`SumOperations tracks the total sum of the results of all operators.`,
 	)
 
@@ -129,7 +129,7 @@ func NewService(impl ToDo, version int) *Intermediate {
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -203,7 +203,7 @@ It demonstrates the use of the defined type Point.`,
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -213,22 +213,10 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 }
 
 // doArithmetic handles marshaling for the Arithmetic function.
-func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) (err error) {
 	var i calculatorapi.ArithmeticIn
 	var o calculatorapi.ArithmeticOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/arithmetic`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/arithmetic`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -254,22 +242,10 @@ func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) er
 }
 
 // doSquare handles marshaling for the Square function.
-func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) (err error) {
 	var i calculatorapi.SquareIn
 	var o calculatorapi.SquareOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/square`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/square`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -293,22 +269,10 @@ func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) error 
 }
 
 // doDistance handles marshaling for the Distance function.
-func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) (err error) {
 	var i calculatorapi.DistanceIn
 	var o calculatorapi.DistanceOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:443/distance`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:443/distance`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -346,10 +310,10 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 AddUsedOperators adds to the value of the counter metric.
 UsedOperators tracks the types of the arithmetic operators used.
 */
-func (svc *Intermediate) AddUsedOperators(ctx context.Context, num int, op string) error {
+func (svc *Intermediate) AddUsedOperators(ctx context.Context, num int, op string) (err error) {
 	_num := float64(num)
 	_op := utils.AnyToString(op)
-	return svc.AddCounter(ctx, "fabric_calculator_used_operators",
+	return svc.AddCounter(ctx, "used_operators",
 		_num,
 		`op`, _op)
 }
@@ -360,20 +324,20 @@ UsedOperators tracks the types of the arithmetic operators used.
 
 Deprecated: Use AddUsedOperators
 */
-func (svc *Intermediate) IncrementUsedOperators(num int, op string) error {
+func (svc *Intermediate) IncrementUsedOperators(num int, op string) (err error) {
 	_num := float64(num)
 	_op := utils.AnyToString(op)
-	return svc.IncrementMetric("fabric_calculator_used_operators", _num, _op)
+	return svc.IncrementMetric("used_operators", _num, _op)
 }
 
 /*
 RecordSumOperations records the current value of the gauge metric.
 SumOperations tracks the total sum of the results of all operators.
 */
-func (svc *Intermediate) RecordSumOperations(ctx context.Context, sum int, op string) error {
+func (svc *Intermediate) RecordSumOperations(ctx context.Context, sum int, op string) (err error) {
 	_sum := float64(sum)
 	_op := utils.AnyToString(op)
-	return svc.RecordGauge(ctx, "fabric_calculator_sum_operations",
+	return svc.RecordGauge(ctx, "sum_operations",
 		_sum,
 		`op`, _op)
 }
@@ -384,10 +348,10 @@ SumOperations tracks the total sum of the results of all operators.
 
 Deprecated: Use RecordSumOperations
 */
-func (svc *Intermediate) ObserveSumOperations(sum int, op string) error {
+func (svc *Intermediate) ObserveSumOperations(sum int, op string) (err error) {
 	_sum := float64(sum)
 	_op := utils.AnyToString(op)
-	return svc.ObserveMetric("fabric_calculator_sum_operations", _sum, _op)
+	return svc.ObserveMetric("sum_operations", _sum, _op)
 }
 
 /*
@@ -396,8 +360,8 @@ SumOperations tracks the total sum of the results of all operators.
 
 Deprecated: Use RecordSumOperations
 */
-func (svc *Intermediate) IncrementSumOperations(sum int, op string) error {
+func (svc *Intermediate) IncrementSumOperations(sum int, op string) (err error) {
 	_sum := float64(sum)
 	_op := utils.AnyToString(op)
-	return svc.IncrementMetric("fabric_calculator_sum_operations", _sum, _op)
+	return svc.IncrementMetric("sum_operations", _sum, _op)
 }

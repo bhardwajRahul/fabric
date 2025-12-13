@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,17 +30,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/fabric/coreservices/httpingress/intermediate"
+	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
-
 	"go.opentelemetry.io/otel/propagation"
-
-	"github.com/microbus-io/fabric/coreservices/httpingress/intermediate"
-	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 )
 
 /*
@@ -49,7 +47,7 @@ Service implements the http.ingress.core microservice.
 The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	httpServers    map[int]*http.Server
 	mux            sync.Mutex
@@ -390,8 +388,7 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	return errors.Trace(err)
 }
 
-// readRequestBody reads the body of the request into memory, within the memory limit
-// set for the proxy.
+// readRequestBody reads the body of the request into memory, within the memory limit set for the proxy.
 func (svc *Service) readRequestBody(r *http.Request) (body []byte, err error) {
 	if r.Body == nil || r.ContentLength == 0 {
 		return []byte{}, nil
@@ -481,13 +478,17 @@ func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) {
 
 // resolveInternalURL resolves the NATS URL from the external URL.
 func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (natsURL *url.URL, err error) {
+	uri := externalURL.RequestURI()
+	if !strings.HasPrefix(uri, "/") {
+		uri = "/" + uri
+	}
+	u, err := httpx.ParseURL("https:/" + uri) // First part of the URL is the internal host
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	externalPort := externalURL.Port()
 	if externalPort == "" {
 		externalPort = "443"
-	}
-	u, err := httpx.ParseURL("https:/" + externalURL.RequestURI()) // First part of the URL is the internal host
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 	internalPort := u.Port()
 	mappedInternalPort := internalPort

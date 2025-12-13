@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,20 +18,21 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
-	"github.com/microbus-io/fabric/env"
+	"github.com/microbus-io/codegen/generator"
 )
 
-// main is executed when "go generate" is run in the current working directory.
+// main runs the code generator when "go generate" is executed in the current working directory.
 func main() {
 	// Load flags from environment variable because can't pass arguments to code-generator
 	var flagForce bool
 	var flagVerbose bool
-	envVal := env.Get("MICROBUS_CODEGEN")
+	envVal := os.Getenv("MICROBUS_CODEGEN")
 	if envVal == "" {
-		envVal = env.Get("CODEGEN")
+		envVal = os.Getenv("CODEGEN")
 	}
 	flags := flag.NewFlagSet("", flag.ContinueOnError)
 	flags.BoolVar(&flagForce, "f", false, "Force processing even if no change detected")
@@ -39,17 +40,20 @@ func main() {
 	_ = flags.Parse(strings.Split(envVal, " "))
 
 	// Run generator
-	gen := NewGenerator()
-	gen.Force = flagForce
-	gen.Printer = &Printer{
-		Verbose: flagVerbose,
+	gen, err := generator.NewGenerator()
+	if err == nil {
+		gen.Force = flagForce
+		gen.Verbose = flagVerbose
+		fmt.Fprintf(os.Stdout, "[fabric] %s\n", gen.PackagePath)
+		gen.Indent()
+		err = gen.Run()
+		gen.Unindent()
 	}
-	err := gen.Run()
 	if err != nil {
 		if flagVerbose {
-			gen.Printer.Error("%+v", err)
+			fmt.Fprintf(os.Stderr, "%+v\n", err)
 		} else {
-			gen.Printer.Error("%v", err)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 		os.Exit(-1)
 	}

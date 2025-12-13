@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/testarossa"
@@ -35,7 +35,6 @@ import (
 
 // Application is a collection of microservices that run in a single process and share the same lifecycle.
 type Application struct {
-	initializer     func(service.Service)
 	groups          []group
 	sig             chan os.Signal
 	plane           string
@@ -47,6 +46,7 @@ type Application struct {
 
 // New creates a new application.
 // An application is a collection of microservices that run in a single process and share the same lifecycle.
+// A unique plane of communication is used to isolate the app if it is running in a unit test environment.
 func New() *Application {
 	app := &Application{
 		sig:             make(chan os.Signal, 1),
@@ -54,30 +54,28 @@ func New() *Application {
 		deployment:      env.Get("MICROBUS_DEPLOYMENT"),
 		startupTimeout:  time.Second * 20,
 		shutdownTimeout: time.Second * 20,
-		initializer:     func(s service.Service) {},
 	}
 	return app
 }
 
-// NewTesting creates a new application for running in a unit test environment.
-// An application is a collection of microservices that run in a single process and share the same lifecycle.
+// NewTesting creates a new application explicitly for running in a unit test environment.
 // A random plane of communication is used to isolate the testing app from other apps.
-// Tickers of microservices do not run in the TESTING deployment environment.
+//
+// Deprecated: Use [New] with [Application.RunInTest] instead.
 func NewTesting() *Application {
 	app := &Application{
 		sig:            make(chan os.Signal, 1),
 		plane:          rand.AlphaNum64(12),
 		deployment:     connector.TESTING,
 		startupTimeout: time.Second * 8,
-		initializer:    func(s service.Service) {},
 	}
 	return app
 }
 
 /*
 Add adds a collection of microservices to be managed by the app.
-Added microservices are not started up immediately. An explicit call to [Startup] is required.
-Microservices that are included together are started in parallel together.
+Added microservices are not started up immediately. An explicit call to [Startup] or [Run] is required.
+Microservices that are added together are started in parallel.
 Otherwise, microservices are started sequentially in order of inclusion.
 
 In the following example, A is started first, then B1 and B2 in parallel, and finally C1 and C2 in parallel.
@@ -86,7 +84,7 @@ In the following example, A is started first, then B1 and B2 in parallel, and fi
 	app.Add(a)
 	app.Add(b1, b2)
 	app.Add(c1, c2)
-	app.Startup()
+	app.Run()
 */
 func (app *Application) Add(services ...service.Service) {
 	app.mux.Lock()
@@ -94,7 +92,6 @@ func (app *Application) Add(services ...service.Service) {
 	for _, s := range services {
 		s.SetPlane(app.plane)
 		s.SetDeployment(app.deployment)
-		app.initializer(s)
 	}
 	g = append(g, services...)
 	app.groups = append(app.groups, g)
@@ -108,7 +105,6 @@ func (app *Application) AddAndStartup(services ...service.Service) (err error) {
 	for _, s := range services {
 		s.SetPlane(app.plane)
 		s.SetDeployment(app.deployment)
-		app.initializer(s)
 	}
 	g = append(g, services...)
 	app.groups = append(app.groups, g)
@@ -143,18 +139,6 @@ func (app *Application) Remove(services ...service.Service) {
 	app.mux.Unlock()
 }
 
-// Init sets up a method to call on each of the included microservices at the time they are included or joined.
-// It is a convenience method to allow applying a generic operation en masse, for example, setting a shared configuration
-// value during testing.
-//
-// The is only one initializer. Consecutive calls overwrite the previous value. Pass nil to clear the initializer.
-func (app *Application) Init(initializer func(svc service.Service)) {
-	if initializer == nil {
-		initializer = func(s service.Service) {}
-	}
-	app.initializer = initializer
-}
-
 // Startup starts all unstarted microservices included in this app.
 // Microservices that are included together are started in parallel together.
 // Otherwise, microservices are started sequentially in order of inclusion.
@@ -171,7 +155,7 @@ func (app *Application) Startup() error {
 	for _, g := range app.groups {
 		err := g.Startup(ctx)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -191,7 +175,7 @@ func (app *Application) Shutdown() error {
 	for i := len(app.groups) - 1; i >= 0; i-- {
 		err := app.groups[i].Shutdown(ctx)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -224,17 +208,28 @@ func (app *Application) Run() error {
 }
 
 // RunInTest starts up all microservices included in this app, waits for the test to finish, then shuts them down.
+// A random plane of communication is used to isolate the testing app from other apps.
 // Errors in startup or shutdown will fail the test.
 func (app *Application) RunInTest(t testing.TB) error {
-	assert := testarossa.For(t)
-	err := app.Startup()
-	if !assert.NoError(err) {
-		t.FailNow()
-		return errors.Trace(err)
+	app.plane = rand.AlphaNum64(12)
+	app.deployment = connector.TESTING
+	app.startupTimeout = time.Second * 8
+	for _, g := range app.groups {
+		for _, s := range g {
+			s.SetPlane(app.plane)
+			s.SetDeployment(app.deployment)
+		}
 	}
+
+	assert := testarossa.For(t)
 	t.Cleanup(func() {
-		err := app.Shutdown()
-		assert.NoError(err)
+		shutdownErr := app.Shutdown()
+		assert.NoError(shutdownErr)
 	})
+	startupErr := app.Startup()
+	if !assert.NoError(startupErr) {
+		t.FailNow()
+		return errors.Trace(startupErr)
+	}
 	return nil
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,18 +24,17 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/mnako/letters"
-	"github.com/phires/go-guerrilla"
-	"github.com/phires/go-guerrilla/backends"
-	glog "github.com/phires/go-guerrilla/log"
-	"github.com/phires/go-guerrilla/mail"
-	"github.com/sirupsen/logrus"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/smtpingress/intermediate"
 	"github.com/microbus-io/fabric/coreservices/smtpingress/smtpingressapi"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/trc"
+	"github.com/mnako/letters"
+	"github.com/phires/go-guerrilla"
+	"github.com/phires/go-guerrilla/backends"
+	"github.com/phires/go-guerrilla/mail"
+	"github.com/sirupsen/logrus"
+	glog "github.com/phires/go-guerrilla/log"
 )
 
 const processorName = "MessageProcessor"
@@ -46,7 +45,7 @@ Service implements the smtp.ingress.core microservice.
 The SMTP ingress microservice listens for incoming emails and fires corresponding events.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 
 	daemon *guerrilla.Daemon
 	mux    sync.Mutex

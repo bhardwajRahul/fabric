@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@ limitations under the License.
 package cfg
 
 import (
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/errors"
 )
 
 // Config is a property used to configure a microservice.
@@ -30,15 +29,15 @@ type Config struct {
 	Validation   string
 	Secret       bool
 
+	Set   bool
 	Value string
 }
 
 // NewConfig creates a new config property.
 func NewConfig(name string, options ...Option) (*Config, error) {
-	if err := utils.ValidateConfigName(name); err != nil {
-		return nil, errors.Trace(err)
+	if name == "" {
+		return nil, errors.New("config name is required")
 	}
-
 	c := &Config{
 		Name:       name,
 		Validation: "str",

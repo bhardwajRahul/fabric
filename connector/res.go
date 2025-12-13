@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"strconv"
@@ -29,19 +31,18 @@ import (
 	htmltemplate "html/template"
 	texttemplate "text/template"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/utils"
 	"gopkg.in/yaml.v3"
 )
 
 // SetResFS initialized the connector to load resource files from an arbitrary FS.
-func (c *Connector) SetResFS(fs service.FS) error {
+func (c *Connector) SetResFS(resFileSys fs.FS) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	c.resourcesFS = fs
+	c.resourcesFS = resFileSys
 	err := c.initStringBundle()
 	if err != nil {
 		return c.captureInitErr(errors.Trace(err))
@@ -51,25 +52,25 @@ func (c *Connector) SetResFS(fs service.FS) error {
 
 // SetResFSDir initialized the connector to load resource files from a directory.
 func (c *Connector) SetResFSDir(directoryPath string) error {
-	err := c.SetResFS(os.DirFS(directoryPath).(service.FS)) // Casting required
+	err := c.SetResFS(os.DirFS(directoryPath))
 	return errors.Trace(err)
 }
 
 // ResFS returns the FS associated with the connector.
-func (c *Connector) ResFS() service.FS {
+func (c *Connector) ResFS() fs.FS {
 	return c.resourcesFS
 }
 
 // ReadResFile returns the content of a resource file.
 func (c *Connector) ReadResFile(name string) ([]byte, error) {
-	b, err := c.resourcesFS.ReadFile(name)
+	b, err := fs.ReadFile(c.resourcesFS, name)
 	return b, errors.Trace(err)
 }
 
 // MustReadResFile returns the content of a resource file, or nil if not found.
 // It panics if the resource file is not found.
 func (c *Connector) MustReadResFile(name string) []byte {
-	b, err := c.resourcesFS.ReadFile(name)
+	b, err := fs.ReadFile(c.resourcesFS, name)
 	if err != nil {
 		panic(err)
 	}
@@ -78,14 +79,14 @@ func (c *Connector) MustReadResFile(name string) []byte {
 
 // ReadResTextFile returns the content of a resource file as a string.
 func (c *Connector) ReadResTextFile(name string) (string, error) {
-	b, err := c.resourcesFS.ReadFile(name)
+	b, err := fs.ReadFile(c.resourcesFS, name)
 	return string(b), errors.Trace(err)
 }
 
 // MustReadResTextFile returns the content of a resource file as a string, or "" if not found.
 // It panics if the resource file is not found.
 func (c *Connector) MustReadResTextFile(name string) string {
-	b, err := c.resourcesFS.ReadFile(name)
+	b, err := fs.ReadFile(c.resourcesFS, name)
 	if err != nil {
 		panic(err)
 	}
@@ -94,7 +95,7 @@ func (c *Connector) MustReadResTextFile(name string) string {
 
 // ServeResFile serves the content of a resources file as a response to a web request.
 func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Request) error {
-	b, err := c.resourcesFS.ReadFile(name)
+	b, err := fs.ReadFile(c.resourcesFS, name)
 	if err != nil {
 		return errors.New("", http.StatusNotFound)
 	}
@@ -124,17 +125,36 @@ func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Req
 }
 
 // ExecuteResTemplate parses the resource file as a template, executes it given the data, and returns the result.
-// The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.
 //
+// The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.
 // {{ var | attr }}, {{ var | url }}, {{ var | css }} or {{ var | safe }} may be used to prevent the escaping of a variable in an HTML template.
 // These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML] respectively.
 // Use of these types presents a security risk.
-func (c *Connector) ExecuteResTemplate(name string, data any) ([]byte, error) {
-	templateFile, err := c.resourcesFS.ReadFile(name)
+//
+// This method does not support customizing execution with a func map or changing the delimiters.
+// If either is required, use the standard library pattern instead.
+//
+// Deprecated: Use WriteResTemplate instead.
+func (c *Connector) ExecuteResTemplate(name string, data any) (rendered []byte, err error) {
+	var buf bytes.Buffer
+	err = c.WriteResTemplate(&buf, name, data)
+	return buf.Bytes(), errors.Trace(err)
+}
+
+// WriteResTemplate parses the resource file as a template, executes it given the data, writing the result to the writer.
+//
+// The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.
+// {{ var | attr }}, {{ var | url }}, {{ var | css }} or {{ var | safe }} may be used to prevent the escaping of a variable in an HTML template.
+// These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML] respectively.
+// Use of these types presents a security risk.
+//
+// This method does not support customizing execution with a func map or changing the delimiters.
+// If either is required, use the standard library pattern instead.
+func (c *Connector) WriteResTemplate(w io.Writer, name string, data any) (err error) {
+	templateFile, err := fs.ReadFile(c.resourcesFS, name)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
-	var rendered bytes.Buffer
 	if strings.HasSuffix(strings.ToLower(name), ".html") {
 		funcMap := htmltemplate.FuncMap{
 			"attr": func(s string) htmltemplate.HTMLAttr {
@@ -154,24 +174,24 @@ func (c *Connector) ExecuteResTemplate(name string, data any) ([]byte, error) {
 			Funcs(funcMap).
 			Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
-		err = htmlTmpl.ExecuteTemplate(&rendered, name, data)
+		err = htmlTmpl.ExecuteTemplate(w, name, data)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	} else {
 		textTmpl, err := texttemplate.New(name).
 			Parse(utils.UnsafeBytesToString(templateFile))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
-		err = textTmpl.ExecuteTemplate(&rendered, name, data)
+		err = textTmpl.ExecuteTemplate(w, name, data)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
-	return rendered.Bytes(), nil
+	return nil
 }
 
 // initStringBundle reads text.yaml from the FS into an in-memory map.

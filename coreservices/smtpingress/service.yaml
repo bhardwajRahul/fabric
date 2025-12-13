@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Microbus LLC and various contributors
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -198,7 +198,7 @@ tickers:
 # description - Documentation
 # kind - The kind of the metric, "counter" (default), "gauge" or "histogram"
 # buckets - Bucket boundaries for histograms [x,y,z,...]
-# alias - The name of the OpenTelemetry metric (defaults to module_package_function_name)
+# alias - The name to post to OpenTelemetry (defaults to the function name in snake_case)
 # callback - Whether or not to observe the metric just in time (defaults to false)
 metrics:
   # - signature:

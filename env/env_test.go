@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -28,7 +28,8 @@ func TestEnv_FileOverridesOS(t *testing.T) {
 	// No parallel
 	assert := testarossa.For(t)
 
-	os.Chdir("testdata")
+	os.Chdir("testdata/subdir")
+	defer os.Chdir("..")
 	defer os.Chdir("..")
 
 	// File overrides OS
@@ -52,10 +53,18 @@ func TestEnv_FileOverridesOS(t *testing.T) {
 	})
 	assert.Error(err)
 
+	// Subdirectory over ancestor directory
+	assert.Equal("Child", Get("X35638125X"))
+	os.Chdir("..")
+	assert.Equal("Parent", Get("X35638125X"))
+	os.Chdir("subdir")
+
 	// Lookup
 	_, ok := Lookup("X5981245X")
 	assert.True(ok)
 	_, ok = Lookup("x5981245x")
+	assert.True(ok)
+	_, ok = Lookup("X35638125X")
 	assert.True(ok)
 	_, ok = Lookup("Y5981245Y")
 	assert.False(ok)

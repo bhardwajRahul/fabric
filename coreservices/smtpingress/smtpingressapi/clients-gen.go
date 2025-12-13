@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
@@ -243,23 +243,11 @@ func (_c MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Ema
 /*
 OnIncomingEmail is triggered when a new email message is received.
 */
-func (_c Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Email) (err error)) error {
+func (_c Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Email) (err error)) (err error) {
 	doOnIncomingEmail := func(w http.ResponseWriter, r *http.Request) error {
 		var i OnIncomingEmailIn
 		var o OnIncomingEmailOut
-		pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:417/on-incoming-email`))
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(pathArgs, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.ParseRequestBody(r, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+		err = httpx.ParseRequest(r, `:417/on-incoming-email`, &i, &i, &i)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package tokenissuer
 
-const Version = 105
-const SourceCodeSHA256 = "2804716d09671e51bc6e7b01445c1daff40332985dfb78e8dd55fa512311ee3a"
-const Timestamp = "2025-11-29T13:03:56.487238Z"
-
-/* {
-	"ver": 105,
-	"sha256": "2804716d09671e51bc6e7b01445c1daff40332985dfb78e8dd55fa512311ee3a",
-	"ts": "2025-11-29T13:03:56.487238Z"
-} */
+const (
+	Version = 115
+	SourceCodeSHA256 = "23eb0ee735da3b74a79c4119a9cb29dbc14d427b51e12046b39af2977da2fe2e"
+	Timestamp = "2026-01-29T13:04:05.481673Z"
+)

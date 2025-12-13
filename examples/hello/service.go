@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,12 +24,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/pub"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 	"github.com/microbus-io/fabric/examples/hello/intermediate"
+	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/pub"
 )
 
 var (
@@ -43,7 +42,7 @@ Service implements the hello.example microservice.
 The Hello microservice demonstrates the various capabilities of a microservice.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.
@@ -67,9 +66,9 @@ func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Prepare the greeting
-	greeting := svc.Config("greeting")
+	greeting := svc.Config("Greeting")
 	hello := greeting + ", " + name + "!\n"
-	repeat, err := strconv.Atoi(svc.Config("repeat"))
+	repeat, err := strconv.Atoi(svc.Config("Repeat"))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -85,18 +84,13 @@ func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error {
 Echo back the incoming request in wire format.
 */
 func (svc *Service) Echo(w http.ResponseWriter, r *http.Request) error {
-	// Stop the http package from serializing Go-http-client/1.1 as the user-agent
+	// Prevent the http package from serializing Go-http-client/1.1 as the user-agent
 	if len(r.Header.Values("User-Agent")) == 0 {
 		r.Header.Set("User-Agent", "")
 	}
-	var buf bytes.Buffer
-	err := r.Write(&buf)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write(buf.Bytes())
-	return nil
+	err := r.Write(w)
+	return errors.Trace(err)
 }
 
 /*

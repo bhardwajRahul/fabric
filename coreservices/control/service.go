@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,8 +20,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/microbus-io/fabric/errors"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/control/intermediate"
 )
 
@@ -32,7 +31,7 @@ This microservice is created for the sake of generating the client API for the :
 The microservice itself does nothing and should not be included in applications.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.

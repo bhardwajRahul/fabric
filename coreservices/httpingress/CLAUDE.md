@@ -1,2 +1,2 @@
 
-**CRITICAL**: Read `AGENTS.md`.
+**CRITICAL**: Read `AGENTS.md` immediately.

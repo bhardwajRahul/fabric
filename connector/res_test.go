@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,13 +17,14 @@ limitations under the License.
 package connector
 
 import (
+	"bytes"
 	"context"
 	"html"
 	"io"
 	"net/http"
 	"testing"
 
-	"github.com/microbus-io/fabric/errors"
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 )
@@ -52,13 +53,15 @@ func TestConnector_ReadResFile(t *testing.T) {
 	})
 	assert.Error(err)
 
-	v, err := con.ExecuteResTemplate("res.txt", "<body></body>")
+	var buf bytes.Buffer
+	err = con.WriteResTemplate(&buf, "res.txt", "<body></body>")
 	assert.NoError(err)
-	assert.Equal("<html><body></body></html>\n", string(v))
+	assert.Equal("<html><body></body></html>\n", buf.String())
 
-	v, err = con.ExecuteResTemplate("res.html", "<body></body>")
+	buf.Reset()
+	err = con.WriteResTemplate(&buf, "res.html", "<body></body>")
 	assert.NoError(err)
-	assert.Equal("<html>"+html.EscapeString("<body></body>")+"</html>\n", string(v))
+	assert.Equal("<html>"+html.EscapeString("<body></body>")+"</html>\n", buf.String())
 }
 
 func TestConnector_LoadResString(t *testing.T) {

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,13 +23,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
-	"github.com/microbus-io/fabric/rand"
-
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/intermediate"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
+	"github.com/microbus-io/fabric/rand"
 )
 
 /*
@@ -38,10 +36,11 @@ Service implements the tokenissuer.core microservice.
 The token issuer microservice generates and validates JWTs.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
-	devOnlySecretKey           string
-	issClaim                   string
-	transformer                func(ctx context.Context, claims jwt.MapClaims) (extendedClaims jwt.MapClaims, err error)
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+
+	devOnlySecretKey string
+	issClaim         string
+	transformer      func(ctx context.Context, claims jwt.MapClaims) (extendedClaims jwt.MapClaims, err error)
 }
 
 // OnStartup is called when the microservice is started up.
@@ -49,12 +48,6 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	svc.issClaim = "microbus://" + svc.Hostname()
 	if svc.Deployment() == connector.LOCAL || svc.Deployment() == connector.TESTING {
 		svc.devOnlySecretKey = strings.Repeat("0123456789abcdef", 4)
-	} else {
-		if len(svc.SecretKey()) == 0 {
-			return errors.New("secret key is required")
-		} else if len(svc.SecretKey()) < 64 {
-			svc.LogWarn(ctx, "secret key should be at least 512 bits (64 characters) long")
-		}
 	}
 	return nil
 }
@@ -112,7 +105,7 @@ func (svc *Service) parseToken(signedJWT string) (validToken *jwt.Token) {
 	if svc.SecretKey() != "" {
 		token, _ := jwt.Parse(
 			signedJWT,
-			func(t *jwt.Token) (interface{}, error) {
+			func(t *jwt.Token) (any, error) {
 				return []byte(svc.SecretKey()), nil
 			},
 			jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Name}),
@@ -125,7 +118,7 @@ func (svc *Service) parseToken(signedJWT string) (validToken *jwt.Token) {
 	if svc.AltSecretKey() != "" {
 		token, _ := jwt.Parse(
 			signedJWT,
-			func(t *jwt.Token) (interface{}, error) {
+			func(t *jwt.Token) (any, error) {
 				return []byte(svc.AltSecretKey()), nil
 			},
 			jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Name}),
@@ -138,7 +131,7 @@ func (svc *Service) parseToken(signedJWT string) (validToken *jwt.Token) {
 	if svc.devOnlySecretKey != "" {
 		token, _ := jwt.Parse(
 			signedJWT,
-			func(t *jwt.Token) (interface{}, error) {
+			func(t *jwt.Token) (any, error) {
 				return []byte(svc.devOnlySecretKey), nil
 			},
 			jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Name}),

@@ -38,7 +38,7 @@ Service implements the eventsink.example microservice.
 The event sink microservice handles events that are fired by the event source microservice.
 */
 type Service struct {
-	*intermediate.Intermediate // DO NOT REMOVE
+	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
 }
 
 // OnStartup is called when the microservice is started up.

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
@@ -137,7 +137,7 @@ Setting the previous secret key as an alternative key is useful when rotating ke
 }
 
 // doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
 	oapiSvc := openapi.Service{
 		ServiceName: svc.Hostname(),
 		Description: svc.Description(),
@@ -190,7 +190,7 @@ See https://www.iana.org/assignments/jwt/jwt.xhtml for a list of the common clai
 	if svc.Deployment() == connector.LOCAL {
 		encoder.SetIndent("", "  ")
 	}
-	err := encoder.Encode(&oapiSvc)
+	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
 }
 
@@ -214,7 +214,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 AuthTokenTTL sets the TTL of the JWT.
 */
-func (svc *Intermediate) SetAuthTokenTTL(ttl time.Duration) error {
+func (svc *Intermediate) SetAuthTokenTTL(ttl time.Duration) (err error) {
 	return svc.SetConfig("AuthTokenTTL", utils.AnyToString(ttl))
 }
 
@@ -232,7 +232,7 @@ This action is restricted to the TESTING deployment in which the fetching of val
 
 SecretKey is a symmetrical key used to sign and validate the JWT when using the HMAC-SHA algorithm.
 */
-func (svc *Intermediate) SetSecretKey(key string) error {
+func (svc *Intermediate) SetSecretKey(key string) (err error) {
 	return svc.SetConfig("SecretKey", utils.AnyToString(key))
 }
 
@@ -252,27 +252,15 @@ This action is restricted to the TESTING deployment in which the fetching of val
 AltSecretKey is an alternative key used to validate the JWT when using the HMAC-SHA algorithm.
 Setting the previous secret key as an alternative key is useful when rotating keys.
 */
-func (svc *Intermediate) SetAltSecretKey(key string) error {
+func (svc *Intermediate) SetAltSecretKey(key string) (err error) {
 	return svc.SetConfig("AltSecretKey", utils.AnyToString(key))
 }
 
 // doIssueToken handles marshaling for the IssueToken function.
-func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) (err error) {
 	var i tokenissuerapi.IssueTokenIn
 	var o tokenissuerapi.IssueTokenOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/issue-token`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:444/issue-token`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -296,22 +284,10 @@ func (svc *Intermediate) doIssueToken(w http.ResponseWriter, r *http.Request) er
 }
 
 // doValidateToken handles marshaling for the ValidateToken function.
-func (svc *Intermediate) doValidateToken(w http.ResponseWriter, r *http.Request) error {
+func (svc *Intermediate) doValidateToken(w http.ResponseWriter, r *http.Request) (err error) {
 	var i tokenissuerapi.ValidateTokenIn
 	var o tokenissuerapi.ValidateTokenOut
-	pathArgs, err := httpx.PathValues(r, httpx.JoinHostAndPath("host", `:444/validate-token`))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(pathArgs, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.ParseRequestBody(r, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = httpx.DecodeDeepObject(r.URL.Query(), &i)
+	err = httpx.ParseRequest(r, `:444/validate-token`, &i, &i, &i)
 	if err != nil {
 		return errors.Trace(err)
 	}

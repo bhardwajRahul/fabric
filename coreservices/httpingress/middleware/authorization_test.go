@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ func newSignedToken(claims jwt.MapClaims) string {
 }
 
 func validator(ctx context.Context, token string) (actor any, valid bool, err error) {
-	parsedToken, _ := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+	parsedToken, _ := jwt.Parse(token, func(t *jwt.Token) (any, error) {
 		return []byte(signatureKey), nil
 	})
 	return parsedToken.Claims, parsedToken.Valid && parsedToken.Claims.(jwt.MapClaims)["ok"].(bool), nil

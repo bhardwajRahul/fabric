@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ package env
 
 import (
 	"os"
+	"path"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -41,15 +43,31 @@ func Lookup(key string) (string, bool) {
 	if ok && len(vals) > 0 {
 		return vals[len(vals)-1], true
 	}
-	// Next, look in env.yaml file
-	if file, err := os.Open("env.yaml"); err == nil {
-		var inFile map[string]string
-		if err := yaml.NewDecoder(file).Decode(&inFile); err == nil {
-			if val, ok := inFile[key]; ok {
-				return val, true
+	// Next, look in env.yaml or env.local.yaml file in an ancestor directory
+	wd, err := os.Getwd()
+	if err == nil {
+		dir := ""
+		split := strings.Split(wd, string(os.PathSeparator))
+		for p := range split {
+			dir = string(os.PathSeparator) + path.Join(split[:len(split)-p]...) // Subdirectories take priority over ancestors
+			for _, fileName := range []string{
+				path.Join(dir, "env.local.yaml"), // Local file takes priority
+				path.Join(dir, "env.yaml"),
+			} {
+				file, err := os.Open(fileName)
+				if err == nil {
+					var kv map[string]string
+					err := yaml.NewDecoder(file).Decode(&kv)
+					if err == nil {
+						if val, ok := kv[key]; ok {
+							return val, true // Return first match
+						}
+					}
+				}
 			}
 		}
 	}
+	// Finally, look for the real OS envar
 	return os.LookupEnv(key)
 }
 

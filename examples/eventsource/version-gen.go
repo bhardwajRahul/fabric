@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package eventsource
 
-const Version = 260
-const SourceCodeSHA256 = "96fe759fff19e7aa13692c61959c8e4ea82ebf2564b1ac4c9327a84ee15f1e7f"
-const Timestamp = "2025-11-14T03:51:21.215545Z"
-
-/* {
-	"ver": 260,
-	"sha256": "96fe759fff19e7aa13692c61959c8e4ea82ebf2564b1ac4c9327a84ee15f1e7f",
-	"ts": "2025-11-14T03:51:21.215545Z"
-} */
+const (
+	Version = 268
+	SourceCodeSHA256 = "42c958b210f78d2d9a69df0c733299f268f4edf267000e1670b42906e79e45a9"
+	Timestamp = "2026-01-29T13:04:05.889344Z"
+)

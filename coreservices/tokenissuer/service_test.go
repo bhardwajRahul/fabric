@@ -52,9 +52,9 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	_ = client
 
 	// Run the testing app
-	app := application.NewTesting()
+	app := application.New()
 	app.Add(
-		// Add microservices or mocks required for this test
+		// HINT: Add microservices or mocks required for this test
 		svc.Init(func(svc *Service) {
 			svc.SetClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (transformedClaims jwt.MapClaims, err error) {
 				if _, ok := claims["transform"]; ok {

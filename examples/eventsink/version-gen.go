@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,12 +18,8 @@ limitations under the License.
 
 package eventsink
 
-const Version = 251
-const SourceCodeSHA256 = "07556062e9268da092451deee930daf11aeba206b2bfc3ea99e88f67e71b781e"
-const Timestamp = "2025-11-08T21:18:36.934932Z"
-
-/* {
-	"ver": 251,
-	"sha256": "07556062e9268da092451deee930daf11aeba206b2bfc3ea99e88f67e71b781e",
-	"ts": "2025-11-08T21:18:36.934932Z"
-} */
+const (
+	Version = 258
+	SourceCodeSHA256 = "d89f0a720c417ddb77c1fe4339f3e1aaf35a688f69fc6cb5bbb7ec80811f4dcb"
+	Timestamp = "2026-01-29T13:04:05.807956Z"
+)

@@ -28,18 +28,23 @@ Your project structure will now look like this:
 
 ```
 mysolution/
-├── .claude/                     # Claude setup
+├── .claude/                    # Claude setup
+│   ├── rules/
 │   └── skills/
 ├── .vscode/
-│   └── launch.json				 # VSCode launch file
+│   └── launch.json             # VSCode launch file
 ├── main/
-│   ├── config.yaml              # Configuration file
-│   ├── env.yaml                 # Environment settings
-│   └── main.go                  # Main application
-├── AGENTS-MICROBUS.md           # Instructions to coding agents for Microbus
-├── AGENTS.md                    # Instructions to coding agents for this project
-├── CLAUDE.md                    # Refer Claude to AGENTS.md
+│   ├── config.yaml             # Configuration file
+│   ├── env.yaml                # Environment settings
+│   └── main.go                 # Main application
+├── .gitignore                  # git ignore
+├── AGENTS.md                   # Instructions for coding agents
+├── CLAUDE.md                   # Instructions for Claude
+├── config.yaml                 # Configuration properties
+├── config.local.yaml           # git ignored configuration properties
 ├── doc.go
+├── env.yaml                    # Environment variables
+├── env.local.yaml              # git ignored environment variables
 ├── go.mod
 └── go.sum
 ```
