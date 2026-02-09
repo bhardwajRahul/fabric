@@ -2,10 +2,10 @@
 
 `Microbus` recognizes four deployment environments:
 
-* `PROD` represents a production deployment
-* `LAB` represents a fully-functional non-production deployments such as dev integration, testing, staging, etc.
-* `LOCAL` represents development on an engineer's local machine
-* `TESTING` represents a unit test running a testing application
+- `PROD` represents a production deployment
+- `LAB` represents a fully-functional non-production deployments such as dev integration, testing, staging, etc.
+- `LOCAL` represents development on an engineer's local machine
+- `TESTING` represents a unit test running a testing application
 
 The deployment environment impacts certain aspects of the framework such as [structured logging](../blocks/logging.md) and [distributed tracing](../blocks/distrib-tracing.md).
 

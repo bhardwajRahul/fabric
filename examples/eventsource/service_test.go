@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/eventsink"
@@ -45,7 +47,91 @@ var (
 	_ *eventsourceapi.Client
 )
 
-func TestEventsource_Register(t *testing.T) {
+func TestEventsource_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		// HINT: Include all ports of functional or web endpoints
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(eventsourceapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestEventsource_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("register", func(t *testing.T) { // MARKER: Register
+		assert := testarossa.For(t)
+
+		exampleEmail := "test@example.com"
+		expectedAllowed := true
+
+		_, err := mock.Register(ctx, exampleEmail)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockRegister(func(ctx context.Context, email string) (allowed bool, err error) {
+			return expectedAllowed, nil
+		})
+		allowed, err := mock.Register(ctx, exampleEmail)
+		assert.Expect(
+			allowed, expectedAllowed,
+			err, nil,
+		)
+	})
+}
+
+func TestEventsource_Register(t *testing.T) { // MARKER: Register
 	t.Parallel()
 	ctx := t.Context()
 
@@ -53,7 +139,7 @@ func TestEventsource_Register(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("eventsource.register.tester")
+	tester := connector.New("tester.client")
 	client := eventsourceapi.NewClient(tester)
 	hook := eventsourceapi.NewHook(tester)
 
@@ -135,10 +221,10 @@ func TestEventsource_Register(t *testing.T) {
 	t.Run("partial_approval_is_blocked", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
+		unsub, _ := hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
 			return false, nil
 		})
-		defer hook.OnAllowRegister(nil)
+		defer unsub()
 
 		// The eventsink service approves, but the local hook blocks
 		allowed, err := client.Register(ctx, "mixed@example.com")
@@ -148,17 +234,17 @@ func TestEventsource_Register(t *testing.T) {
 	t.Run("sink_errors_out", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
+		unsub, _ := hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
 			return false, errors.New("oops")
 		})
-		defer hook.OnAllowRegister(nil)
+		defer unsub()
 
 		_, err := client.Register(ctx, "error@example.com")
 		assert.Contains(err, "oops")
 	})
 }
 
-func TestEventsource_OnAllowRegister(t *testing.T) {
+func TestEventsource_OnAllowRegister(t *testing.T) { // MARKER: OnAllowRegister
 	t.Parallel()
 	ctx := t.Context()
 
@@ -166,7 +252,7 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("eventsource.onallowregister.tester")
+	tester := connector.New("tester.client")
 	client := eventsourceapi.NewClient(tester)
 	trigger := eventsourceapi.NewMulticastTrigger(tester)
 	hook := eventsourceapi.NewHook(tester)
@@ -221,13 +307,13 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 
 		// Install a hook to verify it receives the event
 		hookReceived := false
-		hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
+		unsub, _ := hook.OnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
 			assert.Expect(email, "test@example.com")
 			hookReceived = true
 			// Hook returns true, but sink will also be consulted
 			return true, nil
 		})
-		defer hook.OnAllowRegister(nil)
+		defer unsub()
 
 		// Trigger the event - both hook and sink receive it
 		count := 0
@@ -256,7 +342,7 @@ func TestEventsource_OnAllowRegister(t *testing.T) {
 	})
 }
 
-func TestEventsource_OnRegistered(t *testing.T) {
+func TestEventsource_OnRegistered(t *testing.T) { // MARKER: OnRegistered
 	t.Parallel()
 	ctx := t.Context()
 
@@ -264,7 +350,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("eventsource.onregistered.tester")
+	tester := connector.New("tester.client")
 	client := eventsourceapi.NewClient(tester)
 	trigger := eventsourceapi.NewMulticastTrigger(tester)
 	hook := eventsourceapi.NewHook(tester)
@@ -285,12 +371,12 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		done := make(chan bool)
 
 		// Verify the OnRegistered event is fired with the correct email
-		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+		unsub, _ := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			assert.Expect(email, "peter@example.com")
 			done <- true
 			return nil
 		})
-		defer hook.OnRegistered(nil)
+		defer unsub()
 
 		// Register a user
 		allowed, err := client.Register(ctx, "peter@example.com")
@@ -306,11 +392,11 @@ func TestEventsource_OnRegistered(t *testing.T) {
 
 		// OnRegistered should NOT fire for blocked registrations
 		// The service only fires the event after successful registration
-		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+		unsub, _ := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			assert.True(false, "OnRegistered should not fire for blocked registrations")
 			return nil
 		})
-		defer hook.OnRegistered(nil)
+		defer unsub()
 
 		// Try to register a blocked user
 		allowed, err := client.Register(ctx, "paul@gmail.com")
@@ -334,7 +420,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		}
 		done := make(chan bool, len(expectedEmails))
 
-		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+		unsub, _ := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// Verify each email matches expected order
 			found := expectedEmails[email]
 			expectedEmails[email] = false
@@ -342,7 +428,7 @@ func TestEventsource_OnRegistered(t *testing.T) {
 			done <- true
 			return nil
 		})
-		defer hook.OnRegistered(nil)
+		defer unsub()
 
 		// Register multiple users
 		for email := range expectedEmails {
@@ -362,14 +448,14 @@ func TestEventsource_OnRegistered(t *testing.T) {
 		done := make(chan bool)
 
 		// Verify the event receives the email as submitted (not normalized)
-		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+		unsub, _ := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			// The service passes the email as-is to the event
 			// Normalization happens in the event sink
 			assert.Expect(email, "David@EXAMPLE.com")
 			done <- true
 			return nil
 		})
-		defer hook.OnRegistered(nil)
+		defer unsub()
 
 		// Register with mixed case
 		allowed, err := client.Register(ctx, "David@EXAMPLE.com")

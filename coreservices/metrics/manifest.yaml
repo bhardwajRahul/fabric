@@ -1,0 +1,20 @@
+general:
+  hostname: metrics.core
+  description: The Metrics service is a core microservice that aggregates metrics from other microservices and makes them available for collection.
+  package: github.com/microbus-io/fabric/coreservices/metrics
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: control.core
+    package: github.com/microbus-io/fabric/coreservices/control
+
+webs:
+  Collect:
+    description: Collect the metrics of all microservices.
+    method: GET
+    route: /collect
+
+configs:
+  SecretKey:
+    description: SecretKey must be provided with the request to collect the metrics. This key is required except in local development and tests.
+    type: string

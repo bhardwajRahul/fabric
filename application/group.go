@@ -53,7 +53,7 @@ func (grp group) Startup(ctx context.Context) error {
 					startErrs <- err
 					return
 				case <-time.After(tryAfter):
-					err = s.Startup()
+					err = s.Startup(ctx)
 					if err == nil {
 						return
 					}
@@ -89,7 +89,7 @@ func (grp group) Shutdown(ctx context.Context) error {
 		go func(s service.Service, delay time.Duration) {
 			defer wg.Done()
 			time.Sleep(delay)
-			shutdownErrs <- s.Shutdown()
+			shutdownErrs <- s.Shutdown(ctx)
 		}(s, delay)
 		delay += time.Millisecond
 	}

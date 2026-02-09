@@ -5,10 +5,10 @@ One of the challenges with messaging buses is that they have an unfamiliar patte
 
 For starters, while NATS supports a purely arbitrary binary message format, `Microbus`'s messages adhere to the HTTP/1.1 request and response message formats. This is done for several reasons:
 
-* The HTTP format includes a meta-data section in the form of headers in addition to an unrestricted binary body. The headers are ideal for sending the control information necessary to make the `Microbus` magic happen
-* The HTTP format is familiar to developers
-* There are plenty of tools and libraries to work with the HTTP format
-* Conversion to and from "real" HTTP by the [ingress proxy service](httpingress.md) is trivial
+- The HTTP format includes a meta-data section in the form of headers in addition to an unrestricted binary body. The headers are ideal for sending the control information necessary to make the `Microbus` magic happen
+- The HTTP format is familiar to developers
+- There are plenty of tools and libraries to work with the HTTP format
+- Conversion to and from "real" HTTP by the [ingress proxy service](../structure/coreservices-httpingress.md) is trivial
 
 ### Emulating Request/Response
 

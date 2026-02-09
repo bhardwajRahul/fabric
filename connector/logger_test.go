@@ -17,7 +17,6 @@ limitations under the License.
 package connector
 
 import (
-	"context"
 	stderrors "errors"
 	"log/slog"
 	"strings"
@@ -30,7 +29,7 @@ func TestConnector_Log(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	stderror := stderrors.New("error")
 
 	con := New("log.connector")
@@ -44,9 +43,9 @@ func TestConnector_Log(t *testing.T) {
 	con.LogError(ctx, "This is a log error message", "error", stderror, "someStr", "some string")
 
 	// Start service to initialize logger
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Logger initialized, it can now be observed
 	assert.NotNil(con.logger)

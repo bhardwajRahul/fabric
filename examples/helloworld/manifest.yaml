@@ -1,0 +1,11 @@
+general:
+  hostname: helloworld.example
+  description: The HelloWorld microservice demonstrates the classic minimalist example.
+  package: github.com/microbus-io/fabric/examples/helloworld
+  frameworkVersion: 2.0.0
+
+webs:
+  HelloWorld:
+    description: HelloWorld prints the classic greeting.
+    method: GET
+    route: /hello-world

@@ -1,0 +1,26 @@
+general:
+  hostname: eventsink.example
+  description: The event sink microservice handles events that are fired by the event source microservice.
+  package: github.com/microbus-io/fabric/examples/eventsink
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: eventsource.example
+    package: github.com/microbus-io/fabric/examples/eventsource
+
+functions:
+  Registered:
+    signature: Registered() (emails []string)
+    description: Registered returns the list of registered users.
+    method: ANY
+    route: :443/registered
+
+inboundEvents:
+  OnAllowRegister:
+    signature: OnAllowRegister(email string) (allow bool)
+    description: OnAllowRegister blocks registrations from gmail and hotmail domains.
+    source: github.com/microbus-io/fabric/examples/eventsource
+  OnRegistered:
+    signature: OnRegistered(email string)
+    description: OnRegistered keeps track of registrations.
+    source: github.com/microbus-io/fabric/examples/eventsource

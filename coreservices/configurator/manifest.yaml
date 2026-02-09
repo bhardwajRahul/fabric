@@ -1,0 +1,47 @@
+general:
+  hostname: configurator.core
+  description: The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.
+  package: github.com/microbus-io/fabric/coreservices/configurator
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: control.core
+    package: github.com/microbus-io/fabric/coreservices/control
+
+functions:
+  Values:
+    signature: Values(names []string) (values map[string]string)
+    description: Values returns the values associated with the specified config property names for the caller microservice.
+    method: ANY
+    route: :888/values
+  Refresh:
+    signature: Refresh()
+    description: Refresh tells all microservices to contact the configurator and refresh their configs. An error is returned if any of the values sent to the microservices fails validation.
+    method: ANY
+    route: :444/refresh
+  SyncRepo:
+    signature: SyncRepo(timestamp time.Time, values map[string]map[string]string)
+    description: SyncRepo is used to synchronize values among replica peers of the configurator.
+    method: ANY
+    route: :888/sync-repo
+    loadBalancing: none
+  Values443:
+    signature: Values443(names []string) (values map[string]string)
+    description: Deprecated.
+    method: ANY
+    route: :443/values
+  Refresh443:
+    signature: Refresh443()
+    description: Deprecated.
+    method: ANY
+    route: :443/refresh
+  Sync443:
+    signature: Sync443(timestamp time.Time, values map[string]map[string]string)
+    description: Deprecated.
+    method: ANY
+    route: :443/sync
+
+tickers:
+  PeriodicRefresh:
+    description: PeriodicRefresh refreshes all microservice configs every 20 minutes.
+    interval: 20m

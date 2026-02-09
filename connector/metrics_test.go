@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 
 func TestConnector_DefineMetrics(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("define.metrics.connector")
@@ -61,9 +62,9 @@ func TestConnector_DefineMetrics(t *testing.T) {
 
 	// Startup
 	con.initErr = nil
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Describe all three collector types after starting up
 	err = con.DescribeCounter(
@@ -122,9 +123,9 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 
 	// Startup
 	con.initErr = nil
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Histogram
 	err = con.RecordHistogram(ctx, "my_histogram", 2.5, "a", "1")
@@ -134,7 +135,7 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 	err = con.RecordHistogram(ctx, "my_histogram", -2.5, "a", "1")
 	assert.NoError(err)
 
-	err = con.AddCounter(ctx, "my_histogram", 1.5, "a", "1")
+	err = con.IncrementCounter(ctx, "my_histogram", 1.5, "a", "1")
 	assert.Error(err)
 	err = con.RecordGauge(ctx, "my_histogram", 1.5, "a", "1")
 	assert.Error(err)
@@ -147,17 +148,17 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 	err = con.RecordGauge(ctx, "my_gauge", 0, "a", "1")
 	assert.NoError(err)
 
-	err = con.AddCounter(ctx, "my_gauge", 1.5, "a", "1")
+	err = con.IncrementCounter(ctx, "my_gauge", 1.5, "a", "1")
 	assert.Error(err)
 	err = con.RecordHistogram(ctx, "my_gauge", 2.5, "a", "1")
 	assert.Error(err)
 
 	// Counter
-	err = con.AddCounter(ctx, "my_counter", 1.5, "a", "1")
+	err = con.IncrementCounter(ctx, "my_counter", 1.5, "a", "1")
 	assert.NoError(err)
-	err = con.AddCounter(ctx, "my_counter", 0, "a", "1")
+	err = con.IncrementCounter(ctx, "my_counter", 0, "a", "1")
 	assert.NoError(err)
-	err = con.AddCounter(ctx, "my_counter", -1.5, "a", "1")
+	err = con.IncrementCounter(ctx, "my_counter", -1.5, "a", "1")
 	assert.Error(err)
 
 	err = con.RecordHistogram(ctx, "my_counter", 2.5, "a", "1")
@@ -168,6 +169,7 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 
 func TestConnector_StandardMetrics(t *testing.T) {
 	// No parallel
+	ctx := t.Context()
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
@@ -176,9 +178,9 @@ func TestConnector_StandardMetrics(t *testing.T) {
 	con := New("standard.metrics.connector")
 	assert.Len(con.metricInstruments, 0)
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Len(con.metricInstruments, 10)
 	assert.NotNil(con.metricInstruments["microbus_callback_duration_seconds"])
@@ -220,6 +222,7 @@ func TestConnector_InferUnit(t *testing.T) {
 
 func TestConnector_MetricExporters(t *testing.T) {
 	// No parallel
+	ctx := t.Context()
 	assert := testarossa.For(t)
 	delay := time.Millisecond * 100
 
@@ -242,10 +245,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:5555")
 
 	con := New("metric.exporters.connector")
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	err = con.Shutdown()
+	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
 	assert.Equal(2, int(counter.Load()))
@@ -255,10 +258,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
 	con = New("metric.exporters.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	err = con.Shutdown()
+	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
 	assert.Equal(2, int(counter.Load()))
@@ -268,10 +271,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:5555")
 
 	con = New("metric.exporters.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	err = con.Shutdown()
+	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
 	assert.Equal(4, int(counter.Load()))
@@ -281,10 +284,10 @@ func TestConnector_MetricExporters(t *testing.T) {
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
 	con = New("metric.exporters.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	err = con.Shutdown()
+	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
 	assert.Equal(4, int(counter.Load()))

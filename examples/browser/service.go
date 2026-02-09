@@ -22,20 +22,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/httpegress/httpegressapi"
+
 	"github.com/microbus-io/fabric/examples/browser/browserapi"
-	"github.com/microbus-io/fabric/examples/browser/intermediate"
 )
 
 var (
 	_ context.Context
-	_ *http.Request
-	_ time.Duration
-	_ *errors.TracedError
-	_ *browserapi.Client
+	_ http.Request
+	_ errors.TracedError
+	_ browserapi.Client
 )
 
 /*
@@ -44,7 +42,9 @@ Service implements the browser.example microservice.
 The browser microservice implements a simple web browser that utilizes the egress proxy.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
+
+	// HINT: Add member variables here
 }
 
 // OnStartup is called when the microservice is started up.
@@ -60,7 +60,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Browser shows a simple address bar and the source code of a URL.
 */
-func (svc *Service) Browse(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Browse(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Browse
 	ctx := r.Context()
 	u := r.URL.Query().Get("url")
 	if u != "" && !strings.Contains(u, "://") {

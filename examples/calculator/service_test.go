@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,17 +17,153 @@ limitations under the License.
 package calculator
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"sync"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 )
 
-func TestCalculator_Arithmetic(t *testing.T) {
+var (
+	_ context.Context
+	_ *testing.T
+	_ jwt.MapClaims
+	_ application.Application
+	_ connector.Connector
+	_ frame.Frame
+	_ pub.Option
+	_ testarossa.Asserter
+	_ calculatorapi.Client
+)
+
+func TestCalculator_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(calculatorapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestCalculator_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("arithmetic", func(t *testing.T) { // MARKER: Arithmetic
+		assert := testarossa.For(t)
+		_, _, _, _, err := mock.Arithmetic(ctx, 1, "+", 2)
+		assert.Error(err) // Not mocked yet
+
+		mock.MockArithmetic(func(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) {
+			return x, op, y, x + y, nil
+		})
+		xEcho, opEcho, yEcho, result, err := mock.Arithmetic(ctx, 3, "+", 4)
+		assert.NoError(err)
+		assert.Expect(xEcho, 3, opEcho, "+", yEcho, 4, result, 7)
+	})
+
+	t.Run("square", func(t *testing.T) { // MARKER: Square
+		assert := testarossa.For(t)
+		_, _, err := mock.Square(ctx, 5)
+		assert.Error(err) // Not mocked yet
+
+		mock.MockSquare(func(ctx context.Context, x int) (xEcho int, result int, err error) {
+			return x, x * x, nil
+		})
+		xEcho, result, err := mock.Square(ctx, 5)
+		assert.NoError(err)
+		assert.Expect(xEcho, 5, result, 25)
+	})
+
+	t.Run("distance", func(t *testing.T) { // MARKER: Distance
+		assert := testarossa.For(t)
+		_, err := mock.Distance(ctx, calculatorapi.Point{}, calculatorapi.Point{})
+		assert.Error(err) // Not mocked yet
+
+		mock.MockDistance(func(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error) {
+			return 5.0, nil
+		})
+		d, err := mock.Distance(ctx, calculatorapi.Point{X: 3, Y: 0}, calculatorapi.Point{X: 0, Y: 4})
+		assert.NoError(err)
+		assert.Expect(d, 5.0)
+	})
+
+	t.Run("on_observe_sum_operations", func(t *testing.T) { // MARKER: SumOperations
+		assert := testarossa.For(t)
+		err := mock.OnObserveSumOperations(ctx)
+		assert.Error(err) // Not mocked yet
+
+		mock.MockOnObserveSumOperations(func(ctx context.Context) (err error) {
+			return nil
+		})
+		err = mock.OnObserveSumOperations(ctx)
+		assert.NoError(err)
+	})
+}
+
+func TestCalculator_Arithmetic(t *testing.T) { // MARKER: Arithmetic
 	t.Parallel()
 	ctx := t.Context()
 
@@ -35,7 +171,7 @@ func TestCalculator_Arithmetic(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("calculator.arithmetic.tester")
+	tester := connector.New("tester.client")
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
@@ -115,7 +251,7 @@ func TestCalculator_Arithmetic(t *testing.T) {
 	}
 }
 
-func TestCalculator_Square(t *testing.T) {
+func TestCalculator_Square(t *testing.T) { // MARKER: Square
 	t.Parallel()
 	ctx := t.Context()
 
@@ -123,7 +259,7 @@ func TestCalculator_Square(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("calculator.square.tester")
+	tester := connector.New("tester.client")
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
@@ -165,7 +301,7 @@ func TestCalculator_Square(t *testing.T) {
 	}
 }
 
-func TestCalculator_Distance(t *testing.T) {
+func TestCalculator_Distance(t *testing.T) { // MARKER: Distance
 	t.Parallel()
 	ctx := t.Context()
 
@@ -173,7 +309,7 @@ func TestCalculator_Distance(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("calculator.distance.tester")
+	tester := connector.New("tester.client")
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
@@ -263,7 +399,7 @@ func TestCalculator_Distance(t *testing.T) {
 	}
 }
 
-func TestCalculator_OnObserveSumOperations(t *testing.T) {
+func TestCalculator_OnObserveSumOperations(t *testing.T) { // MARKER: SumOperations
 	t.Parallel()
 	ctx := t.Context()
 	assert := testarossa.For(t)
@@ -272,7 +408,7 @@ func TestCalculator_OnObserveSumOperations(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("calculator.observesumops.tester")
+	tester := connector.New("tester.client")
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app
@@ -332,7 +468,7 @@ func TestCalculator_ConcurrentOperations(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("calculator.concurrent.tester")
+	tester := connector.New("tester.client")
 	client := calculatorapi.NewClient(tester)
 
 	// Run the testing app

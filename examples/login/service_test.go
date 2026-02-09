@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import (
 	"github.com/microbus-io/fabric/examples/login/loginapi"
 )
 
-func TestLogin_Login(t *testing.T) {
+func TestLogin_Login(t *testing.T) { // MARKER: Login
 	t.Parallel()
 	ctx := t.Context()
 
@@ -41,7 +41,7 @@ func TestLogin_Login(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("login.login.tester")
+	tester := connector.New("tester.client")
 	client := loginapi.NewClient(tester)
 
 	app := application.New()
@@ -56,7 +56,7 @@ func TestLogin_Login(t *testing.T) {
 	t.Run("login_form_displayed", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Login(ctx, "GET", "", "", nil)
+		res, err := client.Login(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -91,7 +91,7 @@ func TestLogin_Login(t *testing.T) {
 			"p": {"password"},
 			"l": {"Login"},
 		}
-		res, err := client.Login(ctx, "POST", "", "", formData)
+		res, err := client.Login(ctx, "POST", "", formData)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
 			// Check that a cookie was set with the authorization token
 			cookies := res.Header.Values("Set-Cookie")
@@ -103,7 +103,7 @@ func TestLogin_Login(t *testing.T) {
 	})
 }
 
-func TestLogin_Logout(t *testing.T) {
+func TestLogin_Logout(t *testing.T) { // MARKER: Logout
 	t.Parallel()
 	ctx := t.Context()
 
@@ -111,7 +111,7 @@ func TestLogin_Logout(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("login.logout.tester")
+	tester := connector.New("tester.client")
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
@@ -132,7 +132,7 @@ func TestLogin_Logout(t *testing.T) {
 			Subject: "someone@example.com",
 			Roles:   []string{"m", "u"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Logout(ctx, "GET", "", "", nil)
+		res, err := client.WithOptions(pub.Actor(actor)).Logout(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
 			// Check that the Authorization cookie is cleared
 			cookies := res.Header.Values("Set-Cookie")
@@ -144,7 +144,7 @@ func TestLogin_Logout(t *testing.T) {
 	})
 }
 
-func TestLogin_Welcome(t *testing.T) {
+func TestLogin_Welcome(t *testing.T) { // MARKER: Welcome
 	t.Parallel()
 	ctx := t.Context()
 
@@ -152,7 +152,7 @@ func TestLogin_Welcome(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("login.welcome.tester")
+	tester := connector.New("tester.client")
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
@@ -173,7 +173,7 @@ func TestLogin_Welcome(t *testing.T) {
 			Subject: "someone@example.com",
 			Roles:   []string{"m", "u"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", "", nil)
+		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -190,7 +190,7 @@ func TestLogin_Welcome(t *testing.T) {
 			Subject: "someone@example.com",
 			Roles:   []string{"a"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", "", nil)
+		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -200,7 +200,7 @@ func TestLogin_Welcome(t *testing.T) {
 	})
 }
 
-func TestLogin_AdminOnly(t *testing.T) {
+func TestLogin_AdminOnly(t *testing.T) { // MARKER: AdminOnly
 	t.Parallel()
 	ctx := t.Context()
 
@@ -208,7 +208,7 @@ func TestLogin_AdminOnly(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("login.adminonly.tester")
+	tester := connector.New("tester.client")
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app
@@ -254,7 +254,7 @@ func TestLogin_AdminOnly(t *testing.T) {
 	})
 }
 
-func TestLogin_ManagerOnly(t *testing.T) {
+func TestLogin_ManagerOnly(t *testing.T) { // MARKER: ManagerOnly
 	t.Parallel()
 	ctx := t.Context()
 
@@ -262,7 +262,7 @@ func TestLogin_ManagerOnly(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("login.manageronly.tester")
+	tester := connector.New("tester.client")
 	client := loginapi.NewClient(tester)
 
 	// Run the testing app

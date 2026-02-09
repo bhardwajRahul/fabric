@@ -9,10 +9,10 @@ Practically all solutions require interaction with a source that is outside `Mic
 
 On one end, the HTTP ingress proxy listens on port `:8080` for real HTTP requests; on the other end it is connected to NATS. The ingress proxy converts real requests into requests on the bus; and on the flip side, converts responses from the bus to real responses. Because the bus messages in `Microbus` are formatted themselves as HTTP messages, this conversion is trivial, with minor adjustments:
 
-* The proxy filters out `Microbus-` control headers from coming in or leaking out
-* The first segment of the path of the real HTTP request is treated as the hostname of the microservice on the bus. So for example, `POST` request `http://localhost:8080/echo.example/echo` is translated to a bus `POST` request `https://echo.example/echo` which is then mapped to the NATS subject `microbus.443.example.echo.|.POST.echo`.
-* Port `:443` is assumed by default when a port is not explicitly specified. Internal ports can be designated in the first segment of the path. For example, `http://localhost:8080/echo.example:1234/echo` is mapped to the bus address `https://echo.example:1234/echo`.
-* The empty root path is transformed to `/root`, therefore `http://localhost:8080/` is mapped to `https://root`.
+- The proxy filters out `Microbus-` control headers from coming in or leaking out
+- The first segment of the path of the real HTTP request is treated as the hostname of the microservice on the bus. So for example, `POST` request `http://localhost:8080/echo.example/echo` is translated to a bus `POST` request `https://echo.example/echo` which is then mapped to the NATS subject `microbus.443.example.echo.|.POST.echo`.
+- Port `:443` is assumed by default when a port is not explicitly specified. Internal ports can be designated in the first segment of the path. For example, `http://localhost:8080/echo.example:1234/echo` is mapped to the bus address `https://echo.example:1234/echo`.
+- The empty root path is transformed to `/root`, therefore `http://localhost:8080/` is mapped to `https://root`.
 
 ### Configuration
 
@@ -39,10 +39,10 @@ Ports can be used to differentiate between traffic that is coming from trusted a
 
 Four config properties are used to safeguard against long requests:
 
-* `ReadHeaderTimeout` is the timeout to read the request's header
-* `ReadTimeout` is the timeout to read the full request, including the header
-* `TimeBudget` is the time budget allocated to the downstream microservice to process the request
-* `WriteTimeout` is the timeout to write the response back to the client
+- `ReadHeaderTimeout` is the timeout to read the request's header
+- `ReadTimeout` is the timeout to read the full request, including the header
+- `TimeBudget` is the time budget allocated to the downstream microservice to process the request
+- `WriteTimeout` is the timeout to write the response back to the client
 
 <img src="./coreservices-httpingress-2.drawio.svg">
 <p></p>
@@ -55,10 +55,10 @@ Four config properties are used to safeguard against long requests:
 
 The HTTP ingress proxy respects the following incoming headers:
 
-* `Request-Timeout` can be used to override the default time-budget of the request
-* `Accept-Encoding` with `br`, `deflate` or `gzip` can be used to compress the response
-* `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Proto` and `X-Forwarded-Prefix` are augmented with the ingress proxy's information 
-* `Origin` may cause a request to be blocked
+- `Request-Timeout` can be used to override the default time-budget of the request
+- `Accept-Encoding` with `br`, `deflate` or `gzip` can be used to compress the response
+- `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Proto` and `X-Forwarded-Prefix` are augmented with the ingress proxy's information 
+- `Origin` may cause a request to be blocked
 
 ### Middleware
 

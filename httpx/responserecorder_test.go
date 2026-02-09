@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -85,7 +85,7 @@ func TestHttpx_Copy(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	payload := rand.AlphaNum64(256 * 1024)
+	payload := utils.RandomIdentifier(256 * 1024)
 
 	recorder := NewResponseRecorder()
 	recorder.Write([]byte(payload))

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,13 +45,6 @@ type Cache[K comparable, V any] struct {
 	misses     int
 	lock       sync.Mutex
 	timeOffset time.Duration // For testing only
-}
-
-// NewCache creates a new LRU cache with max weight 16384 and max age of 1 hour.
-//
-// Deprecated: Use New to explicitly specify max weight and max age.
-func NewCache[K comparable, V any]() *Cache[K, V] {
-	return New[K, V](16384, time.Hour)
 }
 
 // New creates a new LRU cache.

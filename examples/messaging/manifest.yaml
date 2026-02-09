@@ -1,0 +1,28 @@
+general:
+  hostname: messaging.example
+  description: The Messaging microservice demonstrates service-to-service communication patterns.
+  package: github.com/microbus-io/fabric/examples/messaging
+  frameworkVersion: 2.0.0
+
+webs:
+  Home:
+    description: Home demonstrates making requests using multicast and unicast request/response patterns.
+    method: GET
+    route: /home
+  NoQueue:
+    description: NoQueue demonstrates how the NoQueue subscription option is used to create a multicast request/response communication pattern. All instances respond.
+    method: GET
+    route: /no-queue
+    loadBalancing: none
+  DefaultQueue:
+    description: DefaultQueue demonstrates how the DefaultQueue subscription option is used to create a unicast request/response communication pattern. Only one instance responds.
+    method: GET
+    route: /default-queue
+  CacheLoad:
+    description: CacheLoad looks up an element in the distributed cache of the microservice.
+    method: GET
+    route: /cache-load
+  CacheStore:
+    description: CacheStore stores an element in the distributed cache of the microservice.
+    method: GET
+    route: /cache-store

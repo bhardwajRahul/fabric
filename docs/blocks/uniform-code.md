@@ -1,44 +1,38 @@
 # Uniform Code Structure
 
-The code generator creates numerous files and subdirectories in the directory of the microservice.
+Coding agents are instructed to create numerous files and subdirectories in the directory of a microservice.
 
 ```
-{name}
-├── {name}api
-│   ├── clients-gen.go
-│   ├── imports-gen.go
-│   └── {type}.go
-├── intermediate
-│   ├── intermediate-gen.go
-│   └── mock-gen.go
-├── resources
-│   └── embed-gen.go
-├── AGENTS.md
-├── CLAUDE.md
-├── doc.go
-├── service_test.go
-├── service-gen.go
-├── service.go
-├── service.yaml
-├── version-gen_test.go
-└── version-gen.go
+myservice/                  # Each microservice has its own directory
+├── myserviceapi/           # The public interface of this microservice
+│   ├── client.go           # Generated client API
+│   └── [type].go           # Generated definition for each type used in the API
+├── resources/              # Embedded resource files
+│   ├── embed.go            # go:embed directive
+│   └── [your files]        # Static files, configs, etc.
+├── AGENTS.md               # Local instructions to the coding agent
+├── CLAUDE.md               # Local instructions for Claude
+├── intermediate.go         # Service infrastructure
+├── manifest.yaml           # Manifest of [features](../blocks/features.md)
+├── mock.go                 # Mock for testing purposes
+├── PROMPTS.md              # Audit trail of prompts
+├── service_test.go         # Integration tests
+└── service.go              # Implementation
 ```
 
-Files that include `-gen` in their name are fully code generated and should not be edited. The are also marked with a `DO NOT EDIT` comment.
-
-The `{name}api` directory (and package) defines the `Client` and `MulticastClient` of the microservice and the complex types (structs) that they use. `MulticastTrigger` and `Hook` are defined if the microservice is a source of events. Together these represent the public-facing API of the microservice to upstream microservices. The name of the directory `{name}api` is derived from that of the microservice in order to make it easily distinguishable in code completion tools.
-
-The `intermediate` directory (and package) defines the `Intermediate` and the `Mock`. The `Intermediate` serves as the base of the microservice via anonymous inclusion and in turn extends the [`Connector`](../structure/connector.md). The `Mock` is a mockable stub of the microservices that can be used in [integration testing](../blocks/integration-testing.md) when a live version of the microservice cannot.
-
-`AGENTS.md` allows setting instructions to coding agents that should be respected in the context of this microservice only. `CLAUDE.md` refers Claude Code to `Agents.md`.
-
-A test harness is created in `service_test.go` for each testable web handler, functional endpoint, event, event sink ticker, config callback and metric callback of the microservice. The logic of each test is left to the solution developer to implement.
+The `*api` directory (and package) defines the `Client` and `MulticastClient` of the microservice and the complex types (structs) that they use. `MulticastTrigger` and `Hook` are also defined and populated if the microservice is a source of events. Together these represent the public-facing API of the microservice to upstream microservices. The name of the API directory is derived from that of the microservice in order to make it easily distinguishable in code completion tools.
 
 The `resources` directory is a place to put [static files to be embedded](../blocks/embedded-res.md) into the executable of the microservice. Templates, images and scripts are some examples of what can potentially be embedded.
 
-`service-gen.go` primarily includes the function to create a `NewService`.
+`AGENTS.md` allows setting instructions to coding agents that should be respected in the context of this microservice only. `CLAUDE.md` refers Claude Code to `AGENTS.md`. `PROMPTS.md` keeps an audit trail of the prompts that affected this microservice.
 
-`service.go` is where the solution developer is expected to introduce the business logic of the microservice. `service.go` implements `Service`, which extends `Intermediate` as mentioned earlier. Most of the tools that a microservice needs are available through the receiver `(svc *Service)` which points to the `Intermediate` and by extension the `Connector`. It include the methods of the `Connector` as well as type-specific methods defined in the `Intermediate`.
+`intermediate.go` defines the `Intermediate` that serves as the base of the microservice via anonymous inclusion, in turn extending the [`Connector`](../structure/connector.md).
+
+The `Mock` is a mockable stub of the microservice that can be used in [integration testing](../blocks/integration-testing.md) when a live version of the microservice cannot. It is defined in `mock.go`.
+
+A test is created in `service_test.go` for each testable web handler, functional endpoint, event, event sink, ticker, config callback and metric callback of the microservice.
+
+`service.go` is where the business logic of the microservice lives. `service.go` implements `Service`, which extends `Intermediate` as mentioned earlier. Most of the tools that a microservice needs are available through the receiver `(svc *Service)` which points to the `Intermediate` and by extension the `Connector`. It includes the methods of the `Connector` as well as type-specific methods defined in the `Intermediate`.
 
 ```go
 type Intermediate struct {
@@ -53,21 +47,3 @@ func (svc *Service) DoSomething(ctx context.Context) (err error) {
     // svc points to the Intermediate and by extension the Connector
 }
 ```
-
-In addition to the standard `OnStartup` and `OnShutdown` callbacks, the code generator creates an empty function in `service.go` for each and every web handler, functional handler, event sink, ticker or config change callback defined in `service.yaml` as described earlier.
-
-```go
-// OnStartup is called when the microservice is started up.
-func (svc *Service) OnStartup(ctx context.Context) (err error) {
-    return nil
-}
-
-// OnShutdown is called when the microservice is shut down.
-func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-    return nil
-}
-```
-
-`service.yaml` is the input to the code generator. Every microservice starts here.
-
-`version-gen.go` holds the SHA256 of the source code and the auto-incremented version number. `version-gen_test.go` makes sure it is up to date. If the test fails, running `go generate` brings the version up to date.

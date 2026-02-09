@@ -30,7 +30,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/examples/directory/directoryapi"
-	"github.com/microbus-io/fabric/examples/directory/intermediate"
 	"github.com/microbus-io/fabric/pub"
 )
 
@@ -48,7 +47,7 @@ Service implements the directory.example microservice.
 The directory microservice exposes a RESTful API for persisting personal records in a SQL database.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 
 	db *sql.DB
 }
@@ -95,7 +94,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Create registers the person in the directory.
 */
-func (svc *Service) Create(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error) {
+func (svc *Service) Create(ctx context.Context, httpRequestBody directoryapi.Person) (key directoryapi.PersonKey, err error) { // MARKER: Create
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
@@ -139,7 +138,7 @@ func (svc *Service) Create(ctx context.Context, httpRequestBody directoryapi.Per
 /*
 Update updates the person's data in the directory.
 */
-func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error) {
+func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, httpRequestBody directoryapi.Person) (err error) { // MARKER: Update
 	person := httpRequestBody
 	err = person.Validate()
 	if err != nil {
@@ -184,7 +183,7 @@ func (svc *Service) Update(ctx context.Context, key directoryapi.PersonKey, http
 /*
 Load looks up a person in the directory.
 */
-func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error) {
+func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpResponseBody directoryapi.Person, err error) { // MARKER: Load
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
@@ -216,7 +215,7 @@ func (svc *Service) Load(ctx context.Context, key directoryapi.PersonKey) (httpR
 /*
 Delete removes a person from the directory.
 */
-func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err error) {
+func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err error) { // MARKER: Delete
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
@@ -248,7 +247,7 @@ func (svc *Service) Delete(ctx context.Context, key directoryapi.PersonKey) (err
 /*
 LoadByEmail looks up a person in the directory by their email.
 */
-func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error) {
+func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponseBody directoryapi.Person, err error) { // MARKER: LoadByEmail
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
@@ -280,7 +279,7 @@ func (svc *Service) LoadByEmail(ctx context.Context, email string) (httpResponse
 /*
 List returns the keys of all the persons in the directory.
 */
-func (svc *Service) List(ctx context.Context) (httpResponseBody []directoryapi.PersonKey, err error) {
+func (svc *Service) List(ctx context.Context) (httpResponseBody []directoryapi.PersonKey, err error) { // MARKER: List
 	if svc.db == nil {
 		// Emulate a database in-memory
 		mux.Lock()
@@ -313,7 +312,7 @@ func (svc *Service) List(ctx context.Context) (httpResponseBody []directoryapi.P
 /*
 WebUI provides a form for making web requests to the CRUD endpoints.
 */
-func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: WebUI
 	ctx := r.Context()
 	err = r.ParseForm()
 	if err != nil {

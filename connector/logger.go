@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ func (c *Connector) LogDebug(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Debug(msg, args...)
-	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
 		"severity", "DEBUG",
 	)
@@ -95,7 +95,7 @@ func (c *Connector) LogInfo(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Info(msg, args...)
-	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
 		"severity", "INFO",
 	)
@@ -124,7 +124,7 @@ func (c *Connector) LogWarn(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Warn(msg, args...)
-	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
 		"severity", "WARN",
 	)
@@ -170,7 +170,7 @@ func (c *Connector) LogError(ctx context.Context, msg string, args ...any) {
 		args = append(args, "trace", traceID)
 	}
 	logger.Error(msg, args...)
-	_ = c.AddCounter(ctx, "microbus_log_messages", 1,
+	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
 		"severity", "ERROR",
 	)

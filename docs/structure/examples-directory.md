@@ -7,63 +7,13 @@ For the sake of this example, if a connection to the SQL database cannot be esta
 
 It takes a couple of steps to add SQL support to a microservice.
 
-Edit `service.yaml` to define a configuration property to represent the connection string.
+> HEY CLAUDE...
+>
+Define a configuration property "SQL" to represent the data source name.
 
-```yaml
-configs:
-  - signature: SQL() (dsn string)
-    description: SQL is the connection string to the database.
-```
-
-Then run `go generate` to create the `svc.SQL()` method corresponding to the `SQL` configuration property.
-
-```shell
-go generate
-```
-
-Next, define the database connection `db *sql.DB` as a member property of the `Service`.
-
-```go
-import _ "github.com/go-sql-driver/mysql"
-
-type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
-
-	db *sql.DB
-}
-```
-
-Open it in `OnStartup`.
-
-```go
-// OnStartup is called when the microservice is started up.
-func (svc *Service) OnStartup(ctx context.Context) (err error) {
-	dsn := svc.SQL()
-	if dsn != "" {
-		svc.db, err = sql.Open("mysql", dsn)
-		if err == nil {
-			err = svc.db.PingContext(ctx)
-		}
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
-}
-```
-
-And close it in `OnShutdown`.
-
-```go
-// OnShutdown is called when the microservice is shut down.
-func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-	if svc.db != nil {
-		svc.db.Close()
-		svc.db = nil
-	}
-	return nil
-}
-```
+> HEY CLAUDE...
+>
+> Open a SQL database connection for the life of the microservice. Take the connection string from the "SQL" property.
 
 ### Connecting to the Database
 
@@ -71,7 +21,7 @@ This example requires a MariaDB database instance. If you don't already have one
 
 ```shell
 docker pull mariadb
-docker run -p 3306:3306 --name mariadb-1 -e MARIADB_ROOT_PASSWORD=secret1234 -d mariadb
+docker run -p 3306:3306 --name mariadb-1 -e MARIADB_ROOT_PASSWORD=root -d mariadb
 ```
 
 Next, create a database named `microbus_examples`.
@@ -79,7 +29,7 @@ Next, create a database named `microbus_examples`.
 From the `Exec` panel of the `mariadb-1` container, type:
 
 ```shell
-mysql -uroot -psecret1234
+mysql -uroot -proot
 ```
 
 And then use the SQL command prompt to create the database:
@@ -91,11 +41,11 @@ CREATE DATABASE microbus_examples;
 <img src="examples-directory-1.png" width="498">
 <p></p>
 
-The connection string to the database is pulled from `main/config.yaml` by the [configurator](../structure/coreservices-configurator.md) and served to the `directory.example` microservice. Adjust it as necessary to point to the location of your MariaDB database.
+Set the connection string to the database in `config.local.yaml` at the root of the project.
 
 ```yaml
 directory.example:
-  SQL: "root:secret1234@tcp(127.0.0.1:3306)/microbus_examples"
+  SQL: "root:root@tcp(127.0.0.1:3306)/microbus_examples"
 ```
 
 ### Web UI
@@ -159,7 +109,7 @@ To delete a record, `DELETE` at `/persons/key/1`. Voldemort would be pleased.
 
 Alternatively, use the OpenAPI document of the microservice to interact with the directory microservice. Fetch the OpenAPI document at:
 
-http://localhost:8080/codegen.test/openapi.json
+http://localhost:8080/directory.example/openapi.json
 
 Copy the JSON and paste it at https://editor-next.swagger.io to parse it. You'll see all endpoints of the microservices listed to the right-hand side.
 

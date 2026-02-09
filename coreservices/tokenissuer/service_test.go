@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,22 +20,129 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
 )
 
-func TestTokenissuer_IssueToken(t *testing.T) {
+var (
+	_ context.Context
+	_ *testing.T
+	_ jwt.MapClaims
+	_ application.Application
+	_ connector.Connector
+	_ frame.Frame
+	_ pub.Option
+	_ testarossa.Asserter
+	_ tokenissuerapi.Client
+)
+
+func TestTokenissuer_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		"444",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(tokenissuerapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestTokenissuer_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("issue_token", func(t *testing.T) { // MARKER: IssueToken
+		assert := testarossa.For(t)
+		_, err := mock.IssueToken(ctx, tokenissuerapi.MapClaims{"sub": "test"})
+		assert.Error(err) // Not mocked yet
+
+		mock.MockIssueToken(func(ctx context.Context, claims tokenissuerapi.MapClaims) (signedToken string, err error) {
+			return "mock-token", nil
+		})
+		signedToken, err := mock.IssueToken(ctx, tokenissuerapi.MapClaims{"sub": "test"})
+		assert.NoError(err)
+		assert.Expect(signedToken, "mock-token")
+	})
+
+	t.Run("validate_token", func(t *testing.T) { // MARKER: ValidateToken
+		assert := testarossa.For(t)
+		_, _, err := mock.ValidateToken(ctx, "some-token")
+		assert.Error(err) // Not mocked yet
+
+		mock.MockValidateToken(func(ctx context.Context, signedToken string) (claims tokenissuerapi.MapClaims, valid bool, err error) {
+			return tokenissuerapi.MapClaims{"sub": "test"}, true, nil
+		})
+		claims, valid, err := mock.ValidateToken(ctx, "some-token")
+		assert.NoError(err)
+		assert.Expect(claims["sub"], "test", valid, true)
+	})
+}
+
+func TestTokenissuer_IssueToken(t *testing.T) { // MARKER: IssueToken
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -43,11 +150,11 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	// Initialize the microservice under test
 	svc := NewService()
 	svc.SetAuthTokenTTL(time.Hour)
-	svc.SetSecretKey(rand.AlphaNum64(64))
+	svc.SetSecretKey(utils.RandomIdentifier(64))
 	// svc.SetAltSecretKey(key)
 
 	// Initialize the testers
-	tester := connector.New("tokenissuer.issuetoken.tester")
+	tester := connector.New("tester.client")
 	client := tokenissuerapi.NewClient(tester)
 	_ = client
 
@@ -55,13 +162,14 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		svc.Init(func(svc *Service) {
+		svc.Init(func(svc *Service) (err error) {
 			svc.SetClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (transformedClaims jwt.MapClaims, err error) {
 				if _, ok := claims["transform"]; ok {
 					claims["transform"] = 1
 				}
 				return claims, nil
 			})
+			return nil
 		}),
 		tester,
 	)
@@ -89,7 +197,6 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 
 		token, _ := jwt.Parse(signedToken, nil)
 		mc := token.Claims.(jwt.MapClaims)
-		assert.True(mc.VerifyIssuer(svc.issClaim, true))
 		assert.Equal(svc.issClaim, mc["iss"])
 		assert.NotNil(mc["iat"])
 		assert.NotNil(mc["exp"])
@@ -152,7 +259,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 			err, nil,
 		)
 
-		svc.SetSecretKey(rand.AlphaNum64(64))
+		svc.SetSecretKey(utils.RandomIdentifier(64))
 
 		_, valid, err = client.ValidateToken(ctx, signedToken)
 		assert.Expect(
@@ -181,7 +288,7 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 		)
 
 		svc.SetAltSecretKey(svc.SecretKey())
-		svc.SetSecretKey(rand.AlphaNum64(64))
+		svc.SetSecretKey(utils.RandomIdentifier(64))
 
 		_, valid, err = client.ValidateToken(ctx, signedToken)
 		assert.Expect(
@@ -243,9 +350,9 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 
 		token, _ := jwt.Parse(signedToken, nil)
 		mc := token.Claims.(jwt.MapClaims)
-		assert.True(mc.VerifyIssuer(svc.issClaim, true))
+		assert.Equal(svc.issClaim, mc["iss"])
 
-		svc.SetSecretKey(rand.AlphaNum64(64))
+		svc.SetSecretKey(utils.RandomIdentifier(64))
 	})
 
 	t.Run("claims_transformer", func(t *testing.T) {
@@ -292,6 +399,6 @@ func TestTokenissuer_IssueToken(t *testing.T) {
 	})
 }
 
-func TestTokenissuer_ValidateToken(t *testing.T) {
+func TestTokenissuer_ValidateToken(t *testing.T) { // MARKER: ValidateToken
 	t.Skip() // Tested elsewhere
 }

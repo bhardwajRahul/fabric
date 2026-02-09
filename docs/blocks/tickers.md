@@ -6,20 +6,7 @@ Tickers run independently for each replica of the microservice, so a once an hou
 
 Tickers are defined using the `Connector`s `StartTicker` method which accepts a name, an interval and a callback function (handler). If the microservice is running, the ticker activates immediately. Otherwise, it will activate when the microservice starts. `StopTicker` can be used to stop a ticker identified by its name.
 
-The more common case is to define tickers in `service.yaml` and use the [code generator](../blocks/codegen.md) to generate their [skeleton code](../blocks/skeleton-code.md).
-
-```yaml
-# Tickers
-#
-# signature - Go-style method signature (no arguments or return values)
-#   MyTicker()
-# description - Documentation
-# interval - Duration between iterations (e.g. 15m)
-tickers:
-  - signature: HourlyJob()
-    description: HourlyJob runs once an hour.
-    interval: 1h
-```
+The common case is to let the [coding agent](../blocks/coding-agents.md) define tickers.
 
 Tickers are disabled in the `TESTING` [deployment environment](../tech/deployments.md) in order to avoid the unpredictability of their running schedule.
 

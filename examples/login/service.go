@@ -22,10 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
-	"github.com/microbus-io/fabric/examples/login/intermediate"
 	"github.com/microbus-io/fabric/examples/login/loginapi"
 	"github.com/microbus-io/fabric/frame"
 )
@@ -48,7 +47,7 @@ Service implements the login.example microservice.
 The Login microservice demonstrates usage of authentication and authorization.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -66,7 +65,7 @@ Login renders a simple login screen that authenticates a user.
 Known users are hardcoded as "admin", "manager" and "user".
 The password is "password".
 */
-func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Login
 	ctx := r.Context()
 
 	// Read submitted values
@@ -142,7 +141,7 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) {
 /*
 Logout renders a page that logs out the user.
 */
-func (svc *Service) Logout(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Logout(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Logout
 	// Clear the cookie
 	cookie := &http.Cookie{
 		Name:     authTokenCookieName,
@@ -163,7 +162,7 @@ func (svc *Service) Logout(w http.ResponseWriter, r *http.Request) (err error) {
 Welcome renders a page that is shown to the user after a successful login.
 Rendering is adjusted based on the user's roles.
 */
-func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Welcome
 	var actor Actor
 	_, err = frame.Of(r).ParseActor(&actor)
 	if err != nil {
@@ -188,7 +187,7 @@ func (svc *Service) Welcome(w http.ResponseWriter, r *http.Request) (err error) 
 /*
 AdminOnly is only accessible by admins.
 */
-func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: AdminOnly
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
 	err = svc.WriteResTemplate(w, "admin-only.html", nil)
@@ -201,7 +200,7 @@ func (svc *Service) AdminOnly(w http.ResponseWriter, r *http.Request) (err error
 /*
 ManagerOnly is only accessible by managers.
 */
-func (svc *Service) ManagerOnly(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) ManagerOnly(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ManagerOnly
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Content-Language", "en-US")
 	err = svc.WriteResTemplate(w, "manager-only.html", nil)

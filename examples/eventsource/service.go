@@ -21,8 +21,8 @@ import (
 	"net/http"
 
 	"github.com/microbus-io/errors"
+
 	"github.com/microbus-io/fabric/examples/eventsource/eventsourceapi"
-	"github.com/microbus-io/fabric/examples/eventsource/intermediate"
 )
 
 var (
@@ -38,7 +38,7 @@ Service implements the eventsource.example microservice.
 The event source microservice fires events that are caught by the event sink microservice.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -54,7 +54,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Register attempts to register a new user.
 */
-func (svc *Service) Register(ctx context.Context, email string) (allowed bool, err error) {
+func (svc *Service) Register(ctx context.Context, email string) (allowed bool, err error) { // MARKER: Register
 	// Trigger a synchronous event to check if any event sink blocks the registration
 	for r := range eventsourceapi.NewMulticastTrigger(svc).OnAllowRegister(ctx, email) {
 		allowed, err := r.Get()

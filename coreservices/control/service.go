@@ -21,7 +21,6 @@ import (
 	"net/http"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/coreservices/control/intermediate"
 )
 
 /*
@@ -31,7 +30,9 @@ This microservice is created for the sake of generating the client API for the :
 The microservice itself does nothing and should not be included in applications.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
+
+	// HINT: Add member variables here
 }
 
 // OnStartup is called when the microservice is started up.
@@ -47,27 +48,27 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Ping responds to the message with a pong.
 */
-func (svc *Service) Ping(ctx context.Context) (pong int, err error) {
+func (svc *Service) Ping(ctx context.Context) (pong int, err error) { // MARKER: Ping
 	return 0, nil
 }
 
 /*
 ConfigRefresh pulls the latest config values from the configurator microservice.
 */
-func (svc *Service) ConfigRefresh(ctx context.Context) (err error) {
+func (svc *Service) ConfigRefresh(ctx context.Context) (err error) { // MARKER: ConfigRefresh
 	return nil
 }
 
 /*
 Trace forces exporting the indicated tracing span.
 */
-func (svc *Service) Trace(ctx context.Context, id string) (err error) {
+func (svc *Service) Trace(ctx context.Context, id string) (err error) { // MARKER: Trace
 	return nil
 }
 
 /*
 Metrics returns the Prometheus metrics collected by the microservice.
 */
-func (svc *Service) Metrics(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Metrics(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Metrics
 	return nil
 }

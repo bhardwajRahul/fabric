@@ -10,8 +10,8 @@ con.DefineConfig("Database", cfg.Validation("url"), cfg.Secret())
 
 The following options are supported:
 
-* `cfg.DefaultValue` specifies a default value for the property when one is not provided by the configurator
-* `cfg.Validation` uses a pattern to validate values before they are set
+- `cfg.DefaultValue` specifies a default value for the property when one is not provided by the configurator
+- `cfg.Validation` uses a pattern to validate values before they are set
 	* `str` - Plain text, no validation
 	* `str ^[a-zA-Z0-9]+$` - Text with regexp validation
 	* `bool` - Must be `true` or `false`
@@ -25,5 +25,5 @@ The following options are supported:
 	* `url` - A URL
 	* `email` - An email address, either `Joe <joe@example.com>` or just `joe@example.com`
 	* `json` - A valid JSON string
-* `cfg.Secret` indicates that the value of this property is a secret and should not be logged
-* `cfg.Description` is intended to explain the purpose of the config property and how it will impact the microservice
+- `cfg.Secret` indicates that the value of this property is a secret and should not be logged
+- `cfg.Description` is intended to explain the purpose of the config property and how it will impact the microservice

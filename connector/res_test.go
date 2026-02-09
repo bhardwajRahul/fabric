@@ -18,7 +18,6 @@ package connector
 
 import (
 	"bytes"
-	"context"
 	"html"
 	"io"
 	"net/http"
@@ -68,7 +67,7 @@ func TestConnector_LoadResString(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("alpha.load.res.string.connector")
@@ -82,12 +81,12 @@ func TestConnector_LoadResString(t *testing.T) {
 	beta.SetResFSDir("testdata")
 
 	// Startup the microservices
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	// Send message and validate the correct language
 	testCases := []string{
@@ -115,16 +114,16 @@ func TestConnector_LoadResStrings(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	con := New("load.res.strings.connector")
 	con.SetResFSDir("testdata")
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	textMap, err := con.LoadResStrings(ctx)
 	assert.NoError(err)

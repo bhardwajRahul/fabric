@@ -19,6 +19,7 @@ package dlru_test
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"runtime"
 	"strconv"
 	"sync"
@@ -27,7 +28,7 @@ import (
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/dlru"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -35,24 +36,24 @@ func TestDLRU_Lookup(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("lookup.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("lookup.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("lookup.dlru")
-	err = gamma.Startup()
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 	gammaLRU := gamma.DistribCache()
 
 	// Insert to alpha cache
@@ -65,9 +66,9 @@ func TestDLRU_Lookup(t *testing.T) {
 		123,
 		"abc",
 	}
-	err = alphaLRU.StoreJSON(ctx, "B", jsonObject)
+	err = alphaLRU.Set(ctx, "B", jsonObject)
 	assert.NoError(err)
-	err = alphaLRU.StoreCompressedJSON(ctx, "C", jsonObject)
+	err = alphaLRU.Set(ctx, "C", jsonObject, dlru.Compress(true))
 	assert.NoError(err)
 
 	assert.Equal(3, alphaLRU.LocalCache().Len())
@@ -85,11 +86,11 @@ func TestDLRU_Lookup(t *testing.T) {
 			Num int    `json:"num"`
 			Str string `json:"str"`
 		}
-		ok, err = c.LoadJSON(ctx, "B", &jval)
+		ok, err = c.Get(ctx, "B", &jval)
 		assert.NoError(err)
 		assert.True(ok)
 		assert.Equal(jsonObject, jval)
-		ok, err = c.LoadCompressedJSON(ctx, "C", &jval)
+		ok, err = c.Get(ctx, "C", &jval)
 		assert.NoError(err)
 		assert.True(ok)
 		assert.Equal(jsonObject, jval)
@@ -137,24 +138,24 @@ func TestDLRU_Replicate(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("replicate.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("replicate.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("replicate.dlru")
-	err = gamma.Startup()
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 	gammaLRU := gamma.DistribCache()
 
 	// Insert to alpha cache
@@ -167,9 +168,9 @@ func TestDLRU_Replicate(t *testing.T) {
 		123,
 		"abc",
 	}
-	err = alphaLRU.StoreJSON(ctx, "B", jsonObject, dlru.Replicate(true))
+	err = alphaLRU.Set(ctx, "B", jsonObject, dlru.Replicate(true))
 	assert.NoError(err)
-	err = alphaLRU.StoreCompressedJSON(ctx, "C", jsonObject, dlru.Replicate(true))
+	err = alphaLRU.Set(ctx, "C", jsonObject, dlru.Replicate(true), dlru.Compress(true))
 	assert.NoError(err)
 
 	assert.Equal(3, alphaLRU.LocalCache().Len())
@@ -197,10 +198,10 @@ func TestDLRU_Rescue(t *testing.T) {
 	// No parallel
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("rescue.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
 	alphaLRU := alpha.DistribCache()
 
@@ -226,22 +227,22 @@ func TestDLRU_Rescue(t *testing.T) {
 	assert.Equal(n, alphaLRU.LocalCache().Len())
 
 	beta := connector.New("rescue.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	gamma := connector.New("rescue.dlru")
-	err = gamma.Startup()
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 	gammaLRU := gamma.DistribCache()
 
 	assert.Zero(betaLRU.LocalCache().Len())
 	assert.Zero(gammaLRU.LocalCache().Len())
 
 	// Should distribute the elements to beta and gamma
-	err = alpha.Shutdown()
+	err = alpha.Shutdown(ctx)
 	assert.NoError(err)
 	assert.Equal(n, betaLRU.LocalCache().Len()+gammaLRU.LocalCache().Len())
 
@@ -273,25 +274,25 @@ func TestDLRU_MaxMemory(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	maxMem := 4096
 
 	alpha := connector.New("max.memory.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 	alphaLRU.SetMaxMemory(maxMem)
 
 	beta := connector.New("max.memory.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 	betaLRU.SetMaxMemory(maxMem)
 
 	// Insert enough to max out the memory limit
-	payload := rand.AlphaNum64(maxMem / 4)
+	payload := utils.RandomIdentifier(maxMem / 4)
 	err = alphaLRU.Store(ctx, "A", []byte(payload))
 	assert.NoError(err)
 	err = alphaLRU.Store(ctx, "B", []byte(payload))
@@ -335,21 +336,21 @@ func TestDLRU_WeightAndLen(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("weight.and.len.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("weight.and.len.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
-	payload := rand.AlphaNum64(1024)
+	payload := utils.RandomIdentifier(1024)
 	err = alphaLRU.Store(ctx, "A", []byte(payload))
 	assert.NoError(err)
 
@@ -381,7 +382,7 @@ func TestDLRU_Options(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	dlru, err := dlru.NewCache(context.Background(), connector.New("www.example.com"), "/path")
+	dlru, err := dlru.NewCache(t.Context(), connector.New("www.example.com"), "/path")
 	dlru.SetMaxAge(5 * time.Hour)
 	dlru.SetMaxMemoryMB(8)
 	assert.NoError(err)
@@ -394,18 +395,18 @@ func TestDLRU_MulticastOptim(t *testing.T) {
 	// No parallel
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("multicast.optim.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("multicast.optim.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	// First operation is slow because of being the first broadcast
 	t0 := time.Now()
@@ -428,12 +429,12 @@ func TestDLRU_InvalidRequests(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	con := connector.New("invalid.requests.dlru")
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	cache, err := dlru.NewCache(ctx, con, "/cache")
 	assert.NoError(err)
@@ -441,11 +442,7 @@ func TestDLRU_InvalidRequests(t *testing.T) {
 
 	_, _, err = cache.Load(ctx, "")
 	assert.Equal("missing key", err.Error())
-	_, err = cache.LoadJSON(ctx, "", nil)
-	assert.Equal("missing key", err.Error())
 	err = cache.Store(ctx, "", nil)
-	assert.Equal("missing key", err.Error())
-	err = cache.StoreJSON(ctx, "", nil)
 	assert.Equal("missing key", err.Error())
 	err = cache.Delete(ctx, "")
 	assert.Equal("missing key", err.Error())
@@ -455,18 +452,18 @@ func TestDLRU_Inconsistency(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("inconsistency.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("inconsistency.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	// Store an element in the cache
@@ -517,18 +514,18 @@ func TestDLRU_MaxAge(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("maxage.actions.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("maxage.actions.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	// Store an element in the cache
@@ -554,18 +551,18 @@ func TestDLRU_DeletePrefix(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("delete.prefix.actions.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("delete.prefix.actions.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	for i := 1; i <= 10; i++ {
@@ -601,18 +598,18 @@ func TestDLRU_DeleteContains(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("delete.contains.actions.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("delete.contains.actions.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	for i := 1; i <= 10; i++ {
@@ -648,22 +645,22 @@ func TestDLRU_RandomActions(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("random.actions.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 
 	beta := connector.New("random.actions.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	gamma := connector.New("random.actions.dlru")
-	err = gamma.Startup()
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 
 	caches := []*dlru.Cache{
 		alpha.DistribCache(),
@@ -685,7 +682,7 @@ func TestDLRU_RandomActions(t *testing.T) {
 			assert.Equal(val2, val1)
 
 		case 3: // Store
-			val := []byte(rand.AlphaNum32(15))
+			val := []byte(utils.RandomIdentifier(15))
 			err := cache.Store(ctx, key, val)
 			assert.NoError(err)
 			state[key] = val
@@ -702,15 +699,15 @@ func BenchmarkDLRU_Store(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.store.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.store.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	b.ResetTimer()
 	for b.Loop() {
@@ -730,15 +727,15 @@ func BenchmarkDLRU_Load(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.load.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.load.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	err = alphaLRU.Store(ctx, "Foo", []byte("Bar"))
 	testarossa.NoError(b, err)
@@ -762,15 +759,15 @@ func BenchmarkDLRU_LoadNoConsistencyCheck(b *testing.B) {
 	ctx := context.Background()
 
 	alpha := connector.New("benchmark.load.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("benchmark.load.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	err = alphaLRU.Store(ctx, "Foo", []byte("Bar"), dlru.Replicate(true))
 	testarossa.NoError(b, err)
@@ -801,18 +798,18 @@ func TestDLRU_Compression(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	alpha := connector.New("compression.dlru")
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 	alphaLRU := alpha.DistribCache()
 
 	beta := connector.New("compression.dlru")
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 	betaLRU := beta.DistribCache()
 
 	// Insert to alpha cache
@@ -827,7 +824,7 @@ func TestDLRU_Compression(t *testing.T) {
 	}
 
 	// Insert to alpha cache
-	payload = []byte(rand.AlphaNum64(10 << 10)) // 10KiB
+	payload = []byte(utils.RandomIdentifier(10 << 10)) // 10KiB
 	err = alphaLRU.Store(ctx, "Random", payload, dlru.Compress(true))
 	assert.NoError(err)
 
@@ -841,15 +838,16 @@ func TestDLRU_Compression(t *testing.T) {
 func TestDLRU_AvailableInOnStartup(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
 
 	alpha := connector.New("availeable.in.on.startup.dlru")
 	alpha.SetOnStartup(func(ctx context.Context) error {
 		alpha.DistribCache().Set(ctx, "Foo", "Bar")
 		return nil
 	})
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 
 	beta := connector.New("availeable.in.on.startup.dlru")
 	beta.SetOnStartup(func(ctx context.Context) error {
@@ -859,9 +857,9 @@ func TestDLRU_AvailableInOnStartup(t *testing.T) {
 		beta.DistribCache().Set(ctx, "Foo", "Baz")
 		return nil
 	})
-	err = beta.Startup()
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	gamma := connector.New("availeable.in.on.startup.dlru")
 	gamma.SetOnStartup(func(ctx context.Context) error {
@@ -870,7 +868,7 @@ func TestDLRU_AvailableInOnStartup(t *testing.T) {
 		assert.Equal("Baz", val)
 		return nil
 	})
-	err = gamma.Startup()
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 }

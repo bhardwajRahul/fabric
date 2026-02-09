@@ -2,12 +2,12 @@
 
 The `Microbus` framework uses environment variables for various purposes:
 
-* Initializing the connection to NATS
-* Identifying the deployment environment (`PROD`, `LAB`, `LOCAL`, `TESTING`)
-* Designating a plane of communication
-* Enabling output of debug-level messages
-* Configuring the URL to the OpenTelemetry collector endpoint
-* Designating a geographic locality
+- Initializing the connection to NATS
+- Identifying the deployment environment (`PROD`, `LAB`, `LOCAL`, `TESTING`)
+- Designating a plane of communication
+- Enabling output of debug-level messages
+- Configuring the URL to the OpenTelemetry collector endpoint
+- Designating a geographic locality
 
 Environment variables may also be set by placing an `env.yaml` or `env.local.yaml` file in the working directory of the executable running the microservice, or any ancestor directory thereof. The bundled example application includes such a file at `main/env.yaml`.
 

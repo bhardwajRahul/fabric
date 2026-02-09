@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,18 +18,177 @@ package messaging
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"testing"
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/messaging/messagingapi"
 )
 
-func TestMessaging_Home(t *testing.T) {
+var (
+	_ context.Context
+	_ *testing.T
+	_ *application.Application
+	_ *connector.Connector
+	_ pub.Option
+	_ testarossa.TestingT
+	_ messagingapi.Client
+)
+
+func TestMessaging_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		// HINT: Include all ports of functional or web endpoints
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(messagingapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestMessaging_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("home", func(t *testing.T) { // MARKER: Home
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Home(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockHome(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Home(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("no_queue", func(t *testing.T) { // MARKER: NoQueue
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.NoQueue(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockNoQueue(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.NoQueue(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("default_queue", func(t *testing.T) { // MARKER: DefaultQueue
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.DefaultQueue(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockDefaultQueue(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.DefaultQueue(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("cache_load", func(t *testing.T) { // MARKER: CacheLoad
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.CacheLoad(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockCacheLoad(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.CacheLoad(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("cache_store", func(t *testing.T) { // MARKER: CacheStore
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.CacheStore(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockCacheStore(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.CacheStore(w, r)
+		assert.NoError(err)
+	})
+}
+
+func TestMessaging_Home(t *testing.T) { // MARKER: Home
 	t.Parallel()
 	ctx := t.Context()
 
@@ -38,7 +197,7 @@ func TestMessaging_Home(t *testing.T) {
 	svc2 := NewService()
 
 	// Initialize the testers
-	tester := connector.New("messaging.home.tester")
+	tester := connector.New("tester.client")
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
@@ -65,7 +224,7 @@ func TestMessaging_Home(t *testing.T) {
 	})
 }
 
-func TestMessaging_NoQueue(t *testing.T) {
+func TestMessaging_NoQueue(t *testing.T) { // MARKER: NoQueue
 	t.Parallel()
 	ctx := t.Context()
 
@@ -74,7 +233,7 @@ func TestMessaging_NoQueue(t *testing.T) {
 	svc2 := NewService()
 
 	// Initialize the testers
-	tester := connector.New("messaging.noqueue.tester")
+	tester := connector.New("tester.client")
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
@@ -101,7 +260,7 @@ func TestMessaging_NoQueue(t *testing.T) {
 	})
 }
 
-func TestMessaging_DefaultQueue(t *testing.T) {
+func TestMessaging_DefaultQueue(t *testing.T) { // MARKER: DefaultQueue
 	t.Parallel()
 	ctx := t.Context()
 
@@ -110,7 +269,7 @@ func TestMessaging_DefaultQueue(t *testing.T) {
 	svc2 := NewService()
 
 	// Initialize the testers
-	tester := connector.New("messaging.defaultqueue.tester")
+	tester := connector.New("tester.client")
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
@@ -137,7 +296,7 @@ func TestMessaging_DefaultQueue(t *testing.T) {
 	})
 }
 
-func TestMessaging_CacheLoad(t *testing.T) {
+func TestMessaging_CacheLoad(t *testing.T) { // MARKER: CacheLoad
 	t.Parallel()
 	ctx := t.Context()
 
@@ -146,7 +305,7 @@ func TestMessaging_CacheLoad(t *testing.T) {
 	svc2 := NewService()
 
 	// Initialize the testers
-	tester := connector.New("messaging.cacheload.tester")
+	tester := connector.New("tester.client")
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app
@@ -193,7 +352,7 @@ func TestMessaging_CacheLoad(t *testing.T) {
 	})
 }
 
-func TestMessaging_CacheStore(t *testing.T) {
+func TestMessaging_CacheStore(t *testing.T) { // MARKER: CacheStore
 	t.Parallel()
 	ctx := t.Context()
 
@@ -202,7 +361,7 @@ func TestMessaging_CacheStore(t *testing.T) {
 	svc2 := NewService()
 
 	// Initialize the testers
-	tester := connector.New("messaging.cachestore.tester")
+	tester := connector.New("tester.client")
 	client := messagingapi.NewClient(tester)
 
 	// Run the testing app

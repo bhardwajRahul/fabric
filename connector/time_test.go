@@ -56,18 +56,19 @@ func TestConnector_ClockOffset(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := alpha.Startup()
+	ctx := t.Context()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
-	err = gamma.Startup()
+	defer beta.Shutdown(ctx)
+	err = gamma.Startup(ctx)
 	assert.NoError(err)
-	defer gamma.Shutdown()
+	defer gamma.Shutdown(ctx)
 
 	// Shift the time in the context one minute in the past
-	ctx := frame.CloneContext(context.Background())
+	ctx = frame.CloneContext(t.Context())
 	f := frame.Of(ctx)
 	f.SetClockShift(-time.Minute)
 	assert.Equal(-time.Minute, f.ClockShift())
@@ -85,7 +86,7 @@ func TestConnector_ClockOffset(t *testing.T) {
 	assert.Equal(-time.Minute, gammaShift)
 
 	// Shift the time in the context one hour in the future
-	ctx = frame.CloneContext(context.Background())
+	ctx = frame.CloneContext(t.Context())
 	f = frame.Of(ctx)
 	f.SetClockShift(15 * time.Minute)
 	f.IncrementClockShift(45 * time.Minute)
@@ -105,6 +106,7 @@ func TestConnector_ClockOffset(t *testing.T) {
 
 func TestConnector_Ticker(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.connector")
@@ -121,9 +123,9 @@ func TestConnector_Ticker(t *testing.T) {
 
 	assert.Zero(count.Load())
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-step // at 1 intervals
 	assert.Equal(int32(1), count.Load())
@@ -137,6 +139,7 @@ func TestConnector_Ticker(t *testing.T) {
 
 func TestConnector_TickerSkippingBeats(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.skipping.beats.connector")
@@ -154,9 +157,9 @@ func TestConnector_TickerSkippingBeats(t *testing.T) {
 
 	assert.Zero(count.Load())
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-step // at 1 intervals
 	assert.Equal(int32(1), count.Load())
@@ -171,6 +174,7 @@ func TestConnector_TickerSkippingBeats(t *testing.T) {
 
 func TestConnector_TickerPendingOps(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.pending.ops.connector")
@@ -194,9 +198,9 @@ func TestConnector_TickerPendingOps(t *testing.T) {
 
 	assert.Zero(con.pendingOps.Load())
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-step1 // at 1 intervals
 	<-step2 // at 1 intervals
@@ -211,6 +215,7 @@ func TestConnector_TickerPendingOps(t *testing.T) {
 
 func TestConnector_TickerTimeout(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.timeout.connector")
@@ -228,9 +233,9 @@ func TestConnector_TickerTimeout(t *testing.T) {
 		return nil
 	})
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-start
 	t0 := time.Now()
@@ -242,6 +247,7 @@ func TestConnector_TickerTimeout(t *testing.T) {
 
 func TestConnector_TickerLifetimeCancellation(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.lifetime.cancellation.connector")
@@ -259,9 +265,9 @@ func TestConnector_TickerLifetimeCancellation(t *testing.T) {
 		return nil
 	})
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-start
 	t0 := time.Now()
@@ -273,6 +279,7 @@ func TestConnector_TickerLifetimeCancellation(t *testing.T) {
 
 func TestConnector_TickersDisabledInTestingApp(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("tickers.disabled.in.testing.app.connector")
@@ -286,9 +293,9 @@ func TestConnector_TickersDisabledInTestingApp(t *testing.T) {
 
 	assert.Zero(count.Load())
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	time.Sleep(5 * interval)
 	assert.Zero(count.Load())
@@ -296,6 +303,7 @@ func TestConnector_TickersDisabledInTestingApp(t *testing.T) {
 
 func TestConnector_TickerStop(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("ticker.stop.connector")
@@ -314,9 +322,9 @@ func TestConnector_TickerStop(t *testing.T) {
 
 	assert.Zero(count.Load())
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	<-enter
 	assert.Equal(int32(1), count.Load())
@@ -341,15 +349,15 @@ func TestConnector_TickerStop(t *testing.T) {
 
 func TestConnector_Sleep(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("sleep.connector")
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Natural expiration
-	ctx := context.Background()
 	t0 := time.Now()
 	v := con.Sleep(ctx, time.Millisecond*100)
 	dur := time.Since(t0)
@@ -357,31 +365,30 @@ func TestConnector_Sleep(t *testing.T) {
 	assert.True(v)
 
 	// Context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	ctxTimeout, cancel := context.WithTimeout(t.Context(), time.Millisecond*100)
 	t0 = time.Now()
-	v = con.Sleep(ctx, time.Millisecond*1000)
+	v = con.Sleep(ctxTimeout, time.Millisecond*1000)
 	dur = time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
 	assert.False(v)
 	cancel()
 
 	// Context cancellation
-	ctx, cancel = context.WithCancel(context.Background())
+	ctxCancel, cancel := context.WithCancel(t.Context())
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 	}()
 	t0 = time.Now()
-	v = con.Sleep(ctx, time.Millisecond*1000)
+	v = con.Sleep(ctxCancel, time.Millisecond*1000)
 	dur = time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
 	assert.False(v)
 
 	// Lifetime cancellation
-	ctx = context.Background()
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		con.Shutdown()
+		con.Shutdown(ctx)
 	}()
 	t0 = time.Now()
 	v = con.Sleep(ctx, time.Millisecond*1000)

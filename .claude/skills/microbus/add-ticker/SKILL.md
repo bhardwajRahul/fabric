@@ -3,6 +3,10 @@ name: Adding a Ticker
 description: Creates or modify a ticker of a microservice. Use when explicitly asked by the user to create or modify a ticker or a recurring operation for a microservice.
 ---
 
+**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+
+**CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
+
 ## Workflow
 
 Copy this checklist and track your progress:
@@ -10,72 +14,156 @@ Copy this checklist and track your progress:
 ```
 Creating or modifying a ticker:
 - [ ] Step 1: Read local AGENTS.md file
-- [ ] Step 2: Define in service.yaml
-- [ ] Step 3: Generate boilerplate code
-- [ ] Step 4: Move implementation and test if renamed
-- [ ] Step 5: Implement the business logic
-- [ ] Step 6: Test the ticker
-- [ ] Step 7: Document the microservice
-- [ ] Step 8: Versioning
+- [ ] Step 2: Define and implement handler
+- [ ] Step 3: Extend the ToDo interface
+- [ ] Step 4: Bind handler to the microservice
+- [ ] Step 5: Extend the mock
+- [ ] Step 6: Test the handler
+- [ ] Step 7: Update manifest
+- [ ] Step 8: Document the microservice
+- [ ] Step 9: Versioning
 ```
 
-#### Step 1: Read local `AGENTS.md` file
+#### Step 1: Read Local `AGENTS.md` File
 
-Check for and read a local `AGENTS.md` file in that microservice's directory. The local `AGENTS.md` file contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
-#### Step 2: Define in `service.yaml`
+#### Step 2: Define and Implement Handler
 
-Define the recurring operation in the `tickers` array in the `service.yaml` of the microservice.
-- The `signature` of the ticker must follow Go function syntax exactly. Do not include any input arguments nor any output arguments.
-- The `description` should explain what the recurring operation is doing. It should start with the name of the ticker.
-- The `interval` determines the duration between consecutive iterations of the ticker.
-
-```yaml
-tickers:
-  - signature: MyNewTicker()
-    description: MyNewTicker does X, Y and Z.
-    interval: 5m
-```
-
-#### Step 3: Generate boilerplate code
-
-Run `go generate` to create the boilerplate code of the new ticker.
-
-#### Step 4: Move implementation and test if renamed
-
-If you made a change to the name of the method in the `signature` field, you need to move over the implementation of the ticker in `service.go` from under the old name, to the newly-created declaration under the new name. Similarly, you'll need to move over the implementation of the tests in `service_test.go`. 
-
-#### Step 5: Implement the business logic
-
-Look for the ticker declaration in `service.go` and implement or adjust its logic appropriately.
+Implement the ticker handler function in `service.go`. Append it at the end of the file.
 
 ```go
-func (svc *Service) MyNewTicker(ctx context.Context) (err error) {
-	// Implement logic here
-	return err
+/*
+MyTicker does X.
+*/
+func (svc *Service) MyTicker(ctx context.Context) (err error) { // MARKER: MyTicker
+	// Implement logic here...
+	return nil
 }
 ```
 
-#### Step 6: Test the ticker
+#### Step 3: Extend the `ToDo` Interface
 
-Skip this step if integration tests were skipped for this microservice, or if instructed to be "quick".
-
-Look for the integration test created in `service_test.go` for the ticker and implement or adjust it appropriately.
-- Follow the pattern recommendation in the code
-- Add downstream microservices or their mocks to the testing app
+Extend the `ToDo` interface in `intermediate.go`.
 
 ```go
-func TestMyservice_MyNewTicker(t *testing.T) {
-	// Implement testing here
+type ToDo interface {
+	// ...
+	MyTicker(ctx context.Context) (err error) // MARKER: MyTicker
 }
 ```
 
-#### Step 7: Document the microservice
+#### Step 4: Bind the Handler to the Microservice
 
-Skip this step if instructed to be "quick".
+Bind the ticker handler to the microservice in the `NewIntermediate` constructor in `intermediate/intermediate.go`.
+
+```go
+func NewIntermediate() *Intermediate {
+	// ...
+	svc.StartTicker("MyTicker", time.Minute, svc.MyTicker) // MARKER: MyTicker
+	// ...
+}
+```
+
+Customize the duration to indicate how often to invoke the ticker.
+
+#### Step 5: Extend the Mock
+
+The `Mock` must satisfy the `ToDo` interface.
+
+Add a field to the `Mock` structure definition in `intermediate/mock.go` to hold a mock handler.
+
+```go
+type Mock struct {
+	// ...
+	mockMyTicker func(ctx context.Context) (err error) // MARKER: MyTicker
+}
+```
+
+Add the stubs to the `Mock`:
+
+```go
+// MockMyTicker sets up a mock handler for MyTicker.
+func (svc *Mock) MockMyTicker(handler func(ctx context.Context) (err error)) *Mock { // MARKER: MyTicker
+	svc.mockMyTicker = handler
+	return svc
+}
+
+// MyTicker executes the mock handler.
+func (svc *Mock) MyTicker(ctx context.Context) (err error) { // MARKER: MyTicker
+	if svc.mockMyTicker == nil {
+		return errors.New("mock not implemented", http.StatusNotImplemented)
+	}
+	err = svc.mockMyTicker(ctx)
+	return errors.Trace(err)
+}
+```
+
+Add a test case in `TestMyService_Mock`.
+
+```go
+t.Run("my_ticker", func(t *testing.T) { // MARKER: MyTicker
+	assert := testarossa.For(t)
+
+	err := mock.MyTicker(ctx)
+	assert.Contains(err.Error(), "not implemented")
+	mock.MockMyTicker(func(ctx context.Context) (err error) {
+		return nil
+	})
+	err = mock.MyTicker(ctx)
+	assert.NoError(err)
+})
+```
+
+#### Step 6: Test the Handler
+
+Skip this step if instructed to be "quick" or to skip tests.
+
+Add a test to `service_test.go`.
+
+```go
+func TestMyService_MyTicker(t *testing.T) { // MARKER: MyTicker
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Use the following pattern for each test case
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.MyTicker(ctx)
+			assert.NoError(err)
+		})
+	*/
+}
+```
+
+The `MyService` part of the test name should match the microservice name.
+
+The `MyTicker` part of the test name should match the ticker name.
+
+#### Step 7: Update Manifest
+
+Update the `tickers` and `downstream` sections of `manifest.yaml`.
+
+#### Step 8: Document the Microservice
+
+Skip this step if instructed to be "quick" or to skip documentation.
 
 Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
 
-#### Step 8: Versioning
+#### Step 9: Versioning
 
-Run `go generate` to version the code.
+If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate/intermediate.go`.

@@ -2,8 +2,8 @@
 
 A communication pattern that is often underappreciated is publish/subscribe which enables a publisher to send a message while remaining unaware of who the subscribers are. A microservices system is ever evolving and subscribers can be added over time by distributed teams. By leveraging publish/subscribe, the client does not need to be changed when new subscribers are added. These use cases are well-suited for publish/subscribe:
 
-* Discovery - The client is trying to detect other microservices that provide a known function. For example, an authenticator service might look for authentication providers
-* On change events - The client is informing dependent microservices that an object it owns has changed so they can take the appropriate action. For example, if a user is deleted, all microservices that store information about a user need to be informed so they also delete the corresponding data they own.
+- Discovery - The client is trying to detect other microservices that provide a known function. For example, an authenticator service might look for authentication providers
+- On change events - The client is informing dependent microservices that an object it owns has changed so they can take the appropriate action. For example, if a user is deleted, all microservices that store information about a user need to be informed so they also delete the corresponding data they own.
 
 `Microbus` takes publish/subscribe to the next level. Whereas traditional publish/subscribe is unidirectional, multicasting via the `Microbus` enables subscribers to also respond as if they had received a standard HTTP request. It is up to the client whether to iterate over the responses, or ignore them and just fire and forget.
 

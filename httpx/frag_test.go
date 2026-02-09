@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -48,7 +48,7 @@ func TestHttpx_FragRequest(t *testing.T) {
 func request(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 	assert := testarossa.For(t)
 
-	body := []byte(rand.AlphaNum64(int(bodySize)))
+	body := []byte(utils.RandomIdentifier(int(bodySize)))
 	var bodyReader io.Reader
 	if optimized {
 		bodyReader = NewBodyReader(body)
@@ -132,7 +132,7 @@ func TestHttpx_FragResponse(t *testing.T) {
 func response(t *testing.T, bodySize int64, fragmentSize int64, optimized bool) {
 	assert := testarossa.For(t)
 
-	body := []byte(rand.AlphaNum64(int(bodySize)))
+	body := []byte(utils.RandomIdentifier(int(bodySize)))
 
 	var res *http.Response
 	if optimized {
@@ -212,7 +212,7 @@ func TestHttpx_DefragRequestNoContentLen(t *testing.T) {
 	assert := testarossa.For(t)
 
 	bodySize := 128*1024 + 16
-	body := []byte(rand.AlphaNum64(int(bodySize)))
+	body := []byte(utils.RandomIdentifier(int(bodySize)))
 	req, err := http.NewRequest("GET", "https://www.example.com", bytes.NewReader(body))
 	assert.NoError(err)
 
@@ -251,7 +251,7 @@ func TestHttpx_DefragResponseNoContentLen(t *testing.T) {
 	assert := testarossa.For(t)
 
 	bodySize := 128*1024 + 16
-	body := []byte(rand.AlphaNum64(int(bodySize)))
+	body := []byte(utils.RandomIdentifier(int(bodySize)))
 
 	rec := httptest.NewRecorder()
 	n, err := rec.Write(body)

@@ -6,7 +6,8 @@ The concept of a port in `Microbus` can mean one of two things: a real TCP port,
 
 `Microbus` uses actual TCP ports for a few use cases.
 
-<img src="./ports-1.drawio.svg"><br>
+<img src="./ports-1.drawio.svg">
+<p><p>
 
 The [HTTP ingress proxy](../structure/coreservices-httpingress.md) listens for incoming HTTP requests on one or more TCP ports, by default `:8080`. A public-facing HTTP ingress proxy in a production setting will most likely be configured to listen on the standard HTTP ports `:443` and `:80`.
 
@@ -24,7 +25,7 @@ By convention, some of these internal ports have a special purpose.
 
 Port `:888` is reserved for the [control plane](../tech/control-subs.md).
 
-Endpoints [defined](../tech/service-yaml.md) on port `:443` or `:80` are typically considered public and exposed by the [HTTP ingress proxy](../structure/coreservices-httpingress.md) to external users.
+Endpoints defined on port `:443` or `:80` are typically considered public and exposed by the [HTTP ingress proxy](../structure/coreservices-httpingress.md) to external users.
 
 Port `:444` is used by convention for endpoints that should remain internal. Any port not exposed by the ingress proxy would serve the same purpose.
 

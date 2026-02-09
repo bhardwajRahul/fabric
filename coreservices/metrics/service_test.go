@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,12 +29,106 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 )
+
+var (
+	_ context.Context
+	_ *testing.T
+	_ *application.Application
+	_ *connector.Connector
+	_ pub.Option
+	_ testarossa.TestingT
+	_ metricsapi.Client
+)
+
+func TestMetrics_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		// HINT: Include all ports of functional or web endpoints
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(metricsapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestMetrics_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("collect", func(t *testing.T) { // MARKER: Collect
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Collect(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockCollect(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Collect(w, r)
+		assert.NoError(err)
+	})
+}
 
 func TestMetrics_Collect(t *testing.T) {
 	// No t.Parallel: modifying environment
@@ -61,7 +155,7 @@ func TestMetrics_Collect(t *testing.T) {
 	con2 := connector.New("two.collect")
 
 	// Initialize the testers
-	tester := connector.New("metrics.collect.tester")
+	tester := connector.New("tester.client")
 	client := metricsapi.NewClient(tester)
 	_ = client
 
@@ -258,7 +352,7 @@ func TestMetrics_Gzip(t *testing.T) {
 	// svc.SetSecretKey(secretKey)
 
 	// Initialize the testers
-	tester := connector.New("metrics.gzip.tester")
+	tester := connector.New("tester.client")
 	client := metricsapi.NewClient(tester).WithOptions(
 		// Add options as required
 		pub.Header("Accept-Encoding", "gzip"),
@@ -298,7 +392,7 @@ func TestMetrics_SecretKey(t *testing.T) {
 	// svc.SetSecretKey(secretKey)
 
 	// Initialize the testers
-	tester := connector.New("metrics.gzip.tester")
+	tester := connector.New("tester.client")
 	client := metricsapi.NewClient(tester).WithOptions(
 		// Add options as required
 		pub.Header("Accept-Encoding", "gzip"),
@@ -316,7 +410,7 @@ func TestMetrics_SecretKey(t *testing.T) {
 	t.Run("no_key_provided", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		svc.SetSecretKey(rand.AlphaNum64(16))
+		svc.SetSecretKey(utils.RandomIdentifier(16))
 
 		_, err := client.Collect(ctx, "")
 		assert.Contains(err, "incorrect secret key")
@@ -325,16 +419,16 @@ func TestMetrics_SecretKey(t *testing.T) {
 	t.Run("incorrect_key_provided", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		svc.SetSecretKey(rand.AlphaNum64(16))
+		svc.SetSecretKey(utils.RandomIdentifier(16))
 
-		_, err := client.Collect(ctx, "?secretkey="+rand.AlphaNum64(16))
+		_, err := client.Collect(ctx, "?secretkey="+utils.RandomIdentifier(16))
 		assert.Contains(err, "incorrect secret key")
 	})
 
 	t.Run("correct_key_provided", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		svc.SetSecretKey(rand.AlphaNum64(16))
+		svc.SetSecretKey(utils.RandomIdentifier(16))
 
 		_, err := client.Collect(ctx, "?secretkey="+svc.SecretKey())
 		assert.NoError(err)
@@ -357,7 +451,7 @@ func TestMetrics_SecretKey(t *testing.T) {
 
 		svc.SetSecretKey("")
 
-		_, err := client.Collect(ctx, "?secretkey="+rand.AlphaNum64(16))
+		_, err := client.Collect(ctx, "?secretkey="+utils.RandomIdentifier(16))
 		assert.NoError(err)
 	})
 }

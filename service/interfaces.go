@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,8 +37,7 @@ type Publisher interface {
 
 // Subscriber are the actions used to subscribe to the bus.
 type Subscriber interface {
-	Subscribe(method string, path string, handler sub.HTTPHandler, options ...sub.Option) error
-	Unsubscribe(method string, path string) error
+	Subscribe(method string, path string, handler sub.HTTPHandler, options ...sub.Option) (unsub func() (err error), err error)
 }
 
 // PublisherSubscriber is both a publisher and a subscriber.
@@ -69,7 +68,7 @@ type MeterDescriber interface {
 
 // Meter are the actions used to record metrics.
 type Meter interface {
-	AddCounter(ctx context.Context, name string, val float64, attributes ...any) (err error)
+	IncrementCounter(ctx context.Context, name string, val float64, attributes ...any) (err error)
 	RecordGauge(ctx context.Context, name string, val float64, attributes ...any) (err error)
 	RecordHistogram(ctx context.Context, name string, val float64, attributes ...any) (err error)
 }
@@ -89,8 +88,8 @@ type ShutdownHandler func(ctx context.Context) error
 
 // StarterStopper are the lifecycle actions of the microservice.
 type StarterStopper interface {
-	Startup() (err error)
-	Shutdown() error
+	Startup(ctx context.Context) (err error)
+	Shutdown(ctx context.Context) error
 	IsStarted() bool
 	Lifetime() context.Context
 

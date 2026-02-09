@@ -32,7 +32,6 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/coreservices/httpingress/intermediate"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
@@ -47,7 +46,7 @@ Service implements the http.ingress.core microservice.
 The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 
 	httpServers    map[int]*http.Server
 	mux            sync.Mutex
@@ -115,7 +114,7 @@ func (svc *Service) Middleware() *middleware.Chain {
 }
 
 // OnChangedPorts is triggered when the value of the Ports config property changes.
-func (svc *Service) OnChangedPorts(ctx context.Context) (err error) {
+func (svc *Service) OnChangedPorts(ctx context.Context) (err error) { // MARKER: Ports
 	return svc.restartHTTPServers(ctx)
 }
 
@@ -441,7 +440,7 @@ func (svc *Service) releaseRequestBody(body []byte) {
 }
 
 // OnChangedAllowedOrigins is triggered when the value of the AllowedOrigins config property changes.
-func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) {
+func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) { // MARKER: AllowedOrigins
 	value := svc.AllowedOrigins()
 	newOrigins := map[string]bool{}
 	for _, origin := range strings.Split(value, ",") {
@@ -455,7 +454,7 @@ func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) {
 }
 
 // OnChangedPortMappings is triggered when the value of the PortMappings config property changes.
-func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) {
+func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) { // MARKER: PortMappings
 	value := svc.PortMappings() // e.g. "8080:*->*, 443:*->443, 80:*->443"
 	newMappings := map[string]string{}
 	for _, m := range strings.Split(value, ",") {
@@ -516,22 +515,22 @@ func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (n
 }
 
 // OnChangedReadTimeout is triggered when the value of the ReadTimeout config property changes.
-func (svc *Service) OnChangedReadTimeout(ctx context.Context) (err error) {
+func (svc *Service) OnChangedReadTimeout(ctx context.Context) (err error) { // MARKER: ReadTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
 // OnChangedWriteTimeout is triggered when the value of the WriteTimeout config property changes.
-func (svc *Service) OnChangedWriteTimeout(ctx context.Context) (err error) {
+func (svc *Service) OnChangedWriteTimeout(ctx context.Context) (err error) { // MARKER: WriteTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
 // OnChangedReadHeaderTimeout is triggered when the value of the ReadHeaderTimeout config property changes.
-func (svc *Service) OnChangedReadHeaderTimeout(ctx context.Context) (err error) {
+func (svc *Service) OnChangedReadHeaderTimeout(ctx context.Context) (err error) { // MARKER: ReadHeaderTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
 // OnChangedBlockedPaths is triggered when the value of the BlockPaths config property changes.
-func (svc *Service) OnChangedBlockedPaths(ctx context.Context) (err error) {
+func (svc *Service) OnChangedBlockedPaths(ctx context.Context) (err error) { // MARKER: BlockedPaths
 	value := svc.BlockedPaths()
 	newPaths := map[string]bool{}
 	for _, path := range strings.Split(value, "\n") {

@@ -26,29 +26,36 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/configurator"
+	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
 func TestApplication_StartStop(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	alpha := connector.New("alpha.start.stop.application")
 	beta := connector.New("beta.start.stop.application")
-	app := NewTesting()
+	app := New()
 	app.Add(alpha, beta)
 
 	assert.False(alpha.IsStarted())
 	assert.False(beta.IsStarted())
 
-	err := app.Startup()
+	err := app.Startup(ctx)
 	assert.NoError(err)
 
 	assert.True(alpha.IsStarted())
 	assert.True(beta.IsStarted())
 
-	err = app.Shutdown()
+	err = app.Shutdown(ctx)
 	assert.NoError(err)
 
 	assert.False(alpha.IsStarted())
@@ -56,20 +63,25 @@ func TestApplication_StartStop(t *testing.T) {
 }
 
 func TestApplication_Interrupt(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	con := connector.New("interrupt.application")
-	app := NewTesting()
+	app := New()
 	app.Add(con)
 
 	ch := make(chan bool)
 	go func() {
-		err := app.Startup()
+		err := app.Startup(ctx)
 		assert.NoError(err)
 		go func() {
 			app.WaitForInterrupt()
-			err := app.Shutdown()
+			err := app.Shutdown(ctx)
 			assert.NoError(err)
 			ch <- true
 		}()
@@ -84,36 +96,43 @@ func TestApplication_Interrupt(t *testing.T) {
 }
 
 func TestApplication_NoConflict(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create first testing app
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
 	alpha := connector.New("no.conflict.application")
 	alpha.Subscribe("GET", "id", func(w http.ResponseWriter, r *http.Request) error {
 		w.Write([]byte("alpha"))
 		return nil
 	})
-	appAlpha := NewTesting()
+	appAlpha := New()
 	appAlpha.Add(alpha)
+	env.Pop("MICROBUS_PLANE")
+	env.Pop("MICROBUS_DEPLOYMENT")
 
 	// Create second testing app
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
 	beta := connector.New("no.conflict.application")
 	beta.Subscribe("GET", "id", func(w http.ResponseWriter, r *http.Request) error {
 		w.Write([]byte("beta"))
 		return nil
 	})
-	appBeta := NewTesting()
+	appBeta := New()
 	appBeta.Add(beta)
+	env.Pop("MICROBUS_PLANE")
+	env.Pop("MICROBUS_DEPLOYMENT")
 
 	// Start the apps
-	err := appAlpha.Startup()
+	err := appAlpha.Startup(ctx)
 	assert.NoError(err)
-	defer appAlpha.Shutdown()
-	err = appBeta.Startup()
+	defer appAlpha.Shutdown(ctx)
+	err = appBeta.Startup(ctx)
 	assert.NoError(err)
-	defer appBeta.Shutdown()
+	defer appBeta.Shutdown(ctx)
 
 	// Assert different planes of communication
 	assert.NotEqual(alpha.Plane(), beta.Plane())
@@ -140,8 +159,13 @@ func TestApplication_NoConflict(t *testing.T) {
 }
 
 func TestApplication_DependencyStart(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	// Alpha is dependent on beta to start
 	failCount := 0
@@ -165,21 +189,26 @@ func TestApplication_DependencyStart(t *testing.T) {
 		return nil
 	})
 
-	app := NewTesting()
+	app := New()
 	app.Add(alpha, beta)
 	t0 := time.Now()
-	err := app.Startup()
+	err := app.Startup(ctx)
 	dur := time.Since(t0)
 	assert.NoError(err)
 	assert.NotZero(failCount)
 	assert.True(dur >= time.Millisecond*500)
 
-	app.Shutdown()
+	app.Shutdown(ctx)
 }
 
 func TestApplication_FailStart(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	startupTimeout := time.Second
 
@@ -194,11 +223,12 @@ func TestApplication_FailStart(t *testing.T) {
 	// Beta starts without a hitch
 	beta := connector.New("beta.fail.start.application")
 
-	app := NewTesting()
+	app := New()
 	app.Add(alpha, beta)
-	app.startupTimeout = startupTimeout
 	t0 := time.Now()
-	err := app.Startup()
+	shortCtx, cancel := context.WithTimeout(ctx, startupTimeout)
+	err := app.Startup(shortCtx)
+	cancel()
 	dur := time.Since(t0)
 	assert.Error(err)
 	assert.True(failCount > 0)
@@ -206,21 +236,26 @@ func TestApplication_FailStart(t *testing.T) {
 	assert.True(beta.IsStarted())
 	assert.False(alpha.IsStarted())
 
-	err = app.Shutdown()
+	err = app.Shutdown(ctx)
 	assert.NoError(err)
 	assert.False(beta.IsStarted())
 	assert.False(alpha.IsStarted())
 }
 
 func TestApplication_Remove(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	alpha := connector.New("alpha.remove.application")
 	beta := connector.New("beta.remove.application")
 
-	app := NewTesting()
-	app.AddAndStartup(alpha, beta)
+	app := New()
+	app.AddAndStartup(ctx, alpha, beta)
 	assert.True(alpha.IsStarted())
 	assert.True(beta.IsStarted())
 	assert.Equal(alpha.Plane(), beta.Plane())
@@ -230,23 +265,27 @@ func TestApplication_Remove(t *testing.T) {
 	assert.True(beta.IsStarted())
 	assert.Equal(alpha.Plane(), beta.Plane())
 
-	err := app.Shutdown()
+	err := app.Shutdown(ctx)
 	assert.NoError(err)
 	assert.False(alpha.IsStarted())
 	assert.True(beta.IsStarted()) // Should remain up because no longer under management of the app
 
-	err = beta.Shutdown()
+	err = beta.Shutdown(ctx)
 	assert.NoError(err)
 	assert.False(beta.IsStarted())
 }
 
 func TestApplication_Run(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
+
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
+	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
+	defer env.Pop("MICROBUS_PLANE")
+	defer env.Pop("MICROBUS_DEPLOYMENT")
 
 	con := connector.New("run.application")
 	config := configurator.NewService()
-	app := NewTesting()
+	app := New()
 	app.Add(config)
 	app.Add(con)
 

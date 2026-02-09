@@ -33,6 +33,7 @@ import (
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/trc"
+	"github.com/microbus-io/fabric/utils"
 
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -41,78 +42,60 @@ import (
 type HTTPHandler = sub.HTTPHandler
 
 /*
-Subscribe assigns a function to handle HTTP requests to the given path.
-If the path ends with a / all sub-paths under the path are capture by the subscription
-
-If the path does not include a hostname, the default host is used.
+Subscribe assigns a function to handle HTTP requests to the given route.
+If the route does not include a hostname, the default host is used.
 If a port is not specified, 443 is used by default.
 If a method is not specified, "ANY" is used by default to capture all methods.
+Path arguments are designated by curly braces.
 
-Examples of valid paths:
+Examples of valid routes:
 
 	(empty)
 	/
+	/path
 	:1080
 	:1080/
 	:1080/path
+	:0/any/port
 	/path/with/slash
 	path/with/no/slash
+	/section/{section}/page/{page...}
 	https://www.example.com/path
 	https://www.example.com:1080/path
+	//www.example.com:1080/path
 */
-func (c *Connector) Subscribe(method string, path string, handler sub.HTTPHandler, options ...sub.Option) error {
+func (c *Connector) Subscribe(method string, route string, handler sub.HTTPHandler, options ...sub.Option) (unsub func() (err error), err error) {
 	if c.hostname == "" {
-		return c.captureInitErr(errors.New("hostname is not set"))
+		return nil, c.captureInitErr(errors.New("hostname is not set"))
 	}
 	if method == "" {
 		method = "ANY"
 	}
-	newSub, err := sub.NewSub(method, c.hostname, path, handler, options...)
+	newSub, err := sub.NewSub(method, c.hostname, route, handler, options...)
 	if err != nil {
-		return c.captureInitErr(errors.Trace(err))
+		return nil, c.captureInitErr(errors.Trace(err))
 	}
-	key := method + "|" + newSub.Canonical()
-	if oldSub, deleted := c.subs.Delete(key); deleted {
-		err = c.deactivateSub(oldSub)
-		if err != nil {
-			return c.captureInitErr(errors.Trace(err))
-		}
-	}
+	key := utils.RandomIdentifier(12)
 	c.subs.Store(key, newSub)
 	if c.isPhase(startedUp) {
 		err := c.activateSub(newSub)
 		if err != nil {
-			return c.captureInitErr(errors.Trace(err))
+			return nil, c.captureInitErr(errors.Trace(err))
 		}
 		c.notifyOnNewSubs(newSub)
 		c.transportConn.WaitForSub()
 	}
-	return nil
-}
-
-// Unsubscribe removes the handler for the specified path
-func (c *Connector) Unsubscribe(method string, path string) error {
-	if c.hostname == "" {
-		return errors.New("hostname is not set")
-	}
-	if method == "" {
-		method = "ANY"
-	}
-	newSub, err := sub.NewSub(method, c.hostname, path, nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	key := method + "|" + newSub.Canonical()
-	if oldSub, deleted := c.subs.Delete(key); deleted {
-		err = c.deactivateSub(oldSub)
+	unsub = func() (err error) {
+		err = c.deactivateSub(newSub)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if c.isPhase(startedUp) {
+			c.transportConn.WaitForSub()
+		}
+		return nil
 	}
-	if c.isPhase(startedUp) {
-		c.transportConn.WaitForSub()
-	}
-	return nil
+	return unsub, nil
 }
 
 // onRequest handles an incoming request. It acks it, then calls the handler to process it and responds to the caller.
@@ -195,9 +178,9 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 			prefix += "."
 		}
 		if s.Queue != "" {
-			transportSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), s.Queue, handler)
+			transportSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Route), s.Queue, handler)
 		} else {
-			transportSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Path), handler)
+			transportSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Route), handler)
 		}
 		if err != nil {
 			break
@@ -339,7 +322,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		// Remove the default user-agent set by the http package
 		httpReq.Header.Del("User-Agent")
 	}
-	httpx.SetPathValues(httpReq, s.Path)
+	httpx.SetPathValues(httpReq, s.Route)
 	if br, ok := httpReq.Body.(*httpx.BodyReader); ok {
 		br.Reset()
 	}
@@ -379,10 +362,10 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	}
 	if c.deployment == LOCAL {
 		// Add the request attributes in LOCAL deployment to facilitate debugging
-		spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Path))
+		spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Route))
 	}
 	ctx = propagation.TraceContext{}.Extract(ctx, propagation.HeaderCarrier(httpReq.Header))
-	ctx, span := c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Path), spanOptions...)
+	ctx, span := c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Route), spanOptions...)
 	spanEnded := false
 	defer func() {
 		if !spanEnded {
@@ -406,11 +389,11 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	httpReq.Header = frame.Of(ctx).Header()
 
 	// Check actor constraints
-	if s.Actor != "" {
+	if s.RequiredClaims != "" {
 		if httpReq.Header.Get(frame.HeaderActor) == "" {
 			handlerErr = errors.New("", http.StatusUnauthorized)
 		} else {
-			satisfied, err := frame.Of(httpReq).IfActor(s.Actor)
+			satisfied, err := frame.Of(httpReq).IfActor(s.RequiredClaims)
 			if err != nil {
 				handlerErr = errors.Trace(err)
 			} else if !satisfied {
@@ -440,13 +423,13 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		}
 		c.LogError(ctx, "Handling request",
 			"error", convertedErr,
-			"path", s.Path,
+			"path", s.Route,
 			"depth", frame.Of(httpReq).CallDepth(),
 			"code", statusCode,
 		)
 
 		// OpenTelemetry: record the error, adding the request attributes
-		span.SetAttributes("http.route", s.Path)
+		span.SetAttributes("http.route", s.Route)
 		span.SetRequest(httpReq)
 		span.SetError(convertedErr)
 		c.ForceTrace(ctx)

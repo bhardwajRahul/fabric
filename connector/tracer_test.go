@@ -37,7 +37,7 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("alpha.test.request.attributes.connector")
@@ -64,12 +64,12 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	// A request that returns with an error
 	_, err = alpha.GET(ctx, "https://beta.test.request.attributes.connector/handle?err=1")
@@ -102,6 +102,7 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 
 func TestConnector_GoTracingSpan(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	alpha := New("go.tracing.span.connector")
@@ -120,9 +121,9 @@ func TestConnector_GoTracingSpan(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
+	defer alpha.Shutdown(ctx)
 
 	wg.Wait()
 	assert.Equal(topSpan.TraceID(), goSpan.TraceID())

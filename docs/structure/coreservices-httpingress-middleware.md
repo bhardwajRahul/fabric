@@ -6,7 +6,7 @@ A middleware is a function that returns a function that can be added to the [HTT
 type Middleware func(next connector.HTTPHandler) connector.HTTPHandler
 ```
 
-Remember that `Microbus` add an error error value to the standard Go web handler.
+Remember that `Microbus` add an error value to the standard Go web handler.
 
 ### Chain
 

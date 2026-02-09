@@ -58,7 +58,7 @@ func main() {
 		tokenissuer.NewService(),
 	)
 	app.Add(
-		// HINT: Add solution microservices here
+		// Example microservices
 		helloworld.NewService(),
 		hello.NewService(),
 		messaging.NewService(),
@@ -72,8 +72,11 @@ func main() {
 		login.NewService(),
 	)
 	app.Add(
+	// HINT: Add solution microservices here
+	)
+	app.Add(
 		// When everything is ready, begin to accept external requests
-		httpingress.NewService().Init(func(svc *httpingress.Service) {
+		httpingress.NewService().Init(func(svc *httpingress.Service) (err error) {
 			svc.Middleware().Append("LoginExample401Redirect",
 				middleware.OnRoute(
 					func(path string) bool {
@@ -82,6 +85,7 @@ func main() {
 					middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+login.Hostname+"/login"),
 				),
 			)
+			return nil
 		}),
 		// smtpingress.NewService(),
 	)

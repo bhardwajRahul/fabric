@@ -25,7 +25,7 @@ Note: These milestones are maintained in separate branches in order to demonstra
 [Milestone 4](https://github.com/microbus-io/fabric/tree/milestone/4):
 
 - Acks and quick timeouts
-- Bi-directional (request/response) HTTP-like *multicast- messaging over NATS
+- Bi-directional (request/response) HTTP-like multicast messaging over NATS
 - Direct addressing
 - Control messages on port `:888`
 
@@ -352,3 +352,11 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Changed configuration property names to be case sensitive
 - Connect to NATS using user JWT and NKey seed
 - NATS connection pooling in single executable
+
+[Milestone 43](https://github.com/microbus-io/fabric/tree/milestone/43):
+
+- Agentic-first approach
+- Retire deterministic code generation
+- Revise documentation
+- Clean up deprecated code
+- Upgrade dependencies

@@ -26,16 +26,16 @@ In this deployment topology, the all-inclusive application is replicated on a mu
 <p></p>
 
 Pros:
-* Simple enough to be manageable without Kubernetes
-* Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
-* Scales horizontally to handle more load
-* Resiliency to AZ failure can be achieved by placing each hardware in a different AZ
+- Simple enough to be manageable without Kubernetes
+- Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
+- Scales horizontally to handle more load
+- Resiliency to AZ failure can be achieved by placing each hardware in a different AZ
 
 Cons:
-* A change to even a single microservice requires redeployment of all microservices
-* All microservices share the same hardware configuration
+- A change to even a single microservice requires redeployment of all microservices
+- All microservices share the same hardware configuration
 
-### Weighted Bundled Replication 
+### Weighted Bundled Replication
 
 If a microservice handles a lot of traffic, it risks having its single connection to NATS getting bogged down. Deploying additional replicas alleviates the pressure and is a simple technique for scaling up throughput. In the diagram below, both the HTTP ingress proxy and microservice `A` are deployed twice as many times as other microservices.
 
@@ -52,15 +52,15 @@ In some cases, a microservice may be required to be deployed separately from the
 <p></p>
 
 Pros:
-* Simple enough to be manageable without Kubernetes if the number of exceptions is low
-* Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
-* Scales horizontally to handle more load
-* Resiliency to AZ failure can be achieved by placing each hardware type in multiple AZs
+- Simple enough to be manageable without Kubernetes if the number of exceptions is low
+- Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
+- Scales horizontally to handle more load
+- Resiliency to AZ failure can be achieved by placing each hardware type in multiple AZs
 
 Cons:
-* A change to even a single microservice is likely to require redeployment of practically all microservices
-* Gets complicated to manage with many exceptions
-* Increased hardware provisioning costs
+- A change to even a single microservice is likely to require redeployment of practically all microservices
+- Gets complicated to manage with many exceptions
+- Increased hardware provisioning costs
 
 ### Individually Wrapped
 
@@ -70,13 +70,13 @@ In this deployment topology, each microservice replica is wrapped in its own ind
 <p></p>
 
 Pros:
-* Well-suited for running on Kubernetes
-* Maximum flexibility in setting the number of replicas and their distribution across hardware
-* Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
-* Scales horizontally to handle more load
-* Redeployment is required only for changed microservices
-* Resiliency to AZ failure can be achieved by placing hardware in multiple AZs and spreading the microservices so that each are replicated in at least 2 AZs
+- Well-suited for running on Kubernetes
+- Maximum flexibility in setting the number of replicas and their distribution across hardware
+- Can sustain the loss of any given hardware, NATS node or executable, including during a rolling deployment
+- Scales horizontally to handle more load
+- Redeployment is required only for changed microservices
+- Resiliency to AZ failure can be achieved by placing hardware in multiple AZs and spreading the microservices so that each are replicated in at least 2 AZs
 
 Cons:
-* Memory requirements are modestly higher
-* Added complexity of Kubernetes
+- Memory requirements are modestly higher
+- Added complexity of Kubernetes

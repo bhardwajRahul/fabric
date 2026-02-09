@@ -26,15 +26,14 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/coreservices/smtpingress/intermediate"
 	"github.com/microbus-io/fabric/coreservices/smtpingress/smtpingressapi"
 	"github.com/microbus-io/fabric/trc"
 	"github.com/mnako/letters"
 	"github.com/phires/go-guerrilla"
 	"github.com/phires/go-guerrilla/backends"
+	glog "github.com/phires/go-guerrilla/log"
 	"github.com/phires/go-guerrilla/mail"
 	"github.com/sirupsen/logrus"
-	glog "github.com/phires/go-guerrilla/log"
 )
 
 const processorName = "MessageProcessor"
@@ -45,7 +44,7 @@ Service implements the smtp.ingress.core microservice.
 The SMTP ingress microservice listens for incoming emails and fires corresponding events.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 
 	daemon *guerrilla.Daemon
 	mux    sync.Mutex
@@ -224,7 +223,7 @@ func (svc *Service) processEnvelope(p backends.Processor, e *mail.Envelope, task
 }
 
 // OnChangedPort is triggered when the value of the Port config property changes.
-func (svc *Service) OnChangedPort(ctx context.Context) (err error) {
+func (svc *Service) OnChangedPort(ctx context.Context) (err error) { // MARKER: Port
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
@@ -236,25 +235,25 @@ func (svc *Service) OnChangedLogLevel(ctx context.Context) (err error) {
 }
 
 // OnChangedEnabled is triggered when the value of the Enabled config property changes.
-func (svc *Service) OnChangedEnabled(ctx context.Context) (err error) {
+func (svc *Service) OnChangedEnabled(ctx context.Context) (err error) { // MARKER: Enabled
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
 // OnChangedMaxSize is triggered when the value of the MaxSize config property changes.
-func (svc *Service) OnChangedMaxSize(ctx context.Context) (err error) {
+func (svc *Service) OnChangedMaxSize(ctx context.Context) (err error) { // MARKER: MaxSize
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
 // OnChangedMaxClients is triggered when the value of the MaxClients config property changes.
-func (svc *Service) OnChangedMaxClients(ctx context.Context) (err error) {
+func (svc *Service) OnChangedMaxClients(ctx context.Context) (err error) { // MARKER: MaxClients
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
 // OnChangedWorkers is triggered when the value of the Workers config property changes.
-func (svc *Service) OnChangedWorkers(ctx context.Context) (err error) {
+func (svc *Service) OnChangedWorkers(ctx context.Context) (err error) { // MARKER: Workers
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }

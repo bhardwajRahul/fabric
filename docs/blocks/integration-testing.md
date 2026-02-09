@@ -10,13 +10,11 @@ Mocks can be added to the application when it's impractical to run the actual do
 
 <img src="./integration-testing-1.drawio.svg">
 
-## Code Generated Test Harness
+## Test Harness
 
-This is all rather complicated to set up which is where the [code generator](../blocks/codegen.md) comes into the picture and automatically creates a test harness for each of the microservice's endpoints based on the specification of the microservice (`service.yaml`). It is left for the developer to initialize the testing app and implement the logic of each test.
+This is all rather complicated to set up which is where the [coding agent](../blocks/coding-agents.md) comes into the picture and automatically creates a test harness for each of the microservice's endpoints.
 
-### Initializing the Testing App
-
-For each test, the code generator prepares a testing app `app` and includes in it the microservice under test `svc`. Dependencies on downstream microservices should be added to the app manually, using the `NewService` constructor of that service. During testing, the [configurator](../structure/coreservices-configurator.md) core microservice is disabled and microservices must be configured directly. If the microservice under test defines any configuration properties, they are pre-listed commented-out for convenience.
+Each test creates a separate testing app `app` and includes in it the microservice under test `svc`. Dependencies on downstream microservices should be added to the app, using the `NewService` constructor of that service. During testing, the [configurator](../structure/coreservices-configurator.md) core microservice is disabled and microservices must be configured directly.
 
 ```go
 func TestMyService_MyEndpoint(t *testing.T) {
@@ -25,10 +23,9 @@ func TestMyService_MyEndpoint(t *testing.T) {
 
 	// Initialize the microservice under test
 	svc := NewService()
-	// svc.SetMyConfig(myConfig)
 
 	// Initialize the testers
-	tester := connector.New("myservice.myendpoint.tester")
+	tester := connector.New("tester.client")
 	client := myservice.NewClient(tester)
 
 	// Run the testing app
@@ -82,7 +79,7 @@ func TestHello_Hello(t *testing.T) {
 	t.Run("hello", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Hello(ctx, "GET", "?name=Maria", "", nil)
+		res, err := client.Hello(ctx, "GET", "?name=Maria", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -145,11 +142,13 @@ func TestExample_OnRegistered(t *testing.T) {
 
 	t.Run("registration_notification", func(t *testing.T) {
 		assert := testarossa.For(t)
-		hook.OnRegistered(func(ctx context.Context, email string) (err error) {
+		unsub, err := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
 			assert.Expect(email, "peter@example.com")
 			return nil
 		})
-		defer hook.OnRegistered(nil)
+		if assert.NoError(err) {
+			defer unsub()
+		}
 		for e := range trigger.OnRegistered(ctx, "peter@example.com") {
 			if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
 				err := e.Get()
@@ -204,25 +203,15 @@ func TestExample_OnObserveNumOperations(t *testing.T) {
 }
 ```
 
-## Skipping Tests
-
-A removed test will be regenerated on the next run of the code generator, so disabling a test is best achieved by placing a call to `t.Skip()` along with an explanation of why the test was skipped.
-
-```go
-func TestEventsink_OnRegistered(t *testing.T) {
-	t.Skip() // Tested elsewhere
-}
-```
-
 ## Parallelism
 
-The code generator specifies to run all tests in parallel. The assumption is that tests are implemented as to not interfere with one another. Comment out `t.Parallel()` to run that test separately from other tests. Be advised that the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
+Most tests are designed to not interfere with one another and run in parallel by default. Comment out `t.Parallel()` to run that test separately from other tests. Be advised that the order of execution of tests is not guaranteed and care must be taken to reset the state at the end of a test that may interfere with another.
 
 ## Mocking
 
 Sometimes, using the actual microservice is not possible because it depends on a resource that is not available in the testing environment. For example, a microservice that makes requests to a third-party web service should be mocked in order to avoid depending on that service for development.
 
-In order to more easily mock microservices, the code generator creates a `Mock` for every microservice. This mock includes type-safe methods for mocking all the endpoints of the microservice. Mocks are added to testing applications in lieu of the real services.
+In order to more easily mock microservices, the [coding agent](../blocks/coding-agents.md) creates a `Mock` for every microservice. This mock includes type-safe methods for mocking all the endpoints of the microservice. Mocks are added to testing applications in lieu of the real services.
 
 ```go
 func TestPayment_ChargeUser(t *testing.T) {
@@ -233,7 +222,7 @@ func TestPayment_ChargeUser(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("payment.chargeuser.tester")
+	tester := connector.New("tester.client")
 	client := payment.NewClient(tester)
 
 	// Run the testing app
@@ -328,4 +317,4 @@ Include in the testing app all the downstream microservices that the microservic
 
 ### Scenarios
 
-Don't be satisfied with the code-generated tests. High code coverage is not enough. Write tests that perform complex scenarios based on the business logic of the solution. For example, if the microservice under test is a CRUD microservice, perform a test that goes through a sequence of steps such as `Create`, `Load`, `List`, `Update`, `Load`, `List`, `Delete`, `Load`, `List` and check for integrity after each step. Involve as many of the downstream microservices as possible, if applicable.
+High code coverage is not enough. Write tests that perform complex scenarios based on the business logic of the solution. For example, if the microservice under test is a CRUD microservice, perform a test that goes through a sequence of steps such as `Create`, `Load`, `List`, `Update`, `Load`, `List`, `Delete`, `Load`, `List` and check for integrity after each step. Involve as many of the downstream microservices as possible, if applicable.

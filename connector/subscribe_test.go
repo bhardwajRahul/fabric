@@ -28,9 +28,9 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/transport"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -38,22 +38,22 @@ func TestConnector_DirectorySubscription(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	var count int
 	var appendix string
 	con := New("directory.subscription.connector")
-	con.Subscribe("GET", "directory/{appendix+}", func(w http.ResponseWriter, r *http.Request) error {
+	con.Subscribe("GET", "directory/{appendix...}", func(w http.ResponseWriter, r *http.Request) error {
 		count++
 		_, appendix, _ = strings.Cut(r.URL.Path, "/directory/")
 		return nil
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages to various locations under the directory
 	_, err = con.GET(ctx, "https://directory.subscription.connector/directory/1.html")
@@ -80,7 +80,7 @@ func TestConnector_HyphenInHostname(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	entered := false
@@ -91,9 +91,9 @@ func TestConnector_HyphenInHostname(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	_, err = con.GET(ctx, "https://hyphen-in-host_name.connector/path")
 	assert.NoError(err)
@@ -104,7 +104,7 @@ func TestConnector_PathArgumentsInSubscription(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	alphaCount := 0
@@ -138,9 +138,9 @@ func TestConnector_PathArgumentsInSubscription(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages
 	_, err = con.GET(ctx, "https://path.arguments.in.subscription.connector/obj/1234/alpha")
@@ -175,7 +175,7 @@ func TestConnector_MixedAsteriskSubscription(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	detected := map[string]bool{}
@@ -186,9 +186,9 @@ func TestConnector_MixedAsteriskSubscription(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	_, err = con.GET(ctx, "https://mixed.asterisk.subscription.connector/obj/2222/gamma")
 	assert.Error(err)
@@ -202,7 +202,7 @@ func TestConnector_ErrorAndPanic(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	con := New("error.and.panic.connector")
@@ -225,9 +225,9 @@ func TestConnector_ErrorAndPanic(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages
 	_, err = con.GET(ctx, "https://error.and.panic.connector/usererr")
@@ -257,7 +257,7 @@ func TestConnector_DifferentPlanes(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("different.planes.connector")
@@ -275,12 +275,12 @@ func TestConnector_DifferentPlanes(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	// Alpha should never see beta
 	for range 32 {
@@ -309,7 +309,7 @@ func TestConnector_SubscribeBeforeAndAfterStartup(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	var beforeCalled, afterCalled bool
@@ -322,9 +322,9 @@ func TestConnector_SubscribeBeforeAndAfterStartup(t *testing.T) {
 	})
 
 	// Startup the microservice
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Subscribe after beta is started
 	con.Subscribe("GET", "after", func(w http.ResponseWriter, r *http.Request) error {
@@ -346,13 +346,13 @@ func TestConnector_Unsubscribe(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	con := New("unsubscribe.connector")
 
 	// Subscribe
-	con.Subscribe("GET", "sub1", func(w http.ResponseWriter, r *http.Request) error {
+	unsub1, _ := con.Subscribe("GET", "sub1", func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	con.Subscribe("GET", "sub2", func(w http.ResponseWriter, r *http.Request) error {
@@ -360,9 +360,9 @@ func TestConnector_Unsubscribe(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send requests
 	_, err = con.GET(ctx, "https://unsubscribe.connector/sub1")
@@ -371,7 +371,7 @@ func TestConnector_Unsubscribe(t *testing.T) {
 	assert.NoError(err)
 
 	// Unsubscribe sub1
-	err = con.Unsubscribe("GET", ":443/sub1")
+	err = unsub1()
 	assert.NoError(err)
 
 	// Send requests
@@ -395,7 +395,7 @@ func TestConnector_AnotherHost(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("alpha.another.host.connector")
@@ -414,15 +414,15 @@ func TestConnector_AnotherHost(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta1.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta1.Startup(ctx)
 	assert.NoError(err)
-	defer beta1.Shutdown()
-	err = beta2.Startup()
+	defer beta1.Shutdown(ctx)
+	err = beta2.Startup(ctx)
 	assert.NoError(err)
-	defer beta2.Shutdown()
+	defer beta2.Shutdown(ctx)
 
 	// Send message
 	responded := 0
@@ -440,19 +440,19 @@ func TestConnector_DirectAddressing(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	con := New("direct.addressing.connector")
-	con.Subscribe("GET", "/hello", func(w http.ResponseWriter, r *http.Request) error {
+	unsub, _ := con.Subscribe("GET", "/hello", func(w http.ResponseWriter, r *http.Request) error {
 		w.Write([]byte("Hello"))
 		return nil
 	})
 
 	// Startup the microservice
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages
 	_, err = con.GET(ctx, "https://direct.addressing.connector/hello")
@@ -460,7 +460,7 @@ func TestConnector_DirectAddressing(t *testing.T) {
 	_, err = con.GET(ctx, "https://"+con.id+".direct.addressing.connector/hello")
 	assert.NoError(err)
 
-	err = con.Unsubscribe("GET", "/hello")
+	err = unsub()
 	assert.NoError(err)
 
 	// Both subscriptions should be deactivated
@@ -472,6 +472,7 @@ func TestConnector_DirectAddressing(t *testing.T) {
 
 func TestConnector_SubPendingOps(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("sub.pending.ops.connector")
@@ -485,9 +486,9 @@ func TestConnector_SubPendingOps(t *testing.T) {
 		return nil
 	})
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Zero(con.pendingOps.Load())
 
@@ -519,7 +520,7 @@ func TestConnector_SubscriptionMethods(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	var get int
@@ -540,9 +541,9 @@ func TestConnector_SubscriptionMethods(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages to various locations under the directory
 	_, err = con.Request(ctx, pub.GET("https://subscription.methods.connector/single"))
@@ -578,7 +579,7 @@ func TestConnector_SubscriptionPorts(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	var p123 int
@@ -599,9 +600,9 @@ func TestConnector_SubscriptionPorts(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages to various locations under the directory
 	_, err = con.Request(ctx, pub.GET("https://subscription.ports.connector:123/single"))
@@ -637,7 +638,7 @@ func TestConnector_FrameConsistency(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	con := New("frame.consistency.connector")
@@ -655,9 +656,9 @@ func TestConnector_FrameConsistency(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages to various locations under the directory
 	_, err = con.Request(ctx, pub.GET("https://frame.consistency.connector/frame"))
@@ -665,13 +666,14 @@ func TestConnector_FrameConsistency(t *testing.T) {
 }
 
 func BenchmarkConnection_AckRequest(b *testing.B) {
+	ctx := context.Background()
 	// Startup the microservices
 	con := New("ack.request.connector")
-	err := con.Startup()
+	err := con.Startup(ctx)
 	testarossa.NoError(b, err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
-	req, _ := http.NewRequest("POST", "https://nowhere/", strings.NewReader(rand.AlphaNum64(16*1024)))
+	req, _ := http.NewRequest("POST", "https://nowhere/", strings.NewReader(utils.RandomIdentifier(16*1024)))
 	f := frame.Of(req)
 	f.SetFromHost("someone")
 	f.SetFromID("me")
@@ -699,7 +701,7 @@ func TestConnector_PathArguments(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	var foo string
@@ -713,9 +715,9 @@ func TestConnector_PathArguments(t *testing.T) {
 	})
 
 	// Startup the microservices
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Values provided in path should be delivered
 	_, err = con.Request(ctx, pub.GET("https://path.arguments.connector/foo/FOO1/bar/BAR1"))
@@ -737,18 +739,19 @@ func TestConnector_PathArguments(t *testing.T) {
 
 func TestConnector_InvalidPathArguments(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	for _, path := range []string{
-		"/1/x{mmm}x", "/2/{}x", "/3/x{}", "/4/x{+}", "/}{", "/{/x",
+		"/1/x{mmm}x", "/2/{}x", "/3/x{}", "/4/x{...}", "/}{", "/{/x",
 	} {
 		con := New("invalid.path.arguments.connector")
 		con.Subscribe("GET", path, func(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		})
-		err := con.Startup()
+		err := con.Startup(ctx)
 		if !assert.Error(err, "%", path) {
-			con.Shutdown()
+			con.Shutdown(ctx)
 		}
 	}
 }
@@ -757,7 +760,7 @@ func TestConnector_SubscriptionLocality(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("alpha.subscription.locality.connector")
@@ -786,9 +789,9 @@ func TestConnector_SubscriptionLocality(t *testing.T) {
 		con.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		})
-		err := con.Startup()
+		err := con.Startup(ctx)
 		assert.NoError(err)
-		defer con.Shutdown()
+		defer con.Shutdown(ctx)
 	}
 
 	// Requests should converge to beta1 that is in the same DC as alpha
@@ -814,7 +817,7 @@ func TestConnector_SubscriptionLocality(t *testing.T) {
 	}
 
 	// Shutting down beta1, requests should converge to beta2 that is in the same region as alpha
-	beta1.Shutdown()
+	beta1.Shutdown(ctx)
 
 	for repeat := 0; repeat < 16; repeat++ {
 		beta2Found := false
@@ -839,7 +842,7 @@ func TestConnector_SubscriptionNoLocalityWithID(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	alpha := New("alpha.subscription.no.locality.with.id.connector")
@@ -864,12 +867,12 @@ func TestConnector_SubscriptionNoLocalityWithID(t *testing.T) {
 		return nil
 	})
 
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	for repeat := 0; repeat < 16; repeat++ {
 		_, err := alpha.GET(ctx, "https://"+beta.ID()+".beta.subscription.no.locality.with.id.connector/byid")
@@ -892,22 +895,28 @@ func TestConnector_Actor(t *testing.T) {
 	// Create the microservice
 	entered := 0
 	con := New("actor.connector")
-	con.Subscribe("GET", "student", func(w http.ResponseWriter, r *http.Request) error {
-		entered++
-		return nil
-	}, sub.Actor(`iss=="hogwats.issuer" && (roles=~"student" || roles=~"professor")`))
-	con.Subscribe("GET", "professor", func(w http.ResponseWriter, r *http.Request) error {
-		entered++
-		return nil
-	}, sub.Actor(`iss=="hogwats.issuer" && roles=~"professor"`))
+	con.Subscribe("GET", "student",
+		func(w http.ResponseWriter, r *http.Request) error {
+			entered++
+			return nil
+		},
+		sub.RequiredClaims(`iss=="hogwats.issuer" && (roles=~"student" || roles=~"professor")`),
+	)
+	con.Subscribe("GET", "professor",
+		func(w http.ResponseWriter, r *http.Request) error {
+			entered++
+			return nil
+		},
+		sub.RequiredClaims(`iss=="hogwats.issuer" && roles=~"professor"`),
+	)
 
 	// Startup the microservice
-	err := con.Startup()
+	ctx := t.Context()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Without a token
-	ctx := t.Context()
 	_, err = con.GET(ctx, "https://actor.connector/student")
 	assert.Error(err)
 	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))

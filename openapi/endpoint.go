@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@ package openapi
 
 // Endpoint describes a single endpoint of a microservice, such as an RPC function.
 type Endpoint struct {
-	Type        string
-	Name        string
-	Path        string
-	Summary     string
-	Description string
-	InputArgs   any
-	OutputArgs  any
-	Method      string
-	Actor       string
+	Type           string
+	Name           string
+	Route          string
+	Summary        string
+	Description    string
+	InputArgs      any
+	OutputArgs     any
+	Method         string
+	RequiredClaims string
 }

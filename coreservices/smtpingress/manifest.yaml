@@ -1,0 +1,39 @@
+general:
+  hostname: smtp.ingress.core
+  description: The SMTP ingress microservice listens for incoming emails and fires corresponding events.
+  package: github.com/microbus-io/fabric/coreservices/smtpingress
+  frameworkVersion: 2.0.0
+
+outboundEvents:
+  OnIncomingEmail:
+    signature: OnIncomingEmail(email Email)
+    description: OnIncomingEmail is triggered when a new email message is received.
+    method: POST
+    route: :417/on-incoming-email
+
+configs:
+  Port:
+    description: Port is the TCP port to listen to.
+    type: int
+    validation: int [1,65535]
+    default: 25
+  Enabled:
+    description: Enabled determines whether the email server is started.
+    type: bool
+    validation: bool
+    default: true
+  MaxSize:
+    description: MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.
+    type: int
+    validation: int [0,1024]
+    default: 10
+  MaxClients:
+    description: MaxClients controls how many client connections can be opened in parallel. Defaults to 128.
+    type: int
+    validation: int [1,1024]
+    default: 128
+  Workers:
+    description: Workers controls how many workers process incoming mail. Defaults to 8.
+    type: int
+    validation: int [1,1024]
+    default: 8

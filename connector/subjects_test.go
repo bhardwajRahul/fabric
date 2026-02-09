@@ -49,13 +49,13 @@ func TestConnector_SubjectOfSubscription(t *testing.T) {
 
 	assert.Equal("p0.80.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/to/file.html"))
 	assert.Equal("p0.80.com.example.|.GET.PATH._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "PATH/"))
-	assert.Equal("p0.123.com.example.|.POST.DIR.>", subjectOfSubscription("p0", "POST", "example.com", "123", "DIR/{+}"))
-	assert.Equal("p0.123.com.example.|.PATCH.DIR.>", subjectOfSubscription("p0", "PATCH", "example.com", "123", "/DIR/{file+}"))
-	assert.Equal("p0.443.com.example.www.|.DELETE.>", subjectOfSubscription("p0", "delete", "www.example.com", "443", "/{+}"))
+	assert.Equal("p0.123.com.example.|.POST.DIR.>", subjectOfSubscription("p0", "POST", "example.com", "123", "DIR/{...}"))
+	assert.Equal("p0.123.com.example.|.PATCH.DIR.>", subjectOfSubscription("p0", "PATCH", "example.com", "123", "/DIR/{file...}"))
+	assert.Equal("p0.443.com.example.www.|.DELETE.>", subjectOfSubscription("p0", "delete", "www.example.com", "443", "/{...}"))
 	assert.Equal("p0.443.com.example.www.|.*._", subjectOfSubscription("p0", "ANY", "www.example.com", "443", ""))
 	assert.Equal("p0.*.com.example.|.GET.PATH.to.file_html", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "0", "PATH/to/file.html"))
 	assert.Equal("p0.443.com.example.|.GET.foo.*.bar.*", subjectOfSubscription("p0", "GET", "example.com", "443", "/foo/{foo}/bar/{bar}"))
-	assert.Equal("p0.*.com.example.|.*.foo.*.bar.*.>", subjectOfSubscription("p0", "ANY", "example.com", "0", "/foo/{foo}/bar/{bar}/{appendix+}"))
+	assert.Equal("p0.*.com.example.|.*.foo.*.bar.*.>", subjectOfSubscription("p0", "ANY", "example.com", "0", "/foo/{foo}/bar/{bar}/{appendix...}"))
 	assert.Equal("p0.80.com.example.|.GET.empty._._._", subjectOfSubscription("p0", "GET", "EXAMPLE.com", "80", "empty///"))
 }
 

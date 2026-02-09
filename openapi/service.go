@@ -87,7 +87,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			ep.OutputArgs = struct{}{}
 		}
 
-		path := httpx.JoinHostAndPath(s.ServiceName, ep.Path)
+		path := httpx.JoinHostAndPath(s.ServiceName, ep.Route)
 		_, path, _ = strings.Cut(path, "://")
 		path = "/" + path
 
@@ -248,9 +248,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					},
 				},
 			}
-			p := strings.LastIndex(ep.Path, ".")
+			p := strings.LastIndex(ep.Route, ".")
 			if p >= 0 {
-				contentType := mime.TypeByExtension(ep.Path[p:])
+				contentType := mime.TypeByExtension(ep.Route[p:])
 				if contentType != "" {
 					op.Responses["2XX"].Content = map[string]*oapiMediaType{
 						contentType: {},
@@ -264,7 +264,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 		}
 
 		// Authorization
-		if ep.Actor != "" {
+		if ep.RequiredClaims != "" {
 			const securitySchemaName = "http_bearer_jwt"
 			if doc.Components.SecuritySchemes[securitySchemaName] == nil {
 				doc.Components.SecuritySchemes[securitySchemaName] = &oapiSecurityScheme{
@@ -284,9 +284,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					},
 				},
 			}
-			if ep.Actor != "" {
+			if ep.RequiredClaims != "" {
 				op.Responses["403"] = &oapiResponse{
-					Description: "Forbidden; token required with: " + ep.Actor,
+					Description: "Forbidden; token required with: " + ep.RequiredClaims,
 					Content: map[string]*oapiMediaType{
 						"application/json": {
 							Schema: &jsonschema.Schema{

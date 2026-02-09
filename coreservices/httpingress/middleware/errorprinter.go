@@ -21,12 +21,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"unicode"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
-	"go.opentelemetry.io/otel/trace"
 )
 
 /*
@@ -97,87 +95,6 @@ func ErrorPrinter(redact func() bool) Middleware {
 				Err: printedError,
 			}
 			err = encoder.Encode(serializedErr)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			return nil
-		}
-	}
-}
-
-/*
-LegacyErrorPrinter returns a middleware that outputs any error to the response body.
-It should typically be the first middleware in the chain in case any of the other middleware fail.
-Error details and stack trace are only printed on localhost.
-
-The printer outputs the error as a root JSON object.
-
-	{
-		"error": "message",
-		"properties": {
-			"trace": "0123456789abcdef0123456789abcdef",
-			"propName": "propValue"
-		}
-		"stack": [...],
-		"statusCode": 500,
-	}
-
-Deprecated: Use the new ErrorPrinter
-*/
-func LegacyErrorPrinter(deployment func() string) Middleware {
-	return func(next connector.HTTPHandler) connector.HTTPHandler {
-		return func(w http.ResponseWriter, r *http.Request) (err error) {
-			ww := httpx.NewResponseRecorder()
-			downstreamErr := next(ww, r) // No trace
-			if downstreamErr == nil {
-				err = httpx.Copy(w, ww.Result())
-				return errors.Trace(err)
-			}
-			tracedError := errors.Convert(downstreamErr)
-
-			// Status code
-			statusCode := tracedError.StatusCode
-			if statusCode <= 0 || statusCode >= 1000 {
-				statusCode = http.StatusInternalServerError
-			}
-			// Enrich with trace ID
-			span := trace.SpanFromContext(r.Context())
-			if span != nil {
-				traceID := span.SpanContext().TraceID().String()
-				if tracedError.Properties == nil {
-					tracedError.Properties = map[string]any{}
-				}
-				tracedError.Properties["trace"] = traceID
-			}
-			local := deployment() == connector.LOCAL
-			var printedError *errors.TracedError
-			if local {
-				printedError = tracedError
-			} else {
-				printedError = &errors.TracedError{
-					StatusCode: statusCode,
-					Stack:      nil, // Redact stack trace
-					Properties: make(map[string]any, len(tracedError.Properties)),
-				}
-				// Only reveal 4xx errors to external users
-				if statusCode < 400 || statusCode >= 500 {
-					printedError.Err = fmt.Errorf("internal server error")
-				} else {
-					printedError.Err = tracedError.Err
-				}
-				// Redact lowercase properties
-				for k, v := range tracedError.Properties {
-					if k != "" && unicode.IsUpper([]rune(k)[0]) {
-						printedError.Properties[k] = v
-					}
-				}
-			}
-			encoder := json.NewEncoder(w)
-			encoder.SetIndent("", "  ")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Cache-Control", "no-store")
-			w.WriteHeader(statusCode)
-			err = encoder.Encode(printedError)
 			if err != nil {
 				return errors.Trace(err)
 			}

@@ -1,0 +1,11 @@
+general:
+  hostname: http.egress.core
+  description: The HTTP egress microservice relays HTTP requests to the internet.
+  package: github.com/microbus-io/fabric/coreservices/httpegress
+  frameworkVersion: 2.0.0
+
+webs:
+  MakeRequest:
+    description: MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context. The proxied request is expected to be posted in the body of the request in binary form (RFC7231).
+    method: POST
+    route: :444/make-request

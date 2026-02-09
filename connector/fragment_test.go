@@ -30,8 +30,8 @@ import (
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -39,7 +39,7 @@ func TestConnector_Frag(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	var bodyReceived []byte
@@ -53,13 +53,13 @@ func TestConnector_Frag(t *testing.T) {
 	})
 
 	// Startup the microservice
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 	con.maxFragmentSize = 128
 
 	// Prepare the body to send
-	bodySent := []byte(rand.AlphaNum64(int(con.maxFragmentSize)*2 + 16))
+	bodySent := []byte(utils.RandomIdentifier(int(con.maxFragmentSize)*2 + 16))
 
 	// Send message and validate that it was received whole
 	res, err := con.POST(ctx, "https://frag.connector/big", bodySent)
@@ -76,7 +76,7 @@ func TestConnector_FragMulticast(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	var alphaBodyReceived []byte
@@ -100,18 +100,18 @@ func TestConnector_FragMulticast(t *testing.T) {
 	}, sub.NoQueue())
 
 	// Startup the microservice
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	alpha.maxFragmentSize = 1024
 	beta.maxFragmentSize = 1024
 
 	// Prepare the body to send
-	bodySent := rand.AlphaNum64(int(alpha.maxFragmentSize)*2 + 16)
+	bodySent := utils.RandomIdentifier(int(alpha.maxFragmentSize)*2 + 16)
 
 	// Send message and validate that it was received whole
 	ch := alpha.Publish(
@@ -134,42 +134,48 @@ func TestConnector_FragLoadBalanced(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservices
 	var alphaBodyReceived []byte
 	alpha := New("frag.load.balanced.connector")
-	alpha.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
-		var err error
-		alphaBodyReceived, err = io.ReadAll(r.Body)
-		assert.NoError(err)
-		w.Write(alphaBodyReceived)
-		return nil
-	}, sub.LoadBalanced())
+	alpha.Subscribe("POST", "big",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var err error
+			alphaBodyReceived, err = io.ReadAll(r.Body)
+			assert.NoError(err)
+			w.Write(alphaBodyReceived)
+			return nil
+		},
+		sub.DefaultQueue(),
+	)
 
 	var betaBodyReceived []byte
 	beta := New("frag.load.balanced.connector")
-	beta.Subscribe("POST", "big", func(w http.ResponseWriter, r *http.Request) error {
-		var err error
-		betaBodyReceived, err = io.ReadAll(r.Body)
-		assert.NoError(err)
-		w.Write(betaBodyReceived)
-		return nil
-	}, sub.LoadBalanced())
+	beta.Subscribe("POST", "big",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var err error
+			betaBodyReceived, err = io.ReadAll(r.Body)
+			assert.NoError(err)
+			w.Write(betaBodyReceived)
+			return nil
+		},
+		sub.DefaultQueue(),
+	)
 
 	// Startup the microservice
-	err := alpha.Startup()
+	err := alpha.Startup(ctx)
 	assert.NoError(err)
-	defer alpha.Shutdown()
-	err = beta.Startup()
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
 	assert.NoError(err)
-	defer beta.Shutdown()
+	defer beta.Shutdown(ctx)
 
 	alpha.maxFragmentSize = 128
 	beta.maxFragmentSize = 128
 
 	// Prepare the body to send
-	bodySent := []byte(rand.AlphaNum64(int(alpha.maxFragmentSize)*2 + 16))
+	bodySent := []byte(utils.RandomIdentifier(int(alpha.maxFragmentSize)*2 + 16))
 
 	// Send message and validate that it was received whole
 	ch := alpha.Publish(
@@ -218,15 +224,15 @@ func BenchmarkConnector_Frag(b *testing.B) {
 		}
 
 		// Startup the microservice
-		err := alpha.Startup()
+		err := alpha.Startup(ctx)
 		assert.NoError(err)
-		err = beta.Startup()
+		err = beta.Startup(ctx)
 		assert.NoError(err)
 
 		b.Run(scDesc, func(b *testing.B) {
 			for i := 16; i <= 256; i *= 2 {
 				b.Run(fmt.Sprintf("%dMB", i), func(b *testing.B) {
-					payload := []byte(rand.AlphaNum64(i << 20))
+					payload := []byte(utils.RandomIdentifier(i << 20))
 					for b.Loop() {
 						// Send message and validate that it was received whole
 						res, err := beta.POST(ctx, "https://alpha.frag.benchmark.connector/big", payload)
@@ -238,8 +244,8 @@ func BenchmarkConnector_Frag(b *testing.B) {
 			}
 		})
 
-		alpha.Shutdown()
-		beta.Shutdown()
+		alpha.Shutdown(ctx)
+		beta.Shutdown(ctx)
 	}
 
 	// goos: darwin

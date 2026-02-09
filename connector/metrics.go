@@ -372,9 +372,9 @@ func (c *Connector) inferMetricUnit(name string, desc string) (unit string) {
 	return ""
 }
 
-// AddCounter adds a non-negative value to a counter metric.
+// IncrementCounter adds a non-negative value to a counter metric.
 // Attributes conform to the standard slog pattern.
-func (c *Connector) AddCounter(ctx context.Context, name string, val float64, attributes ...any) (err error) {
+func (c *Connector) IncrementCounter(ctx context.Context, name string, val float64, attributes ...any) (err error) {
 	if val < 0 {
 		return errors.New("counter '%s' can't be subtracted from", name)
 	}
@@ -562,132 +562,4 @@ func (c *Connector) makeAttributeSetOption(attributes []any) (metric.Measurement
 	}
 	attrSet := attribute.NewSet(kvAttributes...)
 	return metric.WithAttributeSet(attrSet), nil
-}
-
-// DefineHistogram defines a new histogram metric.
-// Histograms can only be observed.
-//
-// Deprecated: Use DescribeHistogram instead.
-func (c *Connector) DefineHistogram(name string, help string, bucketBounds []float64, labels []string) (err error) {
-	err = c.DescribeHistogram(name, help, bucketBounds)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.metricLock.Lock()
-	defer c.metricLock.Unlock()
-	if instrument, ok := c.metricInstruments[name]; ok {
-		instrument.Labels = labels
-	}
-	return nil
-}
-
-// DefineCounter defines a new counter metric.
-// Counters can only be incremented.
-//
-// Deprecated: Use DescribeCounter instead.
-func (c *Connector) DefineCounter(name string, help string, labels []string) (err error) {
-	err = c.DescribeCounter(name, help)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.metricLock.Lock()
-	defer c.metricLock.Unlock()
-	if instrument, ok := c.metricInstruments[name]; ok {
-		instrument.Labels = labels
-	}
-	return nil
-}
-
-// DefineGauge defines a new gauge metric.
-// Gauges can be observed or incremented.
-//
-// Deprecated: Use DescribeGauge instead.
-func (c *Connector) DefineGauge(name string, help string, labels []string) (err error) {
-	err = c.DescribeGauge(name, help)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.metricLock.Lock()
-	defer c.metricLock.Unlock()
-	if instrument, ok := c.metricInstruments[name]; ok {
-		instrument.Labels = labels
-	}
-	return nil
-}
-
-// IncrementMetric adds the given value to a counter or gauge metric.
-// The name and labels must match a previously defined metric.
-// Gauge metrics support subtraction by use of a negative value.
-// Counter metrics only allow addition and a negative value will result in an error.
-//
-// Warning: Incrementing rather than observing a Gauge is not safe in a distributed environment
-// where microservices get out of sync with each other. It is provided for backward
-// compatibility only. Avoid using.
-//
-// Deprecated: Use AddCounter or RecordGauge instead.
-func (c *Connector) IncrementMetric(name string, val float64, labels ...string) (err error) {
-	if val == 0 {
-		return nil
-	}
-	c.metricLock.RLock()
-	meter := c.meter
-	m, ok := c.metricInstruments[name]
-	c.metricLock.RUnlock()
-	if meter == nil {
-		return nil
-	}
-	if !ok {
-		return errors.New("unknown metric '%s'", name)
-	}
-	attrs := make([]any, 0, len(labels)*2)
-	for i := range labels {
-		attrs = append(attrs, m.Labels[i], labels[i])
-	}
-	if m.Counter != nil {
-		err = c.AddCounter(c.Lifetime(), name, val, attrs...)
-	} else if m.Gauge != nil {
-		// Warning: Incrementing rather than observing a Gauge is not safe in a distributed environment
-		// where microservices get out of sync with each other.
-		// This is provided here for backward compatibility only. Avoid using.
-		m.GaugeValLock.Lock()
-		newVal := m.GaugeVal + val
-		m.GaugeVal = newVal
-		m.GaugeValLock.Unlock()
-		err = c.RecordGauge(c.Lifetime(), name, newVal, attrs...)
-	} else {
-		return errors.New("metric '%s' cannot be incremented", name)
-	}
-	return errors.Trace(err)
-}
-
-// ObserveMetric observes the given value using a histogram or summary, or sets it as a gauge's value.
-// The name and labels must match a previously defined metric.
-//
-// Deprecated: Use RecordGauge or RecordHistogram instead.
-func (c *Connector) ObserveMetric(name string, val float64, labels ...string) (err error) {
-	c.metricLock.RLock()
-	meter := c.meter
-	m, ok := c.metricInstruments[name]
-	c.metricLock.RUnlock()
-	if meter == nil {
-		return nil
-	}
-	if !ok {
-		return errors.New("unknown metric '%s'", name)
-	}
-	attrs := make([]any, 0, len(labels)*2)
-	for i := range labels {
-		attrs = append(attrs, m.Labels[i], labels[i])
-	}
-	if m.Gauge != nil {
-		m.GaugeValLock.Lock()
-		m.GaugeVal = val
-		m.GaugeValLock.Unlock()
-		err = c.RecordGauge(c.Lifetime(), name, val, attrs...)
-	} else if m.Histogram != nil {
-		err = c.RecordHistogram(c.Lifetime(), name, val, attrs...)
-	} else {
-		return errors.New("metric '%s' cannot be observed", name)
-	}
-	return errors.Trace(err)
 }

@@ -97,36 +97,6 @@ func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	return parsed, nil
 }
 
-// InsertPathArguments fills URL path arguments such as {arg} from the named value.
-// If the argument is not named, e.g. {}, then a default name of path1, path2, etc. is assumed.
-//
-// Deprecated: No longer used.
-func InsertPathArguments(u string, values QArgs) string {
-	if !strings.Contains(u, "{") {
-		return u
-	}
-	parts := strings.Split(u, "/")
-	argIndex := 0
-	for i := range parts {
-		if !strings.HasPrefix(parts[i], "{") || !strings.HasSuffix(parts[i], "}") {
-			continue
-		}
-		argIndex++
-		parts[i] = strings.TrimPrefix(parts[i], "{")
-		parts[i] = strings.TrimSuffix(parts[i], "}")
-		parts[i] = strings.TrimSuffix(parts[i], "+")
-		if parts[i] == "" {
-			parts[i] = fmt.Sprintf("path%d", argIndex)
-		}
-		if v, ok := values[parts[i]]; ok {
-			parts[i] = url.PathEscape(utils.AnyToString(v))
-		} else {
-			parts[i] = ""
-		}
-	}
-	return strings.Join(parts, "/")
-}
-
 // FillPathArguments transfers query arguments into path arguments, if present.
 func FillPathArguments(u string) (resolved string, err error) {
 	if !strings.Contains(u, "{") {
@@ -146,11 +116,11 @@ func FillPathArguments(u string) (resolved string, err error) {
 		if !strings.HasPrefix(parts[i], "{") || !strings.HasSuffix(parts[i], "}") {
 			continue
 		}
-		greedy := strings.HasSuffix(parts[i], "+}")
+		greedy := strings.HasSuffix(parts[i], "...}")
 		argIndex++
 		parts[i] = strings.TrimPrefix(parts[i], "{")
 		parts[i] = strings.TrimSuffix(parts[i], "}")
-		parts[i] = strings.TrimSuffix(parts[i], "+")
+		parts[i] = strings.TrimSuffix(parts[i], "...")
 		if parts[i] == "" {
 			parts[i] = fmt.Sprintf("path%d", argIndex)
 		}
@@ -173,63 +143,6 @@ func FillPathArguments(u string) (resolved string, err error) {
 	return u, nil
 }
 
-// ExtractPathArguments extracts path arguments from a URL or path given a spec such as /obj/{id}/{} that identified them.
-// Unnamed args are assigned the names path1, path2, etc.
-//
-// Deprecated: No longer used.
-func ExtractPathArguments(spec string, path string) (args url.Values, err error) {
-	if !strings.Contains(spec, "{") {
-		return nil, nil
-	}
-	if _, after, cut := strings.Cut(spec, "://"); cut {
-		spec = after
-		if _, after, cut = strings.Cut(spec, "/"); cut {
-			spec = after
-			spec = "/" + spec
-		}
-	}
-	if _, after, cut := strings.Cut(path, "://"); cut {
-		path = after
-		if _, after, cut = strings.Cut(path, "/"); cut {
-			path = after
-			path = "/" + path
-		}
-	}
-	pathParts := strings.Split(path, "/")
-	specParts := strings.Split(spec, "/")
-	argIndex := 0
-	for i := range specParts {
-		if i >= len(pathParts) {
-			break
-		}
-		if !strings.HasPrefix(specParts[i], "{") || !strings.HasSuffix(specParts[i], "}") {
-			continue
-		}
-		argIndex++
-		if pathParts[i] == specParts[i] {
-			// No value provided in path
-			continue
-		}
-		if args == nil {
-			args = make(url.Values)
-		}
-		name := specParts[i]
-		name = strings.TrimPrefix(name, "{")
-		name = strings.TrimSuffix(name, "}")
-		name = strings.TrimSuffix(name, "+")
-		if name == "" {
-			name = fmt.Sprintf("path%d", argIndex)
-		}
-		// Capture path appendix, e.g. /directory/{filename+}
-		if i == len(specParts)-1 && strings.HasSuffix(specParts[i], "+}") {
-			args.Set(name, strings.Join(pathParts[i:], "/"))
-			break
-		}
-		args.Set(name, pathParts[i])
-	}
-	return args, nil
-}
-
 // SetPathValues compares the request's actual path against a parameterized route path such as /obj/{id}/{},
 // and sets the path values of the request appropriately.
 func SetPathValues(r *http.Request, routePath string) error {
@@ -247,10 +160,10 @@ func SetPathValues(r *http.Request, routePath string) error {
 		if i >= len(actualParts) {
 			break
 		}
-		greedy := strings.HasSuffix(routeParts[i], "+}")
+		greedy := strings.HasSuffix(routeParts[i], "...}")
 		routeParts[i] = strings.TrimPrefix(routeParts[i], "{")
 		routeParts[i] = strings.TrimSuffix(routeParts[i], "}")
-		routeParts[i] = strings.TrimSuffix(routeParts[i], "+")
+		routeParts[i] = strings.TrimSuffix(routeParts[i], "...")
 		routeParts[i] = strings.TrimSpace(routeParts[i])
 		if routeParts[i] == "" {
 			routeParts[i] = fmt.Sprintf("path%d", unnamedIndex)

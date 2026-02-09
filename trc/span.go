@@ -191,56 +191,6 @@ func (s Span) SetAttributes(args ...any) {
 	}
 }
 
-// SetString tags the span during its creation.
-//
-// Deprecated: Use [Span.SetAttributes].
-func (s Span) SetString(k string, v string) {
-	if s.internal == nil {
-		return
-	}
-	s.internal.SetAttributes(attribute.String(k, v))
-}
-
-// SetStrings tags the span during its creation.
-//
-// Deprecated: Use [Span.SetAttributes].
-func (s Span) SetStrings(k string, v []string) {
-	if s.internal == nil {
-		return
-	}
-	s.internal.SetAttributes(attribute.StringSlice(k, v))
-}
-
-// SetBool tags the span during its creation.
-//
-// Deprecated: Use [Span.SetAttributes].
-func (s Span) SetBool(k string, v bool) {
-	if s.internal == nil {
-		return
-	}
-	s.internal.SetAttributes(attribute.Bool(k, v))
-}
-
-// SetInt tags the span during its creation.
-//
-// Deprecated: Use [Span.SetAttributes].
-func (s Span) SetInt(k string, v int) {
-	if s.internal == nil {
-		return
-	}
-	s.internal.SetAttributes(attribute.Int(k, v))
-}
-
-// SetFloat tags the span during its creation.
-//
-// Deprecated: Use [Span.SetAttributes].
-func (s Span) SetFloat(k string, v float64) {
-	if s.internal == nil {
-		return
-	}
-	s.internal.SetAttributes(attribute.Float64(k, v))
-}
-
 // SetRequest tags the span with the request data.
 // Warning: this has a large memory footprint.
 func (s Span) SetRequest(r *http.Request) {

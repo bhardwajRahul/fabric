@@ -124,23 +124,6 @@ func (c *Connector) ServeResFile(name string, w http.ResponseWriter, r *http.Req
 	return nil
 }
 
-// ExecuteResTemplate parses the resource file as a template, executes it given the data, and returns the result.
-//
-// The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.
-// {{ var | attr }}, {{ var | url }}, {{ var | css }} or {{ var | safe }} may be used to prevent the escaping of a variable in an HTML template.
-// These map to [htmltemplate.HTMLAttr], [htmltemplate.URL], [htmltemplate.CSS] and [htmltemplate.HTML] respectively.
-// Use of these types presents a security risk.
-//
-// This method does not support customizing execution with a func map or changing the delimiters.
-// If either is required, use the standard library pattern instead.
-//
-// Deprecated: Use WriteResTemplate instead.
-func (c *Connector) ExecuteResTemplate(name string, data any) (rendered []byte, err error) {
-	var buf bytes.Buffer
-	err = c.WriteResTemplate(&buf, name, data)
-	return buf.Bytes(), errors.Trace(err)
-}
-
 // WriteResTemplate parses the resource file as a template, executes it given the data, writing the result to the writer.
 //
 // The template is assumed to be a text template unless the file name ends in .html, in which case it is processed as an HTML template.

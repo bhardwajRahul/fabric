@@ -1,0 +1,34 @@
+general:
+  hostname: login.example
+  description: The Login microservice demonstrates usage of authentication and authorization.
+  package: github.com/microbus-io/fabric/examples/login
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: tokenissuer.core
+    package: github.com/microbus-io/fabric/coreservices/tokenissuer
+
+webs:
+  Login:
+    description: Login renders a simple login screen that authenticates a user.
+    method: ANY
+    route: /login
+  Logout:
+    description: Logout renders a page that logs out the user.
+    method: ANY
+    route: /logout
+  Welcome:
+    description: Welcome renders a page that is shown to the user after a successful login. Rendering is adjusted based on the user's roles.
+    method: ANY
+    route: /welcome
+    requiredClaims: roles.a || roles.m || roles.u
+  AdminOnly:
+    description: AdminOnly is only accessible by admins.
+    method: GET
+    route: /admin-only
+    requiredClaims: roles.a
+  ManagerOnly:
+    description: ManagerOnly is only accessible by managers.
+    method: GET
+    route: /manager-only
+    requiredClaims: roles.m

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,21 +18,142 @@ package configurator
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
+
+	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
 )
+
+var (
+	_ context.Context
+	_ *testing.T
+	_ application.Application
+	_ connector.Connector
+	_ pub.Option
+	_ testarossa.Asserter
+	_ configuratorapi.Client
+)
+
+func TestConfigurator_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		"444",
+		"888",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(configuratorapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestConfigurator_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("values", func(t *testing.T) { // MARKER: Values
+		assert := testarossa.For(t)
+		_, err := mock.Values(ctx, []string{"foo"})
+		assert.Error(err) // Not mocked yet
+
+		mock.MockValues(func(ctx context.Context, names []string) (values map[string]string, err error) {
+			return map[string]string{"foo": "bar"}, nil
+		})
+		values, err := mock.Values(ctx, []string{"foo"})
+		assert.NoError(err)
+		assert.Expect(values["foo"], "bar")
+	})
+
+	t.Run("refresh", func(t *testing.T) { // MARKER: Refresh
+		assert := testarossa.For(t)
+		err := mock.Refresh(ctx)
+		assert.Error(err) // Not mocked yet
+
+		mock.MockRefresh(func(ctx context.Context) (err error) {
+			return nil
+		})
+		err = mock.Refresh(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("sync_repo", func(t *testing.T) { // MARKER: SyncRepo
+		assert := testarossa.For(t)
+		err := mock.SyncRepo(ctx, time.Now(), nil)
+		assert.Error(err) // Not mocked yet
+
+		mock.MockSyncRepo(func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
+			return nil
+		})
+		err = mock.SyncRepo(ctx, time.Now(), nil)
+		assert.NoError(err)
+	})
+}
 
 func TestConfigurator_ManyMicroservices(t *testing.T) {
 	// No parallel
-	env.Push("MICROBUS_PLANE", rand.AlphaNum64(12))
+	ctx := t.Context()
+	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
 	defer env.Pop("MICROBUS_PLANE")
 	env.Push("MICROBUS_DEPLOYMENT", connector.LAB)
 	defer env.Pop("MICROBUS_DEPLOYMENT")
@@ -60,9 +181,9 @@ func TestConfigurator_ManyMicroservices(t *testing.T) {
 	app := application.New()
 	app.Add(configSvc)
 	app.Add(services...)
-	err := app.Startup()
+	err := app.Startup(ctx)
 	assert.NoError(err)
-	defer app.Shutdown()
+	defer app.Shutdown(ctx)
 
 	for i := 1; i < len(services); i++ {
 		assert.Equal("bar", services[i].(*connector.Connector).Config("foo"))
@@ -108,9 +229,10 @@ many.microservices.configurator:
 
 func TestConfigurator_Callback(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	configSvc := NewService()
 	configSvc.SetDeployment(connector.LAB)
@@ -128,12 +250,12 @@ func TestConfigurator_Callback(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	err = configSvc.Startup()
+	err = configSvc.Startup(ctx)
 	assert.NoError(err)
-	defer configSvc.Shutdown()
-	err = con.Startup()
+	defer configSvc.Shutdown(ctx)
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal("bar", con.Config("foo"))
 
@@ -153,9 +275,10 @@ callback.configurator:
 
 func TestConfigurator_PeerSync(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	// Start the first peer
 	config1 := NewService()
@@ -165,9 +288,9 @@ func TestConfigurator_PeerSync(t *testing.T) {
 www.example.com:
   Foo: Bar
 `)
-	err := config1.Startup()
+	err := config1.Startup(ctx)
 	assert.NoError(err)
-	defer config1.Shutdown()
+	defer config1.Shutdown(ctx)
 
 	val, ok := config1.repo.Value("www.example.com", "Foo")
 	assert.True(ok)
@@ -179,9 +302,9 @@ www.example.com:
 	con.SetPlane(plane)
 	con.DefineConfig("Foo")
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal("Bar", con.Config("Foo"))
 
@@ -193,9 +316,9 @@ www.example.com:
 www.example.com:
   Foo: Baz
 `)
-	err = config2.Startup()
+	err = config2.Startup(ctx)
 	assert.NoError(err)
-	defer config2.Shutdown()
+	defer config2.Shutdown(ctx)
 
 	val, ok = config2.repo.Value("www.example.com", "Foo")
 	assert.True(ok)

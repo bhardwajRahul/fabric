@@ -1,6 +1,7 @@
 # Package `env`
 
-Package `env` manages the loading of environment variables.
-Variables are first searched for in an in-memory stack, then in a file `env.yaml` in the current working directory, and finally in the OS.
-The in-memory stack provides `Push` and `Pop` operations and is intended for modifying the environment during unit and integration testing.
-The YAML file allows the setting of environment variables in a file that can be shared and version-controlled.
+Package `env` manages the loading of [environment variables](../tech/envars.md). A lookup checks three sources in order: an in-memory stack, an `env.yaml` file in the current working directory or an ancestor directory, and the OS environment.
+
+`Get(key string) string` and `Lookup(key string) (string, bool)` retrieve a variable's value. Keys are case-sensitive.
+
+`Push(key, value string)` and `Pop(key string)` manipulate the in-memory stack, which is useful for overriding variables during [integration testing](../blocks/integration-testing.md).

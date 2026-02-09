@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/microbus-io/errors"
+
 	"github.com/microbus-io/fabric/examples/helloworld/helloworldapi"
-	"github.com/microbus-io/fabric/examples/helloworld/intermediate"
 )
 
 var (
@@ -40,7 +40,7 @@ Service implements the helloworld.example microservice.
 The HelloWorld microservice demonstrates the classic minimalist example.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -56,7 +56,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 HelloWorld prints the classic greeting.
 */
-func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: HelloWorld
 	w.Write([]byte("Hello, World!"))
 	return nil
 }

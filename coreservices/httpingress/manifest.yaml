@@ -1,0 +1,53 @@
+general:
+  hostname: http.ingress.core
+  description: The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
+  package: github.com/microbus-io/fabric/coreservices/httpingress
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: metrics.core
+    package: github.com/microbus-io/fabric/coreservices/metrics
+  - hostname: tokenissuer.core
+    package: github.com/microbus-io/fabric/coreservices/tokenissuer
+
+configs:
+  TimeBudget:
+    description: TimeBudget specifies the timeout for handling a request, after it has been read. A value of 0 or less indicates no time budget.
+    type: time.Duration
+    validation: dur [0s,]
+    default: 20s
+  Ports:
+    description: Ports is a comma-separated list of HTTP ports on which to listen for requests.
+    type: string
+    default: "8080"
+  RequestMemoryLimit:
+    description: RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
+    type: int
+    validation: int [1,]
+    default: 4096
+  AllowedOrigins:
+    description: AllowedOrigins is a comma-separated list of CORS origins to allow requests from. The * origin can be used to allow CORS request from all origins.
+    type: string
+    default: "*"
+  PortMappings:
+    description: PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound HTTP port, y is the requested NATS port, and z is the port to serve.
+    type: string
+    default: "8080:*->*, 443:*->443, 80:*->443"
+  ReadTimeout:
+    description: ReadTimeout specifies the timeout for fully reading a request.
+    type: time.Duration
+    validation: dur [1s,]
+    default: 5m
+  WriteTimeout:
+    description: WriteTimeout specifies the timeout for fully writing the response to a request.
+    type: time.Duration
+    validation: dur [1s,]
+    default: 5m
+  ReadHeaderTimeout:
+    description: ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
+    type: time.Duration
+    validation: dur [1s,]
+    default: 20s
+  BlockedPaths:
+    description: A newline-separated list of paths or extensions to block with a 404.
+    type: string

@@ -23,8 +23,8 @@ import (
 	"sync/atomic"
 
 	"github.com/microbus-io/errors"
+
 	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
-	"github.com/microbus-io/fabric/examples/calculator/intermediate"
 )
 
 var (
@@ -40,7 +40,7 @@ Service implements the calculator.example microservice.
 The Calculator microservice performs simple mathematical operations.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 
 	sumAdd      atomic.Int64
 	sumSubtract atomic.Int64
@@ -61,7 +61,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Arithmetic perform an arithmetic operation between two integers x and y given an operator op.
 */
-func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) {
+func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) { // MARKER: Arithmetic
 	if op == " " {
 		op = "+" // + is interpreted as a space in URLs
 	}
@@ -82,15 +82,15 @@ func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xE
 	default:
 		return x, op, y, result, errors.New("invalid operator '%s'", op)
 	}
-	svc.AddUsedOperators(ctx, 1, op)
+	svc.IncrementUsedOperators(ctx, 1, op)
 	return x, op, y, result, nil
 }
 
 /*
 Square prints the square of the integer x.
 */
-func (svc *Service) Square(ctx context.Context, x int) (xEcho int, result int, err error) {
-	svc.AddUsedOperators(ctx, 1, "^2")
+func (svc *Service) Square(ctx context.Context, x int) (xEcho int, result int, err error) { // MARKER: Square
+	svc.IncrementUsedOperators(ctx, 1, "^2")
 	return x, x * x, nil
 }
 
@@ -98,7 +98,7 @@ func (svc *Service) Square(ctx context.Context, x int) (xEcho int, result int, e
 Distance calculates the distance between two points.
 It demonstrates the use of the defined type Point.
 */
-func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error) {
+func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error) { // MARKER: Distance
 	dx := p1.X - p2.X
 	dy := p1.Y - p2.Y
 	return math.Sqrt(dx*dx + dy*dy), nil
@@ -108,7 +108,7 @@ func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 cal
 OnObserveSumOperations observes the value of the SumOperations gauge metric.
 SumOperations tracks the total sum of the results of all operators.
 */
-func (svc *Service) OnObserveSumOperations(ctx context.Context) (err error) {
+func (svc *Service) OnObserveSumOperations(ctx context.Context) (err error) { // MARKER: SumOperations
 	svc.RecordSumOperations(ctx, int(svc.sumAdd.Load()), "+")
 	svc.RecordSumOperations(ctx, int(svc.sumSubtract.Load()), "-")
 	svc.RecordSumOperations(ctx, int(svc.sumMultiply.Load()), "*")

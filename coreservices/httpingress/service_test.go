@@ -26,13 +26,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
@@ -75,7 +75,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 	svc.Middleware().Append("401Redirect", middleware.ErrorPageRedirect(http.StatusUnauthorized, "/login-page"))
 
 	// Initialize the testers
-	tester := connector.New("metrics.collect.tester")
+	tester := connector.New("tester.client")
 	client := metricsapi.NewClient(tester)
 	_ = client
 	httpClient := http.Client{Timeout: time.Second * 4}
@@ -87,13 +87,14 @@ func TestHttpingress_Incoming(t *testing.T) {
 		tokenissuer.NewService(),
 		svc,
 		tester,
-		connector.New("ports").Init(func(c *connector.Connector) {
+		connector.New("ports").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("request.memory.limit").Init(func(c *connector.Connector) {
+		connector.New("request.memory.limit").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("POST", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				b, _ := io.ReadAll(r.Body)
 				w.Write(b)
@@ -105,15 +106,17 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte("done"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("compression").Init(func(c *connector.Connector) {
+		connector.New("compression").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				w.Header().Set("Content-Type", "text/plain")
 				w.Write(bytes.Repeat([]byte("Hello123"), 1024)) // 8KB
 				return nil
 			})
+			return nil
 		}),
-		connector.New("port.mapping").Init(func(c *connector.Connector) {
+		connector.New("port.mapping").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok443", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("ok"))
 				return nil
@@ -122,8 +125,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("forwarded.headers").Init(func(c *connector.Connector) {
+		connector.New("forwarded.headers").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				var sb strings.Builder
 				for _, h := range []string{"X-Forwarded-Host", "X-Forwarded-Prefix", "X-Forwarded-Proto", "X-Forwarded-For", "X-Forwarded-Path"} {
@@ -137,21 +141,24 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte(sb.String()))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("root").Init(func(c *connector.Connector) {
+		connector.New("root").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("Root"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("cors").Init(func(c *connector.Connector) {
+		connector.New("cors").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				callCount++
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("parse.form").Init(func(c *connector.Connector) {
+		connector.New("parse.form").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("POST", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				err := r.ParseForm()
 				if err != nil {
@@ -169,16 +176,18 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("internal.headers").Init(func(c *connector.Connector) {
+		connector.New("internal.headers").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", ":555/ok", func(w http.ResponseWriter, r *http.Request) error {
 				request = r
 				w.Header().Set(frame.HeaderPrefix+"In-Response", "STOP")
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("greeting").Init(func(c *connector.Connector) {
+		connector.New("greeting").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", ":555/ok", func(w http.ResponseWriter, r *http.Request) error {
 				request = r
 				w.Write([]byte("ok"))
@@ -189,8 +198,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("blocked.paths").Init(func(c *connector.Connector) {
+		connector.New("blocked.paths").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "admin.php", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("ok"))
 				return nil
@@ -199,32 +209,36 @@ func TestHttpingress_Incoming(t *testing.T) {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("no.cache").Init(func(c *connector.Connector) {
+		connector.New("no.cache").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("ok"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("auth.token.entry").Init(func(c *connector.Connector) {
+		connector.New("auth.token.entry").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				if ok, _ := frame.Of(r).IfActor(`iss`); ok {
 					countActors++
 				}
 				return nil
 			})
+			return nil
 		}),
-		connector.New("authorization").Init(func(c *connector.Connector) {
+		connector.New("authorization").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "protected", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("Access Granted"))
 				return nil
-			}, sub.Actor("role=='major'"))
+			}, sub.RequiredClaims("role=='major'"))
 			c.Subscribe("GET", "//login-page", func(w http.ResponseWriter, r *http.Request) error {
 				w.Write([]byte("Login"))
 				return nil
 			})
+			return nil
 		}),
-		connector.New("multi.value.headers").Init(func(c *connector.Connector) {
+		connector.New("multi.value.headers").Init(func(c *connector.Connector) (err error) {
 			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
 				request = r
 				w.Header()["Multi-Value"] = []string{
@@ -233,6 +247,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 				}
 				return nil
 			})
+			return nil
 		}),
 	)
 	app.RunInTest(t)
@@ -265,7 +280,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Small request at 25% of capacity
 		assert.Zero(svc.reqMemoryUsed)
-		payload := rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 / 4)
+		payload := utils.RandomIdentifier(svc.RequestMemoryLimit() * 1024 * 1024 / 4)
 		res, err := httpClient.Post("http://localhost:4040/request.memory.limit/ok", "text/plain", strings.NewReader(payload))
 		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
@@ -276,7 +291,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Big request at 55% of capacity
 		assert.Zero(svc.reqMemoryUsed)
-		payload = rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 * 55 / 100)
+		payload = utils.RandomIdentifier(svc.RequestMemoryLimit() * 1024 * 1024 * 55 / 100)
 		res, err = httpClient.Post("http://localhost:4040/request.memory.limit/ok", "text/plain", strings.NewReader(payload))
 		if assert.NoError(err) {
 			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
@@ -284,7 +299,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Two small requests that together are over 50% of capacity
 		assert.Zero(svc.reqMemoryUsed)
-		payload = rand.AlphaNum64(svc.RequestMemoryLimit() * 1024 * 1024 / 3)
+		payload = utils.RandomIdentifier(svc.RequestMemoryLimit() * 1024 * 1024 / 3)
 		returned := make(chan bool)
 		go func() {
 			res, err = httpClient.Post("http://localhost:4040/request.memory.limit/hold", "text/plain", strings.NewReader(payload))
@@ -463,7 +478,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 		// Under 10MB
 		var buf bytes.Buffer
 		buf.WriteString("x=")
-		buf.WriteString(rand.AlphaNum64(9 * 1024 * 1024))
+		buf.WriteString(utils.RandomIdentifier(9 * 1024 * 1024))
 		res, err := httpClient.Post("http://localhost:4040/parse.form/ok", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
 		if assert.NoError(err) {
 			b, err := io.ReadAll(res.Body)
@@ -474,7 +489,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Go sets a 10MB limit on forms by default
 		// https://go.dev/src/net/http/request.go#L1258
-		buf.WriteString(rand.AlphaNum64(2 * 1024 * 1024)) // Now 11MB
+		buf.WriteString(utils.RandomIdentifier(2 * 1024 * 1024)) // Now 11MB
 		res, err = httpClient.Post("http://localhost:4040/parse.form/ok", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
 		if assert.NoError(err) {
 			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)
@@ -490,7 +505,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 
 		// Going above the MaxBytesReader limit
-		buf.WriteString(rand.AlphaNum64(2 * 1024 * 1024)) // Now 13MB
+		buf.WriteString(utils.RandomIdentifier(2 * 1024 * 1024)) // Now 13MB
 		res, err = httpClient.Post("http://localhost:4040/parse.form/more", "application/x-www-form-urlencoded", bytes.NewReader(buf.Bytes()))
 		if assert.NoError(err) {
 			assert.Equal(http.StatusRequestEntityTooLarge, res.StatusCode)

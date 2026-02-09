@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,9 +22,13 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/eventsink/eventsinkapi"
@@ -33,16 +37,132 @@ import (
 
 var (
 	_ context.Context
-	_ io.Closer
-	_ http.Handler
-	_ testing.TB
-	_ *application.Application
-	_ *frame.Frame
-	_ testarossa.TestingT
-	_ *eventsinkapi.Client
+	_ *testing.T
+	_ jwt.MapClaims
+	_ application.Application
+	_ connector.Connector
+	_ frame.Frame
+	_ pub.Option
+	_ testarossa.Asserter
+	_ eventsinkapi.Client
 )
 
-func TestEventsink_Registered(t *testing.T) {
+func TestEventsink_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		// HINT: Include all ports of functional or web endpoints
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(eventsinkapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestEventsink_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("registered", func(t *testing.T) { // MARKER: Registered
+		assert := testarossa.For(t)
+
+		expectedEmails := []string{"user@example.com"}
+
+		_, err := mock.Registered(ctx)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockRegistered(func(ctx context.Context) (emails []string, err error) {
+			return expectedEmails, nil
+		})
+		emails, err := mock.Registered(ctx)
+		assert.Expect(
+			emails, expectedEmails,
+			err, nil,
+		)
+	})
+
+	t.Run("on_allow_register", func(t *testing.T) { // MARKER: OnAllowRegister
+		assert := testarossa.For(t)
+
+		exampleEmail := "user@example.com"
+		expectedAllow := true
+
+		_, err := mock.OnAllowRegister(ctx, exampleEmail)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockOnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
+			return expectedAllow, nil
+		})
+		allow, err := mock.OnAllowRegister(ctx, exampleEmail)
+		assert.Expect(
+			allow, expectedAllow,
+			err, nil,
+		)
+	})
+
+	t.Run("on_registered", func(t *testing.T) { // MARKER: OnRegistered
+		assert := testarossa.For(t)
+
+		exampleEmail := "user@example.com"
+
+		err := mock.OnRegistered(ctx, exampleEmail)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockOnRegistered(func(ctx context.Context, email string) (err error) {
+			return nil
+		})
+		err = mock.OnRegistered(ctx, exampleEmail)
+		assert.NoError(err)
+	})
+}
+
+func TestEventsink_Registered(t *testing.T) { // MARKER: Registered
 	t.Parallel()
 	ctx := t.Context()
 
@@ -50,7 +170,7 @@ func TestEventsink_Registered(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("eventsink.registered.tester")
+	tester := connector.New("tester.client")
 	client := eventsinkapi.NewClient(tester)
 	eventsourceTrigger := eventsourceapi.NewMulticastTrigger(tester)
 
@@ -135,7 +255,7 @@ func TestEventsink_Registered(t *testing.T) {
 	})
 }
 
-func TestEventsink_OnAllowRegister(t *testing.T) {
+func TestEventsink_OnAllowRegister(t *testing.T) { // MARKER: OnAllowRegister
 	t.Parallel()
 	ctx := t.Context()
 
@@ -143,7 +263,7 @@ func TestEventsink_OnAllowRegister(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("eventsink.onallowregister.tester")
+	tester := connector.New("tester.client")
 	client := eventsinkapi.NewClient(tester)
 	eventsourceTrigger := eventsourceapi.NewMulticastTrigger(tester)
 	_ = client
@@ -239,6 +359,6 @@ func TestEventsink_OnAllowRegister(t *testing.T) {
 	})
 }
 
-func TestEventsink_OnRegistered(t *testing.T) {
+func TestEventsink_OnRegistered(t *testing.T) { // MARKER: OnRegistered
 	t.Skip() // Tested by TestEventsink_Registered
 }

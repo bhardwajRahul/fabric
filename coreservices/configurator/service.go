@@ -28,7 +28,6 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
-	"github.com/microbus-io/fabric/coreservices/configurator/intermediate"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/frame"
 )
@@ -44,7 +43,7 @@ Service implements the configurator.core microservice.
 The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 
 	repo          *repository
 	repoTimestamp time.Time

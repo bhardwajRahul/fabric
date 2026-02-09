@@ -37,23 +37,23 @@ type HTTPHandler func(w http.ResponseWriter, r *http.Request) (err error)
 // Subscription handles incoming requests.
 // Although technically public, it is used internally and should not be constructed by microservices directly.
 type Subscription struct {
-	Host     string
-	Port     string
-	Method   string
-	Path     string
-	Queue    string
-	Handler  any
-	Subs     []*transport.Subscription
-	specPath string
-	Actor    string
+	Host           string
+	Port           string
+	Method         string
+	Route          string
+	Queue          string
+	Handler        any
+	Subs           []*transport.Subscription
+	specPath       string
+	RequiredClaims string
 }
 
 /*
-NewSub creates a new subscription for the indicated path.
-If the path does not include a hostname, the microservice's default hostname is used.
+NewSub creates a new subscription.
+If the route does not include a hostname, it is resolved relative to the microservice's default hostname.
 If a port is not specified, 443 is used by default. Port 0 is used to designate any port.
-The subscription can be limited to one HTTP method such as "GET", "POST", etc.
-or "ANY" can be used to accept any method.
+The subscription can be set to a single standard HTTP method such as "GET", "POST", etc. or to "ANY" in order to accept any method.
+Path arguments are designated by curly braces.
 
 Examples of valid paths:
 
@@ -66,12 +66,13 @@ Examples of valid paths:
 	:0/any/port
 	/path/with/slash
 	path/with/no/slash
+	/section/{section}/page/{page...}
 	https://www.example.com/path
 	https://www.example.com:1080/path
 	//www.example.com:1080/path
 */
-func NewSub(method string, defaultHost string, path string, handler HTTPHandler, options ...Option) (*Subscription, error) {
-	joined := httpx.JoinHostAndPath(defaultHost, path)
+func NewSub(method string, defaultHost string, route string, handler HTTPHandler, options ...Option) (*Subscription, error) {
+	joined := httpx.JoinHostAndPath(defaultHost, route)
 	u, err := httpx.ParseURL(joined)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -103,10 +104,10 @@ func NewSub(method string, defaultHost string, path string, handler HTTPHandler,
 		name := parts[i]
 		name = strings.TrimPrefix(name, "{")
 		name = strings.TrimSuffix(name, "}")
-		if strings.HasSuffix(name, "+") && i != len(parts)-1 {
+		if strings.HasSuffix(name, "...") && i != len(parts)-1 {
 			return nil, errors.New("greedy path argument '%s' must end path", parts[i])
 		}
-		name = strings.TrimSuffix(name, "+")
+		name = strings.TrimSuffix(name, "...")
 		if name != "" && !utils.IsLowerCaseIdentifier(name) {
 			return nil, errors.New("name of path argument '%s' must be an identifier", parts[i])
 		}
@@ -115,10 +116,10 @@ func NewSub(method string, defaultHost string, path string, handler HTTPHandler,
 		Host:     u.Hostname(),
 		Port:     u.Port(),
 		Method:   method,
-		Path:     u.Path,
+		Route:    u.Path,
 		Queue:    defaultHost,
 		Handler:  handler,
-		specPath: path,
+		specPath: route,
 	}
 	err = sub.Apply(options...)
 	if err != nil {
@@ -140,7 +141,7 @@ func (sub *Subscription) Apply(options ...Option) error {
 
 // Canonical returns the fully-qualified canonical host:port/path of the subscription, not including the scheme or the method.
 func (sub *Subscription) Canonical() string {
-	return fmt.Sprintf("%s:%s%s", sub.Host, sub.Port, sub.Path)
+	return fmt.Sprintf("%s:%s%s", sub.Host, sub.Port, sub.Route)
 }
 
 // RefreshHostname refreshes the subscription for a different hostname.

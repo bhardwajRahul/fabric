@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package utils
 import (
 	"encoding"
 	"fmt"
+	"math/rand/v2"
 	"regexp"
 	"strings"
 	"unicode"
@@ -142,6 +143,24 @@ func UnsafeStringToBytes(s string) []byte {
 func UnsafeBytesToString(b []byte) string {
 	pBytes := unsafe.SliceData(b)
 	return unsafe.String(pBytes, len(b))
+}
+
+// RandomIdentifier generates a random string of the specified length.
+// The string will include only alphanumeric characters a-z, A-Z, 0-9.
+// Digits 0 and 1 are slightly overrepresented (2/64 vs 1/64) due to padding the 62-character alphabet to a power of two.
+func RandomIdentifier(length int) string {
+	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01"
+	bytes := make([]byte, length)
+	var x uint64
+	for i := range length {
+		if i%8 == 0 {
+			x = rand.Uint64()
+		} else {
+			x = x >> 8
+		}
+		bytes[i] = letters[x&0x3F]
+	}
+	return UnsafeBytesToString(bytes)
 }
 
 // AnyToString returns the string representation of the object.

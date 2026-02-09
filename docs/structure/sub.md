@@ -11,7 +11,7 @@ The `sub` package defines the internal `Subscription` struct that facilitates th
 | :1080/path | https://example.host:1080/path |
 | /path/with/slash | https://example.host:443/path/with/slash |
 | path/with/no/slash | https://example.host:443/path/with/no/slash |
-| /path/{argument}/or/{suffix+} | https://example.host:443/path/{argument}/or/{suffix+} |
+| /path/{argument}/or/{suffix...} | https://example.host:443/path/{argument}/or/{suffix...} |
 | https://another.host/path | https://another.host:443/path |
 | https://another.host:1080/path | https://another.host:1080/path |
 

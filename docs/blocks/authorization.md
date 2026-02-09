@@ -19,15 +19,9 @@ Cookie: Authorization=<JWT>
 Authorization: Bearer <JWT>
 ```
 
-The [connector](../structure/connector.md) of each microservice allows a request to continue if the claims associated with the request satisfies a set of requirements expressed as a boolean expression. Requirements are specified during the definition of the endpoint, most commonly via [`service.yaml`](../tech/service-yaml.md), or using the `sub.Actor` option when creating [subscriptions](../structure/sub.md) manually.
+The [connector](../structure/connector.md) of each microservice allows a request to continue if the claims associated with the request satisfy a set of requirements expressed as a boolean expression. Requirements are specified during the definition of the endpoint, using the `sub.RequiredClaims` option when creating [subscriptions](../structure/sub.md) manually.
 
-For example, the `SalesReport` endpoint below is restricted to sales directors or managers only. Requests by actors that do not satisfy these requirements will be denied with a `401 Unauthorized` or `403 Forbidden` error.
-
-```yaml
-functions:
-  - signature: SalesReport(from time.Time, to time.Time) (sales SalesData)
-    actor: groups.sales && (roles.director || roles.manager)
-```
+For example, the option `sub.RequiredClaims("groups.sales && (roles.director || roles.manager)")` indicates that the endpoint is restricted to directors or managers only from the sales group. Requests by actors that do not satisfy these requirements will be denied with a `401 Unauthorized` or `403 Forbidden` error.
 
 ### Flow 3: Redirect
 

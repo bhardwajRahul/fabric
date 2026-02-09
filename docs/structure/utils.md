@@ -2,6 +2,6 @@
 
 Package `utils` includes various independent utilities.
 
-`SourceCodeSHA256` reads the content of a source code directory and generates a SHA256 of its relevant content. It is used by the code generator for change detection and automatic versioning.
+`RandomIdentifier(length int) string` generates a random alphanumeric string of the given length, useful for producing unique IDs such as message IDs and plane names.
 
 `SyncMap` is a thin wrapper over a subset of the operations of the standard `sync.Map`. It introduces generics to make these more type-safe.

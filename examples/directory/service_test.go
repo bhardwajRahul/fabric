@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/examples/directory/directoryapi"
@@ -44,7 +45,7 @@ func must[T any](v T, err error) T {
 	return v
 }
 
-func TestDirectory_Create(t *testing.T) {
+func TestDirectory_Create(t *testing.T) { // MARKER: Create
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -54,7 +55,7 @@ func TestDirectory_Create(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.create.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -159,7 +160,7 @@ func TestDirectory_Create(t *testing.T) {
 	})
 }
 
-func TestDirectory_Load(t *testing.T) {
+func TestDirectory_Load(t *testing.T) { // MARKER: Load
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -169,7 +170,7 @@ func TestDirectory_Load(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.load.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -234,7 +235,7 @@ func TestDirectory_Load(t *testing.T) {
 	})
 }
 
-func TestDirectory_Delete(t *testing.T) {
+func TestDirectory_Delete(t *testing.T) { // MARKER: Delete
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -244,7 +245,7 @@ func TestDirectory_Delete(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.delete.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -307,7 +308,7 @@ func TestDirectory_Delete(t *testing.T) {
 	})
 }
 
-func TestDirectory_Update(t *testing.T) {
+func TestDirectory_Update(t *testing.T) { // MARKER: Update
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -317,7 +318,7 @@ func TestDirectory_Update(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.update.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -426,7 +427,7 @@ func TestDirectory_Update(t *testing.T) {
 	})
 }
 
-func TestDirectory_LoadByEmail(t *testing.T) {
+func TestDirectory_LoadByEmail(t *testing.T) { // MARKER: LoadByEmail
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -436,7 +437,7 @@ func TestDirectory_LoadByEmail(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.loadbyemail.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -500,7 +501,7 @@ func TestDirectory_LoadByEmail(t *testing.T) {
 	})
 }
 
-func TestDirectory_List(t *testing.T) {
+func TestDirectory_List(t *testing.T) { // MARKER: List
 	// No t.Parallel: test will fail if records added concurrently by another test
 	ctx := t.Context()
 	_ = ctx
@@ -510,7 +511,7 @@ func TestDirectory_List(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.list.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -557,7 +558,7 @@ func TestDirectory_List(t *testing.T) {
 	})
 }
 
-func TestDirectory_WebUI(t *testing.T) {
+func TestDirectory_WebUI(t *testing.T) { // MARKER: WebUI
 	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
@@ -567,7 +568,7 @@ func TestDirectory_WebUI(t *testing.T) {
 	// svc.SetSQL(dsn)
 
 	// Initialize the testers
-	tester := connector.New("directory.webui.tester")
+	tester := connector.New("tester.client")
 	client := directoryapi.NewClient(tester)
 	_ = client
 
@@ -583,7 +584,7 @@ func TestDirectory_WebUI(t *testing.T) {
 	t.Run("get_webui_form", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.WebUI(ctx, "GET", "", "", nil)
+		res, err := client.WebUI(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -602,7 +603,7 @@ func TestDirectory_WebUI(t *testing.T) {
 
 		// Simulate submitting the form to list persons
 		formData := "method=GET&path=/persons"
-		res, err := client.WebUI(ctx, "POST", "", "application/x-www-form-urlencoded", strings.NewReader(formData))
+		res, err := client.WithOptions(pub.ContentType("application/x-www-form-urlencoded")).WebUI(ctx, "POST", "", strings.NewReader(formData))
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {

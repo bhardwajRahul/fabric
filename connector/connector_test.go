@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -58,9 +58,10 @@ func TestConnector_BadHostname(t *testing.T) {
 
 func TestConnector_Plane(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	randomPlane := rand.AlphaNum64(12)
+	randomPlane := utils.RandomIdentifier(12)
 
 	// Before starting
 	con := New("plane.connector")
@@ -76,9 +77,9 @@ func TestConnector_Plane(t *testing.T) {
 
 	// After starting
 	con = New("plane.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 	assert.NotEqual("", con.Plane())
 	assert.NotEqual("microbus", con.Plane())
 	assert.True(regexp.MustCompile(`\w{12,}`).MatchString(con.Plane())) // Hash of test name
@@ -88,6 +89,7 @@ func TestConnector_Plane(t *testing.T) {
 
 func TestConnector_PlaneEnv(t *testing.T) {
 	// No parallel
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	// Bad plane name
@@ -95,23 +97,24 @@ func TestConnector_PlaneEnv(t *testing.T) {
 	defer env.Pop("MICROBUS_PLANE")
 
 	con := New("plane.env.connector")
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.Error(err)
 
 	// Good plane name
-	randomPlane := rand.AlphaNum64(12)
+	randomPlane := utils.RandomIdentifier(12)
 	env.Push("MICROBUS_PLANE", randomPlane)
 	defer env.Pop("MICROBUS_PLANE")
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal(randomPlane, con.Plane())
 }
 
 func TestConnector_Deployment(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	// Before starting
@@ -128,9 +131,9 @@ func TestConnector_Deployment(t *testing.T) {
 
 	// After starting
 	con = New("deployment.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 	assert.Equal(TESTING, con.Deployment())
 	err = con.SetDeployment(LAB)
 	assert.Error(err)
@@ -138,6 +141,7 @@ func TestConnector_Deployment(t *testing.T) {
 
 func TestConnector_DeploymentEnv(t *testing.T) {
 	// No parallel
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	con := New("deployment.env.connector")
@@ -145,15 +149,16 @@ func TestConnector_DeploymentEnv(t *testing.T) {
 	env.Push("MICROBUS_DEPLOYMENT", "lAb")
 	defer env.Pop("MICROBUS_DEPLOYMENT")
 
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal(LAB, con.Deployment())
 }
 
 func TestConnector_Version(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	// Before starting
@@ -169,9 +174,9 @@ func TestConnector_Version(t *testing.T) {
 
 	// After starting
 	con = New("version.connector")
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 	err = con.SetVersion(123)
 	assert.Error(err)
 }

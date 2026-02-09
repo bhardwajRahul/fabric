@@ -21,7 +21,7 @@ Holistic _adj_ /hō-ˈli-stik/ : characterized by the belief that the parts of s
 ### Open Source Framework
 
 `Microbus` is essentially a software library you use as a foundation for your microservice solution.
-And because it is open sourced, you can feel confident betting your business on it.
+And because it is open source, you can feel confident betting your business on it.
 
 ### SDLC
 
@@ -30,7 +30,7 @@ And because it is open sourced, you can feel confident betting your business on 
 #### Develop
 Run and debug an entire solution comprising a multitude of microservices on your [local development](../tech/local-dev.md) machine, just as easily as if it were a monolith.
 
-Speed up development with [code generation](../blocks/codegen.md).
+Speed up development with [coding agents](../blocks/coding-agents.md).
 
 #### Test
 Spin up the actual downstream microservices along with the microservice being tested into a single process and execute full live [integration tests](../blocks/integration-testing.md)
@@ -44,12 +44,12 @@ Observe system internal with the help of [distributed tracing](../blocks/distrib
 ### Why Microservices?
 
 Microservices are the architecture best suited to deal with the technical and organizational challenges of a growing business.
-* Scale the engineering organization
-* Elevate engineering experience
-* Contain the complexity of the codebase
-* Scale horizontally to handle more load
-* Stay agile and adaptable to change
-* Harden your solution to better deal with failures
+- Scale the engineering organization
+- Elevate engineering experience
+- Contain the complexity of the codebase
+- Scale horizontally to handle more load
+- Stay agile and adaptable to change
+- Harden your solution to better deal with failures
 
 ### At Scale
 
@@ -62,18 +62,18 @@ The small number of moving parts keeps the learning curve short and operational 
 
 ### Tooling
  
-A powerful [code generator](../blocks/codegen.md) takes care of most of the repetitive mundane work, freeing engineers to do meaningful work and deliver business value faster.
+[Coding agents](../blocks/coding-agents.md) are trained to deliver most of the work quickly and accurately, elevating engineers to do meaningful work and deliver business value faster.
 
 ### Best Practices
 
 `Microbus` implements best practices that pave the road and steer engineers away from common pitfalls.
 
-* [Client stubs](../blocks/client-stubs.md) for calling remote microservices
-* Full live [integration testing](../blocks/integration-testing.md)
-* [Time budget](../blocks/time-budget.md) instead of point-to-point timeouts
-* [Error capture](../blocks/error-capture.md) and surfacing
-* Centralized [configuration](../blocks/configuration.md)
-* [Distributed cache](../blocks/distrib-cache.md) siloed to each microservice, not globally centralized
+- [Client stubs](../blocks/client-stubs.md) for calling remote microservices
+- Full live [integration testing](../blocks/integration-testing.md)
+- [Time budget](../blocks/time-budget.md) instead of point-to-point timeouts
+- [Error capture](../blocks/error-capture.md) and surfacing
+- Centralized [configuration](../blocks/configuration.md)
+- [Distributed cache](../blocks/distrib-cache.md) siloed to each microservice, not globally centralized
 
 ### Elevated Engineering Experience
 
@@ -81,7 +81,7 @@ In `Microbus`, microservices are not large memory-gobbling processes but rather 
 This quality allows running, testing and debugging an entire solution comprising a multitude of microservices on a [local development](../tech/local-dev.md) machine.
 In fact, it takes only a few seconds to build and restart an entire solution, so code iterations can be made quickly.
 
-A powerful [code generator](../blocks/codegen.md) takes care of most of the repetitive mundane work, freeing engineers to do meaningful work and deliver business value faster.
+[Coding agents](../blocks/coding-agents.md) are trained to deliver most of the work quickly and accurately, elevating engineers to do meaningful work and deliver business value faster.
 
 Observability tools such as [distributed tracing](../blocks/distrib-tracing.md), [metrics](../blocks/metrics.md) dashboards, [structured logging](../blocks/logging.md) and [error capture](../blocks/error-capture.md) provide visibility into the internals of the system, allowing precision identification of bugs and performance issues.
 
@@ -93,20 +93,20 @@ The conventional practice of developing microservices is a jumble of sophisticat
 
 Here's a list of some of the technologies commonly used today:
 
-* Web server for each microservice
-* Service discovery (e.g. DNS, Eureka, Consul, ZooKeeper)
-* Load balancer
-* Port mapping
-* Connection pooling
-* Health and liveness checks
-* Client-side load balancing
-* gRPC
-* Kubernetes
-* Service mesh (e.g. Istio, Envoy, Consul)
-* eBPF networking (e.g. Cilium, Calico)
-* Separate system for pub/sub (e.g. Redis, RabbitMQ)
-* Separate system for caching (e.g. Redis, memcached)
-* K3s for local development
+- Web server for each microservice
+- Service discovery (e.g. DNS, Eureka, Consul, ZooKeeper)
+- Load balancer
+- Port mapping
+- Connection pooling
+- Health and liveness checks
+- Client-side load balancing
+- gRPC
+- Kubernetes
+- Service mesh (e.g. Istio, Envoy, Consul)
+- eBPF networking (e.g. Cilium, Calico)
+- Separate system for pub/sub (e.g. Redis, RabbitMQ)
+- Separate system for caching (e.g. Redis, memcached)
+- K3s for local development
 
 ### Runtime Substrate
 
@@ -132,9 +132,9 @@ Components at all [layers](../blocks/layers.md) of `Microbus` are horizontally s
 
 `Microbus` conforms to industry standards.
 
-* Communication over the bus conforms to the HTTP protocol
-* Observability data is pushed to OpenTelemetry collectors
-* [OpenAPI](../blocks/openapi.md) documents are automatically created for each microservice
+- Communication over the bus conforms to the HTTP protocol
+- Observability data is pushed to OpenTelemetry collectors
+- [OpenAPI](../blocks/openapi.md) documents are automatically created for each microservice
 
 ### Interoperability
 

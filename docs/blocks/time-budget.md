@@ -31,7 +31,7 @@ In the following example, microservices `Y` will have completed its work at the 
 
 If you look closely at the code you'll notice that the budget is decreased somewhat with each hop. This compensates for the network latency.
 
-The time budget is set at the root of the transaction. For incoming HTTP requests, the root is the [HTTP ingress proxy](httpingress.md) which by default sets the time budget to 20 secs. This may seem quite short but the philosophy is that most users expect a response within 2 secs or less and they will hit the refresh button long before 20 secs pass. If something takes long to process, it should probably be handled asynchronously.
+The time budget is set at the root of the transaction. For incoming HTTP requests, the root is the [HTTP ingress proxy](../structure/coreservices-httpingress.md) which by default sets the time budget to 20 secs. This may seem quite short but the philosophy is that most users expect a response within 2 secs or less and they will hit the refresh button long before 20 secs pass. If something takes long to process, it should probably be handled asynchronously.
 
 It is possible to [configure the time budget](../structure/coreservices-httpingress.md) set by the ingress proxy and it is possible to have multiple proxies with different budgets, e.g. one for user-facing requests and one for internal requests. In addition, the HTTP ingress proxy respects the `Request-Timeout` header and will set the time budget to match.
 

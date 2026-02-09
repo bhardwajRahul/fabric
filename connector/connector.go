@@ -32,7 +32,6 @@ import (
 	"github.com/microbus-io/fabric/dlru"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/transport"
@@ -122,7 +121,7 @@ type Connector struct {
 // NewConnector constructs a new Connector.
 func NewConnector() *Connector {
 	c := &Connector{
-		id:                strings.ToLower(rand.AlphaNum32(10)),
+		id:                strings.ToLower(utils.RandomIdentifier(10)),
 		configs:           map[string]*cfg.Config{},
 		networkRoundtrip:  300 * time.Millisecond,
 		ackTimeout:        300 * time.Millisecond,
@@ -149,18 +148,9 @@ func New(hostname string) *Connector {
 	return c
 }
 
-/*
-Init enables a single-statement pattern for initializing the connector.
-
-	New("my.connector").Init(func(c *Connector) {
-		c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-			w.Write([]byte("ok"))
-			return nil
-		})
-	})
-*/
-func (c *Connector) Init(initializer func(c *Connector)) *Connector {
-	initializer(c)
+// Init enables a single-statement pattern for initializing the connector.
+func (c *Connector) Init(initializer func(c *Connector) (err error)) *Connector {
+	c.captureInitErr(initializer(c))
 	return c
 }
 

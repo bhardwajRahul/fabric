@@ -5,118 +5,112 @@
 [![Test](https://github.com/microbus-io/fabric/actions/workflows/test.yaml/badge.svg?branch=main&event=push)](https://github.com/microbus-io/fabric/actions/workflows/test.yaml)
 [![Reference](https://goreportcard.com/badge/github.com/microbus-io/fabric)](https://goreportcard.com/report/github.com/microbus-io/fabric)
 
-### Build, Test, Deploy & Operate Microservice Architectures Dramatically Simpler at Scale
+## Teach your agent to code microservices
 
-`Microbus` is a holistic open source framework for the development, testing, deployment and operation of microservices at scale. It combines best-in-class OSS, tooling and best practices into a dramatically-simplified engineering experience.
+Your coding agent can already code. Microbus teaches it to master the complex domain of distributed systems — the architecture, the patterns, the operational discipline — and produce enterprise-grade microservices, every time.
 
-Build entire cloud-enabled, enterprise-class and web-scalable solutions comprising a multitude of microservices, all on your local development machine. Deploy to suit your needs, as a standalone executable or individual containers.
+### Precise Code. Faster. At Scale.
 
-### Step 1: Define
+**Precise code** - Each microservice fits entirely in your agent's context window. [Skills](./docs/blocks/agent-skills.md) guide every [feature](./docs/blocks/features.md). A single, [simple API](./docs/structure/connector.md) handles the infrastructure. Your agent codes with complete awareness and zero guesswork.
 
-Start by defining the various properties of the microservice in a YAML file
+**Faster** - Agents implement, test, and iterate in one session, in one process. No containers, no external dependencies, no waiting. Tighter [dev-test-debug loops](./docs/blocks/integration-testing.md) mean fewer mistakes and faster delivery.
 
-```yaml
-general:
-  host: hello.world
-configs:
-  signature: Greeting() (hello string)
-  default: Hello
-  validation: str ^[A-Z][a-z]*$
-functions:
-  signature: Add(x int, y int) (sum int)
-webs:
-  signature: Hello()
-  method: GET
-events:
-  signature: OnDouble(x int)
-```
+**At scale** - Every microservice is independent. Multiple agents — or multiple developers — work on different services simultaneously without merge conflicts or coordination overhead.
 
-### Step 2: Generate Code
+[Get started](#get-started) in minutes. `Microbus` is free and open source under the Apache 2.0 license.
 
-Use the powerful code generator to create boilerplate and skeleton code
+## Why Microbus?
 
-```go
-func (svc *Service) Add(ctx context.Context, x int, y int) (sum int, err error) {
-	// TO DO: Implement Add
-	return nil
-}
+Microservices are the right architecture for most growing systems, but the conventional toolchain is daunting: container orchestration, service meshes, API gateways, distributed tracing pipelines. `Microbus` replaces that complexity with a single framework where microservices communicate over [NATS](https://nats.io) using familiar HTTP semantics.
 
-func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) (err error) {
-	// TO DO: Implement Hello
-	return nil
-}
-```
+<img src="./docs/tech/nutshell-1.drawio.svg">
+<p></p>
 
-### Step 3: Implement
+**Performant** - Persistent multiplexed connections deliver [up to 10x the throughput of HTTP/1.1](./docs/blocks/multiplexed.md), benchmarked on a single machine to run 10,000 microservices at over 100,000 req/sec.
 
-Fill in the gaps with the business logic of the particular microservice
+**Observable** - [Distributed tracing](./docs/blocks/distrib-tracing.md), [structured logging](./docs/blocks/logging.md) and [metrics](./docs/blocks/metrics.md) are built in from the start, not bolted on after the fact.
 
-```go
-func (svc *Service) Add(ctx context.Context, x int, y int) (sum int, err error) {
-	if x == y {
-		// Publish an event
-		helloworldapi.NewTrigger(svc).OnDouble(ctx, x)
-	}
-	// Marshaling to JSON is done automatically
-	return x+y, nil
-}
+**Testable** - Spin up a full integration test of multiple microservices [in a single Go test function](./docs/blocks/integration-testing.md), with no containers or external dependencies required.
 
-func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) (err error) {
-	// Access the config
-	greeting := svc.Greeting()
+**AI-native** - Deep integration with [coding agents](./docs/blocks/coding-agents.md) lets you go from a plain-language prompt to a production-ready microservice with tests in minutes.
 
-	// Call another microservice via its client stub
-	user, err := userstoreapi.NewClient(svc).Me(r.Context())
-	if err != nil {
-		// Just return the error
-		return errors.Trace(err)
-	}
+## Get Started
 
-	message := fmt.Sprintf("%s, %s!", greeting, user.FullName())
-	w.Write([]byte(message))
-	return nil
-}
-```
+### Prerequisites
 
-### Step 4: Add to App
+- Your favorite coding agent
+- [Go](https://go.dev/) 1.24+
+- [NATS](https://nats.io) messaging bus (required in high-availability production settings, optional during development)
+- [LGTM stack](https://github.com/grafana/docker-otel-lgtm) OpenTelemetry observability stack (optional)
 
-Add the microservice to the application that manages its lifecycle
+### Take a Tour
 
-```go
-func main() {
-	app := application.New()
-	app.Add(
-		configurator.NewService(),
-	)
-	app.Add(
-		httpegress.NewService(),
-		openapiportal.NewService(),
-		tokenissuer.NewService(),
-	)
-	app.Add(
-		// Add solution microservices here
-		helloworld.NewService(),
-	)
-	app.Add(
-		httpingress.NewService(),
-	)
-	err := app.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v", err)
-		os.Exit(19)
-	}
-}
-```
+The [examples](./docs/structure/examples.md) directory contains microservices that demonstrate key patterns: [hello world](./examples/helloworld), [calculator](./examples/calculator), [CRUD with a database](./examples/directory), [events](./examples/eventsource), [authentication](./examples/login) and more.
 
-### Step 5: Deploy
+Take the agent-guided tour!
 
-Deploy your apps across machines or availability zones. Microservices communicate via a messaging bus at up to 10X the speed of HTTP/1.1
+> HEY CLAUDE...
+>
+> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus. Then find the appropriate skill and take me through the tour
+
+### Build Your First Microservice
+
+The [step-by-step tutorial](./docs/howto/first-microservice.md) walks you through creating a microservice from scratch, covering endpoints, configuration, web handlers and integration tests.
+
+### Start a New Project
+
+Ready to build your own solution? [Bootstrap a new project](./docs/howto/new-project.md) from scratch.
+
+## Build with a Coding Agent
+
+`Microbus` is designed to work hand-in-hand with coding agents like [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The framework's structured project layout and embedded [guidance](./docs/blocks/coding-agents.md#how-agents-are-guided) keep the agent's context window small and its output accurate.
+
+Ask your coding agent to bootstrap `Microbus`:
+
+> HEY CLAUDE...
+>
+> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus
+
+Then prompt your way to a fully-implemented microservice:
+
+> HEY CLAUDE...
+>
+> Create a new microservice "helloworld"
+
+> HEY CLAUDE...
+>
+> Create a web handler that prints "Hello, World!"
+
+> HEY CLAUDE...
+>
+> Create a config for the greeting, with a default of "Hello". The greeting must start with a capital letter and not be empty
+
+> HEY CLAUDE...
+>
+> Create a functional endpoint Add that sums up two integers x and y and returns the sum
+
+> HEY CLAUDE...
+>
+> Fire an event OnDouble when x==y in Add
+
+> HEY CLAUDE...
+>
+> Create a metric that totals the positive sums in Add, and another that totals the negative sums
+
+Six prompts. Under 10 minutes. 819 lines of code at 87% test coverage.
+
+Learn more about how [coding agents](./docs/blocks/coding-agents.md) work within the `Microbus` framework.
+
+## Deploy
+
+Bundle microservices into applications and deploy them to match your scale: as a single binary, a handful of containers, or across availability zones. Microservices communicate via a messaging bus.
 
 <img src="./docs/blocks/topology-5.drawio.svg">
+<p></p>
 
-### Step 6: Operate
+## Observe
 
-Distributed tracing, metrics and structured logging provide precision observability of system internals
+Distributed tracing, metrics and structured logging provide precision visibility into system behavior.
 
 <img src="./docs/blocks/distrib-tracing-2.png" width="658">
 <p></p>
@@ -124,165 +118,114 @@ Distributed tracing, metrics and structured logging provide precision observabil
 <img src="./docs/blocks/metrics-1.png" width="1158">
 <p></p>
 
-### Watch the Video
+## Architecture
 
-<a href="https://youtu.be/_FXnIb4WKKw">https://youtu.be/_FXnIb4WKKw</a>
-<p>
-<a href="https://youtu.be/_FXnIb4WKKw"><img src="https://img.youtube.com/vi/_FXnIb4WKKw/mqdefault.jpg" height="180"></a>
-</p>
+Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful technologies that together form a robust foundation:
 
-## 🚦 Get Started
-
-👉 Follow the [quick start guide](./docs/howto/quick-start.md) to set up your system and run the example app
-
-👉 Go through the various [examples](./docs/structure/examples.md)
-
-👉 Follow the step-by-step guide and [build your first microservice](./docs/howto/first-microservice.md)
-
-👉 Discover the power of [code generation](./docs/blocks/codegen.md). It's totally RAD, dude
-
-👉 Learn how to write thorough [integration tests](./docs/blocks/integration-testing.md) and achieve high code coverage
-
-👉 Venture out and [explore more on your own](./docs/howto/self-explore.md)
-
-👉 Ready? [Build your own solution](./docs/howto/new-project.md) from scratch
-
-## ⚙️ Internals
-
-Build your microservices on top of a `Connector` construct and use its simple API to communicate with other microservices using familiar HTTP semantics. Under the hood, communication happens over a real-time messaging bus.
-
-<img src="./docs/tech/nutshell-1.drawio.svg">
+<img src="./docs/blocks/layers-1.drawio.svg">
 <p></p>
 
-`Microbus` brings together the patterns and best practices that get it right from the get-go, all in a developer-friendly holistic framework that throws complexity under the bus:
+**OSS** - A curated selection of proven technologies — [NATS](https://nats.io) for messaging, [OpenTelemetry](https://opentelemetry.io) for observability, [Grafana](https://grafana.com) for visualization — abstracted away by the layers above.
 
-### Reliable Transport, Up to 10X the Speed of HTTP/1.1
-* [Unicast](./docs/blocks/unicast.md) 1:1 request/response
-* [Multicast](./docs/blocks/multicast.md) 1:N publish/subscribe
-* [Persistent multiplexed connections](./docs/blocks/multiplexed.md)
-* [Dynamic service discovery](./docs/blocks/discovery.md)
-* [Load balancing](./docs/blocks/lb.md)
-* [Time budget](./docs/blocks/time-budget.md)
-* [Ack or fail fast](./docs/blocks/ack-or-fail.md)
-* [Locality-aware routing](./docs/blocks/locality-aware-routing.md)
-* [Connectivity liveness check](./docs/blocks/connectivity-liveness-test.md)
-* [Short-circuit](./docs/tech/short-circuit.md)
+**Connector** - The [`Connector`](./docs/structure/connector.md) is the base construct from which all microservices are derived. It provides a consistent API for transport, observability, configuration and lifecycle management.
 
-### Precision Observability
-* [Structured logging](./docs/blocks/logging.md)
-* [Distributed tracing](./docs/blocks/distrib-tracing.md)
-* [Metrics](./docs/blocks/metrics.md)
-* [Error capture](./docs/blocks/error-capture.md) and propagation
+**Coding agents** - [Coding agents](./docs/blocks/coding-agents.md) generate boilerplate, business logic, tests and documentation using embedded [skills](./docs/blocks/agent-skills.md) that guide each feature end to end.
 
-### And More...
-* [Configuration](./docs/blocks/configuration.md)
-* [Authorization](./docs/blocks/authorization.md)
-* [Client stubs](./docs/blocks/client-stubs.md)
-* [Live integration tests](./docs/blocks/integration-testing.md)
-* [OpenAPI](./docs/blocks/openapi.md)
-* [Graceful shutdown](./docs/blocks/graceful-shutdown.md)
-* [Distributed caching](./docs/blocks/distrib-cache.md)
-* [Embedded static resources](./docs/blocks/embedded-res.md)
-* [Recurring jobs](./docs/blocks/tickers.md)
+**Microservices** - [Core microservices](./docs/structure/coreservices.md) ship with the framework. Solution microservices implement your business logic. Both are built the same way using the same tools.
 
-## 📚 Learn More
+**Applications** - Microservices are bundled into [applications](./docs/structure/application.md) according to the desired [topology](./docs/blocks/topology.md) — a single binary, a handful of containers, or across availability zones.
 
-Dig deeper into the technology of `Microbus` and its philosophy.
+## Features
 
-### Architecture
+### Transport
+| | |
+|---|---|
+| [Unicast](./docs/blocks/unicast.md) | 1:1 request/response between microservices |
+| [Multicast](./docs/blocks/multicast.md) | 1:N publish/subscribe |
+| [Multiplexed connections](./docs/blocks/multiplexed.md) | Persistent connections with up to 10x HTTP/1.1 throughput |
+| [Service discovery](./docs/blocks/discovery.md) | Dynamic, no registry required |
+| [Load balancing](./docs/blocks/lb.md) | Automatic distribution across replicas |
+| [Time budget](./docs/blocks/time-budget.md) | Cascading timeout propagation |
+| [Ack or fail fast](./docs/blocks/ack-or-fail.md) | Immediate feedback on request delivery |
+| [Locality-aware routing](./docs/blocks/locality-aware-routing.md) | Prefer co-located replicas |
+| [Connectivity check](./docs/blocks/connectivity-liveness-test.md) | Liveness detection |
+| [Short-circuit](./docs/tech/short-circuit.md) | In-memory transport for co-located services |
 
-* [Architectural diagram](./docs/blocks/layers.md) - A map of the building blocks of `Microbus` and how they stack up
-* [Catalog of packages](./docs/structure/packages.md) - Find your way around the codebase
+### Observability
+| | |
+|---|---|
+| [Distributed tracing](./docs/blocks/distrib-tracing.md) | Cross-service call visualization via OpenTelemetry |
+| [Structured logging](./docs/blocks/logging.md) | JSON logging to stderr |
+| [Metrics](./docs/blocks/metrics.md) | Prometheus-compatible metrics |
+| [Error capture](./docs/blocks/error-capture.md) | Stack traces preserved across service boundaries |
+
+### Developer Experience
+| | |
+|---|---|
+| [Client stubs](./docs/blocks/client-stubs.md) | Type-safe generated clients |
+| [Integration testing](./docs/blocks/integration-testing.md) | Multi-service tests in a single process |
+| [Static resources](./docs/blocks/embedded-res.md) | Embedded files via go:embed |
+| [Events](./docs/blocks/events.md) | Decouple services with event-driven patterns |
+| [Tickers](./docs/blocks/tickers.md) | Recurring scheduled jobs |
+
+### Robust Runtime
+| | |
+|---|---|
+| [Configuration](./docs/blocks/configuration.md) | Centralized YAML-based config |
+| [Authorization](./docs/blocks/authorization.md) | JWT-based access control |
+| [Adaptable topology](./docs/blocks/topology.md) | Monolith, multi-container, or hybrid |
+| [OpenAPI](./docs/blocks/openapi.md) | Auto-generated API documentation |
+| [Distributed caching](./docs/blocks/distrib-cache.md) | Shared cache across replicas |
+| [Graceful shutdown](./docs/blocks/graceful-shutdown.md) | Drain pending operations before termination |
+
+## Documentation
 
 ### Guides
 
-* [Code generation](./docs/blocks/codegen.md) - Discover the power of `Microbus`'s powerful RAD tool
-* [Coding agents](./docs/blocks/coding-agents.md) - Leverage coding agents such as Claude
-* [Configuration](./docs/blocks/configuration.md) - How to configure microservices
-* [Path arguments](./docs/tech/path-arguments.md) - Define wildcard path arguments in subscriptions
-* [HTTP magic arguments](./docs/tech/http-arguments.md) - Use HTTP magic arguments in functional endpoints to gain finer control over the HTTP request and response
-* [Integration testing](./docs/blocks/integration-testing.md) - Test a multitude of microservices together
-* [Environment variables](./docs/tech/envars.md) - Environment variables used to initialize microservices
-* [NATS connection settings](./docs/tech/nats-connection.md) - How to configure microservices to connect and authenticate to NATS
-* [RPC over JSON vs REST](./docs/tech/rpc-vs-rest.md) - Implement these common web API styles
-* [Adaptable topology](./docs/blocks/topology.md) - Grow the topology of your system to match your requirements
-* [Bootstrap a new project](./docs/howto/new-project.md) - Create a project for your solution
-* [New microservice](./docs/howto/create-microservice.md) - Create a new microservice and add it to your solution
-* [Enabling authorization](./docs/howto/enabling-auth.md) - Control access to microservices based on the actor associated with the request
+- [Quick start](./docs/howto/quick-start.md) - An agent-guided tour of the examples
+- [First microservice](./docs/howto/first-microservice.md) - Build a microservice step by step
+- [Coding agents](./docs/blocks/coding-agents.md) - Leverage AI-assisted development
+- [New project](./docs/howto/new-project.md) - Bootstrap a solution from scratch
+- [New microservice](./docs/howto/create-microservice.md) - Add a microservice to your project
+- [Configuration](./docs/blocks/configuration.md) - Configure microservices
+- [Integration testing](./docs/blocks/integration-testing.md) - Test multiple microservices together
+- [Enabling authorization](./docs/howto/enabling-auth.md) - Set up JWT-based access control
 
-### Under the Hood
+### Reference
 
-* [HTTP ingress proxy](./docs/structure/coreservices-httpingress.md) - The HTTP ingress proxy bridges the gap between HTTP and `Microbus`
-* [Unicast messaging](./docs/blocks/unicast.md) - Unicast enables bi-directional 1:1 request/response HTTP messaging between a client and a single server over the bus
-* [Multicast messaging](./docs/tech/multicast.md) - Extending on the unicast pattern, multicast enables bi-directional 1:N publish/subscribe HTTP messaging between a client and a multitude of servers over the bus
-* [Error capture](./docs/blocks/error-capture.md) - How and why errors are captured and propagated across microservices boundaries
-* [Time budget](./docs/blocks/time-budget.md) - The right way to manage client-to-server request timeouts
-* [Control subscriptions](./docs/tech/control-subs.md) - Subscriptions that all microservices implement out of the box on port `:888`
-* [Deployment environments](./docs/tech/deployments.md) - An application can run in one of 4 deployment environments: `PROD`, `LAB`, `LOCAL` and `TESTING`
-* [Events](./docs/blocks/events.md) - How event-driven architecture can be used to decouple microservices
-* [Distributed tracing](./docs/blocks/distrib-tracing.md) - Visualizing stack traces across microservices with OpenTelemetry
-* [OpenAPI](./docs/blocks/openapi.md) - OpenAPI document generation for microservices
-* [Local development](./docs/tech/local-dev.md) - Run an entire solution comprising a multitude of microservices in your local IDE
-* [Structured logging](./docs/blocks/logging.md) - JSON logging to `stderr`
-* [Ack or fail fast](./docs/blocks/ack-or-fail.md) - Acks signal the sender if its request was received
-* [Graceful shutdown](./docs/blocks/graceful-shutdown.md) - Graceful shutdown drains pending operations before termination
-* [Tickers](./docs/blocks/tickers.md) - Tickers are jobs that run on a schedule
-* [Multiplexed connections](./docs/blocks/multiplexed.md) - Multiplexed connections are more efficient than HTTP/1.1
-* [Load balancing](./docs/blocks/lb.md) - Load balancing requests among all replicas of a microservice
-* [Internationalization](./docs/blocks/i18n.md) - Loading and localizing strings from `text.yaml`
-* [Locality-aware routing](./docs/blocks/locality-aware-routing.md) - Optimizing service-to-service communication
-* [Connectivity liveness tests](./docs/blocks/connectivity-liveness-test.md) - A microservice's connection to the messaging bus represents its liveness
-* [Skeleton code](./docs/blocks/skeleton-code.md) - Skeleton code is a placeholder for filling in meaningful code
-* [Client stubs](./docs/blocks/client-stubs.md) - Client stubs facilitate calling downstream microservices
-* [Ports](./docs/tech/ports.md) - Ports can be external or internal
-* [Authorization](./docs/blocks/authorization.md) - Control access to microservices based on the actor associated with the request
-* [Short-circuit](./docs/tech/short-circuit.md) - An in-memory transport that speeds up service-to-service calls by a factor of 10
+- [Features of a microservice](./docs/blocks/features.md) - Endpoints, events, configs, tickers and metrics
+- [Path arguments](./docs/tech/path-arguments.md) - Wildcard and greedy path parameters
+- [HTTP magic arguments](./docs/tech/http-arguments.md) - Fine-grained control over HTTP request/response
+- [Environment variables](./docs/tech/envars.md) - Initialization settings
+- [NATS connection](./docs/tech/nats-connection.md) - Connection and authentication options
+- [Control subscriptions](./docs/tech/control-subs.md) - Built-in management endpoints
+- [Deployment environments](./docs/tech/deployments.md) - PROD, LAB, LOCAL and TESTING modes
+- [Ports](./docs/tech/ports.md) - External and internal ports
+- [RPC over JSON vs REST](./docs/tech/rpc-vs-rest.md) - API style comparison
+- [Local development](./docs/tech/local-dev.md) - Running a full solution in your IDE
+- [Package catalog](./docs/structure/packages.md) - Introduction to `Microbus`'s codebase
 
-### Design Choices
+### Design
 
-* [Encapsulation pattern](./docs/tech/encapsulation.md) - The reasons for encapsulating third-party technologies
-* [JSON/HTTP vs Protobuf](./docs/tech/json-vs-protobuf.md) - Why JSON/HTTP was chosen as the protocol
-* [Out of scope](./docs/tech/out-of-scope.md) - Areas that `Microbus` stays clear of
+- [Encapsulation pattern](./docs/tech/encapsulation.md) - Why third-party technologies are wrapped
+- [JSON/HTTP vs Protobuf](./docs/tech/json-vs-protobuf.md) - Protocol choice rationale
+- [Out of scope](./docs/tech/out-of-scope.md) - Deliberate boundaries
+- [Milestones](./docs/general/milestones.md) - Project history and evolution
+- [Mission statement](./docs/general/mission-statement.md) - Goals and philosophy
 
-### Miscellaneous
-
-* [Milestones](./docs/general/milestones.md) - Each milestone of `Microbus` is maintained in a separate branch for archival purposes and to demonstrate the development process and evolution of the code.
-
-## 🚌 Motivation
-
-A microservice architecture is best suited for addressing the technical and organizational scalability challenges of a business as it grows. Without microservices, the complexity of a monolithic codebase often grows to a point where the engineering team can no longer innovate and collaborate efficiently. In most likelihood the entire solution has to be rewritten at a critical point of the business - when it is growing rapidly - and at prohibitive cost. Investing in microservices from the get-go is a wise investment that mitigates this upside risk.
-
-Building and operating microservices at scale, however, is quite difficult and beyond the skills of most engineering teams. It's easy to spin up one web server and call it a microservice but things get exponentially more complicated the more microservices are added to the mix. Many teams at some point either call it quits and stop adding microservices, or introduce complex tooling such as service meshes to help manage the complexity. Adding complexity to solve complexity is a self-defeating strategy: the chickens eventually come home to roost.
-
-`Microbus` takes a novel approach to the development, testing, deployment and troubleshooting of microservices, and eliminates much of the complexity of the conventional practice. `Microbus` is a holistic open source framework that combines best-in-class OSS, tooling and best practices into a dramatically-simplified engineering experience that boosts productivity 4x.
-
-`Microbus` is the culmination of a decade of research and has been successfully battle-tested in production settings running SaaS solutions comprising many dozens of microservices.
-
-## 🎯 Mission Statement
-
-[`Microbus`](./docs/general/mission-statement.md#microbus) is a [holistic](./docs/general/mission-statement.md#holistic) [open source framework](./docs/general/mission-statement.md#open-source-framework) for the [development, testing, deployment and operation](./docs/general/mission-statement.md#sdlc) of [microservices](./docs/general/mission-statement.md#why-microservices) [at scale](./docs/general/mission-statement.md#at-scale).
-
-`Microbus` combines [best-in-class OSS](./docs/general/mission-statement.md#curated-oss), [tooling](./docs/general/mission-statement.md#tooling) and [best practices](./docs/general/mission-statement.md#best-practices) into an [elevated engineering experience](./docs/general/mission-statement.md#elevated-engineering-experience) that eliminates much of the complexity of the [conventional practice](./docs/general/mission-statement.md#conventional-practice).
-
-`Microbus`’s [runtime substrate](./docs/general/mission-statement.md#runtime-substrate) is highly [performant](./docs/general/mission-statement.md#performance), strongly [reliable](./docs/general/mission-statement.md#reliability) and [horizontally scalable](./docs/general/mission-statement.md#horizontal-scalability).
-
-`Microbus` conforms to [industry standards](./docs/general/mission-statement.md#industry-standards) and [interoperates](./docs/general/mission-statement.md#interoperability) smoothly with existing systems.
-
-## ✋ Get Involved
+## Get Involved
 
 We want your feedback. Clone the repo, try things out and let us know what worked for you, what didn't and what you'd like to see improved.
 
 Help us spread the word. Let your peers and the Go community know about `Microbus`.
 
-Give us a Github ⭐. And ask your friends to give us one too!
+Give us a Github star.
 
 Reach out if you'd like to contribute code.
 
-Corporation? Contact us for sponsorship opportunities. 
+Corporation? Contact us for sponsorship opportunities.
 
-## ☎️ Contact Us
-
-Find us at any of the following channels. We're looking forward to hearing from you so don't hesitate to drop us a line.
+## Contact
 
 | <nobr>Find us at...</nobr> | |
 |------------|-----|
@@ -294,7 +237,7 @@ Find us at any of the following channels. We're looking forward to hearing from 
 | Reddit     | [r/microbus](https://reddit.com/r/microbus) |
 | YouTube    | [@microbus-io](https://www.youtube.com/@microbus-io) |
 
-## 📃 Legal
+## Legal
 
 The `Microbus` framework is the copyrighted work of various contributors. It is licensed to you free of charge by `Microbus LLC` - a Delaware limited liability company formed to hold rights to the combined intellectual property of all contributors - under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
 

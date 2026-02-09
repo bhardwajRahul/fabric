@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/examples/messaging/intermediate"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
 )
@@ -40,7 +39,7 @@ Service implements the messaging.example microservice.
 The Messaging microservice demonstrates service-to-service communication patterns.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -56,7 +55,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Home demonstrates making requests using multicast and unicast request/response patterns.
 */
-func (svc *Service) Home(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Home(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Home
 	var buf bytes.Buffer
 
 	// Print the ID of this instance
@@ -153,7 +152,7 @@ NoQueue demonstrates how the NoQueue subscription option is used to create
 a multicast request/response communication pattern.
 All instances of this microservice will respond to each request.
 */
-func (svc *Service) NoQueue(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) NoQueue(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: NoQueue
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte("NoQueue " + svc.ID()))
 	return nil
@@ -164,7 +163,7 @@ DefaultQueue demonstrates how the DefaultQueue subscription option is used to cr
 a unicast request/response communication pattern.
 Only one of the instances of this microservice will respond to each request.
 */
-func (svc *Service) DefaultQueue(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) DefaultQueue(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: DefaultQueue
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte("DefaultQueue " + svc.ID()))
 	return nil
@@ -173,7 +172,7 @@ func (svc *Service) DefaultQueue(w http.ResponseWriter, r *http.Request) (err er
 /*
 CacheLoad looks up an element in the distributed cache of the microservice.
 */
-func (svc *Service) CacheLoad(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) CacheLoad(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CacheLoad
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		return errors.New("missing key")
@@ -205,7 +204,7 @@ func (svc *Service) CacheLoad(w http.ResponseWriter, r *http.Request) (err error
 /*
 CacheStore stores an element in the distributed cache of the microservice.
 */
-func (svc *Service) CacheStore(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) CacheStore(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CacheStore
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		return errors.New("missing key")

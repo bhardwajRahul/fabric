@@ -51,12 +51,6 @@ func NoQueue() Option {
 	}
 }
 
-// Pervasive is synonymous with NoQueue.
-// Requests will be not be load-balanced, all instances of this microservice will receive the request
-func Pervasive() Option {
-	return NoQueue()
-}
-
 // DefaultQueue names the queue of this subscription to the hostname of the service.
 // Requests will be load-balanced among all instances of this microservice.
 func DefaultQueue() Option {
@@ -66,24 +60,18 @@ func DefaultQueue() Option {
 	}
 }
 
-// LoadBalanced is synonymous with DefaultQueue.
-// Requests will be load-balanced among all instances of this microservice
-func LoadBalanced() Option {
-	return DefaultQueue()
-}
-
-// Actor requires that the properties of the actor associated with the request satisfy the boolean expression.
+// RequiredClaims requires that the properties of the actor associated with the request satisfy the boolean expression.
 // For example: iss=='my_issuer' && (roles=~'admin' || roles=~'manager') && region=="US".
 // The =~ and !~ operators evaluate the left operand against a regexp.
 // String constants, including regexp patterns, must be quoted using single quotes, double quotes or backticks.
 // A request that doesn't satisfy the constraint is denied with a 403 forbidden error.
-func Actor(boolExp string) Option {
+func RequiredClaims(boolExp string) Option {
 	return func(sub *Subscription) error {
 		_, err := boolexp.Eval(boolExp, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		sub.Actor = boolExp
+		sub.RequiredClaims = boolExp
 		return nil
 	}
 }

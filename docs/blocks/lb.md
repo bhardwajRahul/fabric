@@ -10,8 +10,6 @@ Microservices in `Microbus` are lightweight goroutines that pull (consume) messa
 <img src="lb-2.drawio.svg">
 <p></p>
 
-When using the `Connector`'s `Subscribe` method directly, multicasting can be enabled via the `sub.NoQueue()` option.
-
-When using [`service.yaml`](../tech/service-yaml.md) and the [code generator](../blocks/codegen.md), the `queue: none` property is used to indicate a multicast subscription.
+When using the `Connector`'s `Subscribe` method directly, multicasting are enabled via the `sub.NoQueue()` option.
 
 [Events](../blocks/events.md) are by definition multicast.

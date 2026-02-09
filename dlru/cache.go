@@ -67,6 +67,8 @@ type Cache struct {
 	svc        Service
 	hits       int64
 	misses     int64
+	unsub1     func() (err error)
+	unsub2     func() (err error)
 }
 
 // Service is an interface abstraction of a microservice used by the distributed cache.
@@ -145,13 +147,14 @@ func (c *Cache) MaxMemory() int {
 }
 
 // start subscribed to handle cache events from peers.
-func (c *Cache) start(ctx context.Context) error {
-	err := c.svc.Subscribe("ANY", c.basePath+"/all", c.handleAll, sub.NoQueue())
+func (c *Cache) start(ctx context.Context) (err error) {
+	c.unsub1, err = c.svc.Subscribe("ANY", c.basePath+"/all", c.handleAll, sub.NoQueue())
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.svc.Subscribe("ANY", c.basePath+"/rescue", c.handleRescue, sub.DefaultQueue())
+	c.unsub2, err = c.svc.Subscribe("ANY", c.basePath+"/rescue", c.handleRescue, sub.DefaultQueue())
 	if err != nil {
+		c.unsub1()
 		return errors.Trace(err)
 	}
 	return nil
@@ -159,8 +162,12 @@ func (c *Cache) start(ctx context.Context) error {
 
 // start unsubscribes from handling cache events from peers.
 func (c *Cache) stop(ctx context.Context) error {
-	c.svc.Unsubscribe("ANY", c.basePath+"/rescue")
-	c.svc.Unsubscribe("ANY", c.basePath+"/all")
+	if c.unsub1 != nil {
+		c.unsub1()
+	}
+	if c.unsub2 != nil {
+		c.unsub2()
+	}
 	return nil
 }
 
@@ -484,7 +491,7 @@ func (c *Cache) Store(ctx context.Context, key string, value []byte, options ...
 	// Store in local cache
 	c.localCache.Store(key, value, lru.Weight(len(value)))
 
-	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+	c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 		"op", "store",
 	)
 
@@ -512,7 +519,7 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 	if ok {
 		if !opts.ConsistencyCheck {
 			atomic.AddInt64(&c.hits, 1)
-			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+			c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 				"op", "load",
 				"hit", "local",
 			)
@@ -557,13 +564,13 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 		}
 		if ok {
 			atomic.AddInt64(&c.hits, 1)
-			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+			c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 				"op", "load",
 				"hit", "local",
 			)
 		} else {
 			atomic.AddInt64(&c.misses, 1)
-			c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+			c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 				"op", "load",
 				"hit", "miss",
 			)
@@ -609,13 +616,13 @@ func (c *Cache) Load(ctx context.Context, key string, options ...LoadOption) (va
 	}
 	if ok {
 		atomic.AddInt64(&c.hits, 1)
-		c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 			"op", "load",
 			"hit", "remote",
 		)
 	} else {
 		atomic.AddInt64(&c.misses, 1)
-		c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+		c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 			"op", "load",
 			"hit", "miss",
 		)
@@ -650,7 +657,7 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 		}
 	}
 
-	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+	c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 		"op", "delete",
 	)
 	return nil
@@ -676,7 +683,7 @@ func (c *Cache) DeletePrefix(ctx context.Context, keyPrefix string) error {
 		}
 	}
 
-	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+	c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 		"op", "delete",
 	)
 	return nil
@@ -702,7 +709,7 @@ func (c *Cache) DeleteContains(ctx context.Context, keySubstring string) error {
 		}
 	}
 
-	c.svc.AddCounter(ctx, "microbus_cache_operations", 1,
+	c.svc.IncrementCounter(ctx, "microbus_cache_operations", 1,
 		"op", "delete",
 	)
 	return nil
@@ -770,91 +777,6 @@ func (c *Cache) Clear(ctx context.Context) error {
 	return nil
 }
 
-// LoadJSON loads a JSON element from the cache.
-// If the element is found, it is bumped to the head of the cache.
-//
-// Deprecated: Use [Cache.Load] or [Cache.Get].
-func (c *Cache) LoadJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
-	if key == "" {
-		return false, errors.New("missing key")
-	}
-	data, ok, err := c.Load(ctx, key, options...)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if !ok {
-		return false, nil
-	}
-	err = json.Unmarshal(data, value)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	return true, nil
-}
-
-// StoreJSON marshals the value as JSON and stores it in the cache.
-// JSON marshalling is not memory efficient and should be avoided if the cache is
-// expected to store a lot of data.
-//
-// Deprecated: Use [Cache.Store] or [Cache.Set].
-func (c *Cache) StoreJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
-	if key == "" {
-		return errors.New("missing key")
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = c.Store(ctx, key, data, options...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-// LoadCompressedJSON loads a compressed JSON element from the cache.
-// If the element is found, it is bumped to the head of the cache.
-//
-// Deprecated: Use [Cache.Load] or [Cache.Get].
-func (c *Cache) LoadCompressedJSON(ctx context.Context, key string, value any, options ...LoadOption) (ok bool, err error) {
-	if key == "" {
-		return false, errors.New("missing key")
-	}
-	data, ok, err := c.Load(ctx, key, options...)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if !ok {
-		return false, nil
-	}
-	err = json.Unmarshal(data, value)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	return true, nil
-}
-
-// StoreCompressedJSON marshals the value as JSON and stores it in the cache compressed.
-// JSON marshalling is not memory efficient and should be avoided if the cache is
-// expected to store a lot of data.
-//
-// Deprecated: Use [Cache.Store] or [Cache.Set].
-func (c *Cache) StoreCompressedJSON(ctx context.Context, key string, value any, options ...StoreOption) error {
-	if key == "" {
-		return errors.New("missing key")
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	options = append(options, Compress(true))
-	err = c.Store(ctx, key, data, options...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 // Hits returns the total number of cache hits.
 // This number can technically overflow.
 func (c *Cache) Hits() int {
@@ -905,7 +827,7 @@ func (c *Cache) dataToValue(data []byte, value any) (err error) {
 
 // CacheSet puts an element in the cache, marking it as the most recently used.
 // The value must be either []byte, string or an object that can be marshaled to JSON.
-func (c *Cache) Set(ctx context.Context, key string, value any) (err error) {
+func (c *Cache) Set(ctx context.Context, key string, value any, options ...StoreOption) (err error) {
 	if key == "" {
 		return errors.New("missing key")
 	}
@@ -913,7 +835,7 @@ func (c *Cache) Set(ctx context.Context, key string, value any) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.Store(ctx, key, data)
+	err = c.Store(ctx, key, data, options...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -922,11 +844,11 @@ func (c *Cache) Set(ctx context.Context, key string, value any) (err error) {
 
 // Get retrieves an element from the cache, marking it as the most recently used.
 // The value must be either a pointer to []byte, string or object that can be unmarshaled from JSON.
-func (c *Cache) Get(ctx context.Context, key string, value any) (found bool, err error) {
+func (c *Cache) Get(ctx context.Context, key string, value any, options ...LoadOption) (found bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
 	}
-	data, ok, err := c.Load(ctx, key)
+	data, ok, err := c.Load(ctx, key, options...)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -942,11 +864,12 @@ func (c *Cache) Get(ctx context.Context, key string, value any) (found bool, err
 
 // Peek retrieves an element from the cache, without marking it as the most recently used.
 // The value must be either a pointer to []byte, string or object that can be unmarshaled from JSON.
-func (c *Cache) Peek(ctx context.Context, key string, value any) (found bool, err error) {
+func (c *Cache) Peek(ctx context.Context, key string, value any, options ...LoadOption) (found bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
 	}
-	data, ok, err := c.Load(ctx, key, NoBump()) // <- NoBump
+	options = append(options, NoBump()) // <- NoBump
+	data, ok, err := c.Load(ctx, key, options...)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -961,11 +884,12 @@ func (c *Cache) Peek(ctx context.Context, key string, value any) (found bool, er
 }
 
 // Has checks if an element is in the cache, without marking it as the most recently used.
-func (c *Cache) Has(ctx context.Context, key string) (found bool, err error) {
+func (c *Cache) Has(ctx context.Context, key string, options ...LoadOption) (found bool, err error) {
 	if key == "" {
 		return false, errors.New("missing key")
 	}
-	_, ok, err := c.Load(ctx, key, NoBump()) // <- NoBump
+	options = append(options, NoBump()) // <- NoBump
+	_, ok, err := c.Load(ctx, key, options...)
 	if err != nil {
 		return false, errors.Trace(err)
 	}

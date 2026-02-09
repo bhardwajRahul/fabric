@@ -15,4 +15,4 @@ Using the availability zone as the basis of the locality, for example `1.b.west.
 <img src="locality-aware-routing-1.drawio.svg">
 <p></p>
 
-Using the machine identifier in the locality, for example `a6506f32.1.b.west.us`or even just `a6506f32`, is a more aggressive strategy that keeps traffic within the same machine when possible. This strategy reduces service-to-service latency but can lead to an imbalanced load distribution.
+Using the machine identifier in the locality, for example `a6506f32.1.b.west.us` or even just `a6506f32`, is a more aggressive strategy that keeps traffic within the same machine when possible. This strategy reduces service-to-service latency but can lead to an imbalanced load distribution.

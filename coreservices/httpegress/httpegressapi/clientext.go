@@ -36,7 +36,7 @@ func (c Client) Get(ctx context.Context, url string) (resp *http.Response, err e
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp, err = c.MakeRequest(ctx, "", "", &buf)
+	resp, err = c.MakeRequest(ctx, "", &buf)
 	return resp, errors.Trace(err)
 }
 
@@ -58,7 +58,7 @@ func (c Client) Post(ctx context.Context, url string, contentType string, body a
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp, err = c.MakeRequest(ctx, "", "", &buf)
+	resp, err = c.MakeRequest(ctx, "", &buf)
 	return resp, errors.Trace(err)
 }
 
@@ -69,6 +69,6 @@ func (c Client) Do(ctx context.Context, req *http.Request) (resp *http.Response,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	resp, err = c.MakeRequest(ctx, "", "", &buf)
+	resp, err = c.MakeRequest(ctx, "", &buf)
 	return resp, errors.Trace(err)
 }

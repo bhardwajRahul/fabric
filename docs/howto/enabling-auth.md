@@ -1,6 +1,6 @@
 # Enabling Authentication
 
-Enabling [authentication and authorization](../blocks/authorization.md) in a `Microbus` application requires an initial setup. Thereafter though, restricting endpoints to only authorized actors is typically a one-liner declaration in `service.yaml`.
+Enabling [authentication and authorization](../blocks/authorization.md) in a `Microbus` application requires an initial setup. Thereafter though, restricting endpoints to only authorized actors is typically a one-liner declaration.
 
 #### Step 1: Actor
 
@@ -59,7 +59,7 @@ tokenissuer.core:
   SecretKey: \K"37WM%h6dj\V£)swfZdebf6b1zXUhd8[`iy>~7[L5BQp3/>z++91s{(PG)6=z/
 ```
 
-If the core microservice is insufficient to your needs, you may implement your own token issuer that provides the same interface. Remember to include the custom token issuer in the main app if not already done so by the code generator.
+If the core microservice is insufficient to your needs, you may implement your own token issuer that provides the same interface.
 
 #### Step 3: Authenticator
 
@@ -76,12 +76,7 @@ tokenissuerapi.NewClient(svc).IssueToken(ctx, jwt.MapClaims{
 })
 ```
 
-The [login example](../structure/examples-login.md) microservice is an example of an authenticator that accepts a username and a password via a web form and returns the JWT via a `Set-Cookie` header. Single-page applications may be better served by a functional endpoint that returns the JWT to the client in JSON form, such as the following.
-
-```yaml
-functions:
-  - signature: Authenticate(username string, password string) (signedToken string)
-```
+The [login example](../structure/examples-login.md) microservice is an example of an authenticator that accepts a username and a password via a web form and returns the JWT via a `Set-Cookie` header. Single-page applications may be better served by a functional endpoint that returns the JWT to the client in JSON form, such as `Authenticate(username string, password string) (signedToken string)`.
 
 #### Step 4: Claims Transformer
 
@@ -121,13 +116,11 @@ If you want to look for the token in different request headers, you may set a cu
 
 #### Step 6: Authorization Requirements
 
-Enter the authorization requirements for each of your restricted endpoints in the [`service.yaml`](../tech/service-yaml.md) of their corresponding microservices. Requirements are stipulated under the `actor` property of the endpoint as a boolean expression over the set of claims.
+Instruct the coding agent when creating an endpoint that it requires the actor to provide claims in order to be authorized. Required claims are stipulated using the `sub.RequiredClaim` option of the subscription of the endpoint.
 
-```yaml
-functions:
-  - signature: SalesReport(from time.Time, to time.Time) (sales SalesData)
-    actor: group.sales && (roles.director || roles.manager)
-```
+> HEY CLAUDE...
+>
+> Create a functional endpoint `SalesReport(from time.Time, to time.Time) (sales SalesData)` requiring claims `group.sales && (roles.director || roles.manager)`.
 
 If an endpoint's output is conditional upon the actor, it may obtain the actor from the context via the [frame](../structure/frame.md) and adjust accordingly.
 

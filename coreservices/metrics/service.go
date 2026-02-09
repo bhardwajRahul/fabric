@@ -29,7 +29,6 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
-	"github.com/microbus-io/fabric/coreservices/metrics/intermediate"
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
@@ -47,7 +46,7 @@ Service implements the metrics.core microservice.
 The Metrics service is a core microservice that aggregates metrics from other microservices and makes them available for collection.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -63,7 +62,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Collect returns the latest aggregated metrics.
 */
-func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Collect
 	if svc.SecretKey() == "" && svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
 		return errors.New("secret key required")
 	}

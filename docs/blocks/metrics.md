@@ -12,58 +12,41 @@ Observability is crucial when operating a SaaS system because it's not possible 
 
 By default, all microservices produce a standard set of metrics:
 
-* The microservice's uptime
-* Histogram of the execution time of callbacks such as `OnStartup`, `OnShutdown`, tickers, etc.
-* Histogram of the processing time of incoming requests
-* Histogram of the size of the response to incoming requests
-* Count of outgoing requests, along with the error and status code
-* Histogram of time to receive an acknowledgement from a downstream microservice
-* Count of log messages recorded
-* Count of distributed cache operations, including hit and miss stats
-* Memory usage of the distributed cache
+- The microservice's uptime
+- Histogram of the execution time of callbacks such as `OnStartup`, `OnShutdown`, tickers, etc.
+- Histogram of the processing time of incoming requests
+- Histogram of the size of the response to incoming requests
+- Count of outgoing requests, along with the error and status code
+- Histogram of time to receive an acknowledgement from a downstream microservice
+- Count of log messages recorded
+- Count of distributed cache operations, including hit and miss stats
+- Memory usage of the distributed cache
 
 ### Custom Metrics
 
-Custom metrics may be defined using the `Connector`'s `DescribeCounter`, `DescribeGauge` or `DescribeHistogram`. Metrics are incremented or observed using `AddCounter`, `RecordGauge` or `RecordHistogram`, depending on their type.
+Custom metrics are defined using the `Connector`'s `DescribeCounter`, `DescribeGauge` or `DescribeHistogram`. Metrics are incremented or observed using `IncrementCounter`, `RecordGauge` or `RecordHistogram`, depending on their type.
 
-[Code generation](../blocks/codegen.md) can be used to assist in the definition of metrics.
+The [coding agent](../blocks/coding-agents.md) can assist in the definition of metrics.
 
-```yaml
-# Metrics
-#
-# signature - Go-style method signature (numeric measure and labels for arguments, no return value)
-#   MyMetric(measure float64) - int, float or duration measure argument
-#   MyMetric(measure int, label1 string, label2 int, label3 bool) - labels of any type
-#   MyMetricSeconds(dur time.Duration) - time unit name as suffix
-#   MyMetricMegaBytes(mb float64) - byte size unit name as suffix
-# description - Documentation
-# kind - The kind of the metric, "counter" (default), "gauge" or "histogram"
-# buckets - Bucket boundaries for histograms [x,y,z,...]
-# alias - The name of the OpenTelemetry metric (defaults to module_package_function_name)
-# callback - Whether or not to observe the metric just in time (defaults to false)
-metrics:
-  - signature: Likes(num int, postId string)
-    description: Likes counts the number of likes for a given post.
-    kind: counter
+```
+Hey Claude, create a metric that counts the number of likes per post ID.
 ```
 
-### Usage in Code
-
-`AddCounterLikes` is created by the code generator based on the `service.yaml` example above.
+`IncrementCounterLikes` (or something similar) will be created by the coding agent in `intermediate.go`.
 
 ```go
-func (svc *Intermediate) AddCounterLikes(ctx context.Context, num int, postId string) error {
+func (svc *Intermediate) IncrementCounterLikes(ctx context.Context, num int, postId string) error {
 	// ...
 }
 ```
 
-It can then be used to count the number of likes in the relevant endpoint.
+It can then be used to count the number of likes from anywhere in the microservice's code.
 
 ```go
 func (svc *Service) Like(ctx context.Context, postId string) error {
 	// ...
 
-	err := svc.AddCounterLikes(ctx, 1, postId)
+	err := svc.IncrementCounterLikes(ctx, 1, postId)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -25,15 +25,18 @@ import (
 	"strings"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
-	"github.com/microbus-io/fabric/examples/hello/intermediate"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
+
+	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
+	"github.com/microbus-io/fabric/examples/hello/helloapi"
 )
 
 var (
-	_ errors.TracedError
+	_ context.Context
 	_ http.Request
+	_ errors.TracedError
+	_ helloapi.Client
 )
 
 /*
@@ -42,7 +45,7 @@ Service implements the hello.example microservice.
 The Hello microservice demonstrates the various capabilities of a microservice.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -58,7 +61,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Hello prints a greeting.
 */
-func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error {
+func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error { // MARKER: Hello
 	// If a name is provided, add a personal touch
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -83,7 +86,7 @@ func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error {
 /*
 Echo back the incoming request in wire format.
 */
-func (svc *Service) Echo(w http.ResponseWriter, r *http.Request) error {
+func (svc *Service) Echo(w http.ResponseWriter, r *http.Request) error { // MARKER: Echo
 	// Prevent the http package from serializing Go-http-client/1.1 as the user-agent
 	if len(r.Header.Values("User-Agent")) == 0 {
 		r.Header.Set("User-Agent", "")
@@ -96,7 +99,7 @@ func (svc *Service) Echo(w http.ResponseWriter, r *http.Request) error {
 /*
 Ping all microservices and list them.
 */
-func (svc *Service) Ping(w http.ResponseWriter, r *http.Request) error {
+func (svc *Service) Ping(w http.ResponseWriter, r *http.Request) error { // MARKER: Ping
 	var buf bytes.Buffer
 	ch := svc.Publish(
 		r.Context(),
@@ -125,7 +128,7 @@ Calculator renders a UI for a calculator.
 The calculation operation is delegated to another microservice in order to demonstrate
 a call from one microservice to another.
 */
-func (svc *Service) Calculator(w http.ResponseWriter, r *http.Request) error {
+func (svc *Service) Calculator(w http.ResponseWriter, r *http.Request) error { // MARKER: Calculator
 	var buf bytes.Buffer
 	buf.WriteString(`<html><body><h1>Arithmetic Calculator</h1>`)
 	buf.WriteString(`<form method=GET action="calculator"><table>`)
@@ -196,7 +199,7 @@ func (svc *Service) Calculator(w http.ResponseWriter, r *http.Request) error {
 /*
 TickTock is executed every 10 seconds.
 */
-func (svc *Service) TickTock(ctx context.Context) error {
+func (svc *Service) TickTock(ctx context.Context) error { // MARKER: TickTock
 	svc.LogInfo(ctx, "Ticktock")
 	return nil
 }
@@ -204,14 +207,14 @@ func (svc *Service) TickTock(ctx context.Context) error {
 /*
 BusPNG serves an image from the embedded resources.
 */
-func (svc *Service) BusPNG(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) BusPNG(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: BusPNG
 	return svc.ServeResFile("bus.png", w, r)
 }
 
 /*
 Localization prints hello in the language best matching the request's Accept-Language header.
 */
-func (svc *Service) Localization(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Localization(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Localization
 	ctx := r.Context()
 	hello, _ := svc.LoadResString(ctx, "Hello")
 	w.Write([]byte(hello))
@@ -221,7 +224,7 @@ func (svc *Service) Localization(w http.ResponseWriter, r *http.Request) (err er
 /*
 Root is the top-most root page.
 */
-func (svc *Service) Root(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) Root(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Root
 	var buf bytes.Buffer
 	buf.WriteString(`<html><body><h1>Microbus</h1></body></html>`)
 	w.Write(buf.Bytes())

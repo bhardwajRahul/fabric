@@ -1,13 +1,12 @@
 # Architecture
 
-`Microbus` solutions can be 6 layers:
+`Microbus` solutions can be seen as comprising of 5 layers:
 
-* At the bottom of the stack is a curated selection of OSS technologies that are utilized and abstracted away by the next layer, the connector
-* The [connector](../blocks/structure/connector.md) construct is the base class from which all microservices are derived. It provides a consistent API to most of the building blocks that are required for a microservice to operate and mesh with other microservices. Quite often they rely on OSS under the hood
-* A [code generator](../blocks/codegen.md) brings type-safe RAD that is specific to the semantics of each individual microservice
-* [Coding agents](../blocks/coding-agents.md) such as Claude are trained to work hand in hand with the code generator. Since the agents need to focus only on the business logic, they require a smaller context window and produce higher quality code in quicker iterations
-* The core microservices and the solution microservices are built using the code generator
-* Microservices are bundled together into [applications](../structure/application.md) according to the desired [topology](../blocks/topology.md)
+- At the bottom of the stack is a curated selection of OSS technologies that are utilized and abstracted away by the next layer, the `Connector`
+- The [`Connector`](../structure/connector.md) construct is the base class from which all microservices are derived. It provides a consistent API to most of the building blocks that are required for a microservice to operate and mesh with other microservices. Quite often they rely on OSS under the hood
+- [Coding agents](../blocks/coding-agents.md) such as Claude generate the code that is specific to the semantics of each individual microservice
+- The core microservices and the solution microservices are built using the coding agent
+- Microservices are bundled together into [applications](../structure/application.md) according to the desired [topology](../blocks/topology.md)
 
 <p></p>
 <img src="./layers-1.drawio.svg">
@@ -17,57 +16,57 @@
 
 Microservices in `Microbus` are not by themselves runnable, rather they are bundled in applications that manage their lifecycle.
 
-Typically, all microservices are bundled into a single application for [local development](../tech/local-dev.md).
+**Adaptable topology** - Applications can contain any number of microservices, making them a flexible vehicle in the construction of the production [topology](../blocks/topology.md). A small solution might run all its microservices in a single application, while a larger one might split them across multiple applications deployed to different machines or availability zones. The topology can evolve over time without changes to the microservices themselves.
 
-Similarly, [integration tests](../blocks/integration-testing.md) are executed against an application that contains the microservice under test and its downstream dependencies.
+**Local development** - For [local development](../tech/local-dev.md), all microservices are typically bundled into a single application that runs in the developer's IDE. This makes it possible to set breakpoints, step through code and inspect state across microservice boundaries, all within a single process.
 
-Applications can contain any number of microservices, making them a flexible vehicle in the construction of the production [topology](../blocks/topology.md).
+**Integration tests** - Similarly, [integration tests](../blocks/integration-testing.md) are executed against an application that contains the microservice under test and its downstream dependencies.
 
 ## Solution Microservices
 
-These are the microservices that implement the business logic of the your solution.
+These are the microservices that implement the business logic of your solution. They are built by coding agents in the same way as core microservices and benefit from all the same infrastructure. What distinguishes them is that their logic is specific to your domain rather than being general-purpose framework functionality.
 
 ## Core Microservices
 
 `Microbus` comes bundled with a few [core microservices](../structure/coreservices.md) that implement common functionality required by most if not all `Microbus` applications.
 
-The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP-based clients and microservices running on `Microbus`.
+**HTTP ingress** - The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP-based clients and microservices running on `Microbus`.
 
-The [HTTP egress proxy](../structure/coreservices-httpegress.md) relays HTTP requests to non-`Microbus` URLs.
+**HTTP egress** - The [HTTP egress proxy](../structure/coreservices-httpegress.md) relays HTTP requests to non-`Microbus` URLs.
 
-The [SMTP ingress](../structure/coreservices-smtpingress.md) microservice captures incoming emails and transforms them to actionable events.
+**SMTP ingress** - The [SMTP ingress](../structure/coreservices-smtpingress.md) microservice captures incoming emails and transforms them to actionable events.
 
-The [configurator](../structure/coreservices-configurator.md) is responsible for delivering configuration values to microservices that define configuration properties. It is a must-have in practically all applications.
+**Configurator** - The [configurator](../structure/coreservices-configurator.md) is responsible for delivering configuration values to microservices that define configuration properties. It is a must-have in practically all applications.
 
-The [metrics](../structure/coreservices-metrics.md) microservice aggregates metrics from all microservices in response to a request from Prometheus.
+**Metrics** - The [metrics](../structure/coreservices-metrics.md) microservice aggregates metrics from all microservices in response to a request from Prometheus.
 
-The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI documents of each and every microservices.
+**OpenAPI portal** - The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI documents of each and every microservices.
 
-The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs. Tokens enable the authentication of actors and the authorization of their requests based on a set of claims.
+**Token issuer** - The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs. Tokens enable the authentication of actors and the authorization of their requests based on a set of claims.
 
 ## Coding Agents
 
-[Coding agents](../blocks/coding-agents.md) develop on top of the generated code. When compared to doing things from scratch, they require a smaller context window thus producing higher quality code quicker.
+[Coding agents](../blocks/coding-agents.md) are fully empowered in `Microbus` to produce code rapidly (RAD). Coding agents generate boilerplate code, business logic, tests and documentation.
 
-[AGENTS.md](../blocks/agents-md.md) files train the coding agents how to work correctly on a `Microbus` solution in general, and on each individual microservice.
+**Agent rules** - The [rules file](../blocks/agent-rules.md) `.claude/rules/microbus.md` teaches the agent the conventions and patterns of the `Microbus` framework. It covers project structure, naming conventions, error handling, logging, and the idiomatic ways of using the `Connector` API. This file is updated with each release of `Microbus` and should not be edited by hand.
 
-## Code Generation
+**Agent skills** - The `.claude/skills/` directory contains a collection of [predefined workflows](../blocks/agent-skills.md) that guide the agent step by step when adding, removing or modifying features of a microservice. Skills make the agent's behavior predictable and its output consistent across microservices and developers.
 
-[Code generation](../blocks/codegen.md) facilitates rapid application development (RAD) by generating boilerplate and skeleton code from declarations in a [`service.yaml`](../tech/service-yaml.md) file. The developer needs only fill in the gaps and implement the business logic.
+**Global and local `AGENTS.md`** - A global `AGENTS.md` at the project root provides context applicable to the whole project, while a local [`AGENTS.md`](../blocks/agents-md.md) in each microservice's directory captures design choices, tradeoffs, and rationale specific to that microservice. The local file is maintained by the agent as it works, focusing on the *why* behind decisions so that future agents can safely evolve the code.
 
-[Skeletons](../blocks/skeleton-code.md) are created for each of the microservice's endpoints with `TODO` markers for the developer to fill in the gaps. For functional endpoints (RPCs), a wrapper takes care of unmarshaling the request's JSON payload into type-safe arguments.
+**Incremental development** - Agents build a microservice one [feature](../blocks/features.md) at a time — an endpoint, a config property, a ticker, a metric. Each prompt results in a focused, incremental change: new code is added without impacting existing code, tests are written or updated, and the manifest is kept in sync. This keeps changes small, reviewable, and easy for the agent to get right.
 
-[Client stubs](../blocks/client-stubs.md) are created for the microservice's public endpoints. These stubs are used by upstream clients to call the microservice in a type-safe fashion. For functional endpoints (RPCs), the stubs take care of marshaling the request arguments into a JSON payload.
+**Client stubs** - [Client stubs](../blocks/client-stubs.md) are created for the microservice's public endpoints. These stubs are used by upstream clients to call the microservice in a type-safe fashion. For functional endpoints (RPCs), the stubs take care of marshaling the request arguments into a JSON payload.
 
-[Events](../blocks/events.md) are a type-safe abstraction of publish/subscribe.
+**Integration tests implementation** - The [integration test harness](../blocks/integration-testing.md) spins up the microservice under test along with the actual downstream microservices it depends on into a single testable application, allowing full-blown integration tests to run inside `go test`.
 
-The [integration test harness](../blocks/integration-testing.md) spins up the microservice under test along with the actual downstream microservices it depends on into a single testable application, allowing full-blown integration tests to run inside `go test`.
+**OpenAPI** - An [OpenAPI document](../blocks/openapi.md) is automatically created with descriptors for each of the microservice's endpoints.
 
-An [OpenAPI document](../blocks/openapi.md) is automatically created with descriptors for each of the microservice's endpoints.
+**Automatic documentation** - As a coding agent works on a microservice, it automatically maintains [documentation](../blocks/auto-doc.md) alongside the code. This includes the `manifest.yaml` that catalogs the microservice's [features](../blocks/features.md), the `PROMPTS.md` audit trail, and the `AGENTS.md` design record. Documentation stays in sync with the implementation because both are produced by the same agent in the same pass.
 
-A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of using code generation. A familiar code structure helps engineers get oriented quickly also when they are not the original authors of the code.
+**Uniform code structure** - A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of the way coding agents work in `Microbus`. A familiar code structure helps agents get oriented quickly.
 
-The [bootstrapping of new projects](../blocks/project-bootstrapping.md) is automated.
+**New project bootstrapping** - The [bootstrapping of new projects](../blocks/project-bootstrapping.md) is automated.
 
 ## Connector Construct
 
@@ -77,58 +76,58 @@ The [`Connector`](../structure/connector.md) is the base class of all microservi
 
 `Microbus` uses a messaging bus for the transport layer of service-to-service communications.
 
-[Unicast request/response](../blocks/unicast.md) is an emulation of the familiar synchronous 1:1 request/response pattern of HTTP over the asynchronous messaging pattern of the underlying transport bus.
+**Unicast 1:1** - [Unicast request/response](../blocks/unicast.md) is an emulation of the familiar synchronous 1:1 request/response pattern of HTTP over the asynchronous messaging pattern of the underlying transport bus.
 
-[Multicast publish/subscribe](../blocks/multicast.md) enhances the publish/subscribe pattern of the bus by introducing a familiar HTTP interface and a bi-directional 1:N request/response pattern.
+**Multicast 1:N** - [Multicast publish/subscribe](../blocks/multicast.md) enhances the publish/subscribe pattern of the bus by introducing a familiar HTTP interface and a bi-directional 1:N request/response pattern.
 
-Microservice are connected to the messaging bus with a [persistent multiplexed connection](../blocks/multiplexed.md) that enables holding multiple concurrent conversations on a single connection. Multiplexing results in lower resource requirements and a simplified network topology that is less prone to error.
+**Multiplexed connections** - Microservices are connected to the messaging bus with a [persistent multiplexed connection](../blocks/multiplexed.md) that enables holding multiple concurrent conversations on a single connection. Multiplexing results in lower resource requirements and a simplified network topology that is less prone to error.
 
-[Time budget](../blocks/time-budget.md) is a depleting timeout that is passed downstream along the call stack. It is the proper way to handle client-to-server timeouts.
+**Time budget** - [Time budget](../blocks/time-budget.md) is a depleting timeout that is passed downstream along the call stack. It is the proper way to handle client-to-server timeouts.
 
-[Ack or fail fast](../blocks/ack-or-fail.md) is a pattern by which the server responds with an ack to the client before processing the request. The client knows to wait for the response only if an ack is received, and fail quickly if it's not.
+**Ack or fail fast** - [Ack or fail fast](../blocks/ack-or-fail.md) is a pattern by which the server responds with an ack to the client before processing the request. The client knows to wait for the response only if an ack is received, and fail quickly if it's not.
 
-A microservices transparently makes itself [discoverable](../blocks/discovery.md) by subscribing to the messaging bus. Once subscribed to a subject it immediately starts receiving message from the corresponding queue. An external service discovery system is not required.
+**Dynamic discovery** - A microservice transparently makes itself [discoverable](../blocks/discovery.md) by subscribing to the messaging bus. Once subscribed to a subject it immediately starts receiving messages from the corresponding queue. An external service discovery system is not required.
 
-[Load balancing](../blocks/lb.md) is handled transparently by the messaging bus. Multiple microservices that subscribe to the same queue are delivered messages randomly. An external load balancer is not required.
+**Load balancing** - [Load balancing](../blocks/lb.md) is handled transparently by the messaging bus. Multiple microservices that subscribe to the same queue are delivered messages randomly. An external load balancer is not required.
 
-With [locality-aware routing](../blocks/locality-aware-routing.md) unicast requests are routed to the replica of the downstream microservice whose locality is nearest to the upstream's locality.
+**Locality-aware routing** - With [locality-aware routing](../blocks/locality-aware-routing.md) unicast requests are routed to the replica of the downstream microservice whose locality is nearest to the upstream's locality.
 
-A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is connected to the messaging bus and can send and receive messages. The bus validates the connection using regular pings. Explicit liveness checks are unnecessary.
+**Connectivity liveness** - A microservice is [alive](../blocks/connectivity-liveness-test.md) when it is connected to the messaging bus and can send and receive messages. The bus validates the connection using regular pings. Explicit liveness checks are unnecessary.
 
 ### Observability
 
-[Structured logs](../blocks/logging.md) are sent to `stderr`.
+**Logging** - [Structured logs](../blocks/logging.md) are emitted in JSON format to `stderr`, using slog-style key/value attributes for easy parsing and filtering.
 
-[Distributed tracing](../blocks/distrib-tracing.md) enables the visualization of the flow of function calls across microservices and processes. Tracing spans are automatically captured for each endpoint call.
+**Distributed tracing** - [Distributed tracing](../blocks/distrib-tracing.md) enables the visualization of the flow of function calls across microservices and processes. Tracing spans are automatically captured for each endpoint call.
 
-[Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are collected and visualized by Grafana.
+**Metrics** - [Metrics](../blocks/metrics.md) such as latency, duration, byte size and count are collected automatically for all microservice endpoint calls. Custom metrics may be defined by the developer. Metrics are collected and visualized by Grafana.
 
-[Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered, traced and propagated up the stack to the upstream microservice.
+**Error capture** - [Errors](../blocks/error-capture.md) are unavoidable. When they occur, they are captured, augmented with a full stack trace, logged, metered, traced and propagated up the stack to the upstream microservice.
 
 ### General
 
-[Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In `Microbus`, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
+**Configuration** - [Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In `Microbus`, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
 
-Microservices may stipulate that incoming requests be authenticated and authorized. Requests that do not satisfy the [authorization](../blocks/authorization.md) requirements are denied.
+**Authorization** - Microservices may stipulate that incoming requests be authenticated and authorized. Requirements are expressed as boolean expressions over the JWT claims of the actor associated with the request. Requests that do not satisfy the [authorization](../blocks/authorization.md) requirements are denied.
 
-[Tickers](../blocks/tickers.md) are jobs that run on a recurring basis.
+**Tickers** - [Tickers](../blocks/tickers.md) are jobs that run on a recurring basis, useful for polling external systems, refreshing caches, running cleanup tasks and similar scheduled work.
 
-Images, scripts, templates and any other [static resources](../blocks/embedded-res.md) are made available to each microservice by association of a file system (`FS`).
+**Embedded resources** - Images, scripts, templates and any other [static resources](../blocks/embedded-res.md) are made available to each microservice by association of a file system (`FS`).
 
-A specially-named resource `text.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
+**Internationalization** - A specially-named resource `text.yaml` enables [internationalization (i18n)](../blocks/i18n.md) of user-facing display strings.
 
-The [distributed cache](../blocks/distrib-cache.md) is an in-memory cache that is shared among the replica peers of microservice.
+**Distributed cache** - The [distributed cache](../blocks/distrib-cache.md) is an in-memory cache that is shared among the replica peers of a microservice. It is useful for reducing redundant calls to external systems or databases when multiple replicas serve the same data.
 
-Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pending requests, goroutines and jobs are drained before the microservice quits.
+**Graceful shutdown** - Microservices are [shutdown gracefully](../blocks/graceful-shutdown.md). All pending requests, goroutines and jobs are drained before the microservice quits.
 
 ## OSS
 
-[NATS](https://www.nats.io) sits at the core of `Microbus` and makes much of its magic possible. NATS is a full-mesh, highly-available, lighting-fast, real-time, at-most-once, messaging bus that supports dynamic subscriptions. It enables request/response, publish/subscribe, load-balancing and dynamic discovery.
+**NATS** - [NATS](https://www.nats.io) sits at the core of `Microbus` and makes much of its magic possible. NATS is a full-mesh, highly-available, lighting-fast, real-time, at-most-once, messaging bus that supports dynamic subscriptions. It enables request/response, publish/subscribe, load-balancing and dynamic discovery.
 
-[OpenTelemetry](https://opentelemetry.io) is a standard for the collection of metrics, distributed tracing and logs.
+**OpenTelemetry** - [OpenTelemetry](https://opentelemetry.io) is a standard for the collection of metrics, distributed tracing and logs.
 
-[Grafana](https://grafana.com)'s LGTM stack is a bundle of applications (Loki, Grafana, Tempo, Mimir) that collect and visualize OpenTelemetry.
+**Grafana** - [Grafana](https://grafana.com)'s LGTM stack is a bundle of applications (Loki, Grafana, Tempo, Mimir) that collect and visualize OpenTelemetry.
 
-[OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
+**OpenAPI** - [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
 
-[JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
+**JWT** - [JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.

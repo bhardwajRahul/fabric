@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 	"github.com/nats-io/nats.go"
 )
@@ -43,7 +43,7 @@ func BenchmarkTransport_NATSDirectPublishing(b *testing.B) {
 			desc = fmt.Sprintf("%dKB", i>>10)
 		}
 		b.Run(desc, func(b *testing.B) {
-			body := []byte(rand.AlphaNum64(i))
+			body := []byte(utils.RandomIdentifier(i))
 			b.ResetTimer()
 			for b.Loop() {
 				cn.Publish("somewhere", body)

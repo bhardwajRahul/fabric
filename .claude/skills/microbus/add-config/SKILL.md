@@ -1,7 +1,11 @@
 ---
 name: Adding a Configuration Property
-description: Creates or modify a configuration property of a microservice. Use when explicitly asked by the user to create or modify a configuration property of a microservice, or when it makes sense to externalize a certain setting of the microservice.  
+description: Creates or modify a configuration property of a microservice. Use when explicitly asked by the user to create or modify a configuration property of a microservice, or when it makes sense to externalize a certain setting of the microservice.
 ---
+
+**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+
+**CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
 ## Workflow
 
@@ -10,39 +14,41 @@ Copy this checklist and track your progress:
 ```
 Creating or modifying a configuration property:
 - [ ] Step 1: Read local AGENTS.md file
-- [ ] Step 2: Define in service.yaml
-- [ ] Step 3: Generate boilerplate code
-- [ ] Step 4: Accessing the configuration property
-- [ ] Step 5: Move implementation and test if renamed
-- [ ] Step 6: Handle the callback
-- [ ] Step 7: Test the callback
-- [ ] Step 8: Document the microservice
-- [ ] Step 9: Versioning
+- [ ] Step 2: Determine type
+- [ ] Step 3: Determine properties
+- [ ] Step 4: Extend the ToDo interface
+- [ ] Step 5: Define the config
+- [ ] Step 6: Implement the getter and setter
+- [ ] Step 7: Wire up the config change dispatcher
+- [ ] Step 8: Implement the callback
+- [ ] Step 9: Extend the mock
+- [ ] Step 10: Test the callback
+- [ ] Step 11: Update manifest
+- [ ] Step 12: Document the microservice
+- [ ] Step 13: Versioning
 ```
 
-#### Step 1: Read local `AGENTS.md` file
+#### Step 1: Read Local `AGENTS.md` File
 
-Check for and read a local `AGENTS.md` file in that microservice's directory. The local `AGENTS.md` file contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
-#### Step 2: Define in `service.yaml`
+#### Step 2: Determine Type
 
-Define the configuration property in the `configs` array in the `service.yaml` of the microservice.
-- The `signature` of the configuration property must follow Go function syntax exactly. Do not include any input argument and return a single output argument of type `string`, `int`, `bool`, `time.Duration` or `float`.
-- The `description` should explain the purpose of the configuration property. It should start with the name of the configuration property.
-- A `default` value may be set for the configuration property.
-- An optional `validation` rule can be set to validate any values set for the configuration property.
-- `secret` indicates if the configuration property is a secret.
-- A `callback` can be enabled to catch changes to the value of the configuration property, for example, in order to reopen a connection to an external resource.
+Determine the return type of the configuration property. It must be one of:
+- `string`
+- `int`
+- `bool`
+- `float64`
+- `time.Duration`
 
-```yaml
-configs:
-  - signature: MyNewConfig() (value int)
-    description: MyNewConfig is X, Y and Z.
-    default: 1
-    validation: int (1,100]
-    secret: false
-    callback: false
-```
+#### Step 3: Determine Properties
+
+Determine the properties of the configuration property:
+- **Description**: explains the purpose of the property. It should start with the name of the property
+- **Default value**: a default value for the property (optional)
+- **Validation**: an optional validation rule (see below)
+- **Secret**: whether the value is a secret that should not be logged
+- **Callback**: whether a callback should be triggered when the value changes, for example to reopen a connection to an external resource
 
 Validation rules can be any of the following:
 - `str` followed by a regexp: `str ^[a-zA-Z0-9]+$`
@@ -55,71 +61,274 @@ Validation rules can be any of the following:
 - `email`
 - `json`
 
-#### Step 3: Generate boilerplate code
+#### Step 4: Extend the `ToDo` Interface
 
-If you've made changes to `service.yaml`, run `go generate` to generate the boilerplate code.
+Skip this step if the config does not have a callback.
 
-#### Step 4: Accessing the configuration property
-
-The getter function of the configuration property is exposed via the `svc` receiver.
+Extend the `ToDo` interface in `intermediate.go`.
 
 ```go
-func (svc *Service) processWithRetries(ctx context.Context) error {
-	maxRetries := svc.MaxRetries() // Generated getter from config
+type ToDo interface {
+	// ...
+	OnChangedMyConfig(ctx context.Context) (err error) // MARKER: MyConfig
+}
+```
 
-	for i := 0; i < maxRetries; i++ {
-		err := svc.attemptOperation(ctx)
-		if err == nil {
-			return nil
-		}
-		svc.Log().Warn("Operation failed, retrying", "attempt", i+1, "error", err)
+#### Step 5: Define the Config
+
+Define the configuration property in `NewIntermediate` in `intermediate.go`.
+
+- Set the `HINT` comment as the insertion point
+- Include `cfg.Description`, `cfg.DefaultValue`, `cfg.Validation`, and `cfg.Secret` as appropriate
+- Omit options that are empty or false
+- The config name is PascalCase
+- In `cfg.Description`, replace `MyConfig is X` with the description of the configuration property
+
+```go
+func NewIntermediate() *Intermediate {
+	// ...
+	svc.DefineConfig( // MARKER: MyConfig
+		"MyConfig",
+		cfg.Description(`MyConfig is X.`),
+		cfg.DefaultValue("1"),
+		cfg.Validation("int (1,100]"),
+		cfg.Secret(),
+	)
+}
+```
+
+#### Step 6: Implement the Getter and Setter
+
+Create the getter and setter methods in `intermediate.go`.
+
+- Set an appropriate comment describing the config property
+- The getter converts the string value to the appropriate type
+- The setter converts the value to a string using type-specific code
+
+If the config type is `string`:
+
+```go
+/*
+MyConfig is X.
+*/
+func (svc *Intermediate) MyConfig() (value string) { // MARKER: MyConfig
+	return svc.Config("MyConfig")
+}
+
+/*
+SetMyConfig sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMyConfig(value string) (err error) { // MARKER: MyConfig
+	return svc.SetConfig("MyConfig", value)
+}
+```
+
+If the config type is `int`:
+
+```go
+/*
+MyConfig is X.
+*/
+func (svc *Intermediate) MyConfig() (value int) { // MARKER: MyConfig
+	_val := svc.Config("MyConfig")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetMyConfig sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMyConfig(value int) (err error) { // MARKER: MyConfig
+	return svc.SetConfig("MyConfig", strconv.Itoa(value))
+}
+```
+
+If the config type is `bool`:
+
+```go
+/*
+MyConfig is X.
+*/
+func (svc *Intermediate) MyConfig() (value bool) { // MARKER: MyConfig
+	_val := svc.Config("MyConfig")
+	_b, _ := strconv.ParseBool(_val)
+	return _b
+}
+
+/*
+SetMyConfig sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMyConfig(value bool) (err error) { // MARKER: MyConfig
+	return svc.SetConfig("MyConfig", strconv.FormatBool(value))
+}
+```
+
+If the config type is `float64`:
+
+```go
+/*
+MyConfig is X.
+*/
+func (svc *Intermediate) MyConfig() (value float64) { // MARKER: MyConfig
+	_val := svc.Config("MyConfig")
+	_f, _ := strconv.ParseFloat(_val, 64)
+	return _f
+}
+
+/*
+SetMyConfig sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMyConfig(value float64) (err error) { // MARKER: MyConfig
+	return svc.SetConfig("MyConfig", strconv.FormatFloat(value, 'f', -1, 64))
+}
+```
+
+If the config type is `time.Duration`:
+
+```go
+/*
+MyConfig is X.
+*/
+func (svc *Intermediate) MyConfig() (value time.Duration) { // MARKER: MyConfig
+	_val := svc.Config("MyConfig")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+/*
+SetMyConfig sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMyConfig(value time.Duration) (err error) { // MARKER: MyConfig
+	return svc.SetConfig("MyConfig", value.String())
+}
+```
+
+#### Step 7: Wire Up the Config Change Dispatcher
+
+Skip this step if the config does not have a callback.
+
+Add a dispatch entry in `doOnConfigChanged` in `intermediate.go`.
+
+```go
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// ...
+	if changed("MyConfig") { // MARKER: MyConfig
+		err = svc.OnChangedMyConfig(ctx)
 	}
-
-	return errors.New("max retries exceeded")
+	return err
 }
 ```
 
-#### Step 5: Move implementation and test if renamed
+#### Step 8: Implement the Callback
 
-If a `callback` is enabled, and you made a change to the name of the configuration property in the `signature` field, you need to move over the implementation of the callback in `service.go` from under the old name to the new name. Similarly, you'll need to move over the implementation of the tests in `service_test.go`. 
+Skip this step if the config does not have a callback.
 
-#### Step 6: Handle the callback
-
-If you enabled a `callback`, look for the `OnChangedMyConfig` function in `service.go` and implement the handling of the new value of the property.
-
-For example:
+Define a callback in `service.go` that handles the change.
 
 ```go
-func (svc *Service) OnChangedDatabaseConnectionString(ctx context.Context) error {
-    svc.db.Close()
-    svc.db, err = sql.Open("mysql", svc.DatabaseConnectionString())
-    if err != nil {
-        return errors.Trace(err)
-    }
-    return nil
+func (svc *Service) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER: MyConfig
+	// Implement handling of the new value here
+	return nil
 }
 ```
 
-#### Step 7: Test the callback
+#### Step 9: Extend the Mock
 
-Skip this step if integration tests were skipped for this microservice, or if instructed to be "quick".
+Skip this step if the config does not have a callback.
 
-If you enabled a `callback`, look for the integration test created in `service_test.go` and implement or adjust it appropriately.
-- Follow the pattern recommendation in the code
-- Add downstream microservices or their mocks to the testing app
+Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
 
 ```go
-func TestMyservice_OnChangedMyNewConfig(t *testing.T) {
-	// Implement testing here
+type Mock struct {
+	// ...
+	mockOnChangedMyConfig func(ctx context.Context) (err error) // MARKER: MyConfig
 }
 ```
 
-#### Step 8: Document the microservice
+Add the stub to the `Mock`.
 
-Skip this step if instructed to be "quick".
+```go
+// MockOnChangedMyConfig sets up a mock handler for OnChangedMyConfig.
+func (svc *Mock) MockOnChangedMyConfig(handler func(ctx context.Context) (err error)) *Mock { // MARKER: MyConfig
+	svc.mockOnChangedMyConfig = handler
+	return svc
+}
+
+// OnChangedMyConfig executes the mock handler.
+func (svc *Mock) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER: MyConfig
+	if svc.mockOnChangedMyConfig == nil {
+		return nil
+	}
+	err = svc.mockOnChangedMyConfig(ctx)
+	return errors.Trace(err)
+}
+```
+
+Add a test case in `TestMyService_Mock`.
+
+```go
+t.Run("on_changed_my_config", func(t *testing.T) { // MARKER: MyConfig
+	assert := testarossa.For(t)
+
+	err := mock.OnChangedMyConfig(ctx)
+	assert.Contains(err.Error(), "not implemented")                                                                             
+	mock.MockOnChangedMyConfig(func(ctx context.Context) (err error) {
+		return nil
+	})
+	err = mock.OnChangedMyConfig(ctx)
+	assert.NoError(err)
+})
+```
+
+#### Step 10: Test the Callback
+
+Skip this step if the config does not have a callback.
+
+Append the following code block to the end of `service_test.go`.
+
+- Do not remove comments with `HINT`s. They are there to guide you in the future.
+- Insert test cases at the bottom of the test function using the recommended pattern.
+
+```go
+func TestMyService_OnChangedMyConfig(t *testing.T) { // MARKER: MyConfig
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Use the following pattern for each test case
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetMyConfig(newValue)
+			assert.NoError(err)
+		})
+	*/
+}
+```
+
+#### Step 11: Update Manifest
+
+Update the `configs` and `downstream` sections of `manifest.yaml`.
+
+#### Step 12: Document the Microservice
+
+Skip this step if instructed to be "quick" or to skip documentation.
 
 Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
 
-#### Step 9: Versioning
+#### Step 13: Versioning
 
-Run `go generate` to version the code.
+If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.

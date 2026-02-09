@@ -29,7 +29,6 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/coreservices/httpegress/intermediate"
 	"github.com/microbus-io/fabric/trc"
 )
 
@@ -39,7 +38,9 @@ Service implements the http.egress.core microservice.
 The HTTP egress microservice relays HTTP requests to the internet.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
+
+	// HINT: Add member variables here
 }
 
 // OnStartup is called when the microservice is started up.
@@ -56,7 +57,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
 The proxied request is expected to be posted in the body of the request in binary form (RFC7231).
 */
-func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MakeRequest
 	ctx := r.Context()
 	req, err := http.ReadRequest(bufio.NewReaderSize(r.Body, 64))
 	if err != nil {

@@ -89,9 +89,9 @@ func TestHttpx_FillPathArguments(t *testing.T) {
 		"https://example.com/article/{user}/comment/{comment}?user=123&comment=456", "https://example.com/article/123/comment/456",
 		"https://example.com/article/{user}/comment/{comment}?user=123&comment=456&x=789", "https://example.com/article/123/comment/456?x=789",
 		"https://example.com/article/{}/comment/{}?path1=123&path2=456&x=789", "https://example.com/article/123/comment/456?x=789",
-		"https://example.com/fixed/{named}/{}/{suffix+}?named=1&path2=2&suffix=3/4&q=5", "https://example.com/fixed/1/2/3/4?q=5",
-		"https://example.com/fixed/{named}/{}/{suffix+}", "https://example.com/fixed///",
-		"https://example.com/fixed/{named}/{suffix+}?named=" + url.QueryEscape("[a&b/c]") + "&suffix=" + url.QueryEscape("[d&e/f]"), "https://example.com/fixed/" + url.PathEscape("[a&b/c]") + "/" + url.PathEscape("[d&e") + "/" + url.PathEscape("f]"),
+		"https://example.com/fixed/{named}/{}/{suffix...}?named=1&path2=2&suffix=3/4&q=5", "https://example.com/fixed/1/2/3/4?q=5",
+		"https://example.com/fixed/{named}/{}/{suffix...}", "https://example.com/fixed///",
+		"https://example.com/fixed/{named}/{suffix...}?named=" + url.QueryEscape("[a&b/c]") + "&suffix=" + url.QueryEscape("[d&e/f]"), "https://example.com/fixed/" + url.PathEscape("[a&b/c]") + "/" + url.PathEscape("[d&e") + "/" + url.PathEscape("f]"),
 	}
 	for i := 0; i < len(testCases); i += 2 {
 		resolved, err := FillPathArguments(testCases[i])

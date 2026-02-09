@@ -38,8 +38,6 @@ Other microservices are able to dynamically subscribe to handle the `OnUserDelet
 
 In `Microbus`, events are implemented as carefully crafted requests and subscriptions. Event sources publish a multicast request to a URL on their own hostname. Event sinks subscribe to handle requests on the hostname of the source rather than their own. Since they are fundamentally not any different than regular requests, events can also return values back to the source. The [events example](../structure/examples-events.md) uses this technique to ask for permission to perform an action. 
 
-The [code generator](../blocks/codegen.md) makes it simple to produce and consume events using the `events` and `sinks` sections, respectively.
-
 By default, events use port `:417` (a word play on "force eventing") to differentiate them from standard requests which default to port `:443`. This allows setting up port-based [NATS ACLs](https://docs.nats.io/running-a-nats-service/configuration/securing_nats/authorization) in low-trust environments where authorization of microservices is important. This way the event source can be made the only one allowed to publish to `eventsource.example:417`, while all other microservice are allowed to subscribe only.
 
 ```
@@ -53,3 +51,5 @@ EVENTSINK_EXAMPLE = {
     subscribe = ["*.*.example.eventsink.>", "*.417.>"]
 }
 ```
+
+The [coding agent](../blocks/coding-agents.md) makes it simple to produce and consume events.

@@ -3,6 +3,8 @@ name: Externalizing and Translating Text
 description: Externalizes user-facing text to a resource bundle where they can be easily translated. Use to externalize static strings that are shown to the end user.
 ---
 
+**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+
 ## Workflow
 
 Copy this checklist and track your progress:
@@ -18,24 +20,24 @@ Externalizing and translating strings:
 - [ ] Step 7: Versioning
 ```
 
-#### Step 1: Create string bundle
+#### Step 1: Create String Bundle
 
-Create a `text.yaml` file under the `resources` directory of the microservice, if one does not already exist.
+Create `resources/text.yaml`, if one does not already exist.
 
-#### Step 2: Transfer strings
+#### Step 2: Transfer Strings
 
 Locate static strings in the microservice that are ultimately shown to the end user. These are likely to be in `service.go` or in HTML or text templates in the `resources` directory.
 
-For each string, create an entry in `text.yaml` that maps a unique key to its localized value on a per language basis. Use PascalCase for the string key (e.g. `MyString`) and ISO 639 language codes for each language (e.g. `en-US`).
+For each string, create an entry in `resources/text.yaml` that maps a unique key to its localized value on a per language basis. Use PascalCase for the string key (e.g. `MyString`) and ISO 639 language codes for each language (e.g. `en-US`).
 
 ```yaml
 HelloWorld:
   en: Hello World
 ```
 
-#### Step 3: Translate strings for requested languages
+#### Step 3: Translate Strings for Requested Languages
 
-Update `text.yaml` and add a localized value for each explicitly requested language.
+Update `resources/text.yaml` and add a localized value for each explicitly requested language.
 Use the ISO 639 language code under the key of each localization.
 
 ```yaml
@@ -56,7 +58,7 @@ HolaMundo:
   default: Hola Mundo
 ```
 
-#### Step 4: Update references in Go files
+#### Step 4: Update References in Go Files
 
 Use `svc.MustLoadResString` to load strings in Go files such as `service.go`.
 
@@ -80,7 +82,7 @@ func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err erro
 }
 ```
 
-#### Step 5: Update references in templates
+#### Step 5: Update References in Templates
 
 To use localized strings in HTML templates, load all strings with `svc.MustLoadResStrings` into a map, pass the map as part of the data to the template, and use the map in the template to obtain the string by key, instead of the static string.
 
@@ -129,12 +131,12 @@ func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err erro
 <b>{{ .Text.HelloWorld }}</b>
 ```
 
-#### Step 6: Document the microservice
+#### Step 6: Document the Microservice
 
-Skip this step if instructed to be "quick".
+Skip this step if instructed to be "quick" or to skip documentation.
 
 Update the microservice's local `AGENTS.md` file to indicate that user-facing text must be externalized and translated to the requested languages.
 
 #### Step 7: Versioning
 
-Run `go generate` to version the code.
+If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.

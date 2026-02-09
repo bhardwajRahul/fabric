@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,9 +25,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -37,18 +40,207 @@ import (
 
 var (
 	_ context.Context
-	_ io.Closer
-	_ http.Handler
-	_ testing.TB
-	_ *application.Application
-	_ *connector.Connector
-	_ *frame.Frame
+	_ *testing.T
+	_ jwt.MapClaims
+	_ application.Application
+	_ connector.Connector
+	_ frame.Frame
 	_ pub.Option
-	_ testarossa.TestingT
-	_ *helloapi.Client
+	_ testarossa.Asserter
+	_ helloapi.Client
 )
 
-func TestHello_Hello(t *testing.T) {
+func TestHello_OpenAPI(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	ports := []string{
+		// HINT: Include all ports of functional or web endpoints
+		"443",
+	}
+	for _, port := range ports {
+		t.Run("port_"+port, func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := tester.Request(
+				ctx,
+				pub.GET(httpx.JoinHostAndPath(helloapi.Hostname, ":"+port+"/openapi.json")),
+			)
+			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+				body, err := io.ReadAll(res.Body)
+				if assert.NoError(err) {
+					assert.Contains(body, "openapi")
+				}
+			}
+		})
+	}
+}
+
+func TestHello_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+
+		mock.SetDeployment(connector.PROD)
+		err = mock.OnStartup(ctx)
+		assert.Error(err)
+		mock.SetDeployment(connector.TESTING)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("hello", func(t *testing.T) { // MARKER: Hello
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Hello(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockHello(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Hello(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("echo", func(t *testing.T) { // MARKER: Echo
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Echo(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockEcho(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Echo(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("ping", func(t *testing.T) { // MARKER: Ping
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Ping(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockPing(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Ping(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("calculator", func(t *testing.T) { // MARKER: Calculator
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Calculator(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockCalculator(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Calculator(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("bus_png", func(t *testing.T) { // MARKER: BusPNG
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.BusPNG(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockBusPNG(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.BusPNG(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("localization", func(t *testing.T) { // MARKER: Localization
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Localization(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockLocalization(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Localization(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("root", func(t *testing.T) { // MARKER: Root
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Root(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockRoot(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Root(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("tick_tock", func(t *testing.T) { // MARKER: TickTock
+		assert := testarossa.For(t)
+
+		err := mock.TickTock(ctx)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockTickTock(func(ctx context.Context) (err error) {
+			return nil
+		})
+		err = mock.TickTock(ctx)
+		assert.NoError(err)
+	})
+}
+
+func TestHello_Hello(t *testing.T) { // MARKER: Hello
 	t.Parallel()
 	ctx := t.Context()
 
@@ -58,7 +250,7 @@ func TestHello_Hello(t *testing.T) {
 	svc.SetRepeat(5)
 
 	// Initialize the testers
-	tester := connector.New("hello.hello.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -73,7 +265,7 @@ func TestHello_Hello(t *testing.T) {
 	t.Run("default_greeting", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Hello(ctx, "GET", "", "", nil)
+		res, err := client.Hello(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -89,7 +281,7 @@ func TestHello_Hello(t *testing.T) {
 	t.Run("personalized_greeting", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Hello(ctx, "GET", "?name=Maria", "", nil)
+		res, err := client.Hello(ctx, "GET", "?name=Maria", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -103,7 +295,7 @@ func TestHello_Hello(t *testing.T) {
 	})
 }
 
-func TestHello_Echo(t *testing.T) {
+func TestHello_Echo(t *testing.T) { // MARKER: Echo
 	t.Parallel()
 	ctx := t.Context()
 
@@ -111,7 +303,7 @@ func TestHello_Echo(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.echo.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -126,7 +318,7 @@ func TestHello_Echo(t *testing.T) {
 	t.Run("nil_request", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Echo(ctx, "", "", "", nil)
+		res, err := client.Echo(ctx, "", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -143,7 +335,7 @@ func TestHello_Echo(t *testing.T) {
 			WithOptions(
 				pub.Header("X-Location", "California"),
 			).
-			Echo(ctx, "PATCH", "", "", strings.NewReader("Sunshine"))
+			Echo(ctx, "PATCH", "", strings.NewReader("Sunshine"))
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -158,7 +350,7 @@ func TestHello_Echo(t *testing.T) {
 	t.Run("get_with_no_url", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Echo(ctx, "GET", "", "", nil)
+		res, err := client.Echo(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -171,7 +363,7 @@ func TestHello_Echo(t *testing.T) {
 	t.Run("get_with_query_string", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Echo(ctx, "GET", "?arg=12345", "", nil)
+		res, err := client.Echo(ctx, "GET", "?arg=12345", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -184,7 +376,7 @@ func TestHello_Echo(t *testing.T) {
 	t.Run("get_with_relative_url", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Echo(ctx, "GET", "/echo?arg=12345", "", nil)
+		res, err := client.Echo(ctx, "GET", "/echo?arg=12345", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -197,7 +389,7 @@ func TestHello_Echo(t *testing.T) {
 	t.Run("get_with_absolute_url", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Echo(ctx, "GET", "https://"+svc.Hostname()+"/echo?arg=12345", "", nil)
+		res, err := client.Echo(ctx, "GET", "https://"+svc.Hostname()+"/echo?arg=12345", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -214,7 +406,7 @@ func TestHello_Echo(t *testing.T) {
 			"pay":  []string{"11111"},
 			"load": []string{"22222"},
 		}
-		res, err := client.Echo(ctx, "POST", "", "", formData)
+		res, err := client.Echo(ctx, "POST", "", formData)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -233,7 +425,7 @@ func TestHello_Echo(t *testing.T) {
 			"pay":  []string{"11111"},
 			"load": []string{"22222"},
 		}
-		res, err := client.Echo(ctx, "POST", "?arg=12345", "", formData)
+		res, err := client.Echo(ctx, "POST", "?arg=12345", formData)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -252,7 +444,9 @@ func TestHello_Echo(t *testing.T) {
 			"pay":  []string{"11111"},
 			"load": []string{"22222"},
 		}
-		res, err := client.Echo(ctx, "POST", "", "text/plain", formData)
+		res, err := client.
+			WithOptions(pub.ContentType("text/plain")).
+			Echo(ctx, "POST", "", formData)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -272,7 +466,7 @@ func TestHello_Echo(t *testing.T) {
 				pub.AddHeader("Echo123", "EchoEchoEcho"),
 				pub.AddHeader("Echo123", "WhoaWhoaWhoa"),
 			).
-			Echo(ctx, "POST", "?echo=123", "", strings.NewReader("PostBody"))
+			Echo(ctx, "POST", "?echo=123", strings.NewReader("PostBody"))
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -286,7 +480,7 @@ func TestHello_Echo(t *testing.T) {
 	})
 }
 
-func TestHello_Ping(t *testing.T) {
+func TestHello_Ping(t *testing.T) { // MARKER: Ping
 	t.Parallel()
 	ctx := t.Context()
 
@@ -294,7 +488,7 @@ func TestHello_Ping(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.ping.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -309,7 +503,7 @@ func TestHello_Ping(t *testing.T) {
 	t.Run("ping_returns_service_id", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Ping(ctx, "GET", "", "", nil)
+		res, err := client.Ping(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -321,7 +515,7 @@ func TestHello_Ping(t *testing.T) {
 	})
 }
 
-func TestHello_Calculator(t *testing.T) {
+func TestHello_Calculator(t *testing.T) { // MARKER: Calculator
 	t.Parallel()
 	ctx := t.Context()
 
@@ -329,7 +523,7 @@ func TestHello_Calculator(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.calculator.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -345,7 +539,7 @@ func TestHello_Calculator(t *testing.T) {
 	t.Run("addition", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Calculator(ctx, "GET", "?x=500&op=+&y=580", "", nil)
+		res, err := client.Calculator(ctx, "GET", "?x=500&op=+&y=580", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -361,7 +555,7 @@ func TestHello_Calculator(t *testing.T) {
 	t.Run("multiplication", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Calculator(ctx, "GET", "?x=5&op=*&y=80", "", nil)
+		res, err := client.Calculator(ctx, "GET", "?x=5&op=*&y=80", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -374,7 +568,9 @@ func TestHello_Calculator(t *testing.T) {
 	t.Run("division", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Calculator(ctx, "POST", "", "application/x-www-form-urlencoded", strings.NewReader("x=500&op=/&y=5"))
+		res, err := client.
+			WithOptions(pub.ContentType("application/x-www-form-urlencoded")).
+			Calculator(ctx, "POST", "", strings.NewReader("x=500&op=/&y=5"))
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -385,7 +581,7 @@ func TestHello_Calculator(t *testing.T) {
 	})
 }
 
-func TestHello_BusPNG(t *testing.T) {
+func TestHello_BusPNG(t *testing.T) { // MARKER: BusPNG
 	t.Parallel()
 	ctx := t.Context()
 
@@ -393,7 +589,7 @@ func TestHello_BusPNG(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.buspng.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -423,7 +619,7 @@ func TestHello_BusPNG(t *testing.T) {
 	})
 }
 
-func TestHello_Localization(t *testing.T) {
+func TestHello_Localization(t *testing.T) { // MARKER: Localization
 	t.Parallel()
 	ctx := t.Context()
 
@@ -431,7 +627,7 @@ func TestHello_Localization(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.localization.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -446,7 +642,7 @@ func TestHello_Localization(t *testing.T) {
 	t.Run("default_english", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Localization(ctx, "GET", "", "", nil)
+		res, err := client.Localization(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -462,7 +658,7 @@ func TestHello_Localization(t *testing.T) {
 			WithOptions(
 				pub.Header("Accept-Language", "en"),
 			).
-			Localization(ctx, "GET", "", "", nil)
+			Localization(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -478,7 +674,7 @@ func TestHello_Localization(t *testing.T) {
 			WithOptions(
 				pub.Header("Accept-Language", "en-NZ"),
 			).
-			Localization(ctx, "GET", "", "", nil)
+			Localization(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -494,7 +690,7 @@ func TestHello_Localization(t *testing.T) {
 			WithOptions(
 				pub.Header("Accept-Language", "it"),
 			).
-			Localization(ctx, "GET", "", "", nil)
+			Localization(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -504,7 +700,7 @@ func TestHello_Localization(t *testing.T) {
 	})
 }
 
-func TestHello_Root(t *testing.T) {
+func TestHello_Root(t *testing.T) { // MARKER: Root
 	t.Parallel()
 	ctx := t.Context()
 
@@ -512,7 +708,7 @@ func TestHello_Root(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("hello.root.tester")
+	tester := connector.New("tester.client")
 	client := helloapi.NewClient(tester)
 
 	// Run the testing app
@@ -527,7 +723,7 @@ func TestHello_Root(t *testing.T) {
 	t.Run("root_page", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		res, err := client.Root(ctx, "GET", "", "", nil)
+		res, err := client.Root(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -539,7 +735,7 @@ func TestHello_Root(t *testing.T) {
 	})
 }
 
-func TestHello_TickTock(t *testing.T) {
+func TestHello_TickTock(t *testing.T) { // MARKER: TickTock
 	t.Parallel()
 	ctx := t.Context()
 

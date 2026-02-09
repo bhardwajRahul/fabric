@@ -1,0 +1,33 @@
+general:
+  hostname: calculator.example
+  description: The Calculator microservice performs simple mathematical operations.
+  package: github.com/microbus-io/fabric/examples/calculator
+  frameworkVersion: 2.0.0
+
+functions:
+  Arithmetic:
+    signature: Arithmetic(x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int)
+    description: Arithmetic performs an arithmetic operation between two integers x and y given an operator op.
+    method: GET
+    route: :443/arithmetic
+  Square:
+    signature: Square(x int) (xEcho int, result int)
+    description: Square prints the square of the integer x.
+    method: GET
+    route: :443/square
+  Distance:
+    signature: Distance(p1 Point, p2 Point) (d float64)
+    description: Distance calculates the distance between two points. It demonstrates the use of the defined type Point.
+    method: ANY
+    route: :443/distance
+
+metrics:
+  UsedOperators:
+    otelName: used_operators
+    description: UsedOperators tracks the types of the arithmetic operators used.
+    kind: counter
+  SumOperations:
+    otelName: sum_operations
+    description: SumOperations tracks the total sum of the results of all operators.
+    kind: gauge
+    observable: true

@@ -20,16 +20,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-
-	"github.com/microbus-io/errors"
 )
-
-// CatchPanic calls the given function and returns any panic as a standard error.
-//
-// Deprecated: Use [errors.CatchPanic] instead.
-func CatchPanic(f func() error) (err error) {
-	return errors.CatchPanic(f)
-}
 
 // IsNil returns true if x is nil or an interface holding nil.
 func IsNil(x any) bool {

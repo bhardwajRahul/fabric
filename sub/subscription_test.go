@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,10 +27,10 @@ func TestSub_NewSub(t *testing.T) {
 	assert := testarossa.For(t)
 
 	type testCase struct {
-		spec         string
-		expectedHost string
-		expectedPort string
-		expectedPath string
+		spec          string
+		expectedHost  string
+		expectedPort  string
+		expectedRoute string
 	}
 	testCases := []testCase{
 		{"", "www.example.com", "443", ""},
@@ -53,7 +53,7 @@ func TestSub_NewSub(t *testing.T) {
 		assert.NoError(err)
 		assert.Equal(tc.expectedHost, s.Host)
 		assert.Equal(tc.expectedPort, s.Port)
-		assert.Equal(tc.expectedPath, s.Path)
+		assert.Equal(tc.expectedRoute, s.Route)
 	}
 }
 
@@ -117,9 +117,9 @@ func TestSub_Apply(t *testing.T) {
 	assert.Equal("foo", s.Queue)
 	s.Apply(DefaultQueue())
 	assert.Equal("www.example.com", s.Queue)
-	s.Apply(Pervasive())
+	s.Apply(NoQueue())
 	assert.Equal("", s.Queue)
-	s.Apply(LoadBalanced())
+	s.Apply(DefaultQueue())
 	assert.Equal("www.example.com", s.Queue)
 
 	err = s.Apply(Queue("$$$"))
@@ -147,13 +147,13 @@ func TestSub_PathArguments(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	_, err := NewSub("GET", "www.example.com", ":567/path/{named}/{suffix+}", nil)
+	_, err := NewSub("GET", "www.example.com", ":567/path/{named}/{suffix...}", nil)
 	assert.NoError(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{}/{+}", nil)
+	_, err = NewSub("GET", "www.example.com", ":567/path/{}/{...}", nil)
 	assert.NoError(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{}", nil)
 	assert.NoError(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{+}", nil)
+	_, err = NewSub("GET", "www.example.com", ":567/path/{...}", nil)
 	assert.NoError(err)
 
 	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}x", nil)
@@ -162,7 +162,7 @@ func TestSub_PathArguments(t *testing.T) {
 	assert.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}", nil)
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/x{+}", nil)
+	_, err = NewSub("GET", "www.example.com", ":567/path/x{...}", nil)
 	assert.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/}/x", nil)
 	assert.Error(err)
@@ -178,8 +178,8 @@ func TestSub_PathArguments(t *testing.T) {
 	assert.Error(err)
 	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@}", nil)
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@+}", nil)
+	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@...}", nil)
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{+}/{}", nil)
+	_, err = NewSub("GET", "www.example.com", ":567/path/{...}/{}", nil)
 	assert.Error(err)
 }

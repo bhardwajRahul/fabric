@@ -1,73 +1,16 @@
-# Bootstrapping a New Project
+# Bootstrapping a New Microbus Project
 
-Follow these steps to create a new project based on the `Microbus` framework.
-
-#### Step 1: Init the Go Project
-
-Make a directory to hold your projects files.
+Make a new directory to hold the files of your `Microbus`-based project.
 
 ```shell
-mkdir mysolution
+mkdir -p myproject
+cd myproject
 ```
 
-Init the Go project with the name of the package of your project, for example `github.com/mycompany/mysolution`.
+Instruct your coding agent to:
 
-```shell
-cd mysolution
-go mod init github.com/mycompany/mysolution
-```
+> HEY CLAUDE...
+>
+> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus.
 
-#### Step 2: Code Generate the Project Structure
-
-Add `Microbus`'s code generator to `go.mod` using:
-
-```shell
-go get github.com/microbus-io/fabric/codegen
-```
-
-Create `doc.go` in the root of the project next to `go.mod`.
-
-```go
-package root
-
-//go:generate go run github.com/microbus-io/fabric/codegen
-```
-
-Use the code generator to create the project structure.
-
-```shell
-go generate
-```
-
-```
-mysolution/
-├── .claude/                    # Claude setup
-│   ├── rules/
-│   └── skills/
-├── .vscode/
-│   └── launch.json             # VSCode launch file
-├── main/
-│   ├── config.yaml             # Configuration file
-│   ├── env.yaml                # Environment settings
-│   └── main.go                 # Main application
-├── .gitignore                  # git ignore
-├── AGENTS.md                   # Instructions for coding agents
-├── CLAUDE.md                   # Instructions for Claude
-├── config.yaml                 # Configuration properties
-├── config.local.yaml           # git ignored configuration properties
-├── doc.go
-├── env.yaml                    # Environment variables
-├── env.local.yaml              # git ignored environment variables
-├── go.mod
-└── go.sum
-```
-
-Fetch the dependencies.
-
-```shell
-go mod tidy
-```
-
-#### Step 3: Create Microservices
-
-[Create a microservice](../howto/create-microservice.md), rinse and repeat.
+The project is ready. [Create a microservice](../howto/create-microservice.md), rinse and repeat.

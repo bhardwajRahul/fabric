@@ -48,7 +48,7 @@ zzz.DefineConfig("Moo")
 zzz.DefineConfig("Zoo")
 ```
 
-Note that both domain names and case insensitive, while property names are case sensitive.
+Note that domain names are case insensitive, while property names are case sensitive.
 
 Every 20 minutes the configurator broadcasts the command `https://all:888/config-refresh` to instruct all microservices to refresh their config. They respond by calling the configurator's `:888/values` endpoint to fetch the current values. This guarantees that microservices do not fall out of sync with their configuration, at least not for long.
 

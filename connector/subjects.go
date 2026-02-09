@@ -104,7 +104,7 @@ func subjectOf(wildcards bool, plane string, method string, hostname string, por
 			sb.WriteRune('.')
 		}
 		if wildcards && strings.HasPrefix(parts[i], "{") && strings.HasSuffix(parts[i], "}") {
-			if i == len(parts)-1 && strings.HasSuffix(parts[i], "+}") {
+			if i == len(parts)-1 && strings.HasSuffix(parts[i], "...}") {
 				// Greedy
 				sb.WriteRune('>')
 			} else {

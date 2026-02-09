@@ -28,20 +28,18 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
 // Application is a collection of microservices that run in a single process and share the same lifecycle.
 type Application struct {
-	groups          []group
-	sig             chan os.Signal
-	plane           string
-	deployment      string
-	mux             sync.Mutex
-	startupTimeout  time.Duration
-	shutdownTimeout time.Duration
+	groups     []group
+	sig        chan os.Signal
+	plane      string
+	deployment string
+	mux        sync.Mutex
 }
 
 // New creates a new application.
@@ -49,25 +47,9 @@ type Application struct {
 // A unique plane of communication is used to isolate the app if it is running in a unit test environment.
 func New() *Application {
 	app := &Application{
-		sig:             make(chan os.Signal, 1),
-		plane:           env.Get("MICROBUS_PLANE"),
-		deployment:      env.Get("MICROBUS_DEPLOYMENT"),
-		startupTimeout:  time.Second * 20,
-		shutdownTimeout: time.Second * 20,
-	}
-	return app
-}
-
-// NewTesting creates a new application explicitly for running in a unit test environment.
-// A random plane of communication is used to isolate the testing app from other apps.
-//
-// Deprecated: Use [New] with [Application.RunInTest] instead.
-func NewTesting() *Application {
-	app := &Application{
-		sig:            make(chan os.Signal, 1),
-		plane:          rand.AlphaNum64(12),
-		deployment:     connector.TESTING,
-		startupTimeout: time.Second * 8,
+		sig:        make(chan os.Signal, 1),
+		plane:      env.Get("MICROBUS_PLANE"),
+		deployment: env.Get("MICROBUS_DEPLOYMENT"),
 	}
 	return app
 }
@@ -99,7 +81,7 @@ func (app *Application) Add(services ...service.Service) {
 }
 
 // AddAndStartup adds a collection of microservices to the app, and starts them up immediately.
-func (app *Application) AddAndStartup(services ...service.Service) (err error) {
+func (app *Application) AddAndStartup(ctx context.Context, services ...service.Service) (err error) {
 	app.mux.Lock()
 	g := group{}
 	for _, s := range services {
@@ -110,8 +92,6 @@ func (app *Application) AddAndStartup(services ...service.Service) (err error) {
 	app.groups = append(app.groups, g)
 	app.mux.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), app.startupTimeout)
-	defer cancel()
 	err = g.Startup(ctx)
 	return errors.Trace(err)
 }
@@ -144,12 +124,10 @@ func (app *Application) Remove(services ...service.Service) {
 // Otherwise, microservices are started sequentially in order of inclusion.
 // If an error is returned, there is no guarantee as to the state of the microservices:
 // some microservices may have been started while others not.
-func (app *Application) Startup() error {
+// The context deadline is used to limit the time allotted to the operation.
+func (app *Application) Startup(ctx context.Context) error {
 	app.mux.Lock()
 	defer app.mux.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), app.startupTimeout)
-	defer cancel()
 
 	// Start each of the groups sequentially
 	for _, g := range app.groups {
@@ -164,12 +142,10 @@ func (app *Application) Startup() error {
 // Shutdown shuts down all started microservices included in this app in the reverse order of their starting up.
 // If an error is returned, there is no guarantee as to the state of the microservices:
 // some microservices may have been shut down while others not.
-func (app *Application) Shutdown() error {
+// The context deadline is used to limit the time allotted to the operation.
+func (app *Application) Shutdown(ctx context.Context) error {
 	app.mux.Lock()
 	defer app.mux.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), app.shutdownTimeout)
-	defer cancel()
 
 	// Stop each of the groups sequentially in reverse order
 	for i := len(app.groups) - 1; i >= 0; i-- {
@@ -194,13 +170,23 @@ func (app *Application) Interrupt() {
 }
 
 // Run starts up all microservices included in this app, waits for interrupt, then shuts them down.
+// Microservices are give 20 seconds to start and shutdown. For finer timeout control, use [Startup] and [Shutdown].
 func (app *Application) Run() error {
-	err := app.Startup()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	err := errors.CatchPanic(func() error {
+		return app.Startup(ctx)
+	})
+	cancel()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	app.WaitForInterrupt()
-	err = app.Shutdown()
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second*20)
+	err = errors.CatchPanic(func() error {
+		return app.Shutdown(ctx)
+	})
+	cancel()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -211,9 +197,8 @@ func (app *Application) Run() error {
 // A random plane of communication is used to isolate the testing app from other apps.
 // Errors in startup or shutdown will fail the test.
 func (app *Application) RunInTest(t testing.TB) error {
-	app.plane = rand.AlphaNum64(12)
+	app.plane = utils.RandomIdentifier(12)
 	app.deployment = connector.TESTING
-	app.startupTimeout = time.Second * 8
 	for _, g := range app.groups {
 		for _, s := range g {
 			s.SetPlane(app.plane)
@@ -223,10 +208,18 @@ func (app *Application) RunInTest(t testing.TB) error {
 
 	assert := testarossa.For(t)
 	t.Cleanup(func() {
-		shutdownErr := app.Shutdown()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*8)
+		shutdownErr := errors.CatchPanic(func() error {
+			return app.Shutdown(ctx)
+		})
+		cancel()
 		assert.NoError(shutdownErr)
 	})
-	startupErr := app.Startup()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*8)
+	startupErr := errors.CatchPanic(func() error {
+		return app.Startup(ctx)
+	})
+	cancel()
 	if !assert.NoError(startupErr) {
 		t.FailNow()
 		return errors.Trace(startupErr)

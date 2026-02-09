@@ -1,0 +1,3 @@
+## Upgrade to v2
+
+Upgrade the configurator core service to v2 by replacing the code-generated intermediate pattern with hand-written files. Delete `service.yaml`, `doc.go`, `service-gen.go`, `version-gen.go`, `version-gen_test.go`, and the `intermediate/` subdirectory. Replace `configuratorapi/clients-gen.go` with `configuratorapi/client.go`, `resources/embed-gen.go` with `resources/embed.go`. Create `intermediate.go` and `mock.go` in the package root. Update `service.go` to embed `*connector.Connector` instead of `*intermediate.Intermediate`. Update `service_test.go` with OpenAPI and Mock tests. Update `AGENTS.md` with features table.

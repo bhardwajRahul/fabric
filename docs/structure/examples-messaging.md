@@ -3,9 +3,9 @@
 ### Messaging
 
 The `/home` endpoint of the `messaging.example` microservice demonstrates three messaging patterns:
-* Load-balanced unicast
-* Multicast
-* Direct addressing
+- Load-balanced unicast
+- Multicast
+- Direct addressing
 
 The output of http://localhost:8080/messaging.example/home looks like this:
 
@@ -55,9 +55,9 @@ The fifth paragraph is showing the result of making a direct addressing multicas
 
 Refresh the page to see the IDs change:
 
-* The processor ID may change
-* The responder to the unicast request may change
-* The order of the responses to the multicast may change
+- The processor ID may change
+- The responder to the unicast request may change
+- The order of the responses to the multicast may change
 
 ### Distributed Cache
 

@@ -17,7 +17,6 @@ limitations under the License.
 package connector
 
 import (
-	"context"
 	"testing"
 
 	"github.com/microbus-io/fabric/pub"
@@ -28,15 +27,15 @@ func TestConnector_Ping(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create the microservice
 	con := New("ping.connector")
 
 	// Startup the microservice
-	err := con.Startup()
+	err := con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	// Send messages
 	for r := range con.Publish(ctx, pub.GET("https://ping.connector:888/ping")) {

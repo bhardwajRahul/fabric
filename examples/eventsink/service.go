@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-
-	"github.com/microbus-io/fabric/examples/eventsink/intermediate"
 )
 
 var (
@@ -38,7 +36,7 @@ Service implements the eventsink.example microservice.
 The event sink microservice handles events that are fired by the event source microservice.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -54,7 +52,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 OnAllowRegister blocks registrations from gmail and hotmail domains.
 */
-func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bool, err error) {
+func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bool, err error) { // MARKER: OnAllowRegister
 	svc.LogInfo(ctx, "OnAllowRegister", "email", email)
 	address, err := mail.ParseAddress(strings.ToLower(email))
 	if err != nil {
@@ -75,7 +73,7 @@ func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bo
 /*
 OnRegistered keeps track of registrations.
 */
-func (svc *Service) OnRegistered(ctx context.Context, email string) (err error) {
+func (svc *Service) OnRegistered(ctx context.Context, email string) (err error) { // MARKER: OnRegistered
 	svc.LogInfo(ctx, "OnRegistered", "email", email)
 	plane := svc.Plane()
 	mux.Lock()
@@ -87,7 +85,7 @@ func (svc *Service) OnRegistered(ctx context.Context, email string) (err error) 
 /*
 Registered returns the list of registered users.
 */
-func (svc *Service) Registered(ctx context.Context) (emails []string, err error) {
+func (svc *Service) Registered(ctx context.Context) (emails []string, err error) { // MARKER: Registered
 	plane := svc.Plane()
 	emails = []string{}
 	mux.Lock()

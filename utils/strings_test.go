@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,9 +18,10 @@ package utils
 
 import (
 	"errors"
+	"regexp"
 	"testing"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -63,6 +64,19 @@ func TestUtils_ToKebabCase(t *testing.T) {
 	for id, expected := range testCases {
 		actual := ToKebabCase(id)
 		assert.Equal(expected, actual, "expected %s, got %s, in %s", expected, actual, id)
+	}
+}
+
+func TestUtils_RandomIdentifier(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	re := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	for i := 1; i < 1024; i++ {
+		id := RandomIdentifier(i)
+		assert.Len(id, i)
+		match := re.MatchString(id)
+		assert.True(match)
 	}
 }
 

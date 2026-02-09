@@ -30,8 +30,8 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/fabric/transport"
+	"github.com/microbus-io/fabric/utils"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -243,7 +243,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	}
 	msgID := ""
 	for {
-		msgID = rand.AlphaNum64(8)                      // 2.8e+14
+		msgID = utils.RandomIdentifier(8)               // 2.8e+14
 		_, exists := c.reqs.LoadOrStore(msgID, awaitCh) // Avoid hash clash because it has severe repercussions
 		if !exists {
 			break
@@ -466,7 +466,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			)
 			output = append(output, pub.NewErrorResponse(err))
 			c.postRequestData.Store("timeout:"+msgID, subject)
-			_ = c.AddCounter(
+			_ = c.IncrementCounter(
 				ctx,
 				"microbus_client_timeout_requests",
 				1,
@@ -512,7 +512,7 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 						c.Span(ctx).TraceID(),
 					)
 					output = append(output, pub.NewErrorResponse(err))
-					_ = c.AddCounter(
+					_ = c.IncrementCounter(
 						ctx,
 						"microbus_client_timeout_requests",
 						1,

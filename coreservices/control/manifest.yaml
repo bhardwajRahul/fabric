@@ -1,0 +1,39 @@
+general:
+  hostname: control.core
+  description: This microservice is created for the sake of generating the client API for the :888 control subscriptions. The microservice itself does nothing and should not be included in applications.
+  package: github.com/microbus-io/fabric/coreservices/control
+  frameworkVersion: 2.0.0
+
+functions:
+  Ping:
+    signature: Ping() (pong int)
+    description: Ping responds with a pong.
+    method: ANY
+    route: :888/ping
+    loadBalancing: none
+  ConfigRefresh:
+    signature: ConfigRefresh()
+    description: ConfigRefresh pulls the latest config values.
+    method: ANY
+    route: :888/config-refresh
+    loadBalancing: none
+  Trace:
+    signature: Trace(id string)
+    description: Trace forces exporting a tracing span.
+    method: ANY
+    route: :888/trace
+    loadBalancing: none
+
+webs:
+  Metrics:
+    description: Metrics returns Prometheus metrics.
+    method: ANY
+    route: :888/metrics
+    loadBalancing: none
+
+outboundEvents:
+  OnNewSubs:
+    signature: OnNewSubs()
+    description: OnNewSubs informs of new subscriptions.
+    method: POST
+    route: :888/on-new-subs

@@ -25,7 +25,7 @@ import (
 )
 
 // subscribeControl creates subscriptions for control requests on the reserved port 888.
-func (c *Connector) subscribeControl() error {
+func (c *Connector) subscribeControl() (err error) {
 	type ctrlSub struct {
 		path    string
 		handler HTTPHandler
@@ -59,11 +59,11 @@ func (c *Connector) subscribeControl() error {
 		},
 	}
 	for _, s := range subs {
-		err := c.Subscribe("ANY", ":888/"+s.path, s.handler, s.options...)
+		_, err = c.Subscribe("ANY", ":888/"+s.path, s.handler, s.options...)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = c.Subscribe("ANY", "https://all:888/"+s.path, s.handler, s.options...)
+		_, err = c.Subscribe("ANY", "https://all:888/"+s.path, s.handler, s.options...)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -23,15 +23,16 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/cfg"
-	"github.com/microbus-io/fabric/rand"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
 
 func TestConnector_SetConfig(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	// Mock config service
 	mockCfg := New("configurator.core")
@@ -43,9 +44,9 @@ func TestConnector_SetConfig(t *testing.T) {
 		return nil
 	})
 
-	err := mockCfg.Startup()
+	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
-	defer mockCfg.Shutdown()
+	defer mockCfg.Shutdown(ctx)
 
 	// Connector
 	con := New("set.config.connector")
@@ -68,9 +69,9 @@ func TestConnector_SetConfig(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("changed", con.Config("s"))
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal("default", con.Config("s")) // Gets reset after fetching from configurator
 
@@ -84,10 +85,10 @@ func TestConnector_SetConfig(t *testing.T) {
 
 func TestConnector_FetchConfig(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
-	ctx := context.Background()
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	// Mock a config service
 	mockCfg := New("configurator.core")
@@ -101,9 +102,9 @@ func TestConnector_FetchConfig(t *testing.T) {
 		return nil
 	})
 
-	err := mockCfg.Startup()
+	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
-	defer mockCfg.Shutdown()
+	defer mockCfg.Shutdown(ctx)
 
 	// Connector
 	con := New("fetch.config.connector")
@@ -125,9 +126,9 @@ func TestConnector_FetchConfig(t *testing.T) {
 	assert.Equal("bar", con.Config("foo"))
 	assert.Equal("5", con.Config("int"))
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal("baz", con.Config("foo"), "New value should be read from configurator")
 	assert.Equal("5", con.Config("int"), "Invalid value should not be accepted")
@@ -145,9 +146,10 @@ func TestConnector_FetchConfig(t *testing.T) {
 
 func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	// Mock a config service
 	mockCfg := New("configurator.core")
@@ -158,9 +160,9 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 		return nil
 	})
 
-	err := mockCfg.Startup()
+	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
-	defer mockCfg.Shutdown()
+	defer mockCfg.Shutdown(ctx)
 
 	// Connector
 	con := New("no.fetch.in.testing.app.config.connector")
@@ -174,9 +176,9 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Equal("bar", con.Config("foo"))
 	assert.False(callbackCalled)
@@ -184,6 +186,7 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 
 func TestConnector_CallbackWhenStarted(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
 	// Connector
@@ -202,9 +205,9 @@ func TestConnector_CallbackWhenStarted(t *testing.T) {
 	assert.Equal("baz", con.Config("foo"))
 	assert.Zero(callbackCalled)
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 	assert.Zero(callbackCalled)
 
 	con.SetConfig("foo", "bam")
@@ -214,10 +217,10 @@ func TestConnector_CallbackWhenStarted(t *testing.T) {
 
 func TestConnector_CaseSensitiveConfig(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 	assert := testarossa.For(t)
-	ctx := context.Background()
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	// Mock a config service
 	mockCfg := New("configurator.core")
@@ -230,9 +233,9 @@ func TestConnector_CaseSensitiveConfig(t *testing.T) {
 		return nil
 	})
 
-	err := mockCfg.Startup()
+	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
-	defer mockCfg.Shutdown()
+	defer mockCfg.Shutdown(ctx)
 
 	// Connector
 	con := New("case.sensitive.config.connector")
@@ -253,9 +256,9 @@ func TestConnector_CaseSensitiveConfig(t *testing.T) {
 		con.Config("FOO-CONFIG_"), "",
 	)
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.False(callbackCalled)
 
@@ -271,9 +274,10 @@ func TestConnector_CaseSensitiveConfig(t *testing.T) {
 
 func TestConnector_ReadFromFile(t *testing.T) {
 	// No parallel
+	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	plane := rand.AlphaNum64(12)
+	plane := utils.RandomIdentifier(12)
 
 	os.Chdir("testdata/subdir")
 	defer os.Chdir("..")
@@ -289,9 +293,9 @@ func TestConnector_ReadFromFile(t *testing.T) {
 		return nil
 	})
 
-	err := mockCfg.Startup()
+	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
-	defer mockCfg.Shutdown()
+	defer mockCfg.Shutdown(ctx)
 
 	// Connector
 	con := New("read.from.file.config.connector")
@@ -310,9 +314,9 @@ func TestConnector_ReadFromFile(t *testing.T) {
 	err = con.DefineConfig("Empty")
 	assert.NoError(err)
 
-	err = con.Startup()
+	err = con.Startup(ctx)
 	assert.NoError(err)
-	defer con.Shutdown()
+	defer con.Shutdown(ctx)
 
 	assert.Expect(
 		con.Config("SubDir"), "Child Subdomain",

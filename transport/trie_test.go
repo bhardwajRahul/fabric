@@ -17,11 +17,11 @@ limitations under the License.
 package transport
 
 import (
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"testing"
 
-	"github.com/microbus-io/fabric/rand"
 	"github.com/microbus-io/testarossa"
 )
 

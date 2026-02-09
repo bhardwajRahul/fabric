@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 	"github.com/microbus-io/fabric/examples/helloworld/helloworldapi"
 )
 
-func TestHelloworld_HelloWorld(t *testing.T) {
+func TestHelloworld_HelloWorld(t *testing.T) { // MARKER: HelloWorld
 	t.Parallel()
 	ctx := t.Context()
 	assert := testarossa.For(t)
@@ -37,7 +37,7 @@ func TestHelloworld_HelloWorld(t *testing.T) {
 	svc := NewService()
 
 	// Initialize the testers
-	tester := connector.New("helloworld.helloworld.tester")
+	tester := connector.New("tester.client")
 	client := helloworldapi.NewClient(tester)
 	_ = client
 

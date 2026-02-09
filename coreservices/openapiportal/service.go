@@ -27,7 +27,6 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
-	"github.com/microbus-io/fabric/coreservices/openapiportal/intermediate"
 	"github.com/microbus-io/fabric/coreservices/openapiportal/openapiportalapi"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
@@ -48,7 +47,7 @@ The OpenAPI microservice lists links to the OpenAPI endpoint of all microservice
 on the requested port.
 */
 type Service struct {
-	*intermediate.Intermediate // IMPORTANT: DO NOT REMOVE
+	*Intermediate // IMPORTANT: Do not remove
 }
 
 // OnStartup is called when the microservice is started up.
@@ -64,7 +63,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 List displays links to the OpenAPI endpoint of all microservices that provide one on the request's port.
 */
-func (svc *Service) List(w http.ResponseWriter, r *http.Request) (err error) {
+func (svc *Service) List(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: List
 	ctx := r.Context()
 
 	type info struct {

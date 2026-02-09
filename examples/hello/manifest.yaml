@@ -1,0 +1,55 @@
+general:
+  hostname: hello.example
+  description: The Hello microservice demonstrates the various capabilities of a microservice.
+  package: github.com/microbus-io/fabric/examples/hello
+  frameworkVersion: 2.0.0
+
+downstream:
+  - hostname: calculator.example
+    package: github.com/microbus-io/fabric/examples/calculator
+
+webs:
+  Hello:
+    description: Hello prints a greeting.
+    method: ANY
+    route: /hello
+  Echo:
+    description: Echo back the incoming request in wire format.
+    method: ANY
+    route: /echo
+  Ping:
+    description: Ping all microservices and list them.
+    method: ANY
+    route: /ping
+  Calculator:
+    description: Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.
+    method: ANY
+    route: /calculator
+  BusPNG:
+    description: BusPNG serves an image from the embedded resources.
+    method: GET
+    route: /bus.png
+  Localization:
+    description: Localization prints hello in the language best matching the request's Accept-Language header.
+    method: ANY
+    route: /localization
+  Root:
+    description: Root is the top-most root page.
+    method: ANY
+    route: //root
+
+configs:
+  Greeting:
+    description: Greeting to use.
+    type: string
+    default: Hello
+  Repeat:
+    description: Repeat indicates how many times to display the greeting.
+    type: int
+    validation: int [0,100]
+    default: 1
+
+tickers:
+  TickTock:
+    description: TickTock is executed every 10 seconds.
+    interval: 10s

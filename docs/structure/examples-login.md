@@ -2,16 +2,7 @@
 
 The `login.example` microservice demonstrates the use of [authentication and authorization](../blocks/authorization.md) in `Microbus`.
 
-The `Welcome` endpoint is defined in `service.yaml` to require an actor containing either `a` (admin), `m` (manager) or `u` (user) in its `roles` property. Requests to http://localhost:8080/login.example/welcome that do not satisfy this condition will be met with HTTP error `401 Unauthorized` or `403 Forbidden`.
-
-```yaml
-functions:
-  - signature: Welcome()
-    description: |-
-      Welcome renders a page that is shown to the user after a successful login.
-      Rendering is adjusted based on the user's roles.
-    actor: roles.a || roles.m || roles.u
-```
+The `Welcome` endpoint requires JWT claims to contain either `a` (admin), `m` (manager) or `u` (user) in its `roles` property by means of the `sub.RequiredClaims("roles.a || roles.m || roles.u")` subscription option. Requests to http://localhost:8080/login.example/welcome that do not satisfy this condition are met with HTTP error `401 Unauthorized` or `403 Forbidden`.
 
 An error page redirect [middleware](../structure/coreservices-httpingress-middleware.md) is added to the [HTTP ingress proxy](../structure/coreservices-httpingress.md) in the `main` app to redirect users to the login page upon a `401 Unauthorized` error.
 
