@@ -1252,7 +1252,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 		}
 	}
 	dur := time.Since(t0)
-	assert.True(dur >= cons[0].ackTimeout)
+	assert.True(dur >= client.ackTimeout && dur <= client.ackTimeout+time.Second)
 	assert.Equal(N, countOKs)
 }
 
