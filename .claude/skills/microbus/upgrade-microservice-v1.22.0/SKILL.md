@@ -1,6 +1,6 @@
 ---
-name: Upgrade a Microservice From v1 to v2
-description: Upgrades a microservice built with the code generator of Microbus v1, to the new v2 pattern of relying solely on coding agents.
+name: Upgrade a Microservice to V1.22.0
+description: Upgrades a single microservice to v1.22.0.
 ---
 
 **CRITICAL**: Do NOT explore or analyze existing code before starting. This skill is self-contained.

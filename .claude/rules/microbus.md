@@ -72,7 +72,7 @@ general:
   hostname: my.service.hostname
   description: MyService does X.
   package: github.com/mycompany/myproject/myservice
-  frameworkVersion: 2.0.0 
+  frameworkVersion: 1.22.0 
 ```
 
 #### Downstream Dependencies

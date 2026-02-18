@@ -2,7 +2,7 @@ general:
   hostname: directory.example
   description: The directory microservice exposes a RESTful API for persisting personal records in a SQL database.
   package: github.com/microbus-io/fabric/examples/directory
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 functions:
   Create:

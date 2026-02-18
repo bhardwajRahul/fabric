@@ -2,7 +2,7 @@ general:
   hostname: messaging.example
   description: The Messaging microservice demonstrates service-to-service communication patterns.
   package: github.com/microbus-io/fabric/examples/messaging
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 webs:
   Home:

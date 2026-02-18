@@ -2,7 +2,7 @@ general:
   hostname: metrics.core
   description: The Metrics service is a core microservice that aggregates metrics from other microservices and makes them available for collection.
   package: github.com/microbus-io/fabric/coreservices/metrics
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 downstream:
   - hostname: control.core

@@ -2,7 +2,7 @@ general:
   hostname: http.egress.core
   description: The HTTP egress microservice relays HTTP requests to the internet.
   package: github.com/microbus-io/fabric/coreservices/httpegress
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 webs:
   MakeRequest:

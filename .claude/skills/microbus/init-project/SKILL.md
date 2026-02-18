@@ -18,7 +18,7 @@ Initialize a project to use Microbus:
 - [ ] Step 7: Prepare env files
 - [ ] Step 8: Prepare .gitignore
 - [ ] Step 9: Prepare launch.json
-- [ ] Step 10: Upgrade to v2.0.0
+- [ ] Step 10: Upgrade to v1.22.0
 - [ ] Step 11: Tidy up
 ```
 
@@ -245,11 +245,11 @@ If the file already exists, add the `Main` configuration to the existing file in
 }
 ```
 
-#### Step 10: Upgrade to V2.0.0
+#### Step 10: Upgrade to V1.22.0
 
 Skip this step if the old framework version could not be determined.
 
-If the old framework version is earlier than `2.0.0`, follow the `upgrade-project-v2.0.0` skill. 
+If the old framework version is earlier than `1.22.0`, follow the `upgrade-project-v1.22.0` skill. 
 
 #### Step 11: Tidy Up
 

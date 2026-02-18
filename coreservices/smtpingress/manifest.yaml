@@ -2,7 +2,7 @@ general:
   hostname: smtp.ingress.core
   description: The SMTP ingress microservice listens for incoming emails and fires corresponding events.
   package: github.com/microbus-io/fabric/coreservices/smtpingress
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 outboundEvents:
   OnIncomingEmail:

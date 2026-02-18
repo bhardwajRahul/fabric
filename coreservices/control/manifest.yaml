@@ -2,7 +2,7 @@ general:
   hostname: control.core
   description: This microservice is created for the sake of generating the client API for the :888 control subscriptions. The microservice itself does nothing and should not be included in applications.
   package: github.com/microbus-io/fabric/coreservices/control
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 functions:
   Ping:

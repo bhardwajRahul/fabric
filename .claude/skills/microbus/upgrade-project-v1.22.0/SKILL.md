@@ -1,6 +1,6 @@
 ---
-name: Upgrade a Microbus Project From v1 to v2
-description: Upgrades all microservices built with the code generator of Microbus v1, to the new v2 pattern of relying solely on coding agents.
+name: Upgrade a Project to V1.22.0
+description: Upgrades all microservices to v1.22.0.
 ---
 
 **CRITICAL**: Do NOT explore or analyze existing code before starting. This skill is self-contained.
@@ -48,7 +48,7 @@ Scan the project for all directories containing a `service.yaml` file. Each of t
 
 #### Step 3: Upgrade in Parallel
 
-Use the skill `.claude/skills/microbus/upgrade-microservice-v2.0.0` to upgrade each of the identified microservices. You may invoke sub agents to perform the upgrade in parallel.
+Use the skill `.claude/skills/microbus/upgrade-microservice-v1.22.0` to upgrade each of the identified microservices. You may invoke sub agents to perform the upgrade in parallel.
 
 #### Step 4: Breaking Changes (After Microservices)
 

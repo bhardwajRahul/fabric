@@ -2,7 +2,7 @@ general:
   hostname: calculator.example
   description: The Calculator microservice performs simple mathematical operations.
   package: github.com/microbus-io/fabric/examples/calculator
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 functions:
   Arithmetic:

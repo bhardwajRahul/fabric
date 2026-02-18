@@ -2,7 +2,7 @@ general:
   hostname: helloworld.example
   description: The HelloWorld microservice demonstrates the classic minimalist example.
   package: github.com/microbus-io/fabric/examples/helloworld
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 webs:
   HelloWorld:

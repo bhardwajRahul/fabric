@@ -2,7 +2,7 @@ general:
   hostname: eventsource.example
   description: The event source microservice fires events that are caught by the event sink microservice.
   package: github.com/microbus-io/fabric/examples/eventsource
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 functions:
   Register:

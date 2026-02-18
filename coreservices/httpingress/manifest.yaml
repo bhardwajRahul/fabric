@@ -2,7 +2,7 @@ general:
   hostname: http.ingress.core
   description: The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
   package: github.com/microbus-io/fabric/coreservices/httpingress
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 downstream:
   - hostname: metrics.core

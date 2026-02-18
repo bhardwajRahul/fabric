@@ -641,7 +641,7 @@ general:
   hostname: myservice.myproject.mycompany
   description: MyService does X.
   package: github.com/mycompany/myproject/myservice
-  frameworkVersion: 2.0.0 
+  frameworkVersion: 1.22.0 
 ```
 
 #### Step 10: Add to Main App

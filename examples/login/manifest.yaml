@@ -2,7 +2,7 @@ general:
   hostname: login.example
   description: The Login microservice demonstrates usage of authentication and authorization.
   package: github.com/microbus-io/fabric/examples/login
-  frameworkVersion: 2.0.0
+  frameworkVersion: 1.22.0
 
 downstream:
   - hostname: tokenissuer.core
