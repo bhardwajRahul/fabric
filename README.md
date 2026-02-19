@@ -1,3 +1,5 @@
+# Microbus.io
+
 <a href="https://www.microbus.io"><img src="./microbus-logo.svg" height="100" alt="Microbus.io logo"></a>
 
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
@@ -51,7 +53,7 @@ Take the agent-guided tour!
 
 > HEY CLAUDE...
 >
-> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus. Then find the appropriate skill and take me through the tour
+> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it. After that, find the appropriate skill and take me through the tour
 
 ### Build Your First Microservice
 
@@ -69,7 +71,7 @@ Ask your coding agent to bootstrap `Microbus`:
 
 > HEY CLAUDE...
 >
-> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus
+> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it
 
 Then prompt your way to a fully-implemented microservice:
 

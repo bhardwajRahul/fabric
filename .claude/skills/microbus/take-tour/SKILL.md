@@ -30,11 +30,13 @@ Take the agent-guided tour:
 Download the latest examples from Github.
 
 ```shell
-git clone --depth 1 https://github.com/microbus-io/fabric tmp/microbus-fabric
+git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
 rm -rf examples
-cp -r tmp/microbus-fabric/examples .
-rm -rf tmp/microbus-fabric  
+cp -r temp-clone/examples .
+rm -rf temp-clone  
 ```
+
+The example files reference `github.com/microbus-io/fabric/examples/...` internally. Replace all those references with the local module path.
 
 #### Step 2: Extend Main App
 
@@ -57,7 +59,7 @@ app.Add(
 )
 ```
 
-Add the appropriate imports too.
+Add the appropriate imports too, again, replace all references to `github.com/microbus-io/fabric/examples/...` with the local module path.
 
 ```go
 import (
@@ -70,6 +72,7 @@ import (
 	"github.com/microbus-io/fabric/examples/helloworld"
 	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
+    "github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 )
 ```
 
@@ -102,6 +105,12 @@ If the answer is yes, do so using the following command.
 docker compose -f setup/microbus.yaml -p microbus up -d
 ```
 
+**CRITICAL**: Stop the Docker containers when the user ends the tour or exists the session.
+
+```shell
+docker compose -f setup/microbus.yaml -p microbus down
+```
+
 #### Step 4: Run the Example App
 
 Change into the `main` directory and run the example app in the backgroun.
@@ -110,6 +119,8 @@ Change into the `main` directory and run the example app in the backgroun.
 cd main
 go run main.go
 ```
+
+**CRITICAL**: Interrupt or kill the example app when the user ends the tour or exists the session.
 
 #### Step 5: Calculator
 
@@ -122,7 +133,10 @@ Explain the microservice to the user and present the following links for them to
 - http://localhost:8080/calculator.example/square?x=not-a-number — demonstrates input validation error handling
 - http://localhost:8080/calculator.example/distance?p1.x=0&p1.y=0&p2.x=3&p2.y=4 — calculates distance between two points using a custom Point type
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 6: Hello
 
@@ -136,7 +150,10 @@ Explain the microservice to the user and present the following links for them to
 - http://localhost:8080/hello.example/calculator — renders a calculator UI that calls the calculator microservice
 - http://localhost:8080/hello.example/bus.png — serves an embedded static image resource
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 7: Messaging
 
@@ -148,7 +165,10 @@ Explain the microservice to the user and present the following links for them to
 - http://localhost:8080/messaging.example/cache-store?key=foo&value=bar — stores a key-value pair in the distributed cache
 - http://localhost:8080/messaging.example/cache-load?key=foo — retrieves a value from the distributed cache by key
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 8: Browser
 
@@ -158,7 +178,10 @@ Explain the microservice to the user and present the following link for them to 
 
 - http://localhost:8080/browser.example/browse?url=example.com — fetches and displays the HTML source of example.com
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 9: Directory
 
@@ -171,7 +194,10 @@ Explain the microservice to the user and present the following links for them to
 - http://localhost:8080/directory.example/persons/key/1 — loads the person record with key 1
 - http://localhost:8080/directory.example/web-ui?method=DELETE&path=/persons/key/1 — opens the web UI pre-filled to delete person 1 (push submit)
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 10: Login
 
@@ -181,7 +207,10 @@ Explain the microservice to the user and present the following link for them to 
 
 - http://localhost:8080/login.example/welcome
 
-Tell the user to say "next step" to proceed to the next step, or ask if they want to "explore the code". If they ask to explore the code, show them an overview of the features of the microservice, suggest to them to see the code of any individual feature, and give them the opportunity to ask questions.
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 12
 
 #### Step 11: Telemetry
 
@@ -189,7 +218,8 @@ Skip this step if the user elected not to install the LGTM stack with Docker.
 
 Explain to the user that they can view the telemetry collected by Grafana at http://localhost:3000. Metrics and traces are visualized in [dashboards](http://localhost:3000/dashboards) and can also be viewed in the [metrics drill-down app](http://localhost:3000/a/grafana-metricsdrilldown-app) and the [traces drill-down app](http://localhost:3000/a/grafana-exploretraces-app).
 
-Tell the user to say "next step" to proceed to the next step.
+Present the user with these options:
+- "End the tour" - Proceed to the next step
 
 #### Step 12: Stop Example App
 

@@ -34,23 +34,13 @@ go mod init github.com/mycompany/myproject
 Download the latest coding agent rules and skills from Github.
 
 ```shell
-git clone --depth 1 https://github.com/microbus-io/fabric tmp/microbus-fabric
+git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
 rm -rf .claude/rules/microbus.md
 rm -rf .claude/rules/skills/microbus
-cp -r tmp/microbus-fabric/.claude .
-rm -rf tmp/microbus-fabric
-```
-
-The `.claude` directory should include the following.
-
-```
-.claude/
-├── rules/
-│   └── microbus.md
-└── skills/
-    └── microbus/
+cp -r temp-clone/.claude .
+rm -rf temp-clone
 ```
 
 #### Step 4: Init the Project
 
-Follow the skill in `.claude/skills/microbus/init-project` to initialize the project.
+Follow the skill in `.claude/skills/microbus/init-project` to initialize the project, but skip the step to download the latest agent rules and skills.

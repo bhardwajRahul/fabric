@@ -11,7 +11,7 @@ Instruct your coding agent to:
 
 > HEY CLAUDE...
 >
-> Follow the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md to bootstrap Microbus.
+> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it
 
 Your project structure will now look like this:
 
@@ -19,7 +19,6 @@ Your project structure will now look like this:
 myproject/
 ├── .claude/                    # Claude Code setup
 │   ├── rules/                  # Instructions for coding agents
-│   │   └── microbus.md
 │   └── skills/                 # Claude Code skills
 ├── .vscode/
 │   └── launch.json             # VSCode launch file

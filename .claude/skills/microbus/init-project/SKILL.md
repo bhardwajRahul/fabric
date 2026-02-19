@@ -27,22 +27,14 @@ Initialize a project to use Microbus:
 Download the latest coding agent rules and skills from Github.
 
 ```shell
-git clone --depth 1 https://github.com/microbus-io/fabric tmp/microbus-fabric
+git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
 rm -rf .claude/rules/microbus.md
 rm -rf .claude/rules/skills/microbus
-cp -r tmp/microbus-fabric/.claude .
-rm -rf tmp/microbus-fabric
+cp -r temp-clone/.claude .
+rm -rf temp-clone
 ```
 
-The `.claude` directory should include the following.
-
-```
-.claude/
-├── rules/
-│   └── microbus.md
-└── skills/
-    └── microbus/
-```
+Read all markdown files in `./claude/rules/` to familiarize with the `Microbus` framework.
 
 #### Step 2: Determine Old Version of Microbus
 
@@ -50,10 +42,15 @@ Look in `go.mod` and identify the current version of the `github.com/microbus-io
 
 #### Step 3: Get the Latest Version of Microbus
 
-Get the latest version of the `Microbus` framework and tidy up.
+Get the latest version of `Microbus` and tidy up.
 
 ```shell
 go get github.com/microbus-io/fabric
+```
+
+Tidy up `go.mod`. If it fails, continue to the next step. An upgrade may be necessary first.
+
+```shell
 go mod tidy
 ```
 

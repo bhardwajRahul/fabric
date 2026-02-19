@@ -56,9 +56,9 @@ Required JWT claims are expressed as a boolean expression over the JWT claims as
 
 ### Manifest
 
-Each microservice contains a `manifest.yaml` that concisely sums up its features. Reading a microservice's manifest is a much faster way to understand what it does than reading its code. When starting to work on a project, read all `manifest.yaml` files across the project to build a mental map of the system and keep it in mind.
+Each microservice contains a `manifest.yaml` that concisely catalogs its features. The manifest is documentation of the code, not a definition used to generate it. Reading a microservice's manifest is a much faster way to understand what it does than reading its code. When starting to work on a project, read all `manifest.yaml` files across the project to build a mental map of the system and keep it in mind.
 
-**IMPORTANT**: Update the manifest when working on a microservice.
+**IMPORTANT**: The manifest describes the code but does not generate it. When changing the code of the microservice, update the manifest to match.
 
 #### General
 
@@ -229,7 +229,6 @@ Markers are scoped to a single microservice — different microservices can defi
 ```
 ├── .claude/                    # Claude Code setup
 │   ├── rules/                  # Instructions for coding agents
-│   │   └── microbus.md
 │   └── skills/                 # Claude Code skills
 ├── .vscode/
 │   └── launch.json             # VSCode launch file

@@ -61,6 +61,8 @@ myproject/
 
 **IMPORTANT**: File names in the following steps are relative to the new `myservice` directory, unless indicated otherwise.
 
+File preparation steps can be performed in parallel.
+
 #### Step 2: Prepare Coding Agent Files
 
 Create `AGENTS.md` with the following content verbatim.
