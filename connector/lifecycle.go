@@ -64,7 +64,6 @@ func (c *Connector) SetOnShutdown(handler service.ShutdownHandler) error {
 }
 
 // Startup the microservice by connecting to the transport and activating the subscriptions.
-// The context deadline is used to limit the time allotted to the operation.
 func (c *Connector) Startup(ctx context.Context) (err error) {
 	if !c.phase.CompareAndSwap(shutDown, startingUp) {
 		return errors.New("not shut down")
@@ -144,6 +143,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// All errors must be assigned to err.
 	span := trc.NewSpan(nil)
 	startTime := time.Now()
+	ctx = context.Background()
 	defer func() {
 		if err != nil {
 			c.LogError(ctx, "Starting up", "error", err)
@@ -196,7 +196,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	c.LogInfo(ctx, "Startup")
 
 	// Connect to the transport
-	err = c.transportConn.Open(context.Background(), c)
+	err = c.transportConn.Open(ctx, c)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
@@ -261,17 +261,16 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 		return err
 	}
 
-	// Run all tickers
-	c.runTickers()
-
 	c.startupTime = time.Now().UTC()
 	c.phase.Store(startedUp)
+
+	// Run all tickers after startup is complete
+	c.runTickers()
 
 	return nil
 }
 
 // Shutdown the microservice by deactivating subscriptions and disconnecting from the transport.
-// The context deadline is used to limit the time allotted to the operation.
 func (c *Connector) Shutdown(ctx context.Context) (err error) {
 	if !c.phase.CompareAndSwap(startedUp, shuttingDown) && !c.phase.CompareAndSwap(startingUp, shuttingDown) {
 		return errors.New("not started")

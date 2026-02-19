@@ -264,19 +264,19 @@ func TestConnector_Restart(t *testing.T) {
 
 	// Startup
 	unsub, _ := configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte(`{"values":{"config":"overriden"}}`))
+		w.Write([]byte(`{"values":{"config":"overridden"}}`))
 		return nil
 	})
 	err = con.Startup(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), startupCalled.Load())
 	assert.Zero(shutdownCalled.Load())
-	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
+	_, err = con.Request(ctx, pub.GET("https://restart.connector/endpoint"))
 	assert.NoError(err)
 	assert.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
 	assert.True(tickerCalled.Load() > 0)
-	assert.Equal("overriden", con.Config("config"))
+	assert.Equal("overridden", con.Config("config"))
 
 	// Shutdown
 	err = con.Shutdown(ctx)
@@ -298,7 +298,7 @@ func TestConnector_Restart(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(int32(1), startupCalled.Load())
 	assert.Zero(shutdownCalled.Load())
-	_, err = con.Request(con.lifetimeCtx, pub.GET("https://restart.connector/endpoint"))
+	_, err = con.Request(ctx, pub.GET("https://restart.connector/endpoint"))
 	assert.NoError(err)
 	assert.Equal(int32(1), endpointCalled.Load())
 	time.Sleep(time.Second)
