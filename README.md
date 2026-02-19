@@ -7,7 +7,7 @@
 [![Test](https://github.com/microbus-io/fabric/actions/workflows/test.yaml/badge.svg?branch=main&event=push)](https://github.com/microbus-io/fabric/actions/workflows/test.yaml)
 [![Reference](https://goreportcard.com/badge/github.com/microbus-io/fabric)](https://goreportcard.com/report/github.com/microbus-io/fabric)
 
-## Teach your agent to code microservices
+## Teach Your Agent to Code Microservices
 
 Your coding agent can already code. Microbus teaches it to master the complex domain of distributed systems — the architecture, the patterns, the operational discipline — and produce enterprise-grade microservices, every time.
 
@@ -78,24 +78,14 @@ Then prompt your way to a fully-implemented microservice:
 > HEY CLAUDE...
 >
 > Create a new microservice "helloworld"
-
-> HEY CLAUDE...
 >
 > Create a web handler that prints "Hello, World!"
-
-> HEY CLAUDE...
 >
-> Create a config for the greeting, with a default of "Hello". The greeting must start with a capital letter and not be empty
-
-> HEY CLAUDE...
+> Create a config for the Greeting, with a default of "Hello". The greeting must start with a capital letter and not be empty
 >
 > Create a functional endpoint Add that sums up two integers x and y and returns the sum
-
-> HEY CLAUDE...
 >
 > Fire an event OnDouble when x==y in Add
-
-> HEY CLAUDE...
 >
 > Create a metric that totals the positive sums in Add, and another that totals the negative sums
 
