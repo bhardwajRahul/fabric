@@ -17,7 +17,7 @@ Your coding agent can already code. Microbus teaches it to master the complex do
 
 **Faster** - Agents implement, test, and iterate in one session, in one process. No containers, no external dependencies, no waiting. Tighter [dev-test-debug loops](./docs/blocks/integration-testing.md) mean fewer mistakes and faster delivery.
 
-**At scale** - Every microservice is independent. Multiple agents — or multiple developers — work on different services simultaneously without merge conflicts or coordination overhead.
+**At scale** - Every microservice is independent. Multiple agents work on different services simultaneously without merge conflicts or coordination overhead.
 
 [Get started](#get-started) in minutes. `Microbus` is free and open source under the Apache 2.0 license.
 
