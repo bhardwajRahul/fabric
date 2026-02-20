@@ -1,0 +1,173 @@
+general:
+  name: BusStop
+  hostname: busstop.hostname
+  description: BusStop persists bus stops in a SQL database.
+  package: github.com/microbus-io/fabric/busstop
+  frameworkVersion: 1.23.0
+  db: SQL
+
+functions:
+  Create:
+    signature: Create(obj *BusStop) (objKey BusStopKey)
+    description: Create creates a new bus stop, returning its key.
+    method: ANY
+    route: /create
+  Store:
+    signature: Store(obj *BusStop) (stored bool)
+    description: Store updates the bus stop.
+    method: ANY
+    route: /store
+  MustStore:
+    signature: MustStore(obj *BusStop)
+    description: MustStore updates the bus stop, erroring if not found.
+    method: ANY
+    route: /must-store
+  Revise:
+    signature: Revise(obj *BusStop) (revised bool)
+    description: Revise updates the bus stop only if the revision matches.
+    method: ANY
+    route: /revise
+  MustRevise:
+    signature: MustRevise(obj *BusStop)
+    description: MustRevise updates the bus stop only if the revision matches, erroring on conflict.
+    method: ANY
+    route: /must-revise
+  Delete:
+    signature: Delete(objKey BusStopKey) (deleted bool)
+    description: Delete deletes the bus stop.
+    method: ANY
+    route: /delete
+  MustDelete:
+    signature: MustDelete(objKey BusStopKey)
+    description: MustDelete deletes the bus stop, erroring if not found.
+    method: ANY
+    route: /must-delete
+  List:
+    signature: List(query Query) (objs []*BusStop, totalCount int)
+    description: List returns the bus stops matching the query, and the total count of matches regardless of the limit.
+    method: ANY
+    route: /list
+  Lookup:
+    signature: Lookup(query Query) (obj *BusStop, found bool)
+    description: Lookup returns the single bus stop matching the query.
+    method: ANY
+    route: /lookup
+  MustLookup:
+    signature: MustLookup(query Query) (obj *BusStop)
+    description: MustLookup returns the single bus stop matching the query. It errors unless exactly one bus stop matches the query.
+    method: ANY
+    route: /must-lookup
+  Load:
+    signature: Load(objKey BusStopKey) (obj *BusStop, found bool)
+    description: Load returns the bus stop associated with the key.
+    method: ANY
+    route: /load
+  MustLoad:
+    signature: MustLoad(objKey BusStopKey) (obj *BusStop)
+    description: MustLoad returns the bus stop associated with the key, erroring if not found.
+    method: ANY
+    route: /must-load
+  BulkLoad:
+    signature: BulkLoad(objKeys []BusStopKey) (objs []*BusStop)
+    description: BulkLoad returns the bus stops matching the keys.
+    method: ANY
+    route: /bulk-load
+  BulkDelete:
+    signature: BulkDelete(objKeys []BusStopKey) (deletedKeys []BusStopKey)
+    description: BulkDelete deletes the bus stops matching the keys, returning the keys of the deleted bus stops.
+    method: ANY
+    route: /bulk-delete
+  BulkCreate:
+    signature: BulkCreate(objs []*BusStop) (objKeys []BusStopKey)
+    description: BulkCreate creates multiple bus stops, returning their keys.
+    method: ANY
+    route: /bulk-create
+  BulkStore:
+    signature: BulkStore(objs []*BusStop) (storedKeys []BusStopKey)
+    description: BulkStore updates multiple bus stops, returning the keys of the stored bus stops.
+    method: ANY
+    route: /bulk-store
+  BulkRevise:
+    signature: BulkRevise(objs []*BusStop) (revisedKeys []BusStopKey)
+    description: BulkRevise updates multiple bus stops only if the revisions match, returning the keys of the revised bus stops.
+    method: ANY
+    route: /bulk-revise
+  Purge:
+    signature: Purge(query Query) (deletedKeys []BusStopKey)
+    description: Purge deletes all bus stops matching the query, returning the keys of the deleted bus stops.
+    method: ANY
+    route: /purge
+  Count:
+    signature: Count(query Query) (count int)
+    description: Count returns the number of bus stops matching the query.
+    method: ANY
+    route: /count
+  CreateREST:
+    signature: CreateREST(httpRequestBody *BusStop) (objKey BusStopKey, httpStatusCode int)
+    description: CreateREST creates a new bus stop via REST, returning its key.
+    method: POST
+    route: /busstops
+  StoreREST:
+    signature: StoreREST(key BusStopKey, httpRequestBody *BusStop) (httpStatusCode int)
+    description: StoreREST updates an existing bus stop via REST.
+    method: PUT
+    route: /busstops/{key}
+  DeleteREST:
+    signature: DeleteREST(key BusStopKey) (httpStatusCode int)
+    description: DeleteREST deletes an existing bus stop via REST.
+    method: DELETE
+    route: /busstops/{key}
+  LoadREST:
+    signature: LoadREST(key BusStopKey) (httpResponseBody *BusStop, httpStatusCode int)
+    description: LoadREST loads a bus stop by key via REST.
+    method: GET
+    route: /busstops/{key}
+  ListREST:
+    signature: ListREST(q Query) (httpResponseBody []*BusStop, httpStatusCode int)
+    description: ListREST lists bus stops matching the query via REST.
+    method: GET
+    route: /busstops
+
+  TryReserve:
+    signature: TryReserve(objKey BusStopKey, dur time.Duration) (reserved bool)
+    description: TryReserve attempts to reserve a bus stop for the given duration, returning true if successful.
+    method: ANY
+    route: /try-reserve
+  TryBulkReserve:
+    signature: TryBulkReserve(objKeys []BusStopKey, dur time.Duration) (reservedKeys []BusStopKey)
+    description: TryBulkReserve attempts to reserve bus stops for the given duration, returning the keys of those successfully reserved.
+    method: ANY
+    route: /try-bulk-reserve
+  Reserve:
+    signature: Reserve(objKey BusStopKey, dur time.Duration) (reserved bool)
+    description: Reserve unconditionally reserves a bus stop for the given duration, returning true if the bus stop exists.
+    method: ANY
+    route: /reserve
+  BulkReserve:
+    signature: BulkReserve(objKeys []BusStopKey, dur time.Duration) (reservedKeys []BusStopKey)
+    description: BulkReserve unconditionally reserves bus stops for the given duration, returning the keys of those that exist.
+    method: ANY
+    route: /bulk-reserve
+
+outboundEvents:
+  OnBusStopCreated:
+    signature: OnBusStopCreated(objKeys []BusStopKey)
+    description: OnBusStopCreated is triggered when bus stops are created.
+    method: POST
+    route: :417/on-bus-stop-created
+  OnBusStopStored:
+    signature: OnBusStopStored(objKeys []BusStopKey)
+    description: OnBusStopStored is triggered when bus stops are stored.
+    method: POST
+    route: :417/on-bus-stop-stored
+  OnBusStopDeleted:
+    signature: OnBusStopDeleted(objKeys []BusStopKey)
+    description: OnBusStopDeleted is triggered when bus stops are deleted.
+    method: POST
+    route: :417/on-bus-stop-deleted
+
+configs:
+  SQLDataSourceName:
+    description: SQLDataSourceName is the connection string of the SQL database.
+    signature: SQLDataSourceName() (value string)
+    secret: true

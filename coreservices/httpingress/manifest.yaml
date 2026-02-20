@@ -1,8 +1,23 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 general:
+  name: HTTPIngress
   hostname: http.ingress.core
   description: The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
   package: github.com/microbus-io/fabric/coreservices/httpingress
-  frameworkVersion: 1.22.0
+  frameworkVersion: 1.23.0
 
 downstream:
   - hostname: metrics.core
@@ -13,41 +28,48 @@ downstream:
 configs:
   TimeBudget:
     description: TimeBudget specifies the timeout for handling a request, after it has been read. A value of 0 or less indicates no time budget.
-    type: time.Duration
+    signature: TimeBudget() (budget time.Duration)
     validation: dur [0s,]
     default: 20s
   Ports:
     description: Ports is a comma-separated list of HTTP ports on which to listen for requests.
-    type: string
+    signature: Ports() (port string)
     default: "8080"
+    callback: true
   RequestMemoryLimit:
     description: RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
-    type: int
+    signature: RequestMemoryLimit() (megaBytes int)
     validation: int [1,]
     default: 4096
   AllowedOrigins:
     description: AllowedOrigins is a comma-separated list of CORS origins to allow requests from. The * origin can be used to allow CORS request from all origins.
-    type: string
+    signature: AllowedOrigins() (origins string)
     default: "*"
+    callback: true
   PortMappings:
     description: PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound HTTP port, y is the requested NATS port, and z is the port to serve.
-    type: string
+    signature: PortMappings() (mappings string)
     default: "8080:*->*, 443:*->443, 80:*->443"
+    callback: true
   ReadTimeout:
     description: ReadTimeout specifies the timeout for fully reading a request.
-    type: time.Duration
+    signature: ReadTimeout() (timeout time.Duration)
     validation: dur [1s,]
     default: 5m
+    callback: true
   WriteTimeout:
     description: WriteTimeout specifies the timeout for fully writing the response to a request.
-    type: time.Duration
+    signature: WriteTimeout() (timeout time.Duration)
     validation: dur [1s,]
     default: 5m
+    callback: true
   ReadHeaderTimeout:
     description: ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
-    type: time.Duration
+    signature: ReadHeaderTimeout() (timeout time.Duration)
     validation: dur [1s,]
     default: 20s
+    callback: true
   BlockedPaths:
     description: A newline-separated list of paths or extensions to block with a 404.
-    type: string
+    signature: BlockedPaths() (blockedPaths string)
+    callback: true

@@ -8,17 +8,17 @@ By default, a DLRU is created and assigned for each microservice and made availa
 var obj MyObject
 ok, err := svc.DistribCache().Get(ctx, cacheKey, &obj)
 if err != nil {
-    return errors.Trace(err)
+	return errors.Trace(err)
 }
 if !ok {
-    obj, err = svc.loadObjectFromDatabase(ctx, objKey)
-    if err != nil {
-        return errors.Trace(err)
-    }
-    err = svc.DistribCache().Set(ctx, cacheKey, obj)
-    if err != nil {
-        return errors.Trace(err)
-    }
+	obj, err = svc.loadObjectFromDatabase(ctx, objKey)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = svc.DistribCache().Set(ctx, cacheKey, obj)
+	if err != nil {
+		return errors.Trace(err)
+	}
 }
 ```
 
@@ -28,7 +28,7 @@ The constructor requires a microservice in order to be able to communicate with 
 ```go
 myCache, err := dlru.NewCache(ctx, svc, ":444/my-cache")
 if err != nil {
-    return errors.Trace(err)
+	return errors.Trace(err)
 }
 myCache.SetMaxMemoryMB(5)
 myCache.SetMaxAge(time.Hour)

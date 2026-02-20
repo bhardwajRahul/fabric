@@ -1,7 +1,9 @@
 ---
 name: Initialize a Microbus Project
-description: Sets up a project with the latest the Microbus framework . Use when explicitly asked by the user to initialize a project to use the Microbus framework, or to upgrade an existing Microbus project to the latest version of the framework.
+description: Sets up a project with the latest the Microbus framework. Use when explicitly asked by the user to initialize a project to use the Microbus framework, or to upgrade an existing Microbus project to the latest version of the framework.
 ---
+
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this project.
 
 ## Workflow
 
@@ -18,7 +20,7 @@ Initialize a project to use Microbus:
 - [ ] Step 7: Prepare env files
 - [ ] Step 8: Prepare .gitignore
 - [ ] Step 9: Prepare launch.json
-- [ ] Step 10: Upgrade to v1.22.0
+- [ ] Step 10: Upgrade
 - [ ] Step 11: Tidy up
 ```
 
@@ -242,11 +244,12 @@ If the file already exists, add the `Main` configuration to the existing file in
 }
 ```
 
-#### Step 10: Upgrade to V1.22.0
+#### Step 10: Upgrade
 
-Skip this step if the old framework version could not be determined.
+Skip this step if the old framework version could not be determined. Otherwise, perform the following sequentially in order:
 
-If the old framework version is earlier than `1.22.0`, follow the `upgrade-project-v1.22.0` skill. 
+- If the old framework version is earlier than `1.22.0`, follow the `microbus/upgrade-project-v1.22.0` skill. 
+- If the old framework version is earlier than `1.23.0`, follow the `microbus/upgrade-project-v1.23.0` skill. 
 
 #### Step 11: Tidy Up
 

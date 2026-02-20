@@ -3,7 +3,7 @@ name: Adding an Inbound Event Sink Endpoint
 description: Creates or modify an inbound event sink endpoint of a microservice. Use when explicitly asked by the user to create or modify an inbound event sink endpoint of a microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -24,9 +24,7 @@ Creating or modifying a sink endpoint:
 - [ ] Step 7: Bind the inbound event sink to the microservice
 - [ ] Step 8: Extend the mock
 - [ ] Step 9: Test the inbound event sink
-- [ ] Step 10: Update manifest
-- [ ] Step 11: Document the microservice
-- [ ] Step 12: Versioning
+- [ ] Step 10: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -35,7 +33,7 @@ Read the local `AGENTS.md` file in the microservice's directory. It contains mic
 
 #### Step 2: Locate the Source of the Outbound Event and Determine Signature
 
-Locate the `Hook` in the API directory of the microservice that is the source the event. Determine the signature of the outbound event.
+Locate the `Hook` in the API directory of the microservice that is the source of the event. Determine the signature of the outbound event.
 
 ```go
 func OnMyEvent(ctx context.Context, inArg1 string, inArg2 ThirdPartyStruct) (outArg1 map[string]MyStruct, err error)
@@ -43,7 +41,7 @@ func OnMyEvent(ctx context.Context, inArg1 string, inArg2 ThirdPartyStruct) (out
 
 #### Step 3: Determine a Description
 
-Pull the event description from the `Hook`: `OnMyEvent is triggered when X`. Embed this description in followup steps where appropriate.
+Pull the event description from the `Hook`. Embed this description in followup steps instead of the placeholder `OnMyEvent is triggered when X`.
 
 #### Step 4: Determine the Required Claims
 
@@ -56,7 +54,7 @@ Extend the `ToDo` interface in `intermediate.go`.
 ```go
 type ToDo interface {
 	// ...
-	OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
+	OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
 }
 ```
 
@@ -70,27 +68,38 @@ OnMyEvent is triggered when X.
 */
 func (svc *Service) OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
 	// Implement logic here...
-	return nil, nil
+	return
 }
 ```
 
 #### Step 7: Bind the Inbound Event Sink to the Microservice
 
-Bind the inbound event sink to the microservice in the `NewIntermediate` constructor in `intermediate.go`.
+Use the event source's `Hook` to bind the inbound event sink to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
 
 - The queue option indicate how requests are distributed among replicas of the microservice
   - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default option and may be omitted
   - `sub.NoQueue()`: requests are processed by all subscribers
   - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
 - The `sub.RequiredClaims(requiredClaims)` option defines the authorization requirements of the endpoint. This option can be omitted to allow all requests
-- The return values of `eventsourceapi.NewHook` are discarded by intent
+- Pass queue and claims options via `WithOptions`, not as arguments to the event method
+- The return values of the `Hook` method are discarded by intent
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
-	eventsourceapi.NewHook(svc).OnMyEvent(svc.OnMyEvent, sub.LoadBalanced(), sub.RequiredClaims(requiredClaims)) // MARKER: OnMyEvent
+	eventsourceapi.NewHook(svc).OnMyEvent(svc.OnMyEvent) // MARKER: OnMyEvent
 	// ...
 }
+```
+
+If the endpoint requires a non-default queue or required claims, chain `WithOptions` before the event method:
+
+```go
+eventsourceapi.NewHook(svc).WithOptions(sub.NoQueue()).OnMyEvent(svc.OnMyEvent) // MARKER: OnMyEvent
+```
+
+```go
+eventsourceapi.NewHook(svc).WithOptions(sub.RequiredClaims(requiredClaims)).OnMyEvent(svc.OnMyEvent) // MARKER: OnMyEvent
 ```
 
 Add the appropriate import to `github.com/company/project/eventsource/eventsourceapi`.
@@ -154,18 +163,13 @@ t.Run("on_my_event", func(t *testing.T) { // MARKER: OnMyEvent
 
 #### Step 9: Test the Inbound Event Sink
 
-Skip this step if instructed to be "quick" or to skip tests.
-
-Append the following code block to the end of `service_test.go`.
-
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
-- There is no need to set the `pub.Actor` option if the inbound event sink does not require claims.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -173,6 +177,7 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 	// Initialize the testers
 	tester := connector.New("tester.client")
 	eventsourceTrigger := eventsourceapi.NewMulticastTrigger(tester)
+	_ = eventsourceTrigger
 
 	// Run the testing app
 	app := application.New()
@@ -204,16 +209,31 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 }
 ```
 
-#### Step 10: Update Manifest
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-Update the `inboundEvents` and `downstream` sections of `manifest.yaml`.
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-#### Step 11: Document the Microservice
+- You may omit the `pub.Actor` option if the inbound event does not require claims.
 
-Skip this step if instructed to be "quick" or to skip documentation.
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+	actor := jwt.MapClaims{}
+	for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, argIn1, argIn2) {
+		argOut1, err := e.Get()
+		if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
+			assert.Expect(
+				argOut1, expectedArgOut1,
+				err, nil,
+			)
+		}
+	}
+})
+```
 
-#### Step 12: Versioning
+Do not remove the `HINT` comments.
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+#### Step 10: Housekeeping
+
+Follow the `microbus/housekeeping` skill.

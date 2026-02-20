@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -119,4 +119,12 @@ func (sm *SyncMap[K, V]) DoUnderLock(callback func(m map[K]V)) {
 	}
 	callback(sm.m)
 	sm.mux.Unlock()
+}
+
+// Len is the number of elements in the map.
+func (sm *SyncMap[K, V]) Len() (n int) {
+	sm.mux.Lock()
+	n = len(sm.m)
+	sm.mux.Unlock()
+	return n
 }

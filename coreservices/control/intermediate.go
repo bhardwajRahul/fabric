@@ -99,18 +99,18 @@ func NewIntermediate(impl ToDo) *Intermediate {
 The microservice itself does nothing and should not be included in applications.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functions
-	svc.Subscribe("ANY", controlapi.RouteOfPing, svc.doPing, sub.NoQueue())                   // MARKER: Ping
-	svc.Subscribe("ANY", controlapi.RouteOfConfigRefresh, svc.doConfigRefresh, sub.NoQueue()) // MARKER: ConfigRefresh
-	svc.Subscribe("ANY", controlapi.RouteOfTrace, svc.doTrace, sub.NoQueue())                 // MARKER: Trace
+	svc.Subscribe(controlapi.Ping.Method, controlapi.Ping.Route, svc.doPing, sub.NoQueue())                   // MARKER: Ping
+	svc.Subscribe(controlapi.ConfigRefresh.Method, controlapi.ConfigRefresh.Route, svc.doConfigRefresh, sub.NoQueue()) // MARKER: ConfigRefresh
+	svc.Subscribe(controlapi.Trace.Method, controlapi.Trace.Route, svc.doTrace, sub.NoQueue())                 // MARKER: Trace
 
 	// Web endpoints
-	svc.Subscribe("ANY", controlapi.RouteOfMetrics, svc.Metrics, sub.NoQueue()) // MARKER: Metrics
+	svc.Subscribe(controlapi.Metrics.Method, controlapi.Metrics.Route, svc.Metrics, sub.NoQueue()) // MARKER: Metrics
 
 	// HINT: Add metrics here
 
@@ -120,6 +120,7 @@ The microservice itself does nothing and should not be included in applications.
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -135,6 +136,44 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 
 	endpoints := []*openapi.Endpoint{
 		// HINT: Register web handlers and functional endpoints by adding them here
+		{ // MARKER: Ping
+			Type:        "function",
+			Name:        "Ping",
+			Method:      controlapi.Ping.Method,
+			Route:       controlapi.Ping.Route,
+			Summary:     "Ping() (pong int)",
+			Description: `Ping responds with a pong.`,
+			InputArgs:   controlapi.PingIn{},
+			OutputArgs:  controlapi.PingOut{},
+		},
+		{ // MARKER: ConfigRefresh
+			Type:        "function",
+			Name:        "ConfigRefresh",
+			Method:      controlapi.ConfigRefresh.Method,
+			Route:       controlapi.ConfigRefresh.Route,
+			Summary:     "ConfigRefresh()",
+			Description: `ConfigRefresh pulls the latest config values.`,
+			InputArgs:   controlapi.ConfigRefreshIn{},
+			OutputArgs:  controlapi.ConfigRefreshOut{},
+		},
+		{ // MARKER: Trace
+			Type:        "function",
+			Name:        "Trace",
+			Method:      controlapi.Trace.Method,
+			Route:       controlapi.Trace.Route,
+			Summary:     "Trace(id string)",
+			Description: `Trace forces exporting a tracing span.`,
+			InputArgs:   controlapi.TraceIn{},
+			OutputArgs:  controlapi.TraceOut{},
+		},
+		{ // MARKER: Metrics
+			Type:        "web",
+			Name:        "Metrics",
+			Method:      controlapi.Metrics.Method,
+			Route:       controlapi.Metrics.Route,
+			Summary:     "Metrics()",
+			Description: `Metrics returns Prometheus metrics.`,
+		},
 	}
 
 	// Filter by the port of the request
@@ -173,55 +212,48 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 
 // doPing handles marshaling for the Ping function.
 func (svc *Intermediate) doPing(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Ping
-	var i controlapi.PingIn
-	var o controlapi.PingOut
-	err = httpx.ReadInputPayload(r, controlapi.RouteOfPing, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.Pong, err = svc.Ping(r.Context())
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in controlapi.PingIn
+	var out controlapi.PingOut
+	err = marshalFunction(w, r, controlapi.Ping.Route, &in, &out, func(_ any, _ any) error {
+		out.Pong, err = svc.Ping(r.Context())
+		return err
+	})
+	return err // No trace
 }
 
 // doConfigRefresh handles marshaling for the ConfigRefresh function.
 func (svc *Intermediate) doConfigRefresh(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ConfigRefresh
-	var i controlapi.ConfigRefreshIn
-	var o controlapi.ConfigRefreshOut
-	err = httpx.ReadInputPayload(r, controlapi.RouteOfConfigRefresh, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.ConfigRefresh(r.Context())
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in controlapi.ConfigRefreshIn
+	var out controlapi.ConfigRefreshOut
+	err = marshalFunction(w, r, controlapi.ConfigRefresh.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.ConfigRefresh(r.Context())
+		return err
+	})
+	return err // No trace
 }
 
 // doTrace handles marshaling for the Trace function.
 func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Trace
-	var i controlapi.TraceIn
-	var o controlapi.TraceOut
-	err = httpx.ReadInputPayload(r, controlapi.RouteOfTrace, &i)
+	var in controlapi.TraceIn
+	var out controlapi.TraceOut
+	err = marshalFunction(w, r, controlapi.Trace.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Trace(r.Context(), in.ID)
+		return err
+	})
+	return err // No trace
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = svc.Trace(r.Context(), i.ID)
+	err = execute(in, out)
 	if err != nil {
 		return err // No trace
 	}
-	err = httpx.WriteOutputPayload(w, o)
+	err = httpx.WriteOutputPayload(w, out)
 	if err != nil {
 		return errors.Trace(err)
 	}

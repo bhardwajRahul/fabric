@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/microbus-io/errors"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 type repository struct {

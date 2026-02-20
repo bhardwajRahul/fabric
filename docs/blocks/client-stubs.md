@@ -16,8 +16,8 @@ The aptly-named `MulticastClient` is used to make [multicast](../blocks/multicas
 
 ```go
 for ri := range providerapi.NewMulticastClient(svc).Discover(ctx) {
-    name, err := ri.Get()
-    // ...
+	name, err := ri.Get()
+	// ...
 }
 ```
 
@@ -25,8 +25,8 @@ The `MulticastTrigger` is to be used by the microservice itself to fire its own 
 
 ```go
 for ri := range userstoreapi.NewMulticastTrigger(svc).OnCanDelete(ctx, id) {
-    allowed, err := ri.Get()
-    // ...
+	allowed, err := ri.Get()
+	// ...
 }
 ```
 
@@ -40,12 +40,12 @@ Client requests can be customized with either `ForHost` or `WithOptions`. The fo
 
 ```go
 sum, err := calculatorapi.NewClient(svc).
-    ForHost("my.calculator").
-    WithOptions(
-        pub.Method("POST"),
-        pub.Header("Foo", "Bar"),
-    ).
-    Add(ctx, x, y)
+	ForHost("my.calculator").
+	WithOptions(
+		pub.Method("POST"),
+		pub.Header("Foo", "Bar"),
+	).
+	Add(ctx, x, y)
 ```
 
 The API package also defines the types used by the public endpoints of the microservice. For example, a user store microservice will likely define a `type User struct`. If the public endpoints of a microservice refer to a type owned by another microservice, an alias to it is defined. For example, if a hypothetical registration microservice accepts a `User` object in any of its endpoints, it defines `type User = userstoreapi.User` to alias the original definition.

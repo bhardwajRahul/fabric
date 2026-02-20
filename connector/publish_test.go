@@ -47,11 +47,13 @@ func TestConnector_Echo(t *testing.T) {
 	alpha := New("alpha.echo.connector")
 
 	beta := New("beta.echo.connector")
-	beta.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(err)
-		_, err = w.Write(body)
-		assert.NoError(err)
+	beta.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
+		if r.Body != nil {
+			body, err := io.ReadAll(r.Body)
+			assert.NoError(err)
+			_, err = w.Write(body)
+			assert.NoError(err)
+		}
 		return nil
 	})
 
@@ -63,12 +65,47 @@ func TestConnector_Echo(t *testing.T) {
 	assert.NoError(err)
 	defer beta.Shutdown(ctx)
 
+	// Send message without a body
+	response, err := alpha.GET(ctx, "https://beta.echo.connector/echo")
+	assert.NoError(err)
+	assert.Nil(response.Body)
+
 	// Send message and validate that it's echoed back
-	response, err := alpha.POST(ctx, "https://beta.echo.connector/echo", []byte("Hello"))
+	response, err = alpha.POST(ctx, "https://beta.echo.connector/echo", []byte("Hello"))
 	assert.NoError(err)
 	body, err := io.ReadAll(response.Body)
 	assert.NoError(err)
 	assert.Equal([]byte("Hello"), body)
+
+	// Send message to self and validate that it's echoed back
+	response, err = beta.POST(ctx, "https://beta.echo.connector/echo", []byte("Hello"))
+	assert.NoError(err)
+	body, err = io.ReadAll(response.Body)
+	assert.NoError(err)
+	assert.Equal([]byte("Hello"), body)
+}
+
+func TestConnector_NotFound(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	// Create the microservice
+	con := New("not.found.connector")
+
+	// Startup the microservices
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Send message to nowhere
+	response, err := con.POST(ctx, "https://not.found.connector/nowhere", []byte("Hello"))
+	assert.Expect(
+		err != nil, true,
+		response, nil,
+		errors.StatusCode(err), http.StatusNotFound,
+	)
 }
 
 func TestConnector_Error(t *testing.T) {
@@ -131,7 +168,11 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 		}
 		block := mem.Alloc(sz)
 		for {
-			n, err := io.ReadFull(r.Body, block[:sz])
+			var n int
+			var err error
+			if r.Body != nil {
+				n, err = io.ReadFull(r.Body, block[:sz])
+			}
 			if n == 0 || err == io.EOF {
 				break
 			}
@@ -141,7 +182,9 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 			w.Write(block[:n])
 		}
 		mem.Free(block)
-		r.Body.Close()
+		if r.Body != nil {
+			r.Body.Close()
+		}
 		return nil
 	})
 
@@ -408,7 +451,7 @@ func BenchmarkConnector_EchoParallelShortCircuit(b *testing.B) {
 	// goarch: arm64
 	// pkg: github.com/microbus-io/fabric/connector
 	// cpu: Apple M1 Pro
-	// BenchmarkConnector_EchoParallelShortCircuit/100/0KB-10     	  137668	      8848 ns/op	    8461 B/op	     150 allocs/op
+	// BenchmarkConnector_EchoParallelShortCircuit/100/0KB-10     	  135435	      8775 ns/op	    7548 B/op	     135 allocs/op
 	// BenchmarkConnector_EchoParallelShortCircuit/100/1KB-10     	   91471	     11961 ns/op	   15931 B/op	     161 allocs/op
 	// BenchmarkConnector_EchoParallelShortCircuit/100/16KB-10    	   55020	     19815 ns/op	  125466 B/op	     162 allocs/op
 	// BenchmarkConnector_EchoParallelShortCircuit/100/256KB-10   	   24858	     41754 ns/op	 1852003 B/op	     162 allocs/op
@@ -437,10 +480,12 @@ func echoParallel(b *testing.B, concurrency int, payloadSize int) {
 	var errCount atomic.Int32
 	alpha.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
 		echoCount.Add(1)
-		buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-		io.Copy(buf, r.Body)
-		w.Write(buf.Bytes())
-		mem.Free(buf.Bytes())
+		if r.Body != nil {
+			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+			io.Copy(buf, r.Body)
+			w.Write(buf.Bytes())
+			mem.Free(buf.Bytes())
+		}
 		return nil
 	})
 
@@ -914,6 +959,7 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 	assert.NoError(err)
 	defer con.Shutdown(ctx)
 
+	// Shorten the timeout using a ctx with timeout
 	shortCtx, cancel := context.WithTimeout(ctx, time.Millisecond*500)
 	defer cancel()
 	t0 := time.Now()
@@ -921,9 +967,34 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 		shortCtx,
 		pub.GET("https://timeout.slow.connector/slow"),
 	)
-	assert.Error(err)
 	dur := time.Since(t0)
 	assert.True(dur >= 500*time.Millisecond && dur < 600*time.Millisecond)
+	assert.Error(err)
+
+	// Shorten the timeout using a pub option: Request
+	t0 = time.Now()
+	_, err = con.Request(
+		ctx,
+		pub.GET("https://timeout.slow.connector/slow"),
+		pub.Timeout(time.Millisecond*500),
+	)
+	dur = time.Since(t0)
+	assert.True(dur >= 500*time.Millisecond && dur < 600*time.Millisecond, dur)
+	assert.Error(err)
+
+	// Shorten the timeout using a pub option: Publish
+	t0 = time.Now()
+	q := con.Publish(
+		ctx,
+		pub.GET("https://timeout.slow.connector/slow"),
+		pub.Timeout(time.Millisecond*500),
+	)
+	for qi := range q {
+		_, err = qi.Get()
+	}
+	dur = time.Since(t0)
+	assert.True(dur >= 500*time.Millisecond && dur < 600*time.Millisecond, dur)
+	assert.Error(err)
 }
 
 func TestConnector_ContextTimeout(t *testing.T) {
@@ -1095,17 +1166,14 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 	defer cancel()
 	var respondedOK, respondedErr int
 	t0 := time.Now()
-	ch := slow.Publish(
+	q := slow.Publish(
 		shortCtx,
 		pub.GET("https://multicast.partial.timeout.connector/cast"),
 		pub.Multicast(),
 	)
-	dur := time.Since(t0)
-	assert.True(dur >= 3*delay && dur < 4*delay)
-	assert.Len(ch, 3)
-	assert.Equal(3, cap(ch))
-	for i := range ch {
-		res, err := i.Get()
+	assert.True(time.Since(t0) < delay) // Should return instantly
+	for qi := range q {
+		res, err := qi.Get()
 		if err == nil {
 			body, err := io.ReadAll(res.Body)
 			assert.NoError(err)
@@ -1116,6 +1184,7 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 			respondedErr++
 		}
 	}
+	assert.True(time.Since(t0) > delay*2) // Should wait for slower response
 	assert.Equal(2, respondedOK)
 	assert.Equal(1, respondedErr)
 }
@@ -1386,7 +1455,7 @@ func TestConnector_LifetimeCancellation(t *testing.T) {
 	assert.True(dur < time.Second)
 }
 
-func TestConnector_ChannelCapacity(t *testing.T) {
+func TestConnector_ResponseQueueTiming(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 	ctx := t.Context()
@@ -1400,7 +1469,7 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 	for i := range n {
 		wg.Add(1)
 		go func() {
-			cons[i] = New("channel.capacity.connector")
+			cons[i] = New("response.queue.timing.connector")
 			cons[i].SetDeployment(TESTING)
 			cons[i].Subscribe("GET", "multicast", func(w http.ResponseWriter, r *http.Request) error {
 				time.Sleep(time.Duration(100*i+100) * time.Millisecond)
@@ -1419,31 +1488,38 @@ func TestConnector_ChannelCapacity(t *testing.T) {
 		}
 	}()
 
-	// All responses should come in at once after all handlers finished
+	// Responses should come in as they are produced
 	responses.Store(0)
 	t0 := time.Now()
 	cons[0].multicastChanCap = n / 2 // Limited multicast channel capacity should not block
-	ch := cons[0].Publish(
+	q := cons[0].Publish(
 		ctx,
-		pub.GET("https://channel.capacity.connector/multicast"),
+		pub.GET("https://response.queue.timing.connector/multicast"),
 	)
-	assert.True(time.Since(t0) > time.Duration(n*100)*time.Millisecond)
+	count := 0
+	for range q {
+		count++
+		assert.True(time.Since(t0) > time.Duration(count*100)*time.Millisecond)
+		assert.True(time.Since(t0) < time.Duration(100+count*100)*time.Millisecond)
+	}
 	assert.Equal(n, int(responses.Load()))
-	assert.Len(ch, n)
-	assert.Equal(n, cap(ch))
+	assert.Equal(n, count)
 
 	// If asking for first response only, it should return immediately when it is produced
 	responses.Store(0)
 	t0 = time.Now()
-	ch = cons[0].Publish(
+	q = cons[0].Publish(
 		ctx,
-		pub.GET("https://channel.capacity.connector/multicast"),
+		pub.GET("https://response.queue.timing.connector/multicast"),
 		pub.Unicast(),
 	)
-	assert.True(time.Since(t0) > 100*time.Millisecond && time.Since(t0) < 200*time.Millisecond, time.Since(t0))
-	assert.Equal(1, int(responses.Load()))
-	assert.Len(ch, 1)
-	assert.Equal(1, cap(ch))
+	count = 0
+	for range q {
+		count++
+	}
+	assert.True(time.Since(t0) > 100*time.Millisecond)
+	assert.True(time.Since(t0) < 200*time.Millisecond, time.Since(t0))
+	assert.Equal(1, count)
 
 	// The remaining handlers are still called and should finish
 	time.Sleep(time.Duration(n*100) * time.Millisecond)
@@ -1617,4 +1693,46 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 	)
 	assert.NoError(err)
 	assert.Len(response.Header["Multi-Value-Out"], 3)
+}
+
+func TestConnector_TimeToReturn(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+	delay := 500 * time.Millisecond
+
+	// Create the microservices
+	alpha := New("alpha.time.to.return.echo.connector")
+
+	beta := New("beta.time.to.return.connector")
+	beta.Subscribe("GET", "delayed", func(w http.ResponseWriter, r *http.Request) error {
+		time.Sleep(delay)
+		return nil
+	})
+
+	// Startup the microservices
+	err := alpha.Startup(ctx)
+	assert.NoError(err)
+	defer alpha.Shutdown(ctx)
+	err = beta.Startup(ctx)
+	assert.NoError(err)
+	defer beta.Shutdown(ctx)
+
+	// .Request only returns after the response comes in
+	t0 := time.Now()
+	_, err = alpha.Request(ctx, pub.GET("https://beta.time.to.return.connector/delayed"))
+	assert.NoError(err)
+	assert.True(time.Since(t0) > delay)
+
+	// .Publish returns immediately with a future queue
+	t0 = time.Now()
+	q := alpha.Publish(ctx, pub.GET("https://beta.time.to.return.connector/delayed"))
+	assert.True(time.Since(t0) < delay)
+	// Reading from the queue should return after the response comes in
+	for qi := range q {
+		_, err = qi.Get()
+		assert.NoError(err)
+	}
+	assert.True(time.Since(t0) > delay)
 }

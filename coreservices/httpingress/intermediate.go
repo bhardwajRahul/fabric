@@ -28,16 +28,33 @@ import (
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
+	"github.com/microbus-io/fabric/coreservices/httpingress/httpingressapi"
 	"github.com/microbus-io/fabric/coreservices/httpingress/resources"
 )
 
-// Version is the version of the code of the microservice.
-const Version = 375
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ httpingressapi.Client
+)
 
-// Hostname is the default hostname of the microservice: http.ingress.core.
-const Hostname = "http.ingress.core"
+const (
+	Hostname = httpingressapi.Hostname
+	Version  = 375
+)
 
 // ToDo is implemented by the service or mock.
 // The intermediate delegates handling to this interface.
@@ -53,14 +70,14 @@ type ToDo interface {
 	OnChangedBlockedPaths(ctx context.Context) (err error)      // MARKER: BlockedPaths
 }
 
-// NewService creates a new http.ingress.core microservice.
+// NewService creates a new instance of the microservice.
 func NewService() *Service {
 	svc := &Service{}
 	svc.Intermediate = NewIntermediate(svc)
 	return svc
 }
 
-// Init enables a single-statement pattern for initializing the service.
+// Init enables a single-statement pattern for initializing the microservice.
 func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
 	svc.Connector.Init(func(_ *connector.Connector) (err error) {
 		return initializer(svc)
@@ -82,13 +99,22 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	}
 	svc.SetVersion(Version)
 	svc.SetDescription(`The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.`)
-
-	// Lifecycle
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+
+	// HINT: Add web endpoints here
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
 
 	// Configs
-	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 	svc.DefineConfig( // MARKER: TimeBudget
 		"TimeBudget",
 		cfg.Description(`TimeBudget specifies the timeout for handling a request, after it has been read.
@@ -207,12 +233,9 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 *.exe`),
 	)
 
-	// OpenAPI
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	// HINT: Add inbound event sinks here
 
-	// Resources file system
-	svc.SetResFS(resources.FS)
-
+	_ = marshalFunction
 	return svc
 }
 
@@ -249,6 +272,13 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 	}
 	err = encoder.Encode(&oapiSvc)
 	return errors.Trace(err)
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+		// HINT: Call JIT observers to record the metric here
+	)
 }
 
 // doOnConfigChanged is called when the config of the microservice changes.
@@ -310,7 +340,6 @@ func (svc *Intermediate) TimeBudget() (budget time.Duration) { // MARKER: TimeBu
 
 /*
 SetTimeBudget sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 TimeBudget specifies the timeout for handling a request, after it has been read.
 A value of 0 or less indicates no time budget.
@@ -328,7 +357,6 @@ func (svc *Intermediate) Ports() (port string) { // MARKER: Ports
 
 /*
 SetPorts sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 Ports is a comma-separated list of HTTP ports on which to listen for requests.
 */
@@ -347,7 +375,6 @@ func (svc *Intermediate) RequestMemoryLimit() (megaBytes int) { // MARKER: Reque
 
 /*
 SetRequestMemoryLimit sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
 */
@@ -365,7 +392,6 @@ func (svc *Intermediate) AllowedOrigins() (origins string) { // MARKER: AllowedO
 
 /*
 SetAllowedOrigins sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
 The * origin can be used to allow CORS request from all origins.
@@ -390,7 +416,6 @@ func (svc *Intermediate) PortMappings() (mappings string) { // MARKER: PortMappi
 
 /*
 SetPortMappings sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
 HTTP port, y is the requested NATS port, and z is the port to serve.
@@ -416,7 +441,6 @@ func (svc *Intermediate) ReadTimeout() (timeout time.Duration) { // MARKER: Read
 
 /*
 SetReadTimeout sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 ReadTimeout specifies the timeout for fully reading a request.
 */
@@ -435,7 +459,6 @@ func (svc *Intermediate) WriteTimeout() (timeout time.Duration) { // MARKER: Wri
 
 /*
 SetWriteTimeout sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 WriteTimeout specifies the timeout for fully writing the response to a request.
 */
@@ -454,7 +477,6 @@ func (svc *Intermediate) ReadHeaderTimeout() (timeout time.Duration) { // MARKER
 
 /*
 SetReadHeaderTimeout sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
 */
@@ -473,7 +495,6 @@ func (svc *Intermediate) BlockedPaths() (blockedPaths string) { // MARKER: Block
 
 /*
 SetBlockedPaths sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
 
 A newline-separated list of paths or extensions to block with a 404.
 Paths should not include any arguments and are matched exactly.
@@ -481,4 +502,21 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 */
 func (svc *Intermediate) SetBlockedPaths(blockedPaths string) (err error) { // MARKER: BlockedPaths
 	return svc.SetConfig("BlockedPaths", blockedPaths)
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

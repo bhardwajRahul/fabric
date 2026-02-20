@@ -7,8 +7,8 @@ The `examples` package holds several examples that demonstrate how the `Microbus
 - [Calculator](../structure/examples-calculator.md) demonstrates functional handlers
 - [Messaging](../structure/examples-messaging.md) demonstrates load-balanced unicast, multicast and direct addressing messaging
 - [Event source and sink](../structure/examples-events.md) shows how events can be used to reverse the dependency between two microservices
-- [Directory](../structure/examples-directory.md) is an example of a microservice that provides a CRUD API backed by a database
 - [Browser](../structure/examples-browser.md) is an example of a microservice that uses the [HTTP egress core microservice](../structure/coreservices-httpegress.md)
 - [Login](../structure/examples-login.md) employs authentication and authorization to restrict access to certain endpoints
+- [Yellow Pages](../structure/examples-yellowpages.md) is an example of a SQL CRUD microservice that persists records in a database
 
 In case you missed it, the [quick start guide](../howto/quick-start.md) explains how to setup your system to run the examples.

@@ -1,8 +1,23 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 general:
+  name: SMTPIngress
   hostname: smtp.ingress.core
   description: The SMTP ingress microservice listens for incoming emails and fires corresponding events.
   package: github.com/microbus-io/fabric/coreservices/smtpingress
-  frameworkVersion: 1.22.0
+  frameworkVersion: 1.23.0
 
 outboundEvents:
   OnIncomingEmail:
@@ -14,26 +29,31 @@ outboundEvents:
 configs:
   Port:
     description: Port is the TCP port to listen to.
-    type: int
+    signature: Port() (port int)
     validation: int [1,65535]
     default: 25
+    callback: true
   Enabled:
     description: Enabled determines whether the email server is started.
-    type: bool
+    signature: Enabled() (enabled bool)
     validation: bool
     default: true
+    callback: true
   MaxSize:
     description: MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.
-    type: int
+    signature: MaxSize() (mb int)
     validation: int [0,1024]
     default: 10
+    callback: true
   MaxClients:
     description: MaxClients controls how many client connections can be opened in parallel. Defaults to 128.
-    type: int
+    signature: MaxClients() (clients int)
     validation: int [1,1024]
     default: 128
+    callback: true
   Workers:
     description: Workers controls how many workers process incoming mail. Defaults to 8.
-    type: int
+    signature: Workers() (clients int)
     validation: int [1,1024]
     default: 8
+    callback: true

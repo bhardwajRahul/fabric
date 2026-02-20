@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package login
 
 import (
@@ -91,11 +107,11 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe("ANY", loginapi.RouteOfLogin, svc.Login)                                                          // MARKER: Login
-	svc.Subscribe("ANY", loginapi.RouteOfLogout, svc.Logout)                                                        // MARKER: Logout
-	svc.Subscribe("ANY", loginapi.RouteOfWelcome, svc.Welcome, sub.RequiredClaims(`roles.a || roles.m || roles.u`)) // MARKER: Welcome
-	svc.Subscribe("GET", loginapi.RouteOfAdminOnly, svc.AdminOnly, sub.RequiredClaims(`roles.a`))                   // MARKER: AdminOnly
-	svc.Subscribe("GET", loginapi.RouteOfManagerOnly, svc.ManagerOnly, sub.RequiredClaims(`roles.m`))               // MARKER: ManagerOnly
+	svc.Subscribe(loginapi.Login.Method, loginapi.Login.Route, svc.Login)                                                          // MARKER: Login
+	svc.Subscribe(loginapi.Logout.Method, loginapi.Logout.Route, svc.Logout)                                                       // MARKER: Logout
+	svc.Subscribe(loginapi.Welcome.Method, loginapi.Welcome.Route, svc.Welcome, sub.RequiredClaims(`roles.a || roles.m || roles.u`)) // MARKER: Welcome
+	svc.Subscribe(loginapi.AdminOnly.Method, loginapi.AdminOnly.Route, svc.AdminOnly, sub.RequiredClaims(`roles.a`))                 // MARKER: AdminOnly
+	svc.Subscribe(loginapi.ManagerOnly.Method, loginapi.ManagerOnly.Route, svc.ManagerOnly, sub.RequiredClaims(`roles.m`))           // MARKER: ManagerOnly
 
 	// HINT: Add metrics here
 
@@ -105,6 +121,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -123,8 +140,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Login
 			Type:    "web",
 			Name:    "Login",
-			Method:  "ANY",
-			Route:   loginapi.RouteOfLogin,
+			Method:  loginapi.Login.Method,
+			Route:   loginapi.Login.Route,
 			Summary: "Login()",
 			Description: `Login renders a simple login screen that authenticates a user.
 Known users are hardcoded as "admin", "manager" and "user".
@@ -133,16 +150,16 @@ The password is "password".`,
 		{ // MARKER: Logout
 			Type:        "web",
 			Name:        "Logout",
-			Method:      "ANY",
-			Route:       loginapi.RouteOfLogout,
+			Method:      loginapi.Logout.Method,
+			Route:       loginapi.Logout.Route,
 			Summary:     "Logout()",
 			Description: `Logout renders a page that logs out the user.`,
 		},
 		{ // MARKER: Welcome
 			Type:    "web",
 			Name:    "Welcome",
-			Method:  "ANY",
-			Route:   loginapi.RouteOfWelcome,
+			Method:  loginapi.Welcome.Method,
+			Route:   loginapi.Welcome.Route,
 			Summary: "Welcome()",
 			Description: `Welcome renders a page that is shown to the user after a successful login.
 Rendering is adjusted based on the user's roles.`,
@@ -151,8 +168,8 @@ Rendering is adjusted based on the user's roles.`,
 		{ // MARKER: AdminOnly
 			Type:           "web",
 			Name:           "AdminOnly",
-			Method:         "GET",
-			Route:          loginapi.RouteOfAdminOnly,
+			Method:         loginapi.AdminOnly.Method,
+			Route:          loginapi.AdminOnly.Route,
 			Summary:        "AdminOnly()",
 			Description:    `AdminOnly is only accessible by admins.`,
 			RequiredClaims: `roles.a`,
@@ -160,8 +177,8 @@ Rendering is adjusted based on the user's roles.`,
 		{ // MARKER: ManagerOnly
 			Type:           "web",
 			Name:           "ManagerOnly",
-			Method:         "GET",
-			Route:          loginapi.RouteOfManagerOnly,
+			Method:         loginapi.ManagerOnly.Method,
+			Route:          loginapi.ManagerOnly.Route,
 			Summary:        "ManagerOnly()",
 			Description:    `ManagerOnly is only accessible by managers.`,
 			RequiredClaims: `roles.m`,
@@ -199,5 +216,22 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
+	return nil
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }

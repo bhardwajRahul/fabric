@@ -3,7 +3,7 @@ name: Adding a Web Handler Endpoint
 description: Creates or modify a web handler endpoint of a microservice. Use when explicitly asked by the user to create or modify a web handler endpoint of a microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -24,9 +24,7 @@ Creating or modifying a web endpoint:
 - [ ] Step 9: Expose the endpoint via OpenAPI
 - [ ] Step 10: Extend the mock
 - [ ] Step 11: Test the handler
-- [ ] Step 12: Update manifest
-- [ ] Step 13: Document the microservice
-- [ ] Step 14: Versioning
+- [ ] Step 12: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -47,7 +45,7 @@ Prefix the route with `//` to set a hostname other than that of this microservic
 
 #### Step 3: Determine a Description
 
-Describe the endpoint starting with its name, in Go doc style: `MyWeb does X`. Embed this description in followup steps where appropriate.
+Describe the endpoint starting with its name, in Go doc style: `MyWeb does X`. Embed this description in followup steps wherever you see `MyWeb does X`.
 
 #### Step 4: Determine the Required Claims
 
@@ -66,29 +64,20 @@ type ToDo interface {
 
 #### Step 6: Extend the Clients
 
-Extend the clients in `myserviceapi/client.go`.
-
-Define the route and URL of the endpoint at the top of the file in the respective `const` and `var` blocks. 
+Define the endpoint in the `var` block in `myserviceapi/client.go`, after the corresponding `HINT` comment.
 
 ```go
-// Endpoint routes.
-const (
-	// ...
-	RouteOfMyWeb = `/my-web` // MARKER: MyWeb
-)
-
-// Endpoint URLs.
 var (
+	// HINT: Insert endpoint definitions here
 	// ...
-	URLOfMyWeb = httpx.JoinHostAndPath(Hostname, RouteOfMyWeb) // MARKER: MyWeb
+	MyWeb = Def{Method: "ANY", Route: "/my-web"} // MARKER: MyWeb
 )
 ```
 
-Append the stubs at the bottom of the file.
+Append the following methods to `myserviceapi/client.go`.
 
-- In the comments, replace `MyWeb does X` with the description of the endpoint
 - If the method of the endpoint is anything other than `ANY`, omit the `method` argument and instead hardcode it as the argument of `pub.Method`
-- If the method is `GET`, `HEAD`, `OPTIONS`, or `TRACE` which don't support a body, omit the `body` argument and the `pub.Body` option and adjust the comment appropriately
+- If the method is `GET`, `HEAD`, `OPTIONS`, or `TRACE` which don't support a body, omit the `body` argument and the `pub.Body` option and remove the lines about body serialization from the doc comment
 
 ```go
 /*
@@ -100,12 +89,15 @@ If it is of type url.Values, it is serialized as form data. All other types are 
 */
 func (_c Client) MyWeb(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: MyWeb
 	if method == "" {
+		method = MyWeb.Method
+	}
+	if method == "ANY" {
 		method = "POST"
 	}
 	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfMyWeb)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, MyWeb.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -119,14 +111,17 @@ If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c MulticastClient) MyWeb(ctx context.Context, method string, relativeURL string, body any) <-chan *pub.Response { // MARKER: MyWeb
+func (_c MulticastClient) MyWeb(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: MyWeb
 	if method == "" {
+		method = MyWeb.Method
+	}
+	if method == "ANY" {
 		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfMyWeb)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, MyWeb.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -137,7 +132,6 @@ func (_c MulticastClient) MyWeb(ctx context.Context, method string, relativeURL 
 #### Step 7: Implement the Logic
 
 Implement the web handler in `service.go`:
-- In the comments, replace `MyWeb does X` with the description of the endpoint
 - Use `r.PathValue("argName")` to obtain the values of path arguments by name, if needed
 
 ```go
@@ -152,30 +146,30 @@ func (svc *Service) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { 
 
 #### Step 8: Bind the Handler to the Microservice
 
-Bind the web handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`.
-
-- The first two arguments to `svc.Subscribe` are the method and route of the endpoint
-- The queue option indicate how requests are distributed among replicas of the microservice
-  - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default option and may be omitted
-  - `sub.NoQueue()`: requests are processed by all subscribers
-  - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
-- The `sub.RequiredClaims(requiredClaims)` option defines the authorization requirements of the endpoint. This option can be omitted to allow all requests
+Bind the web handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
-	svc.Subscribe("ANY", myserviceapi.RouteOfMyWeb, svc.MyWeb, sub.LoadBalanced(), sub.RequiredClaims(requiredClaims)) // MARKER: MyWeb
+	svc.Subscribe(myserviceapi.MyWeb.Method, myserviceapi.MyWeb.Route, svc.MyWeb) // MARKER: MyWeb
 	// ...
 }
 ```
 
+Add the following options to `svc.Subscribe` as needed:
+
+- A queue option to control how requests are distributed among replicas of the microservice
+  - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default and may be omitted
+  - `sub.NoQueue()`: requests are processed by all subscribers
+  - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
+- `sub.RequiredClaims(requiredClaims)` to define the authorization requirements of the endpoint. Omit to allow all requests
+
 #### Step 9: Expose the Endpoint via OpenAPI
 
-Register the web handler endpoint in `doOpenAPI` in `intermediate.go`.
+Register the web handler endpoint in `doOpenAPI` in `intermediate.go`, after the corresponding `HINT` comment.
 
 - For a web handler endpoint, the `Type` field should be set to `web`
 - Set the simplified signature of the endpoint, with no arguments, in the `Summary` field
-- In the `Description` field, replace `MyWeb does X` with the description of the endpoint
 - Set the `RequiredClaims` boolean expression, if relevant to this endpoint. Otherwise, omit the field or leave it empty
 
 ```go
@@ -186,8 +180,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: MyWeb
 			Type:          "web",
 			Name:          "MyWeb",
-			Method:        "ANY",
-			Route:         myserviceapi.RouteOfMyWeb,
+			Method:        myserviceapi.MyWeb.Method,
+			Route:         myserviceapi.MyWeb.Route,
 			Summary:       "MyWeb()",
 			Description:   `MyWeb does X.`,
 			RequiredClaims: ``,
@@ -249,18 +243,23 @@ t.Run("my_web", func(t *testing.T) { // MARKER: MyWeb
 
 #### Step 11: Test the Handler
 
-Skip this step if instructed to be "quick" or to skip tests.
+Add the route of the web handler to the `routes` slice in `TestMyService_OpenAPI` in `service_test.go`.
 
-Append the following code block to the end of `service_test.go`.
+```go
+routes := []string{
+	// HINT: Insert routes of functional and web endpoints here
+	// ...
+	myserviceapi.MyWeb.Route, // MARKER: MyWeb
+}
+```
 
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
-- There is no need to set the `pub.Actor` option if the web endpoint does not require claims.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_MyWeb(t *testing.T) { // MARKER: MyWeb
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -268,6 +267,7 @@ func TestMyService_MyWeb(t *testing.T) { // MARKER: MyWeb
 	// Initialize the tester client
 	tester := connector.New("tester.client")
 	client := myserviceapi.NewClient(tester)
+	_ = client
 
 	// Run the testing app
 	app := application.New()
@@ -298,18 +298,30 @@ func TestMyService_MyWeb(t *testing.T) { // MARKER: MyWeb
 }
 ```
 
-In `TestMyService_OpenAPI` in `service_test.go`, add the endpoint's port, if not already tested.
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-#### Step 12: Update Manifest
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-Update the `webs` and `downstream` sections of `manifest.yaml`.
+- You may omit the `pub.Actor` option if the functional endpoint does not require claims.
 
-#### Step 13: Document the Microservice
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Skip this step if instructed to be "quick" or to skip documentation.
+	actor := jwt.MapClaims{}
+	res, err := client.WithOptions(pub.Actor(actor)).MyWeb(ctx, "GET", "", payload)
+	if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+		body, err := io.ReadAll(res.Body)
+		if assert.NoError(err) {
+			assert.HTMLMatch(body, "DIV.class > DIV#id", "substring")
+			assert.Contains(body, "substring")
+		}
+	}
+})
+```
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+Do not remove the `HINT` comments.
 
-#### Step 14: Versioning
+#### Step 12: Housekeeping
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Follow the `microbus/housekeeping` skill.

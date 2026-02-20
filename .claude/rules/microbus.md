@@ -20,7 +20,7 @@ A Microbus application comprises of a multitude of microservices that communicat
 
 A microservice consists of the following features:
 - **Web handler endpoints** — raw `http.ResponseWriter`/`http.Request` handlers for serving HTML, files, or custom HTTP responses
-- **Functional endpoints (RPCs)** — typed request/response functions with input/output structs, marshalling, and client stubs
+- **Functional endpoints (RPCs)** — typed request/response functions with input/output structs, marshaling, and client stubs
 - **Outbound events** — messages this microservice fires for others to consume
 - **Inbound event sinks** — handlers that react to events emitted by other microservices
 - **Configuration properties** — runtime settings (strings, durations, booleans, etc.)
@@ -65,19 +65,24 @@ Each microservice contains a `manifest.yaml` that concisely catalogs its feature
 The `general` section of the manifest describes its general properties.
 
 - The `hostname` must be unique across the application
-- The `frameworkVersion` is the version of `Microbus` when the microservice was last modified
+- The `frameworkVersion` is the version of the `github.com/microbus-io/fabric` package in `go mod` at the time when the microservice was last edited
+- If the microservice depends on either the `github.com/microbus-io/sequel` or the `database/sql` packages, enter `SQL` for the `db` property
+- If the microservice makes outgoing calls to a web API (likely via the HTTP egress proxy), enter the hostname of the web API for `cloud`. If more than one hostname is contacted, enter `various`
 
 ```yaml
 general:
+  name: My service
   hostname: my.service.hostname
   description: MyService does X.
   package: github.com/mycompany/myproject/myservice
-  frameworkVersion: 1.22.0 
+  frameworkVersion: 1.23.0
+  db: SQL
+  cloud: api.example.com
 ```
 
 #### Downstream Dependencies
 
-The `downstream` section of the manifest lists other microservices that this microservice depends on. Microservice X depends on microservice Y when X imports Y's `*api` package to use its `Client`, `MulticastClient`, event `MulticastTrigger`, or event `Hook`.
+The `downstream` section of the manifest lists other microservices that this microservice depends on. Microservice X depends on microservice Y when X imports Y's `*api` package to use its `Client` or `MulticastClient`. Usage of Y's `MulticastTrigger` or `Hook` does not constitute a downstream dependency in this context.
 
 ```yaml
 downstream:
@@ -100,10 +105,10 @@ The `webs` section of the manifest describes the web handler endpoints of the mi
 webs:
   MyWeb:
     description: MyWeb does X.
-	method: GET
-	route: :1234/my-web
-	loadBalancing: default
-	requiredClaims: roles=~"manager|director"
+    method: GET
+    route: :1234/my-web
+    loadBalancing: default
+    requiredClaims: roles=~"manager|director"
 ```
 
 #### Functions
@@ -120,12 +125,12 @@ The `functions` section of the manifest describes the functional endpoints (RPCs
 ```yaml
 functions:
   MyFunction:
-	signature: MyFunction(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
+    signature: MyFunction(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
     description: MyFunction does X.
-	method: GET
-	route: /my-function
-	loadBalancing: default
-	requiredClaims: level>5 && !guest
+    method: GET
+    route: /my-function
+    loadBalancing: default
+    requiredClaims: level>5 && !guest
 ```
 
 #### Outbound Events
@@ -135,10 +140,10 @@ The `outboundEvents` section of the manifest describes the outbound events trigg
 ```yaml
 outboundEvents:
   OnMyEvent:
-	signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
+    signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
     description: OnMyEvent is triggered when X.
-	method: POST
-	route: :417/on-my-event
+    method: POST
+    route: :417/on-my-event
 ```
 
 #### Inbound Events
@@ -154,18 +159,20 @@ The `inboundEvents` section of the manifest describes the inbound events that th
 ```yaml
 inboundEvents:
   OnMyEvent:
-	signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
+    signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
     description: OnMyEvent is triggered when X.
-	loadBalancing: default
-	requiredClaims: admin || manager
-	source: package/path/of/event/source/microservice
+    loadBalancing: default
+    requiredClaims: admin || manager
+    source: package/path/of/event/source/microservice
 ```
 
 #### Configuration Properties
 
 The `configs` section of the manifest describes the configuration properties of the microservice.
 
-- The `type` is the Go data type of the configuration property: `string`, `int`, `float64`, `time.Duration` or `bool`
+- The `signature` describes the getter of the configuration property, including its return type: `string`, `int`, `float64`, `time.Duration` or `bool`
+- `secret` indicates the value should not be logged
+- `callback` indicates an `OnChanged` callback is triggered when the value changes
 - The `validation` pattern is enforced over the value of the configuration property
   - `str ^[a-zA-Z0-9]+$` - string that matches a regular expression
   - `bool` - boolean
@@ -180,42 +187,47 @@ The `configs` section of the manifest describes the configuration properties of 
 ```yaml
 configs:
   MyConfig:
+    signature: MyConfig() (myConfig int)
     description: MyConfig is X.
-    type: int
-	validation: int [1,100]
-	default: 10
+    validation: int [1,100]
+    default: 10
+    secret: false
+    callback: false
 ```
 
 #### Tickers
 
 The `tickers` section of the manifest describes recurring operations of the microservice.
 
-- The `internal` is the duration between iterations
+- The `interval` is the duration between iterations
 
 ```yaml
 tickers:
   MyTicker:
+    signature: MyTicker()
     description: MyTicker does X.
-	internal: 5m
+    interval: 5m
 ```
 
 #### Metrics
 
 The `metrics` section of the manifest describes metrics produced by the microservice.
 
-- The `otelName` is the name of the metric in OpenTelemetry
+- `signature` describes the value type and labels of the metric
 - The metric `kind` is either `counter`, `gauge` or `histogram`
-- The `buckets` are the boundaries of a histogram's buckets
+- `buckets` are the boundaries of a histogram's buckets
+- `otelName` is the name of the metric in OpenTelemetry
 - `observable` metrics are measured just-in-time
 
 ```yaml
 metrics:
   MyMetric:
-	otelName: my_metric
+    signature: MyMetric(value int, label1 string, label2 string)
     description: MyMetric measures X.
-	kind: histogram
-	buckets: [1, 5, 10, 50, 100]
-	observable: false
+    kind: histogram
+    buckets: [1, 5, 10, 50, 100]
+    otelName: my_metric
+    observable: false
 ```
 
 ### Markers
@@ -310,12 +322,12 @@ If making a one-to-one request/response call, use the standard client.
 import "package/path/of/downstream/downstreamapi"
 
 func (svc *Service) ProcessOrder(ctx context.Context, orderID string) error {
-    validated, err := downstreamapi.NewClient(svc).ValidateOrder(ctx, orderID)
-    if err != nil {
-        return errors.Trace(err)
-    }
-    // ...
-    return nil
+	validated, err := downstreamapi.NewClient(svc).ValidateOrder(ctx, orderID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// ...
+	return nil
 }
 ```
 
@@ -325,15 +337,15 @@ If making a one-to-many pub/sub call, use the multicast client to iterate throug
 import "package/path/of/downstream/downstreamapi"
 
 func (svc *Service) ProcessOrder(ctx context.Context, orderID string) error {
-    for e := range downstreamapi.NewMulticastClient(svc).ValidateOrder(ctx, orderID) {
+	for e := range downstreamapi.NewMulticastClient(svc).ValidateOrder(ctx, orderID) {
 		validated, err := e.Get()
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// ...
 	}
-    // ...
-    return nil
+	// ...
+	return nil
 }
 ```
 
@@ -358,7 +370,7 @@ func (svc *Service) RunJob(ctx context.Context, jobID string) (err error) {
 			"dur", svc.Now(ctx).Sub(t0),
 		)
 	}
-    return errors.Trace(err)
+	return errors.Trace(err)
 }
 ```
 
@@ -481,11 +493,11 @@ You can extend the `Service` struct of the microservice with member variables.
 
 ```go
 type Service struct {
-    *Intermediate  // IMPORTANT: Do not remove
-    
-    // Add custom fields here...
-    cache map[string]any
-    db    *sql.DB
+	*Intermediate  // IMPORTANT: Do not remove
+
+	// Add custom fields here...
+	cache map[string]any
+	db    *sql.DB
 }
 ```
 
@@ -496,14 +508,14 @@ Initialize the microservice's resources in the `OnStartup` callback, and clean t
 ```go
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
-    // Initialize the microservice here...
-    return nil
+	// Initialize the microservice here...
+	return nil
 }
 
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-    // Clean up resources here...
-    return nil
+	// Clean up resources here...
+	return nil
 }
 ```
 
@@ -531,7 +543,7 @@ Use `IncrementMyMetric` function to count occurrences of an operation or event i
 ```go
 func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
 	svc.IncrementHelloOccurrences(ctx, 1)
-    return "Hello, " + name, nil
+	return "Hello, " + name, nil
 }
 ```
 
@@ -540,9 +552,9 @@ Use `RecordMyMetric` function to set the value of a gauge metric. Gauge values c
 ```go
 func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
 	concurrent := svc.atomicCounter.Add(1)
-    defer svc.atomicCounter.Add(-1)
-    svc.RecordConcurrentHellos(ctx, concurrent)
-    return "Hello, " + name, nil
+	defer svc.atomicCounter.Add(-1)
+	svc.RecordConcurrentHellos(ctx, concurrent)
+	return "Hello, " + name, nil
 }
 ```
 
@@ -550,8 +562,8 @@ Use `RecordMyMetric` function to update the value of a histogram metric.
 
 ```go
 func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
-    svc.RecordHelloNameLengths(ctx, len(name))
-    return "Hello, " + name, nil
+	svc.RecordHelloNameLengths(ctx, len(name))
+	return "Hello, " + name, nil
 }
 ```
 
@@ -559,21 +571,21 @@ func (svc *Service) Hello(ctx context.Context, name string) (result string, err 
 
 ```go
 import (
-    // 1. Standard library
-    "context"
-    "fmt"
-    "net/http"
+	// 1. Standard library
+	"context"
+	"fmt"
+	"net/http"
 
-    // 2. Microbus packages
-    "github.com/microbus-io/fabric/connector"
-    "github.com/microbus-io/errors"
+	// 2. Microbus packages
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/errors"
 
-    // 3. Third-party packages
+	// 3. Third-party packages
 	"golang.org/x/net/html"
 	"gopkg.in/yaml.v3"
 
-    // 4. Local imports
-    "mycompany/myproject/myservice/myserviceapi"
+	// 4. Local imports
+	"mycompany/myproject/myservice/myserviceapi"
 )
 ```
 
@@ -720,14 +732,34 @@ func (svc *Service) LoadObject(ctx context.Context, category int, name string) (
 }
 ```
 
-### Keep Track of Prompts
+### Connecting to Remote APIs
 
-When working on a microservice, keep track of the prompts affecting it in a `PROMPTS.md` file in its directory. Rephrase the language of the saved prompts to include context that was not made explicit in the original language. The intent is have an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.
+Wrap each remote API (e.g. a third-party web service) in its own microservice. This:
+- Encapsulates connection logic, URLs, and request/response structures in one place
+- Stores credentials in a single secret configuration property
+- Generates type-safe client stubs for use by upstream microservices
+- Enables mocking of the remote system in tests
 
-Save each prompt under a `## Title`.
+Create a functional endpoint or web handler for each operation of the remote API. Use the HTTP egress proxy for outbound calls.
 
-```md
-## Prompt title
+### Parallel Development
 
-Prompt comes here...
+When creating a new microservice, complete its scaffolding before working on any of its features — always follow the relevant skill to the end first.
+
+After scaffolding is in place, independent features can be developed in parallel. Be mindful of inter-feature dependencies: for example, a function that references a configuration property or records a metric requires those to exist first.
+
+Independent microservices can also be developed in parallel.
+
+### Building the Project
+
+To build the project, use `go vet` instead of `go build` to verify compilation without producing a binary. This avoids the "build output already exists and is a directory" error caused by the `main/` directory conflicting with the default output binary name.
+
+```shell
+go vet ./main/...
+```
+
+If a binary is actually needed, specify an explicit output name:
+
+```shell
+go build -o app ./main/...
 ```

@@ -19,7 +19,9 @@ package smtpingressapi
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"net/http"
+	"reflect"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
@@ -34,20 +36,36 @@ var (
 	_ *http.Request
 	_ *errors.TracedError
 	_ *httpx.BodyReader
+	_ = marshalRequest
+	_ = marshalPublish
+	_ = marshalFunction
 )
 
 // Hostname is the default hostname of the microservice.
 const Hostname = "smtp.ingress.core"
 
-// Endpoint routes.
-const (
-	RouteOfOnIncomingEmail = `:417/on-incoming-email` // MARKER: OnIncomingEmail
+// Def defines an endpoint of the microservice.
+type Def struct {
+	Method string
+	Route  string
+}
+
+// URL is the full URL to the endpoint.
+func (d *Def) URL() string {
+	return httpx.JoinHostAndPath(Hostname, d.Route)
+}
+
+var (
+	// HINT: Insert endpoint definitions here
+	OnIncomingEmail = Def{Method: "POST", Route: ":417/on-incoming-email"} // MARKER: OnIncomingEmail
 )
 
-// Endpoint URLs.
-var (
-	URLOfOnIncomingEmail = httpx.JoinHostAndPath(Hostname, RouteOfOnIncomingEmail) // MARKER: OnIncomingEmail
-)
+// multicastResponse packs the response of a functional multicast.
+type multicastResponse struct {
+	data         any
+	HTTPResponse *http.Response
+	err          error
+}
 
 // Client is a lightweight proxy for making unicast calls to the microservice.
 type Client struct {
@@ -58,10 +76,7 @@ type Client struct {
 
 // NewClient creates a new unicast client proxy to the microservice.
 func NewClient(caller service.Publisher) Client {
-	return Client{
-		svc:  caller,
-		host: Hostname,
-	}
+	return Client{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
@@ -75,11 +90,7 @@ func (_c Client) ForHost(host string) Client {
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c Client) WithOptions(opts ...pub.Option) Client {
-	return Client{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return Client{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastClient is a lightweight proxy for making multicast calls to the microservice.
@@ -91,28 +102,17 @@ type MulticastClient struct {
 
 // NewMulticastClient creates a new multicast client proxy to the microservice.
 func NewMulticastClient(caller service.Publisher) MulticastClient {
-	return MulticastClient{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastClient{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
 func (_c MulticastClient) ForHost(host string) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastClient{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -124,28 +124,17 @@ type MulticastTrigger struct {
 
 // NewMulticastTrigger creates a new multicast trigger of events of the microservice.
 func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastTrigger{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the trigger with a different hostname to be applied to requests.
 func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the trigger with options to be applied to requests.
 func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // Hook assists in the subscription to the events of the microservice.
@@ -157,45 +146,114 @@ type Hook struct {
 
 // NewHook creates a new hook to the events of the microservice.
 func NewHook(listener service.Subscriber) Hook {
-	return Hook{
-		svc:  listener,
-		host: Hostname,
-	}
+	return Hook{svc: listener, host: Hostname}
 }
 
 // ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
 func (c Hook) ForHost(host string) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: host,
-		opts: c.opts,
-	}
+	return Hook{svc: c.svc, host: host, opts: c.opts}
 }
 
 // WithOptions returns a copy of the hook with options to be applied to subscriptions.
 func (c Hook) WithOptions(opts ...sub.Option) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: c.host,
-		opts: append(c.opts, opts...),
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
+}
+
+// marshalRequest supports functional endpoints.
+func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return err // No trace
+	}
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.ReadOutputPayload(httpRes, out)
+	return errors.Trace(err)
+}
+
+// marshalPublish supports multicast functional endpoints.
+func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) iter.Seq[*multicastResponse] {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return func(yield func(*multicastResponse) bool) {
+			yield(&multicastResponse{err: err})
+		}
+	}
+	_queue := svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	return func(yield func(*multicastResponse) bool) {
+		for qi := range _queue {
+			httpResp, err := qi.Get()
+			if err == nil {
+				reflect.ValueOf(out).Elem().SetZero()
+				err = httpx.ReadOutputPayload(httpResp, out)
+			}
+			if err != nil {
+				if !yield(&multicastResponse{err: err, HTTPResponse: httpResp}) {
+					return
+				}
+			} else {
+				if !yield(&multicastResponse{data: out, HTTPResponse: httpResp}) {
+					return
+				}
+			}
+		}
 	}
 }
 
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// --- OnIncomingEmail event ---
+
 // OnIncomingEmailIn are the input arguments of OnIncomingEmail.
 type OnIncomingEmailIn struct { // MARKER: OnIncomingEmail
-	MailMessage *Email `json:"mailMessage,omitzero"`
+	Email *Email `json:"email,omitzero"`
 }
 
 // OnIncomingEmailOut are the output arguments of OnIncomingEmail.
 type OnIncomingEmailOut struct { // MARKER: OnIncomingEmail
 }
 
-// OnIncomingEmailResponse is the response to OnIncomingEmail.
-type OnIncomingEmailResponse struct { // MARKER: OnIncomingEmail
-	data         OnIncomingEmailOut
-	HTTPResponse *http.Response
-	err          error
-}
+// OnIncomingEmailResponse packs the response of OnIncomingEmail.
+type OnIncomingEmailResponse multicastResponse // MARKER: OnIncomingEmail
 
 // Get retrieves the return values.
 func (_res *OnIncomingEmailResponse) Get() (err error) { // MARKER: OnIncomingEmail
@@ -205,72 +263,35 @@ func (_res *OnIncomingEmailResponse) Get() (err error) { // MARKER: OnIncomingEm
 /*
 OnIncomingEmail is triggered when a new email message is received.
 */
-func (_c MulticastTrigger) OnIncomingEmail(ctx context.Context, mailMessage *Email) <-chan *OnIncomingEmailResponse { // MARKER: OnIncomingEmail
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfOnIncomingEmail)
-	_in := OnIncomingEmailIn{
-		MailMessage: mailMessage,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *OnIncomingEmailResponse, 1)
-		_res <- &OnIncomingEmailResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *OnIncomingEmailResponse, cap(_ch))
-	for _i := range _ch {
-		var _r OnIncomingEmailResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastTrigger) OnIncomingEmail(ctx context.Context, email *Email) iter.Seq[*OnIncomingEmailResponse] { // MARKER: OnIncomingEmail
+	_in := OnIncomingEmailIn{Email: email}
+	_out := OnIncomingEmailOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnIncomingEmail.Method, OnIncomingEmail.Route, &_in, &_out)
+	return func(yield func(*OnIncomingEmailResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnIncomingEmailResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
 OnIncomingEmail is triggered when a new email message is received.
 */
-func (c Hook) OnIncomingEmail(handler func(ctx context.Context, mailMessage *Email) (err error)) (unsub func() error, err error) { // MARKER: OnIncomingEmail
+func (c Hook) OnIncomingEmail(handler func(ctx context.Context, email *Email) (err error)) (unsub func() error, err error) { // MARKER: OnIncomingEmail
 	doOnIncomingEmail := func(w http.ResponseWriter, r *http.Request) error {
-		var i OnIncomingEmailIn
-		var o OnIncomingEmailOut
-		err = httpx.ReadInputPayload(r, RouteOfOnIncomingEmail, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = handler(
-			r.Context(),
-			i.MailMessage,
-		)
-		if err != nil {
-			return err // No trace
-		}
-		err = httpx.WriteOutputPayload(w, o)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
+		var in OnIncomingEmailIn
+		var out OnIncomingEmailOut
+		err = marshalFunction(w, r, OnIncomingEmail.Route, &in, &out, func(_ any, _ any) error {
+			err = handler(r.Context(), in.Email)
+			return err
+		})
+		return err // No trace
 	}
-	method := "POST"
-	path := httpx.JoinHostAndPath(c.host, RouteOfOnIncomingEmail)
-	unsub, err = c.svc.Subscribe(method, path, doOnIncomingEmail, c.opts...)
+	path := httpx.JoinHostAndPath(c.host, OnIncomingEmail.Route)
+	unsub, err = c.svc.Subscribe(OnIncomingEmail.Method, path, doOnIncomingEmail, c.opts...)
 	return unsub, errors.Trace(err)
 }

@@ -11,12 +11,12 @@ To discover all instances of `www.example.com` using the `Publish` method of the
 ```go
 ch := con.Publish(r.Context(), pub.GET("https://www.example.com:888/ping"))
 for r := range ch {
-    res, err := r.Get()
-    if err != nil {
-        return errors.Trace(err)
-    }
-    fromHost := frame.Of(res).FromHost()
-    fromID := frame.Of(res).FromID()
+	res, err := r.Get()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	fromHost := frame.Of(res).FromHost()
+	fromID := frame.Of(res).FromID()
 }
 ```
 
@@ -25,8 +25,8 @@ Or use the `controlapi.Client` that abstracts the internals:
 ```go
 ch := controlapi.NewMulticastClient(svc).ForHost("www.example.com").Ping(ctx)
 for r := range ch {
-    fromHost := frame.Of(r.HTTPResponse).FromHost()
-    fromID := frame.Of(r.HTTPResponse).FromID()
+	fromHost := frame.Of(r.HTTPResponse).FromHost()
+	fromID := frame.Of(r.HTTPResponse).FromID()
 }
 ```
 

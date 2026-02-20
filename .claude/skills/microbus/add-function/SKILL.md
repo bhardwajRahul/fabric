@@ -3,7 +3,7 @@ name: Adding a Functional Endpoint
 description: Creates or modify a functional endpoint of a microservice. Use when explicitly asked by the user to create or modify a functional or RPC endpoint of a microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -23,14 +23,12 @@ Creating or modifying a functional endpoint:
 - [ ] Step 8: Define the payload structs
 - [ ] Step 9: Extend the clients
 - [ ] Step 10: Implement the logic
-- [ ] Step 11: Define the marshaller function
-- [ ] Step 12: Bind the marshaller function to the microservice
+- [ ] Step 11: Define the marshaler function
+- [ ] Step 12: Bind the marshaler function to the microservice
 - [ ] Step 13: Expose the endpoint via OpenAPI
 - [ ] Step 14: Extend the mock
 - [ ] Step 15: Test the function
-- [ ] Step 16: Update manifest
-- [ ] Step 17: Document the microservice
-- [ ] Step 18: Versioning
+- [ ] Step 16: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -70,13 +68,13 @@ Extend the `ToDo` interface in `intermediate.go`.
 ```go
 type ToDo interface {
 	// ...
-	MyFunction(ctx context.Context, argIn1 string, argIn2 myserviceapi.ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error) { // MARKER: MyFunction
+	MyFunction(ctx context.Context, argIn1 string, argIn2 myserviceapi.ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error) // MARKER: MyFunction
 }
 ```
 
 #### Step 4: Determine the Method and Route
 
-The method of the endpoint determines the HTTP method with which it will be addressable. Use `ANY` to accept requests with any method. The most common approach is to use `POST`.
+The method of the endpoint determines the HTTP method with which it will be addressable. Unless there's a reason to use a specific method, like for a REST API, use `ANY` to accept requests with any method.
 
 The route of the endpoint is resolved relative to the hostname of the microservice to determine how it is addressed. The common approach is to use the name of the endpoint in kebab-case as its route, e.g. `/my-function`.
 
@@ -88,7 +86,7 @@ Prefix the route with `//` to set a hostname other than that of this microservic
 
 #### Step 5: Determine a Description
 
-Describe the endpoint starting with its name, in Go doc style: `MyFunction does X`. Embed this description in followup steps where appropriate.
+Describe the endpoint starting with its name, in Go doc style: `MyFunction does X`. Embed this description in followup steps wherever you see `MyFunction does X`.
 
 #### Step 6: Determine the Required Claims
 
@@ -127,7 +125,10 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 
 #### Step 8: Define the Payload Structs
 
-In `myserviceapi/client.go`, define a struct `MyFunctionIn` to hold the input arguments of the function, excluding `ctx context.Context`. Use PascalCase for the field names and camelCase for the `json` tag names. If an argument is named `httpRequestBody`, set its `json` tag value to `-`.
+Append the function's payload structs to `myserviceapi/client.go`.
+Use PascalCase for the field names and camelCase for the `json` tag names.
+
+`MyFunctionIn` holds the input arguments of the function, excluding `ctx context.Context`. If an argument is named `httpRequestBody`, set its `json` tag value to `-`.
 
 ```go
 // MyFunctionIn are the input arguments of MyFunction.
@@ -137,7 +138,7 @@ type MyFunctionIn struct { // MARKER: MyFunction
 }
 ```
 
-Also in `myserviceapi/client.go`, define a struct `MyFunctionOut` to hold the output arguments of the function, excluding `err error`. Use PascalCase for the field names and camelCase for the `json` tag names. If an argument is named `httpStatusCode`, set its `json` tag value to `-`. Append the definition at the end of the file.
+`MyFunctionOut` holds the output arguments of the function, excluding `err error`. If an argument is named `httpStatusCode`, set its `json` tag value to `-`.
 
 ```go
 // MyFunctionOut are the output arguments of MyFunction.
@@ -146,127 +147,60 @@ type MyFunctionOut struct { // MARKER: MyFunction
 }
 ```
 
-Also in `myserviceapi/client.go`, define a struct `MyFunctionResponse` to hold the response of the request. The struct provides a single method `Get` that returns the functions return arguments. Append the definition at the end of the file.
+`MyFunctionResponse` holds the response of the request. The struct provides a single method `Get` that returns the functions return arguments.
 
 ```go
-// MyFunctionResponse is the response to MyFunction.
-type MyFunctionResponse struct { // MARKER: MyFunction
-	data MyFunctionOut
-	HTTPResponse *http.Response
-	err error
-}
+// MyFunctionResponse packs the response of MyFunction.
+type MyFunctionResponse multicastResponse // MARKER: MyFunction
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of MyFunction.
 func (_res *MyFunctionResponse) Get() (argOut1 map[string]MyStruct, err error) { // MARKER: MyFunction
-	return _res.data.ArgOut1, _res.err
+	_d := _res.data.(*MyFunctionOut)
+	return _d.ArgOut1, _res.err
 }
 ```
 
 #### Step 9: Extend the Clients
 
-Extend the clients in `myserviceapi/client.go`.
-
-Define the route and URL of the endpoint at the top of the file in the respective `const` and `var` blocks. 
+Define the endpoint in the `var` block in `myserviceapi/client.go`, after the corresponding `HINT` comment.
 
 ```go
-// Endpoint routes.
-const (
-	// ...
-	RouteOfMyFunction = `/my-function` // MARKER: MyFunction
-)
-
-// Endpoint URLs.
 var (
+	// HINT: Insert endpoint definitions here
 	// ...
-	URLOfMyFunction = httpx.JoinHostAndPath(Hostname, RouteOfMyFunction) // MARKER: MyFunction
+	MyFunction = Def{Method: "ANY", Route: "/my-function"} // MARKER: MyFunction
 )
 ```
 
-Append the methods at the bottom of the file.
-
-- In the comments, replace `MyFunction does X` with the description of the endpoint
-- If the method of the endpoint is `ANY` set the value of `_method` to `POST`. Otherwise, set the value of `_method` to the method of the endpoint
+Append the following methods to `myserviceapi/client.go`.
 
 ```go
 /*
 MyFunction does X.
 */
-func (_c MulticastClient) MyFunction(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) <-chan *MyFunctionResponse { // MARKER: MyFunction
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfMyFunction)
-	_in := MyFunctionIn{
-		ArgIn1: argIn1,
-		ArgIn2: argIn2,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *MyFunctionResponse, 1)
-		_res <- &MyFunctionResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *MyFunctionResponse, cap(_ch))
-	for _i := range _ch {
-		var _r MyFunctionResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) MyFunction(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) iter.Seq[*MyFunctionResponse] { // MARKER: MyFunction
+	_in := MyFunctionIn{ArgIn1: argIn1, ArgIn2: argIn2}
+	_out := MyFunctionOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, MyFunction.Method, MyFunction.Route, &_in, &_out)
+	return func(yield func(*MyFunctionResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*MyFunctionResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
 MyFunction does X.
 */
 func (_c Client) MyFunction(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) (argOut1 map[string]MyStruct, err error) { // MARKER: MyFunction
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfMyFunction)
-	_in := MyFunctionIn{
-		ArgIn1: argIn1,
-		ArgIn2: argIn2,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out MyFunctionOut
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return _out.ArgOut1, nil
+	_in := MyFunctionIn{ArgIn1: argIn1, ArgIn2: argIn2}
+	_out := MyFunctionOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, MyFunction.Method, MyFunction.Route, &_in, &_out)
+	return _out.ArgOut1, err // No trace
 }
 ```
 
@@ -280,61 +214,53 @@ MyFunction does X.
 */
 func (svc *Service) MyFunction(ctx context.Context, argIn1 string, argIn2 myserviceapi.ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error) { // MARKER: MyFunction
 	// Implement logic here...
-	return nil, nil
+	return
 }
 ```
 
-#### Step 11: Define the Marshaller Function
+#### Step 11: Define the Marshaler Function
 
-In `intermediate.go`, add a web handler to perform the marshaling of the input and output arguments. For the route, set the same path you used in the previous step to bind the function.
+Append a web handler to `intermediate.go` to perform the marshaling of the input and output arguments.
 
 ```go
 // doMyFunction handles marshaling for MyFunction.
 func (svc *Intermediate) doMyFunction(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MyFunction
-	var i myserviceapi.MyFunctionIn
-	var o myserviceapi.MyFunctionOut
-	err = httpx.ReadInputPayload(r, myserviceapi.RouteOfMyFunction, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.ArgOut1, err = svc.MyFunction(r.Context(), i.ArgIn1, i.ArgIn2)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in myserviceapi.MyFunctionIn
+	var out myserviceapi.MyFunctionOut
+	err = marshalFunction(w, r, myserviceapi.MyFunction.Route, &in, &out, func(_ any, _ any) error {
+		out.ArgOut1, err = svc.MyFunction(r.Context(), in.ArgIn1, in.ArgIn2)
+		return err
+	})
+	return err // No trace
 }
 ```
 
-#### Step 12: Bind the Marshaller Function to the Microservice
+#### Step 12: Bind the Marshaler Function to the Microservice
 
-Bind the `doMyFunction` marshaller function to the microservice in the `NewIntermediate` constructor in `intermediate.go`.
-
-- The first two arguments to `svc.Subscribe` are the method and route of the endpoint
-- The queue option indicate how requests are distributed among replicas of the microservice
-  - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default option and may be omitted
-  - `sub.NoQueue()`: requests are processed by all subscribers
-  - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
-- The `sub.RequiredClaims(requiredClaims)` option defines the authorization requirements of the endpoint. This option can be omitted to allow all requests
+Bind the `doMyFunction` marshaler function to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
-	svc.Subscribe("POST", "/my-function", svc.doMyFunction, sub.LoadBalanced(), sub.RequiredClaims("true")) // MARKER: MyFunction
+	svc.Subscribe(myserviceapi.MyFunction.Method, myserviceapi.MyFunction.Route, svc.doMyFunction) // MARKER: MyFunction
 	// ...
 }
 ```
+
+Add the following options to `svc.Subscribe` as needed:
+
+- A queue option to control how requests are distributed among replicas of the microservice
+  - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default and may be omitted
+  - `sub.NoQueue()`: requests are processed by all subscribers
+  - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
+- `sub.RequiredClaims(requiredClaims)` to define the authorization requirements of the endpoint. Omit to allow all requests
 
 #### Step 13: Expose the Endpoint via OpenAPI
 
-Register the functional endpoint in `doOpenAPI` in `intermediate.go`.
+Register the functional endpoint in `doOpenAPI` in `intermediate.go`, after the corresponding `HINT` comment.
 
 - For a functional endpoint, the `Type` field should be set to `function`
 - Set the simplified signature of the endpoint in the `Summary` field. Exclude the arguments `ctx context.Context`, `err error` and `httpStatusCode int`. Remove the argument names `httpRequestBody` and `httpResponseBody` but keep their types
-- In the `Description` field, replace `MyFunction does X` with the description of the endpoint
 - Set the `RequiredClaims` boolean expression, if relevant to this endpoint. Otherwise, omit the field or leave it empty
 
 ```go
@@ -345,8 +271,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: MyFunction
 			Type:          "function",
 			Name:          "MyFunction",
-			Method:        "ANY",
-			Route:         myserviceapi.RouteOfMyFunction,
+			Method:        myserviceapi.MyFunction.Method,
+			Route:         myserviceapi.MyFunction.Route,
 			Summary:       "MyFunction(inArg1 string, inArg2 ThirdPartyStruct) (outArg1 map[string]MyStruct)",
 			Description:   `MyFunction does X.`,
 			RequiredClaims: ``,
@@ -417,18 +343,23 @@ t.Run("my_function", func(t *testing.T) { // MARKER: MyFunction
 
 #### Step 15: Test the Function
 
-Skip this step if instructed to be "quick" or to skip tests.
+Add the route of the function to the `routes` slice in `TestMyService_OpenAPI` in `service_test.go`.
 
-Append the following code block to the end of `service_test.go`.
+```go
+routes := []string{
+	// HINT: Insert routes of functional and web endpoints here
+	// ...
+	myserviceapi.MyFunction.Route, // MARKER: MyFunction
+}
+```
 
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
-- There is no need to set the `pub.Actor` option if the functional endpoint does not require claims.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_MyFunction(t *testing.T) { // MARKER: MyFunction
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -436,6 +367,7 @@ func TestMyService_MyFunction(t *testing.T) { // MARKER: MyFunction
 	// Initialize the testers
 	tester := connector.New("tester.client")
 	client := myserviceapi.NewClient(tester)
+	_ = client
 
 	// Run the testing app
 	app := application.New()
@@ -463,18 +395,27 @@ func TestMyService_MyFunction(t *testing.T) { // MARKER: MyFunction
 }
 ```
 
-In `TestMyService_OpenAPI` in `service_test.go`, add the endpoint's port, if not already tested.
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-#### Step 16: Update Manifest
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-Update the `functions` and `downstream` sections of `manifest.yaml`.
+- You may omit the `pub.Actor` option if the functional endpoint does not require claims.
 
-#### Step 17: Document the Microservice
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Skip this step if instructed to be "quick" or to skip documentation.
+	actor := jwt.MapClaims{}
+	argOut1, err := client.WithOptions(pub.Actor(actor)).MyFunction(ctx, argIn1, argIn2)
+	assert.Expect(
+		argOut1, expectedArgOut1,
+		err, nil,
+	)
+})
+```
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+Do not remove the `HINT` comments.
 
-#### Step 18: Versioning
+#### Step 16: Housekeeping
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Follow the `microbus/housekeeping` skill.

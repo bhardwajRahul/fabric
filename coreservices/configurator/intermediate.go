@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package configurator
 
 import (
@@ -91,14 +107,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functional endpoints
-	svc.Subscribe("ANY", configuratorapi.RouteOfValues, svc.doValues)              // MARKER: Values
-	svc.Subscribe("ANY", configuratorapi.RouteOfRefresh, svc.doRefresh)            // MARKER: Refresh
-	svc.Subscribe("ANY", configuratorapi.RouteOfSyncRepo, svc.doSyncRepo, sub.NoQueue()) // MARKER: SyncRepo
-
-	// Deprecated functional endpoints
-	svc.Subscribe("ANY", configuratorapi.RouteOfValues443, svc.doValues443)   // MARKER: Values443
-	svc.Subscribe("ANY", configuratorapi.RouteOfRefresh443, svc.doRefresh443) // MARKER: Refresh443
-	svc.Subscribe("ANY", configuratorapi.RouteOfSync443, svc.doSync443)       // MARKER: Sync443
+	svc.Subscribe(configuratorapi.Values.Method, configuratorapi.Values.Route, svc.doValues)                     // MARKER: Values
+	svc.Subscribe(configuratorapi.Refresh.Method, configuratorapi.Refresh.Route, svc.doRefresh)                  // MARKER: Refresh
+	svc.Subscribe(configuratorapi.SyncRepo.Method, configuratorapi.SyncRepo.Route, svc.doSyncRepo, sub.NoQueue()) // MARKER: SyncRepo
+	svc.Subscribe(configuratorapi.Values443.Method, configuratorapi.Values443.Route, svc.doValues443)             // MARKER: Values443
+	svc.Subscribe(configuratorapi.Refresh443.Method, configuratorapi.Refresh443.Route, svc.doRefresh443)          // MARKER: Refresh443
+	svc.Subscribe(configuratorapi.Sync443.Method, configuratorapi.Sync443.Route, svc.doSync443)                   // MARKER: Sync443
 
 	// HINT: Add web endpoints here
 
@@ -111,6 +125,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -129,8 +144,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Values
 			Type:        "function",
 			Name:        "Values",
-			Method:      "ANY",
-			Route:       configuratorapi.RouteOfValues,
+			Method:      configuratorapi.Values.Method,
+			Route:       configuratorapi.Values.Route,
 			Summary:     "Values(names []string) (values map[string]string)",
 			Description: `Values returns the values associated with the specified config property names for the caller microservice.`,
 			InputArgs:   configuratorapi.ValuesIn{},
@@ -139,8 +154,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Refresh
 			Type:    "function",
 			Name:    "Refresh",
-			Method:  "ANY",
-			Route:   configuratorapi.RouteOfRefresh,
+			Method:  configuratorapi.Refresh.Method,
+			Route:   configuratorapi.Refresh.Route,
 			Summary: "Refresh()",
 			Description: `Refresh tells all microservices to contact the configurator and refresh their configs.
 An error is returned if any of the values sent to the microservices fails validation.`,
@@ -150,8 +165,8 @@ An error is returned if any of the values sent to the microservices fails valida
 		{ // MARKER: SyncRepo
 			Type:        "function",
 			Name:        "SyncRepo",
-			Method:      "ANY",
-			Route:       configuratorapi.RouteOfSyncRepo,
+			Method:      configuratorapi.SyncRepo.Method,
+			Route:       configuratorapi.SyncRepo.Route,
 			Summary:     "SyncRepo(timestamp time.Time, values map[string]map[string]string)",
 			Description: `SyncRepo is used to synchronize values among replica peers of the configurator.`,
 			InputArgs:   configuratorapi.SyncRepoIn{},
@@ -193,121 +208,90 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// doValues handles marshaling for the Values function.
+// doValues handles marshaling for Values.
 func (svc *Intermediate) doValues(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Values
-	var i configuratorapi.ValuesIn
-	var o configuratorapi.ValuesOut
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfValues, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.Values, err = svc.Values(r.Context(), i.Names)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.ValuesIn
+	var out configuratorapi.ValuesOut
+	err = marshalFunction(w, r, configuratorapi.Values.Route, &in, &out, func(_ any, _ any) error {
+		out.Values, err = svc.Values(r.Context(), in.Names)
+		return err
+	})
+	return err // No trace
 }
 
-// doRefresh handles marshaling for the Refresh function.
+// doRefresh handles marshaling for Refresh.
 func (svc *Intermediate) doRefresh(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Refresh
-	var i configuratorapi.RefreshIn
-	var o configuratorapi.RefreshOut
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfRefresh, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.Refresh(r.Context())
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.RefreshIn
+	var out configuratorapi.RefreshOut
+	err = marshalFunction(w, r, configuratorapi.Refresh.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Refresh(r.Context())
+		return err
+	})
+	return err // No trace
 }
 
-// doSyncRepo handles marshaling for the SyncRepo function.
+// doSyncRepo handles marshaling for SyncRepo.
 func (svc *Intermediate) doSyncRepo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: SyncRepo
-	var i configuratorapi.SyncRepoIn
-	var o configuratorapi.SyncRepoOut
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfSyncRepo, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.SyncRepo(r.Context(), i.Timestamp, i.Values)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.SyncRepoIn
+	var out configuratorapi.SyncRepoOut
+	err = marshalFunction(w, r, configuratorapi.SyncRepo.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.SyncRepo(r.Context(), in.Timestamp, in.Values)
+		return err
+	})
+	return err // No trace
 }
 
-// doValues443 handles marshaling for the Values443 function.
+// doValues443 handles marshaling for Values443.
 func (svc *Intermediate) doValues443(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Values443
-	var i configuratorapi.Values443In
-	var o configuratorapi.Values443Out
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfValues443, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.Values, err = svc.Values443(r.Context(), i.Names)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.Values443In
+	var out configuratorapi.Values443Out
+	err = marshalFunction(w, r, configuratorapi.Values443.Route, &in, &out, func(_ any, _ any) error {
+		out.Values, err = svc.Values443(r.Context(), in.Names)
+		return err
+	})
+	return err // No trace
 }
 
-// doRefresh443 handles marshaling for the Refresh443 function.
+// doRefresh443 handles marshaling for Refresh443.
 func (svc *Intermediate) doRefresh443(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Refresh443
-	var i configuratorapi.Refresh443In
-	var o configuratorapi.Refresh443Out
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfRefresh443, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.Refresh443(r.Context())
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.Refresh443In
+	var out configuratorapi.Refresh443Out
+	err = marshalFunction(w, r, configuratorapi.Refresh443.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Refresh443(r.Context())
+		return err
+	})
+	return err // No trace
 }
 
-// doSync443 handles marshaling for the Sync443 function.
+// doSync443 handles marshaling for Sync443.
 func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Sync443
-	var i configuratorapi.Sync443In
-	var o configuratorapi.Sync443Out
-	err = httpx.ReadInputPayload(r, configuratorapi.RouteOfSync443, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.Sync443(r.Context(), i.Timestamp, i.Values)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	var in configuratorapi.Sync443In
+	var out configuratorapi.Sync443Out
+	err = marshalFunction(w, r, configuratorapi.Sync443.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Sync443(r.Context(), in.Timestamp, in.Values)
+		return err
+	})
+	return err // No trace
 }
 
 // doPeriodicRefresh handles the PeriodicRefresh ticker.
 func (svc *Intermediate) doPeriodicRefresh(ctx context.Context) (err error) { // MARKER: PeriodicRefresh
 	return svc.PeriodicRefresh(ctx)
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

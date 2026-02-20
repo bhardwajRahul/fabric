@@ -6,7 +6,7 @@ Without skills, a coding agent must infer the right approach from general patter
 
 ### Anatomy of a Skill
 
-Each skill lives in its own directory under `.claude/skills/microbus/` and contains a `SKILL.md` file. The file has three parts:
+Each skill lives in its own directory under `.claude/skills/` and contains a `SKILL.md` file. The file has three parts:
 
 Frontmatter declares the skill's name and when to use it:
 
@@ -35,13 +35,13 @@ Detailed steps expand each item in the checklist with precise instructions, cons
 
 Skills enforce several principles that keep agent output reliable:
 
-**Self-contained templates** - Each skill explicitly states that it is self-contained and that agent should not explore or analyze existing microservices before starting its work. This prevents the agent from looking at other microservices and mimicking patterns that may be outdated or non-standard.
+**Self-contained templates** - Most skills explicitly state that they are self-contained and that an agent should not explore or analyze existing microservices before starting its work. This prevents the agent from looking at other microservices and mimicking patterns that may be outdated or non-standard.
 
 **Marker comments** - Skills instruct the agent to include `MARKER` comments throughout the generated code. These comments act as waypoints for future edits. When a feature needs to be modified or removed, the agent locates the relevant code by scanning for its marker rather than guessing.
 
 ```go
 if example { // MARKER: FeatureName
-    // ...
+	// ...
 }
 ```
 

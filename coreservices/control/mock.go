@@ -20,8 +20,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
 
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 )
@@ -35,10 +35,10 @@ var (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockPing          func(ctx context.Context) (pong int, err error)                     // MARKER: Ping
-	mockConfigRefresh func(ctx context.Context) (err error)                                // MARKER: ConfigRefresh
-	mockTrace         func(ctx context.Context, id string) (err error)                     // MARKER: Trace
-	mockMetrics       func(w http.ResponseWriter, r *http.Request) (err error)             // MARKER: Metrics
+	mockPing          func(ctx context.Context) (pong int, err error)         // MARKER: Ping
+	mockConfigRefresh func(ctx context.Context) (err error)                    // MARKER: ConfigRefresh
+	mockTrace         func(ctx context.Context, id string) (err error)         // MARKER: Trace
+	mockMetrics       func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Metrics
 }
 
 // NewMock creates a new mockable version of the microservice.

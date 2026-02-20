@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package calculator
 
 import (
@@ -82,19 +98,19 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Calculator microservice performs simple mathematical operations.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
-	// Functional endpoints
-	svc.Subscribe("GET", calculatorapi.RouteOfArithmetic, svc.doArithmetic) // MARKER: Arithmetic
-	svc.Subscribe("GET", calculatorapi.RouteOfSquare, svc.doSquare)         // MARKER: Square
-	svc.Subscribe("ANY", calculatorapi.RouteOfDistance, svc.doDistance)     // MARKER: Distance
+	// HINT: Add functional endpoints here
+	svc.Subscribe(calculatorapi.Arithmetic.Method, calculatorapi.Arithmetic.Route, svc.doArithmetic) // MARKER: Arithmetic
+	svc.Subscribe(calculatorapi.Square.Method, calculatorapi.Square.Route, svc.doSquare)             // MARKER: Square
+	svc.Subscribe(calculatorapi.Distance.Method, calculatorapi.Distance.Route, svc.doDistance)       // MARKER: Distance
 
 	// HINT: Add web endpoints here
 
-	// Metrics
+	// HINT: Add metrics here
 	svc.DescribeCounter("used_operators", "UsedOperators tracks the types of the arithmetic operators used.")  // MARKER: UsedOperators
 	svc.DescribeGauge("sum_operations", "SumOperations tracks the total sum of the results of all operators.") // MARKER: SumOperations
 
@@ -104,6 +120,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -122,8 +139,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Arithmetic
 			Type:        "function",
 			Name:        "Arithmetic",
-			Method:      "GET",
-			Route:       calculatorapi.RouteOfArithmetic,
+			Method:      calculatorapi.Arithmetic.Method,
+			Route:       calculatorapi.Arithmetic.Route,
 			Summary:     "Arithmetic(x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int)",
 			Description: `Arithmetic performs an arithmetic operation between two integers x and y given an operator op.`,
 			InputArgs:   calculatorapi.ArithmeticIn{},
@@ -132,8 +149,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Square
 			Type:        "function",
 			Name:        "Square",
-			Method:      "GET",
-			Route:       calculatorapi.RouteOfSquare,
+			Method:      calculatorapi.Square.Method,
+			Route:       calculatorapi.Square.Route,
 			Summary:     "Square(x int) (xEcho int, result int)",
 			Description: `Square prints the square of the integer x.`,
 			InputArgs:   calculatorapi.SquareIn{},
@@ -142,10 +159,10 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Distance
 			Type:        "function",
 			Name:        "Distance",
-			Method:      "ANY",
-			Route:       calculatorapi.RouteOfDistance,
+			Method:      calculatorapi.Distance.Method,
+			Route:       calculatorapi.Distance.Route,
 			Summary:     "Distance(p1 Point, p2 Point) (d float64)",
-			Description: "Distance calculates the distance between two points.\nIt demonstrates the use of the defined type Point.",
+			Description: `Distance calculates the distance between two points. It demonstrates the use of the defined type Point.`,
 			InputArgs:   calculatorapi.DistanceIn{},
 			OutputArgs:  calculatorapi.DistanceOut{},
 		},
@@ -186,63 +203,6 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// doArithmetic handles marshaling for the Arithmetic function.
-func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Arithmetic
-	var i calculatorapi.ArithmeticIn
-	var o calculatorapi.ArithmeticOut
-	err = httpx.ReadInputPayload(r, calculatorapi.RouteOfArithmetic, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.XEcho, o.OpEcho, o.YEcho, o.Result, err = svc.Arithmetic(r.Context(), i.X, i.Op, i.Y)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-// doSquare handles marshaling for the Square function.
-func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Square
-	var i calculatorapi.SquareIn
-	var o calculatorapi.SquareOut
-	err = httpx.ReadInputPayload(r, calculatorapi.RouteOfSquare, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.XEcho, o.Result, err = svc.Square(r.Context(), i.X)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-// doDistance handles marshaling for the Distance function.
-func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Distance
-	var i calculatorapi.DistanceIn
-	var o calculatorapi.DistanceOut
-	err = httpx.ReadInputPayload(r, calculatorapi.RouteOfDistance, &i)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	o.D, err = svc.Distance(r.Context(), i.P1, i.P2)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, o)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 /*
 IncrementUsedOperators counts the types of the arithmetic operators used.
 */
@@ -259,4 +219,54 @@ func (svc *Intermediate) RecordSumOperations(ctx context.Context, sum int, op st
 	return svc.RecordGauge(ctx, "sum_operations", float64(sum),
 		"op", utils.AnyToString(op),
 	)
+}
+
+// doArithmetic handles marshaling for Arithmetic.
+func (svc *Intermediate) doArithmetic(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Arithmetic
+	var in calculatorapi.ArithmeticIn
+	var out calculatorapi.ArithmeticOut
+	err = marshalFunction(w, r, calculatorapi.Arithmetic.Route, &in, &out, func(_ any, _ any) error {
+		out.XEcho, out.OpEcho, out.YEcho, out.Result, err = svc.Arithmetic(r.Context(), in.X, in.Op, in.Y)
+		return err
+	})
+	return err // No trace
+}
+
+// doSquare handles marshaling for Square.
+func (svc *Intermediate) doSquare(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Square
+	var in calculatorapi.SquareIn
+	var out calculatorapi.SquareOut
+	err = marshalFunction(w, r, calculatorapi.Square.Route, &in, &out, func(_ any, _ any) error {
+		out.XEcho, out.Result, err = svc.Square(r.Context(), in.X)
+		return err
+	})
+	return err // No trace
+}
+
+// doDistance handles marshaling for Distance.
+func (svc *Intermediate) doDistance(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Distance
+	var in calculatorapi.DistanceIn
+	var out calculatorapi.DistanceOut
+	err = marshalFunction(w, r, calculatorapi.Distance.Route, &in, &out, func(_ any, _ any) error {
+		out.D, err = svc.Distance(r.Context(), in.P1, in.P2)
+		return err
+	})
+	return err // No trace
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

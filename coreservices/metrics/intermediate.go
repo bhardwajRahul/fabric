@@ -20,25 +20,41 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-
 	"regexp"
+	"strconv"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 	"github.com/microbus-io/fabric/coreservices/metrics/resources"
 )
 
-// Version is the version of the code of the microservice.
-const Version = 214
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ metricsapi.Client
+)
 
-// Hostname is the default hostname of the microservice: metrics.core.
-const Hostname = "metrics.core"
+const (
+	Hostname = metricsapi.Hostname
+	Version  = 214
+)
 
 // ToDo is implemented by the service or mock.
 // The intermediate delegates handling to this interface.
@@ -55,7 +71,7 @@ func NewService() *Service {
 	return svc
 }
 
-// Init enables a single-statement pattern for initializing the service.
+// Init enables a single-statement pattern for initializing the microservice.
 func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
 	svc.Connector.Init(func(_ *connector.Connector) (err error) {
 		return initializer(svc)
@@ -77,28 +93,33 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	}
 	svc.SetVersion(Version)
 	svc.SetDescription(`The Metrics service is a core microservice that aggregates metrics from other microservices and makes them available for collection.`)
-
-	// Lifecycle
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+
+	// Web endpoints
+	svc.Subscribe(`GET`, metricsapi.Collect.Route, svc.Collect) // MARKER: Collect
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
 
 	// Configs
-	svc.DefineConfig(
+	svc.DefineConfig( // MARKER: SecretKey
 		"SecretKey",
 		cfg.Description(`SecretKey must be provided with the request to collect the metrics.
 This key is required except in local development and tests.`),
 		cfg.Secret(),
 	)
 
-	// OpenAPI
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	// HINT: Add inbound event sinks here
 
-	// Webs
-	svc.Subscribe(`GET`, `:443/collect`, svc.Collect) // MARKER: Collect
-
-	// Resources file system
-	svc.SetResFS(resources.FS)
-
+	_ = marshalFunction
 	return svc
 }
 
@@ -118,7 +139,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 			Type:        "web",
 			Name:        "Collect",
 			Method:      "GET",
-			Route:       metricsapi.RouteOfCollect,
+			Route:       metricsapi.Collect.Route,
 			Summary:     "Collect()",
 			Description: `Collect the metrics of all microservices.`,
 		},
@@ -145,6 +166,19 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 	return errors.Trace(err)
 }
 
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
+	return nil
+}
+
 /*
 SecretKey must be provided with the request to collect the metrics.
 This key is required except in local development and tests.
@@ -161,6 +195,23 @@ This action is restricted to the TESTING deployment in which the fetching of val
 SecretKey must be provided with the request to collect the metrics.
 This key is required except in local development and tests.
 */
-func (svc *Intermediate) SetSecretKey(secretKey string) (err error) {
+func (svc *Intermediate) SetSecretKey(secretKey string) (err error) { // MARKER: SecretKey
 	return svc.SetConfig("SecretKey", utils.AnyToString(secretKey))
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

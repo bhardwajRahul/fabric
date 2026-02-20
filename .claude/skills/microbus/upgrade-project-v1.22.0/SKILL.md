@@ -3,16 +3,14 @@ name: Upgrade a Project to V1.22.0
 description: Upgrades all microservices to v1.22.0.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing code before starting. This skill is self-contained.
-
 ## Workflow
 
 Copy this checklist and track your progress:
 
 ```
-Upgrade a Microbus project from v1 to v2:
+Upgrade a Microbus project to v1.22.0:
 - [ ] Step 1: Breaking changes (before microservices)
-- [ ] Step 2: Identify v1 microservices
+- [ ] Step 2: Identify microservices to upgrade
 - [ ] Step 3: Upgrade in parallel
 - [ ] Step 4: Breaking changes (after microservices)
 ```
@@ -34,17 +32,17 @@ The JWT dependency was upgraded from `github.com/golang-jwt/jwt/v4` to `github.c
 
 ```go
 jwt.WithTimeFunc(func() time.Time {
-    return svc.Now(ctx)
+	return svc.Now(ctx)
 }),
 ```
 
 The `Startup` and `Shutdown` methods of the `Connector` now require `ctx context.Context` argument. If a context is not available in the parent function, use `t.Context()` if in tests, or `context.Background()` otherwise.
 
-The `Startup`, `Shutdown` and `AddAndStartup` methods of the `Application` now require `ctx context.Context` argument.  If a context is not available in the parent function, use `t.Context()` if in tests, or `context.Background()` otherwise.
+The `Startup`, `Shutdown` and `AddAndStartup` methods of the `Application` now require `ctx context.Context` argument. If a context is not available in the parent function, use `t.Context()` if in tests, or `context.Background()` otherwise.
 
-#### Step 2: Identify V1 Microservices
+#### Step 2: Identify Microservices to Upgrade
 
-Scan the project for all directories containing a `service.yaml` file. Each of these directories identify a microservice that needs upgrading from v1 to v2.
+Scan the project for all directories containing a `service.yaml` file. Each of these directories is a microservice that needs upgrading to v1.22.0.
 
 #### Step 3: Upgrade in Parallel
 

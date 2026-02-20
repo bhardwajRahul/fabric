@@ -14,7 +14,7 @@ Example:
 
 ```go
 c.LogInfo(ctx, "Fixed message",
-    "key1", "value",
-    "key2", 1234,
+	"key1", "value",
+	"key2", 1234,
 )
 ```

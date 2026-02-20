@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"iter"
 	"net/http"
 	"strings"
 	"time"
@@ -63,23 +64,20 @@ func (c *Connector) POST(ctx context.Context, url string, body any) (*http.Respo
 // If no response is received, an ack timeout (404) error is returned.
 func (c *Connector) Request(ctx context.Context, options ...pub.Option) (*http.Response, error) {
 	options = append(options, pub.Unicast())
-	ch := c.Publish(ctx, options...)
-	res, err := (<-ch).Get()
-	return res, err // No trace
+	for qi := range c.Publish(ctx, options...) {
+		return qi.Get() // No trace
+	}
+	return nil, errors.New("no response")
 }
 
 // Publish makes an HTTP request then awaits and returns the responses asynchronously.
 // By default, publish performs a multicast and multiple responses (or none at all) may be returned.
 // Use the Request method or pass in pub.Unicast() to Publish to perform a unicast.
-func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *pub.Response {
-	errOutput := make(chan *pub.Response, 1)
-	defer close(errOutput)
-
+func (c *Connector) Publish(ctx context.Context, options ...pub.Option) iter.Seq[*pub.Response] {
 	// Check if there's enough time budget
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= c.networkRoundtrip {
 		err := errors.New("timeout", http.StatusRequestTimeout, c.Span(ctx).TraceID())
-		errOutput <- pub.NewErrorResponse(err)
-		return errOutput
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 
 	// Limit number of hops
@@ -87,15 +85,14 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	depth := inboundFrame.CallDepth()
 	if depth >= c.maxCallDepth {
 		err := errors.New("call depth overflow", http.StatusLoopDetected, c.Span(ctx).TraceID())
-		errOutput <- pub.NewErrorResponse(err)
-		return errOutput
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 
 	// Build the request
 	req, err := pub.NewRequest()
 	if err != nil {
-		errOutput <- pub.NewErrorResponse(errors.Trace(err, c.Span(ctx).TraceID()))
-		return errOutput
+		err = errors.Trace(err, c.Span(ctx).TraceID())
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 	outboundFrame := frame.Of(req.Header)
 
@@ -115,8 +112,8 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	// Options can override anything above
 	err = req.Apply(options...)
 	if err != nil {
-		errOutput <- pub.NewErrorResponse(errors.Trace(err, c.Span(ctx).TraceID()))
-		return errOutput
+		err = errors.Trace(err, c.Span(ctx).TraceID())
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 
 	// Set depth
@@ -151,18 +148,25 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 	}
 
 	// Make the request
-	output := c.makeRequest(ctx, req)
+	queue := c.makeRequest(ctx, req)
 
 	// Locality-aware routing
 	if optimizeLocality {
-		res, err := output[0].Get()
+		firstResponse := func(q iter.Seq[*pub.Response]) (rr *pub.Response) {
+			q(func(r *pub.Response) bool {
+				rr = r
+				return false
+			})
+			return rr
+		}
+		res, err := firstResponse(queue).Get()
 		if lastKnownLocality != "" && errors.StatusCode(err) == http.StatusNotFound {
 			// No response from the localized URL so retry at the original URL
 			c.localResponder.Delete(localityCacheKey)
 			lastKnownLocality = ""
 			req.URL = origURL
-			output = c.makeRequest(ctx, req)
-			res, _ = output[0].Get()
+			queue = c.makeRequest(ctx, req)
+			res, _ = firstResponse(queue).Get()
 		}
 		responseLocality := frame.Of(res).Locality()
 		if len(responseLocality) > len(lastKnownLocality) {
@@ -185,29 +189,17 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) <-chan *
 		}
 	}
 
-	// Return as channel
-	ch := make(chan *pub.Response, len(output))
-	for _, x := range output {
-		ch <- x
-	}
-	close(ch)
-	return ch
+	// Return the iterator
+	return queue
 }
 
 // makeRequest makes an HTTP request over NATS, then awaits and pushes the responses to the output channel.
-func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output []*pub.Response) {
-	if req.Multicast {
-		output = make([]*pub.Response, 0, c.multicastChanCap)
-	} else {
-		output = make([]*pub.Response, 0, 2)
-	}
-
+func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) iter.Seq[*pub.Response] {
 	// Prepare the HTTP request (first fragment only)
 	httpReq, err := http.NewRequest(req.Method, req.URL, req.Body)
 	if err != nil {
 		err = errors.Trace(err, c.Span(ctx).TraceID())
-		output = append(output, pub.NewErrorResponse(err))
-		return output
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 	for name, value := range req.Header {
 		httpReq.Header[name] = value
@@ -217,23 +209,28 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 	if len(httpReq.Header.Values("User-Agent")) == 0 {
 		httpReq.Header.Set("User-Agent", "")
 	}
+	var timeout time.Duration
 	deadline, deadlineOK := ctx.Deadline()
 	if deadlineOK {
-		frame.Of(httpReq).SetTimeBudget(time.Until(deadline))
+		timeout = time.Until(deadline)
+	}
+	if req.Timeout > 0 && (timeout == 0 || req.Timeout < timeout) {
+		timeout = req.Timeout
+	}
+	if timeout > 0 {
+		frame.Of(httpReq).SetTimeBudget(timeout)
 	}
 
 	// Fragment large requests
 	fragger, err := httpx.NewFragRequest(httpReq, c.maxFragmentSize)
 	if err != nil {
 		err = errors.Trace(err, c.Span(ctx).TraceID())
-		output = append(output, pub.NewErrorResponse(err))
-		return output
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 	httpReq, err = fragger.Fragment(1)
 	if err != nil {
 		err = errors.Trace(err, c.Span(ctx).TraceID())
-		output = append(output, pub.NewErrorResponse(err))
-		return output
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 
 	// Create a channel to await on
@@ -249,10 +246,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 			break
 		}
 	}
-	defer func() {
+	// Must close the await chan after all responses are counted for
+	releaseAwaitCh := func() {
 		c.reqs.Delete(msgID)
 		close(awaitCh.Done)
-	}()
+	}
 
 	// Send the message
 	port := "443"
@@ -280,9 +278,9 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 		err = c.transportConn.Request(subject, httpReq)
 	}
 	if err != nil {
+		releaseAwaitCh()
 		err = errors.Trace(err, c.Span(ctx).TraceID())
-		output = append(output, pub.NewErrorResponse(err))
-		return output
+		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
 
 	// Await and return the responses
@@ -310,231 +308,269 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) (output [
 		}
 		c.postRequestData.Store("multicast:"+msgID, subject)
 	}
-	countResponses := 0
-	seenIDs := map[string]string{} // FromID -> OpCode
-	seenQueues := map[string]bool{}
-	doneWaitingForAcks := false
-	var timeoutTimer *time.Timer
-	if deadlineOK {
-		timeoutTimer = time.NewTimer(time.Until(deadline))
-		defer timeoutTimer.Stop()
-	} else {
-		// No op timer
-		timeoutTimer = &time.Timer{
-			C: make(<-chan time.Time),
-		}
+
+	// Wait for the responses in a separate goroutine
+	var output *pub.ResponseQueue
+	var soloResponse *pub.Response
+	if req.Multicast {
+		output = pub.NewResponseQueue(c.multicastChanCap)
 	}
-	ackTimer := time.NewTimer(c.ackTimeout)
-	defer ackTimer.Stop()
-	ackTimerStart := time.Now()
-	fragmentsSent := map[string]bool{}
-	for {
-		select {
-		case response := <-awaitCh.C:
-			opCode := frame.Of(response).OpCode()
-			fromID := frame.Of(response).FromID()
-			queue := frame.Of(response).Queue()
-			if queue == "" {
-				queue = fromID + "." + frame.Of(response).FromHost()
+	awaitResponses := func() {
+		defer func() {
+			releaseAwaitCh()
+			if output != nil {
+				output.Close()
 			}
-
-			// Known responders optimization
-			if req.Multicast {
-				seenQueues[queue] = true
-				if !doneWaitingForAcks && len(seenQueues) == len(expectedResponders) {
-					match := true
-					for k := range seenQueues {
-						if !expectedResponders[k] {
-							match = false
-							break
-						}
-					}
-					if match {
-						doneWaitingForAcks = true
-					}
-				}
+		}()
+		countResponses := 0
+		seenIDs := map[string]string{} // FromID -> OpCode
+		seenQueues := map[string]bool{}
+		doneWaitingForAcks := false
+		var timeoutTimer *time.Timer
+		if timeout > 0 {
+			timeoutTimer = time.NewTimer(timeout)
+			defer timeoutTimer.Stop()
+		} else {
+			// No op timer
+			timeoutTimer = &time.Timer{
+				C: make(<-chan time.Time),
 			}
+		}
 
-			// Ack
-			if opCode == frame.OpCodeAck {
-				if seenIDs[fromID] == "" {
-					_ = c.RecordHistogram(
-						ctx,
-						"microbus_client_ack_roundtrip_latency_seconds",
-						time.Since(publishTime).Seconds(),
-						"host", host,
-						"port", port,
-					)
-					seenIDs[fromID] = frame.OpCodeAck
+		ackTimer := time.NewTimer(c.ackTimeout)
+		defer ackTimer.Stop()
+		ackTimerStart := time.Now()
+		fragmentsSent := map[string]bool{}
+		for {
+			select {
+			case response := <-awaitCh.C:
+				opCode := frame.Of(response).OpCode()
+				fromID := frame.Of(response).FromID()
+				queue := frame.Of(response).Queue()
+				if queue == "" {
+					queue = fromID + "." + frame.Of(response).FromHost()
 				}
 
-				// Send additional fragments (if there are any) to all those who ack'ed
-				if fragger.N() > 1 && !fragmentsSent[fromID] {
-					fragmentsSent[fromID] = true
-					go func() {
-						for f := 2; f <= fragger.N(); f++ {
-							fragment, err := fragger.Fragment(f)
-							if err != nil {
-								err = errors.Trace(err)
-								c.LogError(ctx, "Sending fragments",
-									"error", err,
-									"url", req.Canonical(),
-									"method", req.Method,
-								)
-								break
-							}
-
-							// Direct addressing
-							subject := subjectOfRequest(c.plane, fragment.Method, fromID+"."+fragment.URL.Hostname(), port, fragment.URL.Path)
-
-							frame.Of(fragment).SetMessageID(msgID)
-							if req.Multicast {
-								err = c.transportConn.Publish(subject, fragment)
-							} else {
-								err = c.transportConn.Request(subject, fragment)
-							}
-							if err != nil {
-								err = errors.Trace(err)
-								c.LogError(ctx, "Sending fragments",
-									"error", err,
-									"url", req.Canonical(),
-									"method", req.Method,
-								)
-								break
-							}
-						}
-					}()
-				}
-			}
-
-			// Response
-			if opCode == frame.OpCodeResponse {
-				output = append(output, pub.NewHTTPResponse(response))
-			}
-
-			// Error
-			if opCode == frame.OpCodeError {
-				// Reconstitute the error
-				var reconstitutedError struct {
-					Err *errors.TracedError `json:"err"`
-				}
-				err = json.NewDecoder(response.Body).Decode(&reconstitutedError)
-				if err != nil || reconstitutedError.Err == nil {
-					err = errors.New("unparsable error response: %s", req.Canonical(), c.Span(ctx).TraceID())
-				} else {
-					reconstitutedError.Err.Trace = c.Span(ctx).TraceID()
-					err = errors.Convert(reconstitutedError.Err)
-				}
-				output = append(output, pub.NewErrorResponse(err))
-				statusCode := reconstitutedError.Err.StatusCode
-				if statusCode == 0 {
-					statusCode = http.StatusInternalServerError
-				}
-			}
-
-			// Response or error (i.e. not an ack)
-			if opCode == frame.OpCodeResponse || opCode == frame.OpCodeError {
-				if !req.Multicast {
-					// Return the first result found immediately
-					return output
-				}
-				seenIDs[fromID] = opCode
-				countResponses++
-				if doneWaitingForAcks && countResponses == len(seenIDs) {
-					// All responses have been received
-					// Known responders optimization
-					c.knownResponders.Store(subject, seenQueues)
-					c.LogDebug(ctx, "Caching responders",
-						"msg", msgID,
-						"subject", subject,
-						"responders", enumResponders(seenQueues),
-					)
-					return output
-				}
-			}
-
-		// Timeout timer
-		case <-timeoutTimer.C:
-			c.LogDebug(ctx, "Request timeout",
-				"msg", msgID,
-				"subject", subject,
-			)
-			err = errors.New(
-				"timeout: %s", req.Canonical(),
-				http.StatusRequestTimeout,
-				c.Span(ctx).TraceID(),
-			)
-			output = append(output, pub.NewErrorResponse(err))
-			c.postRequestData.Store("timeout:"+msgID, subject)
-			_ = c.IncrementCounter(
-				ctx,
-				"microbus_client_timeout_requests",
-				1,
-				"code", http.StatusRequestTimeout,
-			)
-
-			// Known responders optimization
-			if req.Multicast {
-				c.knownResponders.Delete(subject)
-				c.LogDebug(ctx, "Clearing responders",
-					"msg", msgID,
-					"subject", subject,
-				)
-			}
-			return output
-
-		// Ack timer
-		case <-ackTimer.C:
-			if c.deployment == LOCAL && time.Since(ackTimerStart) >= c.ackTimeout*8 {
-				// Likely resuming from a breakpoint that prevented the ack from arriving in time.
-				// Reset the ack timer to allow the ack to arrive.
-				ackTimer.Reset(c.ackTimeout)
-				ackTimerStart = time.Now()
-				c.LogDebug(ctx, "Resetting ack timeout",
-					"msg", msgID,
-					"subject", subject,
-				)
-				continue
-			}
-			doneWaitingForAcks = true
-			if len(seenIDs) == 0 {
+				// Known responders optimization
 				if req.Multicast {
-					// Known responders optimization
+					seenQueues[queue] = true
+					if !doneWaitingForAcks && len(seenQueues) == len(expectedResponders) {
+						match := true
+						for k := range seenQueues {
+							if !expectedResponders[k] {
+								match = false
+								break
+							}
+						}
+						if match {
+							doneWaitingForAcks = true
+						}
+					}
+				}
+
+				// Ack
+				if opCode == frame.OpCodeAck {
+					if seenIDs[fromID] == "" {
+						_ = c.RecordHistogram(
+							ctx,
+							"microbus_client_ack_roundtrip_latency_seconds",
+							time.Since(publishTime).Seconds(),
+							"host", host,
+							"port", port,
+						)
+						seenIDs[fromID] = frame.OpCodeAck
+					}
+
+					// Send additional fragments (if there are any) to all those who ack'ed
+					if fragger.N() > 1 && !fragmentsSent[fromID] {
+						fragmentsSent[fromID] = true
+						go func() {
+							for f := 2; f <= fragger.N(); f++ {
+								fragment, err := fragger.Fragment(f)
+								if err != nil {
+									err = errors.Trace(err)
+									c.LogError(ctx, "Sending fragments",
+										"error", err,
+										"url", req.Canonical(),
+										"method", req.Method,
+									)
+									break
+								}
+
+								// Direct addressing
+								subject := subjectOfRequest(c.plane, fragment.Method, fromID+"."+fragment.URL.Hostname(), port, fragment.URL.Path)
+
+								frame.Of(fragment).SetMessageID(msgID)
+								if req.Multicast {
+									err = c.transportConn.Publish(subject, fragment)
+								} else {
+									err = c.transportConn.Request(subject, fragment)
+								}
+								if err != nil {
+									err = errors.Trace(err)
+									c.LogError(ctx, "Sending fragments",
+										"error", err,
+										"url", req.Canonical(),
+										"method", req.Method,
+									)
+									break
+								}
+							}
+						}()
+					}
+				}
+
+				// Response
+				if opCode == frame.OpCodeResponse {
+					soloResponse = pub.NewHTTPResponse(response)
+					if output != nil {
+						output.Push(soloResponse)
+					}
+				}
+
+				// Error
+				if opCode == frame.OpCodeError {
+					// Reconstitute the error
+					var reconstitutedError struct {
+						Err *errors.TracedError `json:"err"`
+					}
+					err = json.NewDecoder(response.Body).Decode(&reconstitutedError)
+					if err != nil || reconstitutedError.Err == nil {
+						err = errors.New("unparsable error response: %s", req.Canonical(), c.Span(ctx).TraceID())
+					} else {
+						reconstitutedError.Err.Trace = c.Span(ctx).TraceID()
+						err = errors.Convert(reconstitutedError.Err)
+					}
+					if reconstitutedError.Err.StatusCode == 0 {
+						reconstitutedError.Err.StatusCode = http.StatusInternalServerError
+					}
+					soloResponse = pub.NewErrorResponse(err)
+					if output != nil {
+						output.Push(soloResponse)
+					}
+				}
+
+				// Response or error (i.e. not an ack)
+				if opCode == frame.OpCodeResponse || opCode == frame.OpCodeError {
+					if !req.Multicast {
+						// Return the first result found immediately
+						return
+					}
+					seenIDs[fromID] = opCode
+					countResponses++
+					if doneWaitingForAcks && countResponses == len(seenIDs) {
+						// All responses have been received
+						// Known responders optimization
+						c.knownResponders.Store(subject, seenQueues)
+						c.LogDebug(ctx, "Caching responders",
+							"msg", msgID,
+							"subject", subject,
+							"responders", enumResponders(seenQueues),
+						)
+						return
+					}
+				}
+
+			// Timeout timer
+			case <-timeoutTimer.C:
+				c.LogDebug(ctx, "Request timeout",
+					"msg", msgID,
+					"subject", subject,
+				)
+				err = errors.New(
+					"timeout: %s", req.Canonical(),
+					http.StatusRequestTimeout,
+					c.Span(ctx).TraceID(),
+				)
+				soloResponse = pub.NewErrorResponse(err)
+				if output != nil {
+					output.Push(soloResponse)
+				}
+				c.postRequestData.Store("timeout:"+msgID, subject)
+				_ = c.IncrementCounter(
+					ctx,
+					"microbus_client_timeout_requests",
+					1,
+					"code", http.StatusRequestTimeout,
+				)
+
+				// Known responders optimization
+				if req.Multicast {
 					c.knownResponders.Delete(subject)
 					c.LogDebug(ctx, "Clearing responders",
 						"msg", msgID,
 						"subject", subject,
 					)
-				} else {
-					err = errors.New(
-						"ack timeout: %s", req.Canonical(),
-						http.StatusNotFound,
-						c.Span(ctx).TraceID(),
-					)
-					output = append(output, pub.NewErrorResponse(err))
-					_ = c.IncrementCounter(
-						ctx,
-						"microbus_client_timeout_requests",
-						1,
-						"code", http.StatusNotFound,
-					)
 				}
-				return output
-			}
-			if countResponses == len(seenIDs) {
-				// All responses have been received
-				// Known responders optimization
-				if req.Multicast {
-					c.knownResponders.Store(subject, seenQueues)
-					c.LogDebug(ctx, "Caching responders",
+				return
+
+			// Ack timer
+			case <-ackTimer.C:
+				if c.deployment == LOCAL && time.Since(ackTimerStart) >= c.ackTimeout*8 {
+					// Likely resuming from a breakpoint that prevented the ack from arriving in time.
+					// Reset the ack timer to allow the ack to arrive.
+					ackTimer.Reset(c.ackTimeout)
+					ackTimerStart = time.Now()
+					c.LogDebug(ctx, "Resetting ack timeout",
 						"msg", msgID,
 						"subject", subject,
-						"responders", enumResponders(seenQueues),
 					)
+					continue
 				}
-				return output
+				doneWaitingForAcks = true
+				if len(seenIDs) == 0 {
+					if req.Multicast {
+						// Known responders optimization
+						c.knownResponders.Delete(subject)
+						c.LogDebug(ctx, "Clearing responders",
+							"msg", msgID,
+							"subject", subject,
+						)
+					} else {
+						err = errors.New(
+							"ack timeout: %s", req.Canonical(),
+							http.StatusNotFound,
+							c.Span(ctx).TraceID(),
+						)
+						soloResponse = pub.NewErrorResponse(err)
+						if output != nil {
+							output.Push(soloResponse)
+						}
+						_ = c.IncrementCounter(
+							ctx,
+							"microbus_client_timeout_requests",
+							1,
+							"code", http.StatusNotFound,
+						)
+					}
+					return
+				}
+				if countResponses == len(seenIDs) {
+					// All responses have been received
+					// Known responders optimization
+					if req.Multicast {
+						c.knownResponders.Store(subject, seenQueues)
+						c.LogDebug(ctx, "Caching responders",
+							"msg", msgID,
+							"subject", subject,
+							"responders", enumResponders(seenQueues),
+						)
+					}
+					return
+				}
 			}
 		}
+	}
+
+	if output != nil {
+		// Return the output queue instantly as a future
+		// It will be closed by the goroutine when all responses come in
+		go awaitResponses()
+		return output.Q()
+	} else {
+		// Return the single response after it was received
+		awaitResponses()
+		return pub.NewSoloResponseQueue(soloResponse)
 	}
 }
 

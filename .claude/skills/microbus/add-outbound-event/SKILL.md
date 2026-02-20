@@ -3,7 +3,7 @@ name: Adding an Outbound Event Endpoint
 description: Creates or modify an outbound event endpoint of a microservice. Use when explicitly asked by the user to create or modify an outbound event endpoint of a microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -24,9 +24,7 @@ Creating or modifying an event endpoint:
 - [ ] Step 7: Extend the trigger and hook
 - [ ] Step 8: Trigger the event
 - [ ] Step 9: Test the outgoing event
-- [ ] Step 10: Update manifest
-- [ ] Step 11: Document the microservice
-- [ ] Step 12: Versioning
+- [ ] Step 10: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -50,14 +48,6 @@ Constraints:
 - Arguments must not be named `t` or `svc`
 - Argument names must start with a lowercase letter
 - The function name must start with `On` followed by an uppercase letter
-- A return argument named `httpStatusCode` must be of type `int`
-- If the return argument `httpResponseBody` is present, no other return argument other than `httpStatusCode` and `error` can be present
-
-There are three magic variable names that are useful when constructing a REST API.
-
-- An input argument `httpRequestBody` has the request's body read directly into it. Other input arguments, if present, are read from the query arguments of the request. Use this pattern when an endpoint accepts a single object that is defined elsewhere. Handling a `PUT` request is an example
-- Similarly, an output argument `httpResponseBody` has the request's body read directly into it. No other output arguments other than `httpStatusCode` can be returned if `httpResponseBody` is present. Use this pattern when an endpoint returns a single object that is defined elsewhere. Handling a `GET` request is an example
-- An output argument named `httpStatusCode` of type `int` will allow the function to set the request's status code. Returning `http.StatusCreated` after a `POST` request is an example
 
 #### Step 3: Determine the Method and Route
 
@@ -73,7 +63,7 @@ Prefix the route with `//` to set a hostname other than that of this microservic
 
 #### Step 4: Determine a Description
 
-Describe the endpoint starting with its name, in Go doc style: `OnMyEvent is triggered when X`. Embed this description in followup steps where appropriate.
+Describe the endpoint starting with its name, in Go doc style: `OnMyEvent is triggered when X`. Embed this description in followup steps wherever you see `OnMyEvent is triggered when X`.
 
 #### Step 5: Define Complex Types
 
@@ -108,7 +98,10 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 
 #### Step 6: Define the Payload Structs
 
-In `myserviceapi/client.go`, define a struct `OnMyEventIn` to hold the input arguments of the function, excluding `ctx context.Context`. Use PascalCase for the field names and camelCase for the `json` tag names. If an argument is named `httpRequestBody`, set its `json` tag value to `-`.
+Append the function's payload structs to `myserviceapi/client.go`.
+Use PascalCase for the field names and camelCase for the `json` tag names.
+
+`OnMyEventIn` holds the input arguments of the function, excluding `ctx context.Context`. If an argument is named `httpRequestBody`, set its `json` tag value to `-`.
 
 ```go
 // OnMyEventIn are the input arguments of OnMyEvent.
@@ -118,7 +111,7 @@ type OnMyEventIn struct { // MARKER: OnMyEvent
 }
 ```
 
-Also in `myserviceapi/client.go`, define a struct `OnMyEventOut` to hold the output arguments of the function, excluding `err error`. Use PascalCase for the field names and camelCase for the `json` tag names. If an argument is named `httpStatusCode`, set its `json` tag value to `-`. Append the definition at the end of the file.
+`OnMyEventOut` holds the output arguments of the function, excluding `err error`. If an argument is named `httpStatusCode`, set its `json` tag value to `-`.
 
 ```go
 // OnMyEventOut are the output arguments of OnMyEvent.
@@ -127,116 +120,81 @@ type OnMyEventOut struct { // MARKER: OnMyEvent
 }
 ```
 
-Also in `myserviceapi/client.go`, define a struct `OnMyEventResponse` to hold the response of the request. The struct provides a single method `Get` that returns the functions return arguments. Append the definition at the end of the file.
+`OnMyEventResponse` holds the response of the request. The struct provides a single method `Get` that returns the function's return arguments.
+
+If there are output arguments besides `err error`:
 
 ```go
-// OnMyEventResponse is the response to OnMyEvent.
-type OnMyEventResponse struct { // MARKER: OnMyEvent
-	data OnMyEventOut
-	HTTPResponse *http.Response
-	err error
-}
+// OnMyEventResponse packs the response of OnMyEvent.
+type OnMyEventResponse multicastResponse // MARKER: OnMyEvent
 
 // Get retrieves the return values.
 func (_res *OnMyEventResponse) Get() (argOut1 map[string]MyStruct, err error) { // MARKER: OnMyEvent
-	return _res.data.ArgOut1, _res.err
+	_d := _res.data.(*OnMyEventOut)
+	return _d.ArgOut1, _res.err
+}
+```
+
+If `err error` is the only return argument:
+
+```go
+// OnMyEventResponse packs the response of OnMyEvent.
+type OnMyEventResponse multicastResponse // MARKER: OnMyEvent
+
+// Get retrieves the return values.
+func (_res *OnMyEventResponse) Get() (err error) { // MARKER: OnMyEvent
+	return _res.err
 }
 ```
 
 #### Step 7: Extend the Trigger and Hook
 
-Extend the trigger and hook in `myserviceapi/client.go`.
-
-Define the route and URL of the endpoint at the top of the file in the respective `const` and `var` blocks. 
+Define the endpoint in the `var` block in `myserviceapi/client.go`, after the corresponding `HINT` comment.
 
 ```go
-// Endpoint routes.
-const (
-	// ...
-	RouteOfOnMyEvent = `/on-my-event` // MARKER: OnMyEvent
-)
-
-// Endpoint URLs.
 var (
+	// HINT: Insert endpoint definitions here
 	// ...
-	URLOfOnMyEvent = httpx.JoinHostAndPath(Hostname, RouteOfOnMyEvent) // MARKER: OnMyEvent
+	OnMyEvent = Def{Method: "POST", Route: ":417/on-my-event"} // MARKER: OnMyEvent
 )
 ```
 
-Append the methods at the bottom of the file.
-
-- In the comments, replace `OnMyEvent is triggered when X` with the description of the endpoint
-- Set the value of `method` and `_method` to the method of the endpoint
+Append the following methods to `myserviceapi/client.go`.
 
 ```go
 /*
 OnMyEvent is triggered when X.
 */
-func (_c MulticastTrigger) OnMyEvent(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) <-chan *OnMyEventResponse { // MARKER: OnMyEvent
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfOnMyEvent)
-	_in := OnMyEventIn{
-		ArgIn1: argIn1,
-		ArgIn2: argIn2,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *OnMyEventResponse, 1)
-		_res <- &OnMyEventResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *OnMyEventResponse, cap(_ch))
-	for _i := range _ch {
-		var _r OnMyEventResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastTrigger) OnMyEvent(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) iter.Seq[*OnMyEventResponse] { // MARKER: OnMyEvent
+	_in := OnMyEventIn{ArgIn1: argIn1, ArgIn2: argIn2}
+	_out := OnMyEventOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnMyEvent.Method, OnMyEvent.Route, &_in, &_out)
+	return func(yield func(*OnMyEventResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnMyEventResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
 OnMyEvent is triggered when X.
 */
-func (c Hook) OnMyEvent(handler func(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error)) (func unsub() (err error), err error) {
+func (c Hook) OnMyEvent(handler func(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) (argOut1 map[string]MyStruct, err error)) (unsub func() error, err error) { // MARKER: OnMyEvent
 	doOnMyEvent := func(w http.ResponseWriter, r *http.Request) error {
-		var i OnMyEventIn
-		var o OnMyEventOut
-        err = httpx.ReadInputPayload(r, RouteOfOnMyEvent, &i)
-        if err != nil {
-            return errors.Trace(err)
-        }
-        o.ArgOut1, err = handler(r.Context(), i.ArgIn1, i.ArgIn2)
-        if err != nil {
-            return err // No trace
-        }
-        err = httpx.WriteOutputPayload(w, o)
-        if err != nil {
-            return errors.Trace(err)
-        }
-		return nil
+		var in OnMyEventIn
+		var out OnMyEventOut
+		err = marshalFunction(w, r, OnMyEvent.Route, &in, &out, func(_ any, _ any) error {
+			out.ArgOut1, err = handler(r.Context(), in.ArgIn1, in.ArgIn2)
+			return err
+		})
+		return err // No trace
 	}
-    method := "POST"
-	path := httpx.JoinHostAndPath(c.host, RouteOfOnMyEvent)
-	unsub, err = _c.svc.Subscribe(method, path, doOnMyEvent)
+	path := httpx.JoinHostAndPath(c.host, OnMyEvent.Route)
+	unsub, err = c.svc.Subscribe(OnMyEvent.Method, path, doOnMyEvent, c.opts...)
 	return unsub, errors.Trace(err)
 }
 ```
@@ -249,32 +207,23 @@ To fire an event and wait for zero or more responses, loop over the response cha
 
 ```go
 for r := range myserviceapi.NewMulticastTrigger(svc).OnMyEvent(ctx, argIn1, argIn2) {
-    argOut1, err := r.Get()
-    if err != nil {
-        return errors.Trace(err)
-    }
-    // ...
+	argOut1, err := r.Get()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// ...
 }
 ```
 
-To fire and forget, call the trigger inside a Go routine.
+To fire and forget, call the trigger without iterating over its response.
 
 ```go
-svc.Go(ctx, func(ctx context.Context) (err error) {
-    myserviceapi.NewMulticastTrigger(svc).OnMyEvent(ctx, argIn1, argIn2)
-    return nil
-})
+myserviceapi.NewMulticastTrigger(svc).OnMyEvent(ctx, argIn1, argIn2)
 ```
 
 #### Step 9: Test the Outgoing Event
 
-Skip this step if instructed to be "quick" or to skip tests.
-
-Append the following code block to the end of `service_test.go`.
-
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
-- Enter distinct queue names in `sub.Queue` when hooking multiple times to the event to simulate multiple clients
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
@@ -305,7 +254,7 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			unsub, err := hook.WithOptions(sub.Queue("queue1")).OnMyEvent(
+			unsub, err := hook.WithOptions(sub.Queue("UniqueQueueName")).OnMyEvent(
 				func(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error) {
 					assert.Expect(
 						argIn1, expectedArgIn1,
@@ -323,7 +272,7 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 				if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
 					argOut1, err := e.Get()
 					assert.Expect(
-                        argOut1, expectedArgOut1,
+						argOut1, expectedArgOut1,
 						err, nil,
 					)
 				}
@@ -333,16 +282,44 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 }
 ```
 
-#### Step 10: Update Manifest
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-Update the `outboundEvents` and `downstream` sections of `manifest.yaml`.
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-#### Step 11: Document the Microservice
+- Enter distinct queue names in `sub.Queue` when hooking multiple times to the event to simulate multiple clients. Use only alphanumeric characters for queue names.
 
-Skip this step if instructed to be "quick" or to skip documentation.
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+	unsub, err := hook.WithOptions(sub.Queue("UniqueQueueName")).OnMyEvent(
+		func(ctx context.Context, argIn1 string, argIn2 ThirdPartyStruct) (argOut1 map[string]myserviceapi.MyStruct, err error) {
+			assert.Expect(
+				argIn1, expectedArgIn1,
+				argIn2, expectedArgIn2,
+			)
+			// Implement event sink here...
+			return argOut1, err
+		},
+	)
+	if assert.NoError(err) {
+		defer unsub()
+	}
 
-#### Step 12: Versioning
+	for e := range trigger.OnMyEvent(ctx, argIn1, argIn2) {
+		if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
+			argOut1, err := e.Get()
+			assert.Expect(
+				argOut1, expectedArgOut1,
+				err, nil,
+			)
+		}
+	}
+})
+```
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Do not remove the `HINT` comments.
+
+#### Step 10: Housekeeping
+
+Follow the `microbus/housekeeping` skill.

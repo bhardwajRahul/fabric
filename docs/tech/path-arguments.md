@@ -53,12 +53,12 @@ Path arguments are also allowed for web handlers, in which case their value can 
 
 ```go
 func (svc *Service) AvatarImage(w http.ResponseWriter, r *http.Request) (err error) {
-    // Use r.PathValue to obtain the value of a path argument
-    uid := r.PathValue("uid")
-    size, _ := strconv.Atoi(r.PathValue("size"))
-    name := r.PathValue("name")
+	// Use r.PathValue to obtain the value of a path argument
+	uid := r.PathValue("uid")
+	size, _ := strconv.Atoi(r.PathValue("size"))
+	name := r.PathValue("name")
 
-    return serveImage(uid, size)
+	return serveImage(uid, size)
 }
 ```
 

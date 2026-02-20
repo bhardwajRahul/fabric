@@ -1,0 +1,22 @@
+graph TB
+    classDef core fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef svc fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef ext fill:#e5f4f3,color:#434343,stroke:#434343
+
+    configurator.core[Configurator<br>configurator.core]
+    http.ingress.core[HTTP Ingress<br>http.ingress.core] ---> metrics.core[Metrics<br>metrics.core]
+    http.ingress.core ---> tokenissuer.core[Token Issuer<br>tokenissuer.core]
+    openapiportal.core[OpenAPI Portal<br>openapiportal.core]
+    browser.example[Browser<br>browser.example] ---> http.egress.core[HTTP Egress<br>http.egress.core]
+    eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
+    hello.example[Hello<br>hello.example] ---> calculator.example[Calculator<br>calculator.example]
+    helloworld.example[HelloWorld<br>helloworld.example]
+    login.example[Login<br>login.example] ---> tokenissuer.core
+    messaging.example[Messaging<br>messaging.example]
+    yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
+    jitracker.fabric[JiTracker<br>jitracker.fabric] ---> http.egress.core
+    jitracker.fabric --- jitracker.fabric.cloud@{shape: cloud, label: "atlassian.net"}
+
+    class hello.example,calculator.example,browser.example,login.example,eventsource.example,eventsink.example,yellowpages.example,helloworld.example,messaging.example,jitracker.fabric svc
+    class http.ingress.core,metrics.core,tokenissuer.core,http.egress.core,configurator.core,openapiportal.core core
+    class yellowpages.example.db,jitracker.fabric.cloud ext

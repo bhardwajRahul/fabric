@@ -7,8 +7,8 @@ For example, to ping and discover all microservices:
 ```go
 ch := controlapi.NewMulticastClient(svc).ForHost("all").Ping(ctx)
 for r := range ch {
-    fromHost := frame.Of(r.HTTPResponse).FromHost()
-    fromID := frame.Of(r.HTTPResponse).FromID()
+	fromHost := frame.Of(r.HTTPResponse).FromHost()
+	fromID := frame.Of(r.HTTPResponse).FromID()
 }
 ```
 

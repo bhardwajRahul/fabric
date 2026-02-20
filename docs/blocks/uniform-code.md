@@ -36,14 +36,14 @@ A test is created in `service_test.go` for each testable web handler, functional
 
 ```go
 type Intermediate struct {
-    *connector.Connector
+	*connector.Connector
 }
 
 type Service struct {
-    *intermediate.Intermediate
+	*intermediate.Intermediate
 }
 
 func (svc *Service) DoSomething(ctx context.Context) (err error) {
-    // svc points to the Intermediate and by extension the Connector
+	// svc points to the Intermediate and by extension the Connector
 }
 ```

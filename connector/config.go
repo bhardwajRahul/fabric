@@ -30,7 +30,7 @@ import (
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/utils"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // SetOnConfigChanged adds a function to be called when a new config was received from the configurator.

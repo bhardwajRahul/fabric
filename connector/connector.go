@@ -88,6 +88,7 @@ type Connector struct {
 	subs          utils.SyncMap[string, *sub.Subscription]
 	phase         atomic.Int32
 	plane         string
+	controlSubs   bool
 
 	reqs             utils.SyncMap[string, *transferChan]
 	networkRoundtrip time.Duration

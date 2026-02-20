@@ -22,12 +22,20 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+
+	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
+)
+
+var (
+	_ http.Request
+	_ errors.TracedError
+	_ metricsapi.Client
 )
 
 // Mock is a mockable version of the metrics.core microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockCollect func(w http.ResponseWriter, r *http.Request) (err error)
+	mockCollect func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Collect
 }
 
 // NewMock creates a new mockable version of the microservice.

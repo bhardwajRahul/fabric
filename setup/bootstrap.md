@@ -9,8 +9,8 @@ Copy this checklist and track your progress:
 
 ```
 Bootstrap a project to use Microbus:
-- [ ] Step 1: Confirm Director
-- [ ] Step 2: Init the Module
+- [ ] Step 1: Confirm directory
+- [ ] Step 2: Init the module
 - [ ] Step 3: Download agent rules and skills
 - [ ] Step 4: Init the project
 ```

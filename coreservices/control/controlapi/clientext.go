@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ package controlapi
 import (
 	"context"
 	"fmt"
+	"iter"
 
 	"github.com/microbus-io/fabric/frame"
 )
@@ -39,76 +40,73 @@ type ServiceInfo struct {
 
 // PingServices performs a ping and returns service info for microservices on the network.
 // Results are deduped on a per-service basis.
-func (_c MulticastClient) PingServices(ctx context.Context) <-chan *ServiceInfo {
-	ch := _c.Ping(ctx)
-	filtered := make(chan *ServiceInfo, cap(ch))
-	go func() {
+func (_c MulticastClient) PingServices(ctx context.Context) iter.Seq[*ServiceInfo] {
+	return func(yield func(*ServiceInfo) bool) {
 		seen := map[string]bool{}
-		for pingRes := range ch {
-			if pingRes.err != nil {
+		for pingRes := range _c.Ping(ctx) {
+			_r := (*multicastResponse)(pingRes)
+			if _r.err != nil {
 				continue
 			}
-			frame := frame.Of(pingRes.HTTPResponse)
+			f := frame.Of(_r.HTTPResponse)
 			info := &ServiceInfo{
-				Hostname: frame.FromHost(),
+				Hostname: f.FromHost(),
 			}
 			if seen[info.Hostname] {
 				continue
 			}
 			seen[info.Hostname] = true
-			filtered <- info
+			if !yield(info) {
+				return
+			}
 		}
-		close(filtered)
-	}()
-	return filtered
+	}
 }
 
 // PingVersions performs a ping and returns service info for microservice versions on the network.
 // Results are deduped on a per-version basis.
-func (_c MulticastClient) PingVersions(ctx context.Context) <-chan *ServiceInfo {
-	ch := _c.Ping(ctx)
-	filtered := make(chan *ServiceInfo, cap(ch))
-	go func() {
+func (_c MulticastClient) PingVersions(ctx context.Context) iter.Seq[*ServiceInfo] {
+	return func(yield func(*ServiceInfo) bool) {
 		seen := map[string]bool{}
-		for pingRes := range ch {
-			if pingRes.err != nil {
+		for pingRes := range _c.Ping(ctx) {
+			_r := (*multicastResponse)(pingRes)
+			if _r.err != nil {
 				continue
 			}
-			frame := frame.Of(pingRes.HTTPResponse)
+			f := frame.Of(_r.HTTPResponse)
 			info := &ServiceInfo{
-				Hostname: frame.FromHost(),
-				Version:  frame.FromVersion(),
+				Hostname: f.FromHost(),
+				Version:  f.FromVersion(),
 			}
 			key := fmt.Sprintf("%s:%d", info.Hostname, info.Version)
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			filtered <- info
+			if !yield(info) {
+				return
+			}
 		}
-		close(filtered)
-	}()
-	return filtered
+	}
 }
 
 // PingInstances performs a ping and returns service info for all instances on the network.
-func (_c MulticastClient) PingInstances(ctx context.Context) <-chan *ServiceInfo {
-	ch := _c.Ping(ctx)
-	filtered := make(chan *ServiceInfo, cap(ch))
-	go func() {
-		for pingRes := range ch {
-			if pingRes.err != nil {
+func (_c MulticastClient) PingInstances(ctx context.Context) iter.Seq[*ServiceInfo] {
+	return func(yield func(*ServiceInfo) bool) {
+		for pingRes := range _c.Ping(ctx) {
+			_r := (*multicastResponse)(pingRes)
+			if _r.err != nil {
 				continue
 			}
-			frame := frame.Of(pingRes.HTTPResponse)
+			f := frame.Of(_r.HTTPResponse)
 			info := &ServiceInfo{
-				Hostname: frame.FromHost(),
-				Version:  frame.FromVersion(),
-				ID:       frame.FromID(),
+				Hostname: f.FromHost(),
+				Version:  f.FromVersion(),
+				ID:       f.FromID(),
 			}
-			filtered <- info
+			if !yield(info) {
+				return
+			}
 		}
-		close(filtered)
-	}()
-	return filtered
+	}
 }

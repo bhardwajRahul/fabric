@@ -10,7 +10,7 @@ The following open source software (OSS) is used or referenced by the `Microbus`
 | [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-go) | Apache License 2.0 | Copyright The OpenTelemetry Authors |
 | [Grafana](https://grafana.com) | AGPLv3 | Copyright 2014-2021 Grafana Labs |
 | [Logrus](https://github.com/sirupsen/logrus) | MIT License | Copyright (c) 2014 Simon Eskildsen |
-| [Go YAML](https://github.com/go-yaml/yaml) | MIT License<br>Apache License 2.0 | Copyright (c) 2006-2010 Kirill Simonov<br>Copyright (c) 2011-2019 Canonical Ltd |
+| [Go YAML](https://github.com/yaml/go-yaml) | MIT License<br>Apache License 2.0 | Copyright (c) 2006-2010 Kirill Simonov<br>Copyright (c) 2011-2019 Canonical Ltd |
 | [MariaDB](https://mariadb.com) | GNU General Public License | Copyright (c) 2018, 2022, MariaDB Corporation. |
 | [JSON Schema](https://github.com/invopop/jsonschema) | MIT License | Copyright (C) 2014 Alec Thomas |
 | [Go Guerilla](https://github.com/phires/go-guerrilla) | MIT License | Copyright (c) 2016 GuerrillaMail.com. |

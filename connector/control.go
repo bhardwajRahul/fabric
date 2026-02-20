@@ -26,6 +26,10 @@ import (
 
 // subscribeControl creates subscriptions for control requests on the reserved port 888.
 func (c *Connector) subscribeControl() (err error) {
+	if c.controlSubs {
+		// Already subscribed
+		return nil
+	}
 	type ctrlSub struct {
 		path    string
 		handler HTTPHandler
@@ -58,16 +62,26 @@ func (c *Connector) subscribeControl() (err error) {
 			options: []sub.Option{sub.NoQueue()},
 		},
 	}
+	var unsubs []func() (err error)
 	for _, s := range subs {
-		_, err = c.Subscribe("ANY", ":888/"+s.path, s.handler, s.options...)
+		unsub, err := c.Subscribe("ANY", ":888/"+s.path, s.handler, s.options...)
 		if err != nil {
+			for _, unsub := range unsubs {
+				unsub()
+			}
 			return errors.Trace(err)
 		}
-		_, err = c.Subscribe("ANY", "https://all:888/"+s.path, s.handler, s.options...)
+		unsubs = append(unsubs, unsub)
+		unsub, err = c.Subscribe("ANY", "https://all:888/"+s.path, s.handler, s.options...)
 		if err != nil {
+			for _, unsub := range unsubs {
+				unsub()
+			}
 			return errors.Trace(err)
 		}
+		unsubs = append(unsubs, unsub)
 	}
+	c.controlSubs = true
 	return nil
 }
 

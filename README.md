@@ -3,9 +3,11 @@
 <a href="https://www.microbus.io"><img src="./microbus-logo.svg" height="100" alt="Microbus.io logo"></a>
 
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Reference](https://pkg.go.dev/badge/github.com/minio/simdjson-go)](https://pkg.go.dev/github.com/microbus-io/fabric)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Reference](https://pkg.go.dev/badge/github.com/microbus-io/fabric)](https://pkg.go.dev/github.com/microbus-io/fabric)
 [![Test](https://github.com/microbus-io/fabric/actions/workflows/test.yaml/badge.svg?branch=main&event=push)](https://github.com/microbus-io/fabric/actions/workflows/test.yaml)
-[![Reference](https://goreportcard.com/badge/github.com/microbus-io/fabric)](https://goreportcard.com/report/github.com/microbus-io/fabric)
+[![Go Report Card](https://goreportcard.com/badge/github.com/microbus-io/fabric)](https://goreportcard.com/report/github.com/microbus-io/fabric)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/FAJHnGkNqJ)
 
 ## Teach Your Agent to Code Microservices
 
@@ -45,6 +47,14 @@ Microservices are the right architecture for most growing systems, but the conve
 - [NATS](https://nats.io) messaging bus (required in high-availability production settings, optional during development)
 - [LGTM stack](https://github.com/grafana/docker-otel-lgtm) OpenTelemetry observability stack (optional)
 
+### Bootstrap
+
+Ask your coding agent to bootstrap `Microbus`:
+
+> HEY CLAUDE...
+>
+> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it
+
 ### Take a Tour
 
 The [examples](./docs/structure/examples.md) directory contains microservices that demonstrate key patterns: [hello world](./examples/helloworld), [calculator](./examples/calculator), [CRUD with a database](./examples/directory), [events](./examples/eventsource), [authentication](./examples/login) and more.
@@ -53,7 +63,7 @@ Take the agent-guided tour!
 
 > HEY CLAUDE...
 >
-> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it. After that, find the appropriate skill and take me through the tour
+> Take me through the agent-guided tour
 
 ### Build Your First Microservice
 
@@ -67,13 +77,7 @@ Ready to build your own solution? [Bootstrap a new project](./docs/howto/new-pro
 
 `Microbus` is designed to work hand-in-hand with coding agents like [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The framework's structured project layout and embedded [guidance](./docs/blocks/coding-agents.md#how-agents-are-guided) keep the agent's context window small and its output accurate.
 
-Ask your coding agent to bootstrap `Microbus`:
-
-> HEY CLAUDE...
->
-> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it
-
-Then prompt your way to a fully-implemented microservice:
+Prompt your way to a fully-implemented microservice:
 
 > HEY CLAUDE...
 >
@@ -93,14 +97,12 @@ Six prompts. Under 10 minutes. 819 lines of code at 87% test coverage.
 
 Learn more about how [coding agents](./docs/blocks/coding-agents.md) work within the `Microbus` framework.
 
-## Deploy
+## Production Ready
 
 Bundle microservices into applications and deploy them to match your scale: as a single binary, a handful of containers, or across availability zones. Microservices communicate via a messaging bus.
 
 <img src="./docs/blocks/topology-5.drawio.svg">
 <p></p>
-
-## Observe
 
 Distributed tracing, metrics and structured logging provide precision visibility into system behavior.
 
@@ -129,9 +131,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 
 ## Features
 
-### Transport
-
-| | |
+| Transport | |
 |---|---|
 | [Unicast](./docs/blocks/unicast.md) | 1:1 request/response between microservices |
 | [Multicast](./docs/blocks/multicast.md) | 1:N publish/subscribe |
@@ -144,18 +144,14 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Connectivity check](./docs/blocks/connectivity-liveness-test.md) | Liveness detection |
 | [Short-circuit](./docs/tech/short-circuit.md) | In-memory transport for co-located services |
 
-### Observability
-
-| | |
+| Observability | |
 |---|---|
 | [Distributed tracing](./docs/blocks/distrib-tracing.md) | Cross-service call visualization via OpenTelemetry |
 | [Structured logging](./docs/blocks/logging.md) | JSON logging to stderr |
 | [Metrics](./docs/blocks/metrics.md) | Prometheus-compatible metrics |
 | [Error capture](./docs/blocks/error-capture.md) | Stack traces preserved across service boundaries |
 
-### Developer Experience
-
-| | |
+| Developer Experience | |
 |---|---|
 | [Client stubs](./docs/blocks/client-stubs.md) | Type-safe generated clients |
 | [Integration testing](./docs/blocks/integration-testing.md) | Multi-service tests in a single process |
@@ -163,9 +159,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Events](./docs/blocks/events.md) | Decouple services with event-driven patterns |
 | [Tickers](./docs/blocks/tickers.md) | Recurring scheduled jobs |
 
-### Robust Runtime
-
-| | |
+| Runtime | |
 |---|---|
 | [Configuration](./docs/blocks/configuration.md) | Centralized YAML-based config |
 | [Authorization](./docs/blocks/authorization.md) | JWT-based access control |

@@ -102,6 +102,9 @@ func WriteInputPayload(method string, in any) (query url.Values, body any, err e
 	if MethodWithBody(method) {
 		bodySource := in
 		v := reflect.ValueOf(in)
+		if v.Kind() == reflect.Pointer {
+			v = v.Elem()
+		}
 		if v.Kind() == reflect.Struct {
 			if f := v.FieldByName("HTTPRequestBody"); f.IsValid() {
 				bodySource = f.Interface()
@@ -149,6 +152,9 @@ func ReadOutputPayload(res *http.Response, out any) (err error) {
 func WriteOutputPayload(w http.ResponseWriter, out any) (err error) {
 	w.Header().Set("Content-Type", "application/json")
 	v := reflect.ValueOf(out)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
 	if v.Kind() == reflect.Struct {
 		if f := v.FieldByName("HTTPStatusCode"); f.IsValid() {
 			w.WriteHeader(int(f.Int()))

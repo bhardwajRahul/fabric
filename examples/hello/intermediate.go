@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package hello
 
 import (
@@ -45,14 +61,14 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Hello(w http.ResponseWriter, r *http.Request) error                    // MARKER: Hello
-	Echo(w http.ResponseWriter, r *http.Request) error                     // MARKER: Echo
-	Ping(w http.ResponseWriter, r *http.Request) error                     // MARKER: Ping
-	Calculator(w http.ResponseWriter, r *http.Request) error               // MARKER: Calculator
-	BusPNG(w http.ResponseWriter, r *http.Request) (err error)             // MARKER: BusPNG
-	Localization(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: Localization
-	Root(w http.ResponseWriter, r *http.Request) (err error)               // MARKER: Root
-	TickTock(ctx context.Context) error                                    // MARKER: TickTock
+	Hello(w http.ResponseWriter, r *http.Request) error              // MARKER: Hello
+	Echo(w http.ResponseWriter, r *http.Request) error               // MARKER: Echo
+	Ping(w http.ResponseWriter, r *http.Request) error               // MARKER: Ping
+	Calculator(w http.ResponseWriter, r *http.Request) error         // MARKER: Calculator
+	BusPNG(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: BusPNG
+	Localization(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Localization
+	Root(w http.ResponseWriter, r *http.Request) (err error)         // MARKER: Root
+	TickTock(ctx context.Context) error                              // MARKER: TickTock
 }
 
 // NewService creates a new instance of the microservice.
@@ -94,13 +110,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe("ANY", helloapi.RouteOfHello, svc.Hello)               // MARKER: Hello
-	svc.Subscribe("ANY", helloapi.RouteOfEcho, svc.Echo)                 // MARKER: Echo
-	svc.Subscribe("ANY", helloapi.RouteOfPing, svc.Ping)                 // MARKER: Ping
-	svc.Subscribe("ANY", helloapi.RouteOfCalculator, svc.Calculator)     // MARKER: Calculator
-	svc.Subscribe("GET", helloapi.RouteOfBusPNG, svc.BusPNG)             // MARKER: BusPNG
-	svc.Subscribe("ANY", helloapi.RouteOfLocalization, svc.Localization)  // MARKER: Localization
-	svc.Subscribe("ANY", helloapi.RouteOfRoot, svc.Root)                 // MARKER: Root
+	svc.Subscribe(helloapi.Hello.Method, helloapi.Hello.Route, svc.Hello)              // MARKER: Hello
+	svc.Subscribe(helloapi.Echo.Method, helloapi.Echo.Route, svc.Echo)                 // MARKER: Echo
+	svc.Subscribe(helloapi.Ping.Method, helloapi.Ping.Route, svc.Ping)                 // MARKER: Ping
+	svc.Subscribe(helloapi.Calculator.Method, helloapi.Calculator.Route, svc.Calculator) // MARKER: Calculator
+	svc.Subscribe(helloapi.BusPNG.Method, helloapi.BusPNG.Route, svc.BusPNG)            // MARKER: BusPNG
+	svc.Subscribe(helloapi.Localization.Method, helloapi.Localization.Route, svc.Localization) // MARKER: Localization
+	svc.Subscribe(helloapi.Root.Method, helloapi.Root.Route, svc.Root)                 // MARKER: Root
 
 	// HINT: Add metrics here
 
@@ -122,6 +138,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -140,58 +157,56 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Hello
 			Type:        "web",
 			Name:        "Hello",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfHello,
+			Method:      helloapi.Hello.Method,
+			Route:       helloapi.Hello.Route,
 			Summary:     "Hello()",
 			Description: `Hello prints a greeting.`,
 		},
 		{ // MARKER: Echo
 			Type:        "web",
 			Name:        "Echo",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfEcho,
+			Method:      helloapi.Echo.Method,
+			Route:       helloapi.Echo.Route,
 			Summary:     "Echo()",
 			Description: `Echo back the incoming request in wire format.`,
 		},
 		{ // MARKER: Ping
 			Type:        "web",
 			Name:        "Ping",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfPing,
+			Method:      helloapi.Ping.Method,
+			Route:       helloapi.Ping.Route,
 			Summary:     "Ping()",
 			Description: `Ping all microservices and list them.`,
 		},
 		{ // MARKER: Calculator
 			Type:        "web",
 			Name:        "Calculator",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfCalculator,
+			Method:      helloapi.Calculator.Method,
+			Route:       helloapi.Calculator.Route,
 			Summary:     "Calculator()",
-			Description: `Calculator renders a UI for a calculator.
-The calculation operation is delegated to another microservice in order to demonstrate
-a call from one microservice to another.`,
+			Description: `Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.`,
 		},
 		{ // MARKER: BusPNG
 			Type:        "web",
 			Name:        "BusPNG",
-			Method:      "GET",
-			Route:       helloapi.RouteOfBusPNG,
+			Method:      helloapi.BusPNG.Method,
+			Route:       helloapi.BusPNG.Route,
 			Summary:     "BusPNG()",
 			Description: `BusPNG serves an image from the embedded resources.`,
 		},
 		{ // MARKER: Localization
 			Type:        "web",
 			Name:        "Localization",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfLocalization,
+			Method:      helloapi.Localization.Method,
+			Route:       helloapi.Localization.Route,
 			Summary:     "Localization()",
 			Description: `Localization prints hello in the language best matching the request's Accept-Language header.`,
 		},
 		{ // MARKER: Root
 			Type:        "web",
 			Name:        "Root",
-			Method:      "ANY",
-			Route:       helloapi.RouteOfRoot,
+			Method:      helloapi.Root.Method,
+			Route:       helloapi.Root.Route,
 			Summary:     "Root()",
 			Description: `Root is the top-most root page.`,
 		},
@@ -221,13 +236,30 @@ a call from one microservice to another.`,
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
+	return nil
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 

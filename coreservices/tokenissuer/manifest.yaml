@@ -1,8 +1,23 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 general:
+  name: TokenIssuer
   hostname: tokenissuer.core
   description: The token issuer microservice generates and validates JWTs.
   package: github.com/microbus-io/fabric/coreservices/tokenissuer
-  frameworkVersion: 1.22.0
+  frameworkVersion: 1.23.0
 
 functions:
   IssueToken:
@@ -19,14 +34,16 @@ functions:
 configs:
   AuthTokenTTL:
     description: AuthTokenTTL sets the TTL of the JWT.
-    type: time.Duration
+    signature: AuthTokenTTL() (ttl time.Duration)
     validation: dur [1m,]
     default: 720h
   SecretKey:
     description: SecretKey is a symmetrical key used to sign and validate the JWT when using the HMAC-SHA algorithm.
-    type: string
+    signature: SecretKey() (key string)
     validation: str ^(|.{64,})$
+    secret: true
   AltSecretKey:
     description: AltSecretKey is an alternative key used to validate the JWT when using the HMAC-SHA algorithm. Setting the previous secret key as an alternative key is useful when rotating keys.
-    type: string
+    signature: AltSecretKey() (key string)
     validation: str ^(|.{64,})$
+    secret: true

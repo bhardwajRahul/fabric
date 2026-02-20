@@ -3,7 +3,7 @@ name: Adding a Configuration Property
 description: Creates or modify a configuration property of a microservice. Use when explicitly asked by the user to create or modify a configuration property of a microservice, or when it makes sense to externalize a certain setting of the microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -21,11 +21,10 @@ Creating or modifying a configuration property:
 - [ ] Step 6: Implement the getter and setter
 - [ ] Step 7: Wire up the config change dispatcher
 - [ ] Step 8: Implement the callback
-- [ ] Step 9: Extend the mock
-- [ ] Step 10: Test the callback
-- [ ] Step 11: Update manifest
-- [ ] Step 12: Document the microservice
-- [ ] Step 13: Versioning
+- [ ] Step 9: Use the config
+- [ ] Step 10: Extend the mock
+- [ ] Step 11: Test the callback
+- [ ] Step 12: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -76,16 +75,15 @@ type ToDo interface {
 
 #### Step 5: Define the Config
 
-Define the configuration property in `NewIntermediate` in `intermediate.go`.
+Define the configuration property in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment.
 
-- Set the `HINT` comment as the insertion point
 - Include `cfg.Description`, `cfg.DefaultValue`, `cfg.Validation`, and `cfg.Secret` as appropriate
 - Omit options that are empty or false
 - The config name is PascalCase
 - In `cfg.Description`, replace `MyConfig is X` with the description of the configuration property
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 	svc.DefineConfig( // MARKER: MyConfig
 		"MyConfig",
@@ -99,7 +97,7 @@ func NewIntermediate() *Intermediate {
 
 #### Step 6: Implement the Getter and Setter
 
-Create the getter and setter methods in `intermediate.go`.
+Append the getter and setter methods to `intermediate.go`.
 
 - Set an appropriate comment describing the config property
 - The getter converts the string value to the appropriate type
@@ -233,7 +231,17 @@ func (svc *Service) OnChangedMyConfig(ctx context.Context) (err error) { // MARK
 }
 ```
 
-#### Step 9: Extend the Mock
+#### Step 9: Use the Config
+
+The config itself does not have an implementation. Rather, read its value from within other endpoints using its getter.
+
+```go
+myConfig := svc.MyConfig()
+```
+
+Use `svc.SetMyConfig(value)` to set the value programmatically, for example in tests.
+
+#### Step 10: Extend the Mock
 
 Skip this step if the config does not have a callback.
 
@@ -258,7 +266,8 @@ func (svc *Mock) MockOnChangedMyConfig(handler func(ctx context.Context) (err er
 // OnChangedMyConfig executes the mock handler.
 func (svc *Mock) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER: MyConfig
 	if svc.mockOnChangedMyConfig == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedMyConfig(ctx)
 	return errors.Trace(err)
@@ -272,7 +281,7 @@ t.Run("on_changed_my_config", func(t *testing.T) { // MARKER: MyConfig
 	assert := testarossa.For(t)
 
 	err := mock.OnChangedMyConfig(ctx)
-	assert.Contains(err.Error(), "not implemented")                                                                             
+	assert.Contains(err.Error(), "not implemented")
 	mock.MockOnChangedMyConfig(func(ctx context.Context) (err error) {
 		return nil
 	})
@@ -281,19 +290,17 @@ t.Run("on_changed_my_config", func(t *testing.T) { // MARKER: MyConfig
 })
 ```
 
-#### Step 10: Test the Callback
+#### Step 11: Test the Callback
 
 Skip this step if the config does not have a callback.
 
-Append the following code block to the end of `service_test.go`.
-
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_OnChangedMyConfig(t *testing.T) { // MARKER: MyConfig
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -319,16 +326,21 @@ func TestMyService_OnChangedMyConfig(t *testing.T) { // MARKER: MyConfig
 }
 ```
 
-#### Step 11: Update Manifest
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-Update the `configs` and `downstream` sections of `manifest.yaml`.
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-#### Step 12: Document the Microservice
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Skip this step if instructed to be "quick" or to skip documentation.
+	err := svc.SetMyConfig(newValue)
+	assert.NoError(err)
+})
+```
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+Do not remove the `HINT` comments.
 
-#### Step 13: Versioning
+#### Step 12: Housekeeping
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Follow the `microbus/housekeeping` skill.

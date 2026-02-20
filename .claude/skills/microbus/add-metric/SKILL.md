@@ -3,7 +3,7 @@ name: Adding a Metric
 description: Creates or modify a metric of a microservice. Use when explicitly asked by the user to create or modify a custom metric for a microservice, or when it makes sense to measure a certain operation taken by the microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -18,15 +18,14 @@ Creating or modifying a metric:
 - [ ] Step 3: Determine if observable just in time
 - [ ] Step 4: Determine signature
 - [ ] Step 5: Determine OpenTelemetry name
-- [ ] Step 5: Extend the ToDo interface
-- [ ] Step 6: Describe the metric
-- [ ] Step 7: Implement the recorders
-- [ ] Step 8: Observe with callback
-- [ ] Step 9: Extend the mock
-- [ ] Step 10: Test the callback
-- [ ] Step 11: Update manifest
-- [ ] Step 12: Document the microservice
-- [ ] Step 13: Versioning
+- [ ] Step 6: Extend the ToDo interface
+- [ ] Step 7: Describe the metric
+- [ ] Step 8: Implement the recorders
+- [ ] Step 9: Use the metric
+- [ ] Step 10: Observe with callback
+- [ ] Step 11: Extend the mock
+- [ ] Step 12: Test the callback
+- [ ] Step 13: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -68,20 +67,22 @@ The OpenTelemetry name of the metric:
 
 For example, `myapplication_my_metric_units`.
 
-#### Step 6: Extend the `ToDo` Interface
+#### Step 6: Extend the `ToDo` interface
+
+Skip this step if the metric is not observable just in time.
 
 Extend the `ToDo` interface in `intermediate.go`.
 
 ```go
 type ToDo interface {
 	// ...
-	MyMetric(ctx context.Context, value int, label1 string, label2 string) (err error) { // MARKER: MyMetric
+	OnObserveMyMetric(ctx context.Context) (err error) // MARKER: MyMetric
 }
 ```
 
 #### Step 7: Describe the Metric
 
-Describe the metric in `NewIntermediate` in `intermediate.go`.
+Describe the metric in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment.
 
 - Use snake_case for the metric alias
 - If the metric has a unit such as `seconds` or `mb`, append it to the alias
@@ -90,7 +91,7 @@ Describe the metric in `NewIntermediate` in `intermediate.go`.
 If a histogram:
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 	svc.DescribeHistogram("myapplication_my_metric_units", "MyMetric counts X", []float64{1, 2, 5, 10, 100}) // MARKER: MyMetric
 }
@@ -99,7 +100,7 @@ func NewIntermediate() *Intermediate {
 If a gauge:
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 	svc.DescribeGauge("myapplication_my_metric_units", "MyMetric counts X") // MARKER: MyMetric
 }
@@ -108,7 +109,7 @@ func NewIntermediate() *Intermediate {
 If a counter:
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 	svc.DescribeCounter("myapplication_my_metric_units", "MyMetric counts X") // MARKER: MyMetric
 }
@@ -116,7 +117,7 @@ func NewIntermediate() *Intermediate {
 
 #### Step 8: Implement the Recorders
 
-Create the recording methods in `intermediate.go`.
+Append the recording methods to `intermediate.go`.
 
 - Cast `int` values to `float64`
 - Convert `time.Duration` values to seconds using `dur.Seconds()`
@@ -131,7 +132,7 @@ If the metric is a histogram, add the following code.
 RecordMyMetric records X.
 */
 func (svc *Intermediate) RecordMyMetric(ctx context.Context, value int, label1 string, label2 string) (err error) { // MARKER: MyMetric
-	return svc.RecordHistogram(ctx, "my_metric_units", float64(value),
+	return svc.RecordHistogram(ctx, "myapplication_my_metric_units", float64(value),
 		"label_1", utils.AnyToString(label1),
 		"label_2", utils.AnyToString(label2),
 	)
@@ -145,7 +146,7 @@ If the metric is a counter, add the following code.
 IncrementMyMetric counts X.
 */
 func (svc *Intermediate) IncrementMyMetric(ctx context.Context, value int, label1 string, label2 string) (err error) { // MARKER: MyMetric
-	return svc.IncrementCounter(ctx, "my_metric_units", float64(value),
+	return svc.IncrementCounter(ctx, "myapplication_my_metric_units", float64(value),
 		"label_1", utils.AnyToString(label1),
 		"label_2", utils.AnyToString(label2),
 	)
@@ -159,7 +160,7 @@ If the metric is a gauge, add the following code.
 RecordMyMetric records X.
 */
 func (svc *Intermediate) RecordMyMetric(ctx context.Context, value int, label1 string, label2 string) (err error) { // MARKER: MyMetric
-	return svc.RecordGauge(ctx, "my_metric_units", float64(value),
+	return svc.RecordGauge(ctx, "myapplication_my_metric_units", float64(value),
 		"label_1", utils.AnyToString(label1),
 		"label_2", utils.AnyToString(label2),
 	)
@@ -168,7 +169,21 @@ func (svc *Intermediate) RecordMyMetric(ctx context.Context, value int, label1 s
 
 Note that `utils.AnyToString` is defined in `github.com/microbus-io/fabric/utils`.
 
-#### Step 9: Observe With Callback
+#### Step 9: Use the Metric
+
+Skip this step if the metric is observable just in time.
+
+Call `IncrementMyMetric` (if counter) or `RecordMyMetric` (if histogram or gauge) from the appropriate location in `service.go` where the metric should be recorded.
+
+```go
+svc.IncrementMyMetric(ctx, 1, "label1", "label2")
+```
+
+```go
+svc.RecordMyMetric(ctx, value, "label1", "label2")
+```
+
+#### Step 10: Observe With Callback
 
 Skip this step if the metric is not observable just in time.
 
@@ -196,7 +211,7 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 }
 ```
 
-#### Step 10: Extend the Mock
+#### Step 11: Extend the Mock
 
 Skip this step if the metric is not observable just in time.
 
@@ -229,19 +244,17 @@ func (svc *Mock) OnObserveMyMetric(ctx context.Context) (err error) { // MARKER:
 }
 ```
 
-#### Step 11: Test the Callback
+#### Step 12: Test the Callback
 
 Skip this step if the metric is not observable just in time.
 
-Append the following code block to the end of `service_test.go`.
-
-- Do not remove comments with `HINT`s. They are there to guide you in the future.
-- Insert test cases at the bottom of the test function using the recommended pattern.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_OnObserveMyMetric(t *testing.T) { // MARKER: MyMetric
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -267,16 +280,21 @@ func TestMyService_OnObserveMyMetric(t *testing.T) { // MARKER: MyMetric
 }
 ```
 
-#### Step 12: Update Manifest
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-Update the `metrics` and `downstream` sections of `manifest.yaml`.
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-#### Step 13: Document the Microservice
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Skip this step if instructed to be "quick" or to skip documentation.
+	err := svc.OnObserveMyMetric(ctx)
+	assert.NoError(err)
+})
+```
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
+Do not remove the `HINT` comments.
 
-#### Step 14: Versioning
+#### Step 13: Housekeeping
 
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Follow the `microbus/housekeeping` skill.

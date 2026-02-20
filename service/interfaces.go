@@ -20,6 +20,7 @@ package service
 import (
 	"context"
 	"io/fs"
+	"iter"
 	"net/http"
 	"time"
 
@@ -32,7 +33,7 @@ import (
 // Publisher are the actions used to publish to the bus.
 type Publisher interface {
 	Request(ctx context.Context, options ...pub.Option) (*http.Response, error)
-	Publish(ctx context.Context, options ...pub.Option) <-chan *pub.Response
+	Publish(ctx context.Context, options ...pub.Option) iter.Seq[*pub.Response]
 }
 
 // Subscriber are the actions used to subscribe to the bus.

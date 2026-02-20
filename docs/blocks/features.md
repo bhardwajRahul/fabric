@@ -13,7 +13,7 @@ A functional endpoint has a Go-style signature with input and output arguments. 
 
 ```go
 func (svc *Service) Add(ctx context.Context, x int, y int) (sum int, err error) {
-    return x + y, nil
+	return x + y, nil
 }
 ```
 
@@ -51,16 +51,16 @@ webs:
 
 ```go
 func (svc *Service) Dashboard(w http.ResponseWriter, r *http.Request) (err error) {
-    data := struct {
-        Title string
-    }{
-        Title: "My Dashboard",
-    }
-    err = svc.WriteResTemplate(w, "dashboard.html", data)
-    if err != nil {
-        return errors.Trace(err)
-    }
-    return nil
+	data := struct {
+		Title string
+	}{
+		Title: "My Dashboard",
+	}
+	err = svc.WriteResTemplate(w, "dashboard.html", data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 ```
 
@@ -69,10 +69,10 @@ Web handlers can use [path arguments](../tech/path-arguments.md) to extract valu
 ```go
 // Route: /avatar/{uid}/{size}
 func (svc *Service) Avatar(w http.ResponseWriter, r *http.Request) (err error) {
-    uid := r.PathValue("uid")
-    size := r.PathValue("size")
-    // ...
-    return nil
+	uid := r.PathValue("uid")
+	size := r.PathValue("size")
+	// ...
+	return nil
 }
 ```
 
@@ -116,9 +116,9 @@ The generated handler receives the event's arguments:
 
 ```go
 func (svc *Service) OnOrderPlaced(ctx context.Context, orderID string, total float64) (err error) {
-    svc.LogInfo(ctx, "New order received", "order", orderID, "total", total)
-    // React to the event...
-    return nil
+	svc.LogInfo(ctx, "New order received", "order", orderID, "total", total)
+	// React to the event...
+	return nil
 }
 ```
 
@@ -158,9 +158,9 @@ Supported types are `string`, `bool`, `int`, `float64` and `time.Duration`. Vali
 
 ```go
 func (svc *Service) CallPaymentAPI(ctx context.Context) error {
-    apiKey := svc.APIKey()
-    maxRetries := svc.MaxRetries()
-    // ...
+	apiKey := svc.APIKey()
+	maxRetries := svc.MaxRetries()
+	// ...
 }
 ```
 
@@ -177,9 +177,9 @@ An optional callback can be generated to react to configuration changes at runti
 ```go
 // OnChangedMaxRetries is triggered when the value of the MaxRetries config property changes.
 func (svc *Service) OnChangedMaxRetries(ctx context.Context) (err error) {
-    newVal := svc.MaxRetries()
-    // React to the change...
-    return nil
+	newVal := svc.MaxRetries()
+	// React to the change...
+	return nil
 }
 ```
 
@@ -199,8 +199,8 @@ The generated handler is called at the specified interval:
 
 ```go
 func (svc *Service) RefreshRates(ctx context.Context) (err error) {
-    // Fetch latest rates from external API...
-    return nil
+	// Fetch latest rates from external API...
+	return nil
 }
 ```
 
@@ -238,11 +238,11 @@ Metrics are recorded using generated helper methods:
 
 ```go
 func (svc *Service) HandleRequest(ctx context.Context) error {
-    t0 := svc.Now(ctx)
-    svc.IncrementRequestsHandled(ctx, 1)
-    // ... handle the request ...
-    elapsed := svc.Now(ctx).Sub(t0).Milliseconds()
-    svc.RecordResponseTime(ctx, float64(elapsed))
-    return nil
+	t0 := svc.Now(ctx)
+	svc.IncrementRequestsHandled(ctx, 1)
+	// ... handle the request ...
+	elapsed := svc.Now(ctx).Sub(t0).Milliseconds()
+	svc.RecordResponseTime(ctx, float64(elapsed))
+	return nil
 }
 ```

@@ -1,0 +1,155 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  name: Person
+  hostname: yellowpages.example
+  description: Person persists persons in a SQL database.
+  package: github.com/microbus-io/fabric/examples/yellowpages
+  frameworkVersion: 1.23.0
+  persistence: SQL
+
+functions:
+  Create:
+    signature: Create(obj *Person) (objKey PersonKey)
+    description: Create creates a new person, returning its key.
+    method: ANY
+    route: /create
+  Store:
+    signature: Store(obj *Person) (stored bool)
+    description: Store updates the person.
+    method: ANY
+    route: /store
+  MustStore:
+    signature: MustStore(obj *Person)
+    description: MustStore updates the person, erroring if not found.
+    method: ANY
+    route: /must-store
+  Revise:
+    signature: Revise(obj *Person) (revised bool)
+    description: Revise updates the person only if the revision matches.
+    method: ANY
+    route: /revise
+  MustRevise:
+    signature: MustRevise(obj *Person)
+    description: MustRevise updates the person only if the revision matches, erroring on conflict.
+    method: ANY
+    route: /must-revise
+  Delete:
+    signature: Delete(objKey PersonKey) (deleted bool)
+    description: Delete deletes the person.
+    method: ANY
+    route: /delete
+  MustDelete:
+    signature: MustDelete(objKey PersonKey)
+    description: MustDelete deletes the person, erroring if not found.
+    method: ANY
+    route: /must-delete
+  List:
+    signature: List(query Query) (objs []*Person, totalCount int)
+    description: List returns the persons matching the query, and the total count of matches regardless of the limit.
+    method: ANY
+    route: /list
+  Lookup:
+    signature: Lookup(query Query) (obj *Person, found bool)
+    description: Lookup returns the single person matching the query.
+    method: ANY
+    route: /lookup
+  MustLookup:
+    signature: MustLookup(query Query) (obj *Person)
+    description: MustLookup returns the single person matching the query. It errors unless exactly one person matches the query.
+    method: ANY
+    route: /must-lookup
+  Load:
+    signature: Load(objKey PersonKey) (obj *Person, found bool)
+    description: Load returns the person associated with the key.
+    method: ANY
+    route: /load
+  MustLoad:
+    signature: MustLoad(objKey PersonKey) (obj *Person)
+    description: MustLoad returns the person associated with the key, erroring if not found.
+    method: ANY
+    route: /must-load
+  BulkLoad:
+    signature: BulkLoad(objKeys []PersonKey) (objs []*Person)
+    description: BulkLoad returns the persons matching the keys.
+    method: ANY
+    route: /bulk-load
+  BulkDelete:
+    signature: BulkDelete(objKeys []PersonKey) (deletedKeys []PersonKey)
+    description: BulkDelete deletes the persons matching the keys, returning the keys of the deleted persons.
+    method: ANY
+    route: /bulk-delete
+  BulkCreate:
+    signature: BulkCreate(objs []*Person) (objKeys []PersonKey)
+    description: BulkCreate creates multiple persons, returning their keys.
+    method: ANY
+    route: /bulk-create
+  BulkStore:
+    signature: BulkStore(objs []*Person) (storedKeys []PersonKey)
+    description: BulkStore updates multiple persons, returning the keys of the stored persons.
+    method: ANY
+    route: /bulk-store
+  BulkRevise:
+    signature: BulkRevise(objs []*Person) (revisedKeys []PersonKey)
+    description: BulkRevise updates multiple persons only if the revisions match, returning the keys of the revised persons.
+    method: ANY
+    route: /bulk-revise
+  Purge:
+    signature: Purge(query Query) (deletedKeys []PersonKey)
+    description: Purge deletes all persons matching the query, returning the keys of the deleted persons.
+    method: ANY
+    route: /purge
+  Count:
+    signature: Count(query Query) (count int)
+    description: Count returns the number of persons matching the query.
+    method: ANY
+    route: /count
+  CreateREST:
+    signature: CreateREST(httpRequestBody *Person) (objKey PersonKey, httpStatusCode int)
+    description: CreateREST creates a new person via REST, returning its key.
+    method: POST
+    route: /persons
+  StoreREST:
+    signature: StoreREST(key PersonKey, httpRequestBody *Person) (httpStatusCode int)
+    description: StoreREST updates an existing person via REST.
+    method: PUT
+    route: /persons/{key}
+  DeleteREST:
+    signature: DeleteREST(key PersonKey) (httpStatusCode int)
+    description: DeleteREST deletes an existing person via REST.
+    method: DELETE
+    route: /persons/{key}
+  LoadREST:
+    signature: LoadREST(key PersonKey) (httpResponseBody *Person, httpStatusCode int)
+    description: LoadREST loads a person by key via REST.
+    method: GET
+    route: /persons/{key}
+  ListREST:
+    signature: ListREST(q Query) (httpResponseBody []*Person, httpStatusCode int)
+    description: ListREST lists persons matching the query via REST.
+    method: GET
+    route: /persons
+
+webs:
+  WebUI:
+    description: WebUI provides a form for making web requests to the CRUD endpoints.
+    method: ANY
+    route: /web-ui
+
+configs:
+  SQLDataSourceName:
+    description: SQLDataSourceName is the connection string of the SQL database.
+    signature: SQLDataSourceName() (value string)
+    secret: true

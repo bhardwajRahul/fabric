@@ -20,8 +20,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
 
 	"github.com/microbus-io/fabric/coreservices/httpegress/httpegressapi"
 )

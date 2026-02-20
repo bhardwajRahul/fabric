@@ -97,8 +97,8 @@ Microbus-Time-Budget: 19999
 
 ```go
 u := "https://example.com?" + httpx.QArgs{
-    "foo":   "bar",
-    "count": 5,
+	"foo":   "bar",
+	"count": 5,
 }.Encode()
 ```
 

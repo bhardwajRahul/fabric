@@ -12,25 +12,25 @@ package act
 import "github.com/microbus-io/fabric/frame"
 
 type Actor struct {
-    // Identifiers
-    Issuer   string   `json:"iss"`
-    Subject  string   `json:"sub"`
-    TenantID int      `json:"tenantID"`
-    UserID   int      `json:"userID"`
-    // Security claims
-    Groups   []string `json:"groups"`
-    Roles    []string `json:"roles"`
-    Scopes   []string `json:"scopes"`
-    // User preferences
-    TimeZone string   `json:"timezone"`
-    Locale   string   `json:"locale"`
-    Name     string   `json:"name"`
+	// Identifiers
+	Issuer   string   `json:"iss"`
+	Subject  string   `json:"sub"`
+	TenantID int      `json:"tenantID"`
+	UserID   int      `json:"userID"`
+	// Security claims
+	Groups   []string `json:"groups"`
+	Roles    []string `json:"roles"`
+	Scopes   []string `json:"scopes"`
+	// User preferences
+	TimeZone string   `json:"timezone"`
+	Locale   string   `json:"locale"`
+	Name     string   `json:"name"`
 }
 
 func Of(r any) *Actor {
-    var a Actor
-    frame.Of(r).ParseActor(&a)
-    return &a
+	var a Actor
+	frame.Of(r).ParseActor(&a)
+	return &a
 }
 ```
 

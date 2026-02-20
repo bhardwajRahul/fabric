@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package messaging
 
 import (
@@ -91,11 +107,11 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe("GET", messagingapi.RouteOfHome, svc.Home)                      // MARKER: Home
-	svc.Subscribe("GET", messagingapi.RouteOfNoQueue, svc.NoQueue, sub.NoQueue()) // MARKER: NoQueue
-	svc.Subscribe("GET", messagingapi.RouteOfDefaultQueue, svc.DefaultQueue)      // MARKER: DefaultQueue
-	svc.Subscribe("GET", messagingapi.RouteOfCacheLoad, svc.CacheLoad)            // MARKER: CacheLoad
-	svc.Subscribe("GET", messagingapi.RouteOfCacheStore, svc.CacheStore)          // MARKER: CacheStore
+	svc.Subscribe(messagingapi.Home.Method, messagingapi.Home.Route, svc.Home)                         // MARKER: Home
+	svc.Subscribe(messagingapi.NoQueue.Method, messagingapi.NoQueue.Route, svc.NoQueue, sub.NoQueue()) // MARKER: NoQueue
+	svc.Subscribe(messagingapi.DefaultQueue.Method, messagingapi.DefaultQueue.Route, svc.DefaultQueue) // MARKER: DefaultQueue
+	svc.Subscribe(messagingapi.CacheLoad.Method, messagingapi.CacheLoad.Route, svc.CacheLoad)          // MARKER: CacheLoad
+	svc.Subscribe(messagingapi.CacheStore.Method, messagingapi.CacheStore.Route, svc.CacheStore)       // MARKER: CacheStore
 
 	// HINT: Add metrics here
 
@@ -105,6 +121,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -123,40 +140,40 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Home
 			Type:        "web",
 			Name:        "Home",
-			Method:      "GET",
-			Route:       messagingapi.RouteOfHome,
+			Method:      messagingapi.Home.Method,
+			Route:       messagingapi.Home.Route,
 			Summary:     "Home()",
 			Description: `Home demonstrates making requests using multicast and unicast request/response patterns.`,
 		},
 		{ // MARKER: NoQueue
 			Type:        "web",
 			Name:        "NoQueue",
-			Method:      "GET",
-			Route:       messagingapi.RouteOfNoQueue,
+			Method:      messagingapi.NoQueue.Method,
+			Route:       messagingapi.NoQueue.Route,
 			Summary:     "NoQueue()",
-			Description: "NoQueue demonstrates how the NoQueue subscription option is used to create\na multicast request/response communication pattern.\nAll instances of this microservice will respond to each request.",
+			Description: `NoQueue demonstrates how the NoQueue subscription option is used to create a multicast request/response communication pattern. All instances respond.`,
 		},
 		{ // MARKER: DefaultQueue
 			Type:        "web",
 			Name:        "DefaultQueue",
-			Method:      "GET",
-			Route:       messagingapi.RouteOfDefaultQueue,
+			Method:      messagingapi.DefaultQueue.Method,
+			Route:       messagingapi.DefaultQueue.Route,
 			Summary:     "DefaultQueue()",
-			Description: "DefaultQueue demonstrates how the DefaultQueue subscription option is used to create\na unicast request/response communication pattern.\nOnly one of the instances of this microservice will respond to each request.",
+			Description: `DefaultQueue demonstrates how the DefaultQueue subscription option is used to create a unicast request/response communication pattern. Only one instance responds.`,
 		},
 		{ // MARKER: CacheLoad
 			Type:        "web",
 			Name:        "CacheLoad",
-			Method:      "GET",
-			Route:       messagingapi.RouteOfCacheLoad,
+			Method:      messagingapi.CacheLoad.Method,
+			Route:       messagingapi.CacheLoad.Route,
 			Summary:     "CacheLoad()",
 			Description: `CacheLoad looks up an element in the distributed cache of the microservice.`,
 		},
 		{ // MARKER: CacheStore
 			Type:        "web",
 			Name:        "CacheStore",
-			Method:      "GET",
-			Route:       messagingapi.RouteOfCacheStore,
+			Method:      messagingapi.CacheStore.Method,
+			Route:       messagingapi.CacheStore.Route,
 			Summary:     "CacheStore()",
 			Description: `CacheStore stores an element in the distributed cache of the microservice.`,
 		},
@@ -193,5 +210,22 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
+	return nil
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }

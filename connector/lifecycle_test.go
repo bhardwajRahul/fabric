@@ -219,8 +219,6 @@ func TestConnector_InitError(t *testing.T) {
 }
 
 func TestConnector_Restart(t *testing.T) {
-	t.Skip()
-
 	t.Parallel()
 	ctx := t.Context()
 	assert := testarossa.For(t)
@@ -269,6 +267,7 @@ func TestConnector_Restart(t *testing.T) {
 		w.Write([]byte(`{"values":{"config":"overridden"}}`))
 		return nil
 	})
+
 	err = con.Startup(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), startupCalled.Load())
@@ -281,9 +280,16 @@ func TestConnector_Restart(t *testing.T) {
 	assert.Equal("overridden", con.Config("config"))
 
 	// Shutdown
+	subCount := con.subs.Len()
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), shutdownCalled.Load())
+	assert.Equal(subCount, con.subs.Len())
+
+	startupCalled.Store(0)
+	shutdownCalled.Store(0)
+	endpointCalled.Store(0)
+	tickerCalled.Store(0)
 
 	// Restart
 	unsub()
@@ -291,15 +297,13 @@ func TestConnector_Restart(t *testing.T) {
 		w.Write([]byte(`{}`))
 		return nil
 	})
-	startupCalled.Store(0)
-	shutdownCalled.Store(0)
-	endpointCalled.Store(0)
-	tickerCalled.Store(0)
 
 	err = con.Startup(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), startupCalled.Load())
 	assert.Zero(shutdownCalled.Load())
+	assert.Equal(subCount, con.subs.Len())
+
 	_, err = con.Request(ctx, pub.GET("https://restart.connector/endpoint"))
 	assert.NoError(err)
 	assert.Equal(int32(1), endpointCalled.Load())
@@ -311,6 +315,7 @@ func TestConnector_Restart(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), shutdownCalled.Load())
+	assert.Equal(subCount, con.subs.Len())
 }
 
 func TestConnector_GoGracefulShutdown(t *testing.T) {

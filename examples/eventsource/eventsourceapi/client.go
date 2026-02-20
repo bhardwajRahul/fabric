@@ -1,9 +1,27 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package eventsourceapi
 
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"net/http"
+	"reflect"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
@@ -18,24 +36,38 @@ var (
 	_ *http.Request
 	_ *errors.TracedError
 	_ *httpx.BodyReader
+	_ = marshalRequest
+	_ = marshalPublish
+	_ = marshalFunction
 )
 
 // Hostname is the default hostname of the microservice.
 const Hostname = "eventsource.example"
 
-// Endpoint routes.
-const (
-	RouteOfRegister       = `:443/register`        // MARKER: Register
-	RouteOfOnAllowRegister = `:417/on-allow-register` // MARKER: OnAllowRegister
-	RouteOfOnRegistered   = `:417/on-registered`    // MARKER: OnRegistered
+// Def defines an endpoint of the microservice.
+type Def struct {
+	Method string
+	Route  string
+}
+
+// URL is the full URL to the endpoint.
+func (d *Def) URL() string {
+	return httpx.JoinHostAndPath(Hostname, d.Route)
+}
+
+var (
+	// HINT: Insert endpoint definitions here
+	Register        = Def{Method: "ANY", Route: `:443/register`}           // MARKER: Register
+	OnAllowRegister = Def{Method: "POST", Route: `:417/on-allow-register`} // MARKER: OnAllowRegister
+	OnRegistered    = Def{Method: "POST", Route: `:417/on-registered`}     // MARKER: OnRegistered
 )
 
-// Endpoint URLs.
-var (
-	URLOfRegister       = httpx.JoinHostAndPath(Hostname, RouteOfRegister)       // MARKER: Register
-	URLOfOnAllowRegister = httpx.JoinHostAndPath(Hostname, RouteOfOnAllowRegister) // MARKER: OnAllowRegister
-	URLOfOnRegistered   = httpx.JoinHostAndPath(Hostname, RouteOfOnRegistered)   // MARKER: OnRegistered
-)
+// multicastResponse packs the response of a functional multicast.
+type multicastResponse struct {
+	data         any
+	HTTPResponse *http.Response
+	err          error
+}
 
 // Client is a lightweight proxy for making unicast calls to the microservice.
 type Client struct {
@@ -46,10 +78,7 @@ type Client struct {
 
 // NewClient creates a new unicast client proxy to the microservice.
 func NewClient(caller service.Publisher) Client {
-	return Client{
-		svc:  caller,
-		host: Hostname,
-	}
+	return Client{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
@@ -63,11 +92,7 @@ func (_c Client) ForHost(host string) Client {
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c Client) WithOptions(opts ...pub.Option) Client {
-	return Client{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return Client{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastClient is a lightweight proxy for making multicast calls to the microservice.
@@ -79,28 +104,17 @@ type MulticastClient struct {
 
 // NewMulticastClient creates a new multicast client proxy to the microservice.
 func NewMulticastClient(caller service.Publisher) MulticastClient {
-	return MulticastClient{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastClient{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
 func (_c MulticastClient) ForHost(host string) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastClient{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -112,28 +126,17 @@ type MulticastTrigger struct {
 
 // NewMulticastTrigger creates a new multicast trigger of events of the microservice.
 func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastTrigger{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the trigger with a different hostname to be applied to requests.
 func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the trigger with options to be applied to requests.
 func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // Hook assists in the subscription to the events of the microservice.
@@ -145,28 +148,99 @@ type Hook struct {
 
 // NewHook creates a new hook to the events of the microservice.
 func NewHook(listener service.Subscriber) Hook {
-	return Hook{
-		svc:  listener,
-		host: Hostname,
-	}
+	return Hook{svc: listener, host: Hostname}
 }
 
 // ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
 func (c Hook) ForHost(host string) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: host,
-		opts: c.opts,
-	}
+	return Hook{svc: c.svc, host: host, opts: c.opts}
 }
 
 // WithOptions returns a copy of the hook with options to be applied to subscriptions.
 func (c Hook) WithOptions(opts ...sub.Option) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: c.host,
-		opts: append(c.opts, opts...),
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
+}
+
+// marshalRequest supports functional endpoints.
+func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
+	if method == "ANY" {
+		method = "POST"
 	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return err // No trace
+	}
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.ReadOutputPayload(httpRes, out)
+	return errors.Trace(err)
+}
+
+// marshalPublish supports multicast functional endpoints.
+func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) iter.Seq[*multicastResponse] {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return func(yield func(*multicastResponse) bool) {
+			yield(&multicastResponse{err: err})
+		}
+	}
+	_queue := svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	return func(yield func(*multicastResponse) bool) {
+		for qi := range _queue {
+			httpResp, err := qi.Get()
+			if err == nil {
+				reflect.ValueOf(out).Elem().SetZero()
+				err = httpx.ReadOutputPayload(httpResp, out)
+			}
+			if err != nil {
+				if !yield(&multicastResponse{err: err, HTTPResponse: httpResp}) {
+					return
+				}
+			} else {
+				if !yield(&multicastResponse{data: out, HTTPResponse: httpResp}) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // --- Register function ---
@@ -181,96 +255,41 @@ type RegisterOut struct { // MARKER: Register
 	Allowed bool `json:"allowed,omitzero"`
 }
 
-// RegisterResponse is the response to Register.
-type RegisterResponse struct { // MARKER: Register
-	data         RegisterOut
-	HTTPResponse *http.Response
-	err          error
-}
+// RegisterResponse packs the response of Register.
+type RegisterResponse multicastResponse // MARKER: Register
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Register.
 func (_res *RegisterResponse) Get() (allowed bool, err error) { // MARKER: Register
-	return _res.data.Allowed, _res.err
+	_d := _res.data.(*RegisterOut)
+	return _d.Allowed, _res.err
 }
 
 /*
 Register attempts to register a new user.
 */
-func (_c MulticastClient) Register(ctx context.Context, email string) <-chan *RegisterResponse { // MARKER: Register
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRegister)
-	_in := RegisterIn{
-		Email: email,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *RegisterResponse, 1)
-		_res <- &RegisterResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *RegisterResponse, cap(_ch))
-	for _i := range _ch {
-		var _r RegisterResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) Register(ctx context.Context, email string) iter.Seq[*RegisterResponse] { // MARKER: Register
+	_in := RegisterIn{Email: email}
+	_out := RegisterOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Register.Method, Register.Route, &_in, &_out)
+	return func(yield func(*RegisterResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*RegisterResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
 Register attempts to register a new user.
 */
 func (_c Client) Register(ctx context.Context, email string) (allowed bool, err error) { // MARKER: Register
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRegister)
-	_in := RegisterIn{
-		Email: email,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out RegisterOut
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	allowed = _out.Allowed
-	return
+	_in := RegisterIn{Email: email}
+	_out := RegisterOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Register.Method, Register.Route, &_in, &_out)
+	return _out.Allowed, err // No trace
 }
 
 // --- OnAllowRegister event ---
@@ -285,87 +304,48 @@ type OnAllowRegisterOut struct { // MARKER: OnAllowRegister
 	Allow bool `json:"allow,omitzero"`
 }
 
-// OnAllowRegisterResponse is the response to OnAllowRegister.
-type OnAllowRegisterResponse struct { // MARKER: OnAllowRegister
-	data         OnAllowRegisterOut
-	HTTPResponse *http.Response
-	err          error
-}
+// OnAllowRegisterResponse packs the response of OnAllowRegister.
+type OnAllowRegisterResponse multicastResponse // MARKER: OnAllowRegister
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of OnAllowRegister.
 func (_res *OnAllowRegisterResponse) Get() (allow bool, err error) { // MARKER: OnAllowRegister
-	return _res.data.Allow, _res.err
+	_d := _res.data.(*OnAllowRegisterOut)
+	return _d.Allow, _res.err
 }
 
 /*
-OnAllowRegister is called before a user is allowed to register.
-Event sinks are given the opportunity to block the registration.
+OnAllowRegister is triggered before registration to check if any sink blocks it.
 */
-func (_c MulticastTrigger) OnAllowRegister(ctx context.Context, email string) <-chan *OnAllowRegisterResponse { // MARKER: OnAllowRegister
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfOnAllowRegister)
-	_in := OnAllowRegisterIn{
-		Email: email,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *OnAllowRegisterResponse, 1)
-		_res <- &OnAllowRegisterResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *OnAllowRegisterResponse, cap(_ch))
-	for _i := range _ch {
-		var _r OnAllowRegisterResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastTrigger) OnAllowRegister(ctx context.Context, email string) iter.Seq[*OnAllowRegisterResponse] { // MARKER: OnAllowRegister
+	_in := OnAllowRegisterIn{Email: email}
+	_out := OnAllowRegisterOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnAllowRegister.Method, OnAllowRegister.Route, &_in, &_out)
+	return func(yield func(*OnAllowRegisterResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnAllowRegisterResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
-OnAllowRegister is called before a user is allowed to register.
-Event sinks are given the opportunity to block the registration.
+OnAllowRegister is triggered before registration to check if any sink blocks it.
 */
-func (c Hook) OnAllowRegister(handler func(ctx context.Context, email string) (allow bool, err error)) (unsub func() (err error), err error) { // MARKER: OnAllowRegister
+func (c Hook) OnAllowRegister(handler func(ctx context.Context, email string) (allow bool, err error)) (unsub func() error, err error) { // MARKER: OnAllowRegister
 	doOnAllowRegister := func(w http.ResponseWriter, r *http.Request) error {
-		var i OnAllowRegisterIn
-		var o OnAllowRegisterOut
-		err = httpx.ReadInputPayload(r, RouteOfOnAllowRegister, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		o.Allow, err = handler(r.Context(), i.Email)
-		if err != nil {
-			return err // No trace
-		}
-		err = httpx.WriteOutputPayload(w, o)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
+		var in OnAllowRegisterIn
+		var out OnAllowRegisterOut
+		err = marshalFunction(w, r, OnAllowRegister.Route, &in, &out, func(_ any, _ any) error {
+			out.Allow, err = handler(r.Context(), in.Email)
+			return err
+		})
+		return err // No trace
 	}
-	method := "POST"
-	path := httpx.JoinHostAndPath(c.host, RouteOfOnAllowRegister)
-	unsub, err = c.svc.Subscribe(method, path, doOnAllowRegister, c.opts...)
+	path := httpx.JoinHostAndPath(c.host, OnAllowRegister.Route)
+	unsub, err = c.svc.Subscribe(OnAllowRegister.Method, path, doOnAllowRegister, c.opts...)
 	return unsub, errors.Trace(err)
 }
 
@@ -380,84 +360,46 @@ type OnRegisteredIn struct { // MARKER: OnRegistered
 type OnRegisteredOut struct { // MARKER: OnRegistered
 }
 
-// OnRegisteredResponse is the response to OnRegistered.
-type OnRegisteredResponse struct { // MARKER: OnRegistered
-	data         OnRegisteredOut
-	HTTPResponse *http.Response
-	err          error
-}
+// OnRegisteredResponse packs the response of OnRegistered.
+type OnRegisteredResponse multicastResponse // MARKER: OnRegistered
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of OnRegistered.
 func (_res *OnRegisteredResponse) Get() (err error) { // MARKER: OnRegistered
 	return _res.err
 }
 
 /*
-OnRegistered is called when a user is successfully registered.
+OnRegistered is triggered after successful registration.
 */
-func (_c MulticastTrigger) OnRegistered(ctx context.Context, email string) <-chan *OnRegisteredResponse { // MARKER: OnRegistered
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfOnRegistered)
-	_in := OnRegisteredIn{
-		Email: email,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *OnRegisteredResponse, 1)
-		_res <- &OnRegisteredResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *OnRegisteredResponse, cap(_ch))
-	for _i := range _ch {
-		var _r OnRegisteredResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastTrigger) OnRegistered(ctx context.Context, email string) iter.Seq[*OnRegisteredResponse] { // MARKER: OnRegistered
+	_in := OnRegisteredIn{Email: email}
+	_out := OnRegisteredOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnRegistered.Method, OnRegistered.Route, &_in, &_out)
+	return func(yield func(*OnRegisteredResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnRegisteredResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 /*
-OnRegistered is called when a user is successfully registered.
+OnRegistered is triggered after successful registration.
 */
-func (c Hook) OnRegistered(handler func(ctx context.Context, email string) (err error)) (unsub func() (err error), err error) { // MARKER: OnRegistered
+func (c Hook) OnRegistered(handler func(ctx context.Context, email string) (err error)) (unsub func() error, err error) { // MARKER: OnRegistered
 	doOnRegistered := func(w http.ResponseWriter, r *http.Request) error {
-		var i OnRegisteredIn
-		var o OnRegisteredOut
-		err = httpx.ReadInputPayload(r, RouteOfOnRegistered, &i)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = handler(r.Context(), i.Email)
-		if err != nil {
-			return err // No trace
-		}
-		err = httpx.WriteOutputPayload(w, o)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
+		var in OnRegisteredIn
+		var out OnRegisteredOut
+		err = marshalFunction(w, r, OnRegistered.Route, &in, &out, func(_ any, _ any) error {
+			err = handler(r.Context(), in.Email)
+			return err
+		})
+		return err // No trace
 	}
-	method := "POST"
-	path := httpx.JoinHostAndPath(c.host, RouteOfOnRegistered)
-	unsub, err = c.svc.Subscribe(method, path, doOnRegistered, c.opts...)
+	path := httpx.JoinHostAndPath(c.host, OnRegistered.Route)
+	unsub, err = c.svc.Subscribe(OnRegistered.Method, path, doOnRegistered, c.opts...)
 	return unsub, errors.Trace(err)
 }

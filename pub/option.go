@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
@@ -339,6 +340,16 @@ func Options(opts ...Option) Option {
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+		return nil
+	}
+}
+
+// Timeout sets a timeout for the request.
+func Timeout(timeout time.Duration) Option {
+	return func(req *Request) error {
+		if timeout >= 0 {
+			req.Timeout = timeout
 		}
 		return nil
 	}

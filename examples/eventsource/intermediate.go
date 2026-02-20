@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package eventsource
 
 import (
@@ -40,7 +56,8 @@ const (
 	Version  = 270
 )
 
-// ToDo is the interface that must be implemented by the microservice.
+// ToDo is implemented by the service or mock.
+// The intermediate delegates handling to this interface.
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
@@ -62,13 +79,13 @@ func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
 	return svc
 }
 
-// Intermediate is the intermediary between the microservice and the connector.
+// Intermediate extends and customizes the generic base connector.
 type Intermediate struct {
 	*connector.Connector
 	ToDo
 }
 
-// NewIntermediate creates a new intermediary for the microservice.
+// NewIntermediate creates a new instance of the intermediate.
 func NewIntermediate(impl ToDo) *Intermediate {
 	svc := &Intermediate{
 		Connector: connector.New(Hostname),
@@ -78,13 +95,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The event source microservice fires events that are caught by the event sink microservice.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functional endpoints
-	svc.Subscribe("ANY", eventsourceapi.RouteOfRegister, svc.doRegister) // MARKER: Register
+	svc.Subscribe(eventsourceapi.Register.Method, eventsourceapi.Register.Route, svc.doRegister) // MARKER: Register
 
 	// HINT: Add web endpoints here
 
@@ -96,6 +113,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -114,8 +132,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Register
 			Type:        "function",
 			Name:        "Register",
-			Method:      "ANY",
-			Route:       eventsourceapi.RouteOfRegister,
+			Method:      eventsourceapi.Register.Method,
+			Route:       eventsourceapi.Register.Route,
 			Summary:     "Register(email string) (allowed bool)",
 			Description: `Register attempts to register a new user.`,
 			InputArgs:   eventsourceapi.RegisterIn{},
@@ -159,17 +177,26 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 
 // doRegister handles marshaling for the Register function.
 func (svc *Intermediate) doRegister(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Register
-	var i eventsourceapi.RegisterIn
-	var o eventsourceapi.RegisterOut
-	err = httpx.ReadInputPayload(r, eventsourceapi.RouteOfRegister, &i)
+	var in eventsourceapi.RegisterIn
+	var out eventsourceapi.RegisterOut
+	err = marshalFunction(w, r, eventsourceapi.Register.Route, &in, &out, func(_ any, _ any) error {
+		out.Allowed, err = svc.Register(r.Context(), in.Email)
+		return err
+	})
+	return err // No trace
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	o.Allowed, err = svc.Register(r.Context(), i.Email)
+	err = execute(in, out)
 	if err != nil {
 		return err // No trace
 	}
-	err = httpx.WriteOutputPayload(w, o)
+	err = httpx.WriteOutputPayload(w, out)
 	if err != nil {
 		return errors.Trace(err)
 	}

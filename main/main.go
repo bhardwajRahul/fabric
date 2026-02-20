@@ -32,13 +32,13 @@ import (
 	"github.com/microbus-io/fabric/coreservices/tokenissuer"
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
-	"github.com/microbus-io/fabric/examples/directory"
 	"github.com/microbus-io/fabric/examples/eventsink"
 	"github.com/microbus-io/fabric/examples/eventsource"
 	"github.com/microbus-io/fabric/examples/hello"
 	"github.com/microbus-io/fabric/examples/helloworld"
 	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
+	"github.com/microbus-io/fabric/examples/yellowpages"
 )
 
 /*
@@ -67,7 +67,7 @@ func main() {
 		calculator.NewService(),
 		eventsource.NewService(),
 		eventsink.NewService(),
-		directory.NewService(),
+		yellowpages.NewService(),
 		browser.NewService(),
 		login.NewService(),
 	)

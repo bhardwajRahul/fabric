@@ -3,7 +3,7 @@ name: Adding a Ticker
 description: Creates or modify a ticker of a microservice. Use when explicitly asked by the user to create or modify a ticker or a recurring operation for a microservice.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
 **CRITICAL**: Do not omit the `MARKER` comments when generating the code. They are intended as waypoints for future edits.
 
@@ -19,9 +19,7 @@ Creating or modifying a ticker:
 - [ ] Step 4: Bind handler to the microservice
 - [ ] Step 5: Extend the mock
 - [ ] Step 6: Test the handler
-- [ ] Step 7: Update manifest
-- [ ] Step 8: Document the microservice
-- [ ] Step 9: Versioning
+- [ ] Step 7: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -55,10 +53,10 @@ type ToDo interface {
 
 #### Step 4: Bind the Handler to the Microservice
 
-Bind the ticker handler to the microservice in the `NewIntermediate` constructor in `intermediate/intermediate.go`.
+Bind the ticker handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
 
 ```go
-func NewIntermediate() *Intermediate {
+func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 	svc.StartTicker("MyTicker", time.Minute, svc.MyTicker) // MARKER: MyTicker
 	// ...
@@ -71,7 +69,7 @@ Customize the duration to indicate how often to invoke the ticker.
 
 The `Mock` must satisfy the `ToDo` interface.
 
-Add a field to the `Mock` structure definition in `intermediate/mock.go` to hold a mock handler.
+Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
 
 ```go
 type Mock struct {
@@ -117,14 +115,13 @@ t.Run("my_ticker", func(t *testing.T) { // MARKER: MyTicker
 
 #### Step 6: Test the Handler
 
-Skip this step if instructed to be "quick" or to skip tests.
-
-Add a test to `service_test.go`.
+Append the integration test to `service_test.go`.
 
 ```go
 func TestMyService_MyTicker(t *testing.T) { // MARKER: MyTicker
 	t.Parallel()
 	ctx := t.Context()
+	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -150,20 +147,21 @@ func TestMyService_MyTicker(t *testing.T) { // MARKER: MyTicker
 }
 ```
 
-The `MyService` part of the test name should match the microservice name.
+Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
-The `MyTicker` part of the test name should match the ticker name.
+Insert test cases at the bottom of the integration test function using the recommended pattern.
 
-#### Step 7: Update Manifest
+```go
+t.Run("test_case_name", func(t *testing.T) {
+	assert := testarossa.For(t)
 
-Update the `tickers` and `downstream` sections of `manifest.yaml`.
+	err := svc.MyTicker(ctx)
+	assert.NoError(err)
+})
+```
 
-#### Step 8: Document the Microservice
+Do not remove the `HINT` comments.
 
-Skip this step if instructed to be "quick" or to skip documentation.
+#### Step 7: Housekeeping
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, context, and design rationale. Focus on the reasons behind decisions rather than describing what the code does. Explain design choices, tradeoffs, and the context needed for someone to safely evolve this microservice in the future.
-
-#### Step 9: Versioning
-
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate/intermediate.go`.
+Follow the `microbus/housekeeping` skill.

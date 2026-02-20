@@ -6,11 +6,11 @@ To demonstrate, let's look at a common example: a user store microservices. When
 
 ```go
 func (svc *Service) DeleteUser(ctx context.Context, userID string) (err error) {
-    svc.db.ExecuteContext(ctx, "DELETE FROM USERS WHERE ID=?", userID)
-    filestoreapi.NewClient(svc).DeleteForUser(ctx, userID)
-    creditcardapi.NewClient(svc).DeleteForUser(ctx, userID)
-    groupmanagerapi.NewClient(svc).DeleteForUser(ctx, userID)
-    // etc.
+	svc.db.ExecuteContext(ctx, "DELETE FROM USERS WHERE ID=?", userID)
+	filestoreapi.NewClient(svc).DeleteForUser(ctx, userID)
+	creditcardapi.NewClient(svc).DeleteForUser(ctx, userID)
+	groupmanagerapi.NewClient(svc).DeleteForUser(ctx, userID)
+	// etc.
 }
 ```
 
@@ -25,9 +25,9 @@ Alternatively, events take advantage of the pub/sub pattern and allow the user s
 
 ```go
 func (svc *Service) DeleteUser(ctx context.Context, userID string) (err error) {
-    svc.db.Execute(ctx, "DELETE FROM USERS WHERE ID=?", userID)
-    for range userstoreapi.NewMulticastTrigger(svc).OnUserDeleted(ctx, userID) {
-    }
+	svc.db.Execute(ctx, "DELETE FROM USERS WHERE ID=?", userID)
+	for range userstoreapi.NewMulticastTrigger(svc).OnUserDeleted(ctx, userID) {
+	}
 }
 ```
 

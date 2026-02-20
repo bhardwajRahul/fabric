@@ -18,9 +18,18 @@ package httpingress
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+
+	"github.com/microbus-io/fabric/coreservices/httpingress/httpingressapi"
+)
+
+var (
+	_ http.Request
+	_ errors.TracedError
+	_ httpingressapi.Client
 )
 
 // Mock is a mockable version of the http.ingress.core microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -43,7 +52,7 @@ func NewMock() *Mock {
 	return svc
 }
 
-// OnStartup makes sure that the mock is not executed in a non-dev environment.
+// OnStartup is called when the microservice is started up.
 func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
 		return errors.New("mocking disallowed in '%s' deployment", svc.Deployment())
@@ -51,7 +60,7 @@ func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	return nil
 }
 
-// OnShutdown is a no op.
+// OnShutdown is called when the microservice is shut down.
 func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }

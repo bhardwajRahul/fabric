@@ -34,7 +34,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/utils"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // SetResFS initialized the connector to load resource files from an arbitrary FS.

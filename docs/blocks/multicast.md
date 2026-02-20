@@ -12,11 +12,11 @@ Typical client code that processes multiple responses will look similar to the f
 ```go
 ch := svc.Publish(ctx, pub.GET("https://authprovider/discover"))
 for r := range ch {
-    res, err := r.Get()
-    if err != nil {
-        return errors.Trace(err)
-    }
-    // do something with res
+	res, err := r.Get()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// do something with res
 }
 ```
 
@@ -24,8 +24,8 @@ In the case of fire and forget, it may look similar to this:
 
 ```go
 svc.Go(ctx, func(ctx context.Context) (err error) {
-    svc.Publish(ctx, pub.GET("https://users.storage/ondeleted?id=12345"))
-    return nil
+	svc.Publish(ctx, pub.GET("https://users.storage/ondeleted?id=12345"))
+	return nil
 })
 ```
 

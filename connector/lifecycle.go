@@ -226,10 +226,12 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	c.logConfigs(ctx)
 
 	// Set up the distributed cache (before the callbacks)
-	c.distribCache, err = dlru.NewCache(ctx, c, ":888/dcache")
-	if err != nil {
-		err = errors.Trace(err)
-		return err
+	if c.distribCache == nil {
+		c.distribCache, err = dlru.NewCache(ctx, c, ":888/dcache")
+		if err != nil {
+			err = errors.Trace(err)
+			return err
+		}
 	}
 
 	// Call the callback functions in order
@@ -344,7 +346,6 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		if err != nil {
 			lastErr = errors.Trace(err)
 		}
-		c.distribCache = nil
 	}
 
 	// Unsubscribe from the response subject

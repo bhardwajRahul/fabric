@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package eventsink
 
 import (
@@ -41,13 +57,14 @@ const (
 	Version  = 260
 )
 
-// ToDo defines the interface of the microservice.
+// ToDo is implemented by the service or mock.
+// The intermediate delegates handling to this interface.
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Registered(ctx context.Context) (emails []string, err error)                 // MARKER: Registered
-	OnAllowRegister(ctx context.Context, email string) (allow bool, err error)   // MARKER: OnAllowRegister
-	OnRegistered(ctx context.Context, email string) (err error)                  // MARKER: OnRegistered
+	Registered(ctx context.Context) (emails []string, err error)               // MARKER: Registered
+	OnAllowRegister(ctx context.Context, email string) (allow bool, err error) // MARKER: OnAllowRegister
+	OnRegistered(ctx context.Context, email string) (err error)                // MARKER: OnRegistered
 }
 
 // NewService creates a new instance of the microservice.
@@ -65,13 +82,13 @@ func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
 	return svc
 }
 
-// Intermediate is the intermediary between the service implementation and the framework.
+// Intermediate extends and customizes the generic base connector.
 type Intermediate struct {
 	*connector.Connector
 	ToDo
 }
 
-// NewIntermediate creates a new Intermediate.
+// NewIntermediate creates a new instance of the intermediate.
 func NewIntermediate(impl ToDo) *Intermediate {
 	svc := &Intermediate{
 		Connector: connector.New(Hostname),
@@ -87,7 +104,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functional endpoints
-	svc.Subscribe("ANY", eventsinkapi.RouteOfRegistered, svc.doRegistered) // MARKER: Registered
+	svc.Subscribe(eventsinkapi.Registered.Method, eventsinkapi.Registered.Route, svc.doRegistered) // MARKER: Registered
 
 	// HINT: Add web endpoints here
 
@@ -101,6 +118,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	eventsourceapi.NewHook(svc).OnAllowRegister(svc.OnAllowRegister) // MARKER: OnAllowRegister
 	eventsourceapi.NewHook(svc).OnRegistered(svc.OnRegistered)       // MARKER: OnRegistered
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -119,8 +137,8 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 		{ // MARKER: Registered
 			Type:        "function",
 			Name:        "Registered",
-			Method:      "ANY",
-			Route:       eventsinkapi.RouteOfRegistered,
+			Method:      eventsinkapi.Registered.Method,
+			Route:       eventsinkapi.Registered.Route,
 			Summary:     "Registered() (emails []string)",
 			Description: `Registered returns the list of registered users.`,
 			InputArgs:   eventsinkapi.RegisteredIn{},
@@ -162,19 +180,28 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// doRegistered handles marshaling for the Registered function.
+// doRegistered handles marshaling for Registered.
 func (svc *Intermediate) doRegistered(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Registered
-	var i eventsinkapi.RegisteredIn
-	var o eventsinkapi.RegisteredOut
-	err = httpx.ReadInputPayload(r, eventsinkapi.RouteOfRegistered, &i)
+	var in eventsinkapi.RegisteredIn
+	var out eventsinkapi.RegisteredOut
+	err = marshalFunction(w, r, eventsinkapi.Registered.Route, &in, &out, func(_ any, _ any) error {
+		out.Emails, err = svc.Registered(r.Context())
+		return err
+	})
+	return err // No trace
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	o.Emails, err = svc.Registered(r.Context())
+	err = execute(in, out)
 	if err != nil {
 		return err // No trace
 	}
-	err = httpx.WriteOutputPayload(w, o)
+	err = httpx.WriteOutputPayload(w, out)
 	if err != nil {
 		return errors.Trace(err)
 	}

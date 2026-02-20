@@ -1,0 +1,43 @@
+<html>
+    <head>
+        <title>Yellow Pages example</title>
+        <script>
+            function bodyVisibility() {
+                const method = document.querySelector('[name="method"]').value;
+                let v = "unset";
+                if (method!="POST" && method!="PUT") {
+                    v = "none";
+                }
+                document.querySelector('[name="body"]').style.display = v;
+            }
+            window.onload = bodyVisibility;
+        </script>
+    </head>
+    <body>
+        <h3>REST API</h3>
+        <ul>
+            <li>GET /persons - List all persons</li>
+            <li>GET /persons?q.Email={email} - Query for the person matching the email address</li>
+            <li>GET /persons/{key} - Load a person by key</li>
+            <li>POST /persons - Create a new person</li>
+            <li>PUT /persons/{key} - Update a person by key</li>
+            <li>DELETE /persons/{key} - Delete a person by key</li>
+        </ul>
+        <form method="POST">
+            <select name="method" onchange="bodyVisibility()">
+                <option {{ if eq .Method "GET" }}selected{{ end }}>GET</option>
+                <option {{ if eq .Method "POST" }}selected{{ end }}>POST</option>
+                <option {{ if eq .Method "PUT" }}selected{{ end }}>PUT</option>
+                <option {{ if eq .Method "DELETE" }}selected{{ end }}>DELETE</option>
+            </select>
+            <input type="text" name="path" value="{{ .Path }}" size="80" placeholder="/persons/...">
+            <p>
+            <textarea name="body" rows="6" cols="75" placeholder="{...}">{{ .Body }}</textarea>
+            <p>
+            <input type="submit" value="Submit">
+        </form>
+        {{ .StatusCode }}
+        <br>
+        <pre>{{ .Response }}</pre>
+    </body>
+</html>

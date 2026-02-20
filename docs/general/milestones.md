@@ -360,3 +360,14 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Revise documentation
 - Clean up deprecated code
 - Upgrade dependencies
+
+[Milestone 44](https://github.com/microbus-io/fabric/tree/milestone/44):
+
+- Bug fix: dup control and dcache subs after restart
+- Bug fix: add-microservice template
+- Upgrade YAML package
+- Skills for SQL CRUD microservices
+- Yellow pages example replaces the directory example
+- `pub.Timeout` option
+- `con.Publish` returns an iterator instead of a channel
+- Skill to regenerate the boilerplate code of the microservice

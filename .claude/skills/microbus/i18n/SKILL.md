@@ -3,7 +3,7 @@ name: Externalizing and Translating Text
 description: Externalizes user-facing text to a resource bundle where they can be easily translated. Use to externalize static strings that are shown to the end user.
 ---
 
-**CRITICAL**: Do NOT explore or analyze existing microservices before starting. The templates in this skill are self-contained.
+**CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
 
 ## Workflow
 
@@ -16,8 +16,7 @@ Externalizing and translating strings:
 - [ ] Step 3: Translate strings for requested languages
 - [ ] Step 4: Update references in Go files
 - [ ] Step 5: Update references in templates
-- [ ] Step 6: Document the microservice
-- [ ] Step 7: Versioning
+- [ ] Step 6: Housekeeping
 ```
 
 #### Step 1: Create String Bundle
@@ -131,12 +130,6 @@ func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err erro
 <b>{{ .Text.HelloWorld }}</b>
 ```
 
-#### Step 6: Document the Microservice
+#### Step 6: Housekeeping
 
-Skip this step if instructed to be "quick" or to skip documentation.
-
-Update the microservice's local `AGENTS.md` file to indicate that user-facing text must be externalized and translated to the requested languages.
-
-#### Step 7: Versioning
-
-If this is the first edit to the microservice in this session, increment the `Version` const in `intermediate.go`.
+Follow the `microbus/housekeeping` skill.

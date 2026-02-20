@@ -1,8 +1,25 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package loginapi
 
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"net/http"
 
 	"github.com/microbus-io/errors"
@@ -23,22 +40,24 @@ var (
 // Hostname is the default hostname of the microservice.
 const Hostname = "login.example"
 
-// Endpoint routes.
-const (
-	RouteOfLogin       = `/login`        // MARKER: Login
-	RouteOfLogout      = `/logout`       // MARKER: Logout
-	RouteOfWelcome     = `/welcome`      // MARKER: Welcome
-	RouteOfAdminOnly   = `/admin-only`   // MARKER: AdminOnly
-	RouteOfManagerOnly = `/manager-only` // MARKER: ManagerOnly
-)
+// Def defines an endpoint of the microservice.
+type Def struct {
+	Method string
+	Route  string
+}
 
-// Endpoint URLs.
+// URL is the full URL to the endpoint.
+func (d *Def) URL() string {
+	return httpx.JoinHostAndPath(Hostname, d.Route)
+}
+
 var (
-	URLOfLogin       = httpx.JoinHostAndPath(Hostname, RouteOfLogin)       // MARKER: Login
-	URLOfLogout      = httpx.JoinHostAndPath(Hostname, RouteOfLogout)      // MARKER: Logout
-	URLOfWelcome     = httpx.JoinHostAndPath(Hostname, RouteOfWelcome)     // MARKER: Welcome
-	URLOfAdminOnly   = httpx.JoinHostAndPath(Hostname, RouteOfAdminOnly)   // MARKER: AdminOnly
-	URLOfManagerOnly = httpx.JoinHostAndPath(Hostname, RouteOfManagerOnly) // MARKER: ManagerOnly
+	// HINT: Insert endpoint definitions here
+	Login       = Def{Method: "ANY", Route: `/login`}        // MARKER: Login
+	Logout      = Def{Method: "ANY", Route: `/logout`}       // MARKER: Logout
+	Welcome     = Def{Method: "ANY", Route: `/welcome`}      // MARKER: Welcome
+	AdminOnly   = Def{Method: "GET", Route: `/admin-only`}   // MARKER: AdminOnly
+	ManagerOnly = Def{Method: "GET", Route: `/manager-only`} // MARKER: ManagerOnly
 )
 
 // Client is a lightweight proxy for making unicast calls to the microservice.
@@ -175,8 +194,6 @@ func (c Hook) WithOptions(opts ...sub.Option) Hook {
 
 /*
 Login renders a simple login screen that authenticates a user.
-Known users are hardcoded as "admin", "manager" and "user".
-The password is "password".
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
@@ -189,7 +206,7 @@ func (_c Client) Login(ctx context.Context, method string, relativeURL string, b
 	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfLogin)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -198,21 +215,19 @@ func (_c Client) Login(ctx context.Context, method string, relativeURL string, b
 
 /*
 Login renders a simple login screen that authenticates a user.
-Known users are hardcoded as "admin", "manager" and "user".
-The password is "password".
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c MulticastClient) Login(ctx context.Context, method string, relativeURL string, body any) <-chan *pub.Response { // MARKER: Login
+func (_c MulticastClient) Login(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Login
 	if method == "" {
 		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfLogin)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -233,7 +248,7 @@ func (_c Client) Logout(ctx context.Context, method string, relativeURL string, 
 	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfLogout)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -247,14 +262,14 @@ If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c MulticastClient) Logout(ctx context.Context, method string, relativeURL string, body any) <-chan *pub.Response { // MARKER: Logout
+func (_c MulticastClient) Logout(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Logout
 	if method == "" {
 		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfLogout)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -276,7 +291,7 @@ func (_c Client) Welcome(ctx context.Context, method string, relativeURL string,
 	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfWelcome)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -291,14 +306,14 @@ If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c MulticastClient) Welcome(ctx context.Context, method string, relativeURL string, body any) <-chan *pub.Response { // MARKER: Welcome
+func (_c MulticastClient) Welcome(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Welcome
 	if method == "" {
 		method = "POST"
 	}
 	return _c.svc.Publish(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfWelcome)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -313,8 +328,8 @@ If a URL is provided, it is resolved relative to the URL of the endpoint.
 func (_c Client) AdminOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: AdminOnly
 	return _c.svc.Request(
 		ctx,
-		pub.Method("GET"),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfAdminOnly)),
+		pub.Method(AdminOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)
@@ -325,11 +340,11 @@ AdminOnly is only accessible by admins.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c MulticastClient) AdminOnly(ctx context.Context, relativeURL string) <-chan *pub.Response { // MARKER: AdminOnly
+func (_c MulticastClient) AdminOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: AdminOnly
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("GET"),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfAdminOnly)),
+		pub.Method(AdminOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)
@@ -343,8 +358,8 @@ If a URL is provided, it is resolved relative to the URL of the endpoint.
 func (_c Client) ManagerOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: ManagerOnly
 	return _c.svc.Request(
 		ctx,
-		pub.Method("GET"),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfManagerOnly)),
+		pub.Method(ManagerOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)
@@ -355,11 +370,11 @@ ManagerOnly is only accessible by managers.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 */
-func (_c MulticastClient) ManagerOnly(ctx context.Context, relativeURL string) <-chan *pub.Response { // MARKER: ManagerOnly
+func (_c MulticastClient) ManagerOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: ManagerOnly
 	return _c.svc.Publish(
 		ctx,
-		pub.Method("GET"),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RouteOfManagerOnly)),
+		pub.Method(ManagerOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)

@@ -102,7 +102,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add functional endpoints here
 
-	svc.Subscribe("POST", httpegressapi.RouteOfMakeRequest, svc.MakeRequest) // MARKER: MakeRequest
+	svc.Subscribe("POST", httpegressapi.MakeRequest.Route, svc.MakeRequest) // MARKER: MakeRequest
 
 	// HINT: Add metrics here
 
@@ -112,6 +112,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	_ = marshalFunction
 	return svc
 }
 
@@ -131,7 +132,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 			Type:        "web",
 			Name:        "MakeRequest",
 			Method:      "POST",
-			Route:       httpegressapi.RouteOfMakeRequest,
+			Route:       httpegressapi.MakeRequest.Route,
 			Summary:     "MakeRequest()",
 			Description: `MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
 The proxied request is expected to be posted in the body of the request in binary form (RFC7231).`,
@@ -169,5 +170,22 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
+	return nil
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }

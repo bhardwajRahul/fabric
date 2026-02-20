@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
@@ -34,6 +35,7 @@ type Request struct {
 	Body          io.Reader
 	Multicast     bool
 	ContentLength int
+	Timeout       time.Duration
 
 	queryArgs string
 }

@@ -3,6 +3,8 @@ name: Take the Agent-Guided Tour
 description: Runs the agent-guided tour of Microbus using examples. Use when the user asks to take the tour.
 ---
 
+**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
+
 ## Workflow
 
 Copy this checklist and track your progress:
@@ -17,7 +19,7 @@ Take the agent-guided tour:
 - [ ] Step 6: Hello
 - [ ] Step 7: Messaging
 - [ ] Step 8: Browser
-- [ ] Step 9: Directory
+- [ ] Step 9: Yellow Pages
 - [ ] Step 10: Login
 - [ ] Step 11: Telemetry
 - [ ] Step 12: Stop example app
@@ -44,18 +46,18 @@ Edit `main/main.go` and add the following block to the main `app` after the bloc
 
 ```go
 app.Add(
-    // Example microservices
-    helloworld.NewService(),
-    hello.NewService(),
-    messaging.NewService(),
-    messaging.NewService(),
-    messaging.NewService(),
-    calculator.NewService(),
-    eventsource.NewService(),
-    eventsink.NewService(),
-    directory.NewService(),
-    browser.NewService(),
-    login.NewService(),
+	// Example microservices
+	helloworld.NewService(),
+	hello.NewService(),
+	messaging.NewService(),
+	messaging.NewService(),
+	messaging.NewService(),
+	calculator.NewService(),
+	eventsource.NewService(),
+	eventsink.NewService(),
+	yellowpages.NewService(),
+	browser.NewService(),
+	login.NewService(),
 )
 ```
 
@@ -65,14 +67,14 @@ Add the appropriate imports too, again, replace all references to `github.com/mi
 import (
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
-	"github.com/microbus-io/fabric/examples/directory"
+	"github.com/microbus-io/fabric/examples/yellowpages"
 	"github.com/microbus-io/fabric/examples/eventsink"
 	"github.com/microbus-io/fabric/examples/eventsource"
 	"github.com/microbus-io/fabric/examples/hello"
 	"github.com/microbus-io/fabric/examples/helloworld"
 	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
-    "github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 )
 ```
 
@@ -80,14 +82,14 @@ Add the `LoginExample401Redirect` middleware to the HTTP ingress proxy using its
 
 ```go
 httpingress.NewService().Init(func(svc *httpingress.Service) (err error) {
-    svc.Middleware().Append("LoginExample401Redirect",
-        middleware.OnRoute(
-            func(path string) bool {
-                return strings.HasPrefix(path, "/"+login.Hostname+"/")
-            },
-            middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+login.Hostname+"/login"),
-        ),
-    )
+	svc.Middleware().Append("LoginExample401Redirect",
+		middleware.OnRoute(
+			func(path string) bool {
+				return strings.HasPrefix(path, "/"+login.Hostname+"/")
+			},
+			middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+login.Hostname+"/login"),
+		),
+	)
 	return nil
 }),
 ```
@@ -183,16 +185,15 @@ Present the user with these options:
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
 - "End the tour" - Skip to step 12
 
-#### Step 9: Directory
+#### Step 9: Yellow Pages
 
-The `directory.example` microservice demonstrates a RESTful CRUD API backed by a database. It includes a web UI for testing the endpoints. If a SQL database is not configured, it falls back to an in-memory store.
+The `yellowpages.example` microservice demonstrates a SQL CRUD microservice scaffolded using the `sequel` skills. It persists `Person` records with fields for first name, last name, email, and birthday. It includes a full set of CRUD, bulk, and REST endpoints, as well as a web UI for testing. If a SQL database is not configured, it falls back to an in-memory store.
 
 Explain the microservice to the user and present the following links for them to experiment with in their browser:
 
-- http://localhost:8080/directory.example/web-ui?method=POST&path=/persons&body=%7B%22firstName%22:%22Harry%22,%22lastName%22:%22Potter%22,%22email%22:%22hp@hogwarts.edu%22%7D — opens the web UI pre-filled to create a person record (push submit)
-- http://localhost:8080/directory.example/persons — lists all person keys in the directory
-- http://localhost:8080/directory.example/persons/key/1 — loads the person record with key 1
-- http://localhost:8080/directory.example/web-ui?method=DELETE&path=/persons/key/1 — opens the web UI pre-filled to delete person 1 (push submit)
+- http://localhost:8080/yellowpages.example/web-ui?method=POST&path=/persons&body=%7B%22firstName%22:%22Harry%22,%22lastName%22:%22Potter%22,%22email%22:%22hp@hogwarts.edu%22,%22birthday%22:%221980-07-31T00:00:00Z%22%7D — opens the web UI pre-filled to create a person record (push submit)
+- http://localhost:8080/yellowpages.example/web-ui?method=GET&path=/persons — opens the web UI pre-filled to list all persons (push submit)
+- http://localhost:8080/yellowpages.example/web-ui?method=DELETE&path=/persons/{key} — opens the web UI pre-filled to delete a person by key (replace {key} with the actual key, then push submit)
 
 Present the user with these options:
 - "Next step" - Proceed to the next step

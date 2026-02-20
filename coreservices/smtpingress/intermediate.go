@@ -22,21 +22,39 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
 
+	"github.com/microbus-io/fabric/coreservices/smtpingress/smtpingressapi"
 	"github.com/microbus-io/fabric/coreservices/smtpingress/resources"
 )
 
-// Version is the version of the code of the microservice.
-const Version = 181
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ smtpingressapi.Client
+)
 
-// Hostname is the default hostname of the microservice: smtp.ingress.core.
-const Hostname = "smtp.ingress.core"
+const (
+	Hostname = smtpingressapi.Hostname
+	Version  = 181
+)
 
 // ToDo is implemented by the service or mock.
 // The intermediate delegates handling to this interface.
@@ -57,7 +75,7 @@ func NewService() *Service {
 	return svc
 }
 
-// Init enables a single-statement pattern for initializing the service.
+// Init enables a single-statement pattern for initializing the microservice.
 func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
 	svc.Connector.Init(func(_ *connector.Connector) (err error) {
 		return initializer(svc)
@@ -79,13 +97,22 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	}
 	svc.SetVersion(Version)
 	svc.SetDescription(`The SMTP ingress microservice listens for incoming emails and fires corresponding events.`)
-
-	// Lifecycle
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
+	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+
+	// HINT: Add web endpoints here
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
 
 	// Configs
-	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 	svc.DefineConfig( // MARKER: Port
 		"Port",
 		cfg.Description(`Port is the TCP port to listen to.`),
@@ -100,32 +127,26 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 	svc.DefineConfig( // MARKER: MaxSize
 		"MaxSize",
-		cfg.Description(`MaxSize is the maximum size of messages that will be accepted, in megabytes.
-Defaults to 10 megabytes.`),
+		cfg.Description(`MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.`),
 		cfg.DefaultValue(`10`),
 		cfg.Validation(`int [0,1024]`),
 	)
 	svc.DefineConfig( // MARKER: MaxClients
 		"MaxClients",
-		cfg.Description(`MaxClients controls how many client connection can be opened in parallel.
-Defaults to 128.`),
+		cfg.Description(`MaxClients controls how many client connections can be opened in parallel. Defaults to 128.`),
 		cfg.DefaultValue(`128`),
 		cfg.Validation(`int [1,1024]`),
 	)
 	svc.DefineConfig( // MARKER: Workers
 		"Workers",
-		cfg.Description(`Workers controls how many workers process incoming mail.
-Defaults to 8.`),
+		cfg.Description(`Workers controls how many workers process incoming mail. Defaults to 8.`),
 		cfg.DefaultValue(`8`),
 		cfg.Validation(`int [1,1024]`),
 	)
 
-	// OpenAPI
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
+	// HINT: Add inbound event sinks here
 
-	// Resources file system
-	svc.SetResFS(resources.FS)
-
+	_ = marshalFunction
 	return svc
 }
 
@@ -164,6 +185,13 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 	return errors.Trace(err)
 }
 
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	if changed("Port") { // MARKER: Port
@@ -199,6 +227,23 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 /*
 Port is the TCP port to listen to.
 */
@@ -210,9 +255,6 @@ func (svc *Intermediate) Port() (port int) { // MARKER: Port
 
 /*
 SetPort sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
-
-Port is the TCP port to listen to.
 */
 func (svc *Intermediate) SetPort(port int) (err error) { // MARKER: Port
 	return svc.SetConfig("Port", strconv.Itoa(port))
@@ -229,17 +271,13 @@ func (svc *Intermediate) Enabled() (enabled bool) { // MARKER: Enabled
 
 /*
 SetEnabled sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
-
-Enabled determines whether the email server is started.
 */
 func (svc *Intermediate) SetEnabled(enabled bool) (err error) { // MARKER: Enabled
 	return svc.SetConfig("Enabled", strconv.FormatBool(enabled))
 }
 
 /*
-MaxSize is the maximum size of messages that will be accepted, in megabytes.
-Defaults to 10 megabytes.
+MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.
 */
 func (svc *Intermediate) MaxSize() (mb int) { // MARKER: MaxSize
 	_val := svc.Config("MaxSize")
@@ -249,18 +287,13 @@ func (svc *Intermediate) MaxSize() (mb int) { // MARKER: MaxSize
 
 /*
 SetMaxSize sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
-
-MaxSize is the maximum size of messages that will be accepted, in megabytes.
-Defaults to 10 megabytes.
 */
 func (svc *Intermediate) SetMaxSize(mb int) (err error) { // MARKER: MaxSize
 	return svc.SetConfig("MaxSize", strconv.Itoa(mb))
 }
 
 /*
-MaxClients controls how many client connection can be opened in parallel.
-Defaults to 128.
+MaxClients controls how many client connections can be opened in parallel. Defaults to 128.
 */
 func (svc *Intermediate) MaxClients() (clients int) { // MARKER: MaxClients
 	_val := svc.Config("MaxClients")
@@ -270,18 +303,13 @@ func (svc *Intermediate) MaxClients() (clients int) { // MARKER: MaxClients
 
 /*
 SetMaxClients sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
-
-MaxClients controls how many client connection can be opened in parallel.
-Defaults to 128.
 */
 func (svc *Intermediate) SetMaxClients(clients int) (err error) { // MARKER: MaxClients
 	return svc.SetConfig("MaxClients", strconv.Itoa(clients))
 }
 
 /*
-Workers controls how many workers process incoming mail.
-Defaults to 8.
+Workers controls how many workers process incoming mail. Defaults to 8.
 */
 func (svc *Intermediate) Workers() (clients int) { // MARKER: Workers
 	_val := svc.Config("Workers")
@@ -291,10 +319,6 @@ func (svc *Intermediate) Workers() (clients int) { // MARKER: Workers
 
 /*
 SetWorkers sets the value of the configuration property.
-This action is restricted to the TESTING deployment in which the fetching of values from the configurator is disabled.
-
-Workers controls how many workers process incoming mail.
-Defaults to 8.
 */
 func (svc *Intermediate) SetWorkers(clients int) (err error) { // MARKER: Workers
 	return svc.SetConfig("Workers", strconv.Itoa(clients))

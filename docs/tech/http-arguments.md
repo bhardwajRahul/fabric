@@ -65,10 +65,10 @@ The implementation may look similar to the following:
 
 ```go
 func (svc *Service) Create(ctx context.Context, httpRequestBody Person) (id int, httpStatusCode int, err error) {
-    id, err := svc.database.createPerson(ctx, httpRequestBody)
-    if err != nil {
-        return 0, http.StatusInternalServerError, errors.Trace(err)
-    }
-    return id, http.StatusCreated, nil
+	id, err := svc.database.createPerson(ctx, httpRequestBody)
+	if err != nil {
+		return 0, http.StatusInternalServerError, errors.Trace(err)
+	}
+	return id, http.StatusCreated, nil
 }
 ```

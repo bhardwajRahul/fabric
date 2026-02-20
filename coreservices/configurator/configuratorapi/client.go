@@ -19,7 +19,9 @@ package configuratorapi
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/microbus-io/errors"
@@ -35,34 +37,41 @@ var (
 	_ *http.Request
 	_ *errors.TracedError
 	_ *httpx.BodyReader
+	_ = marshalRequest
+	_ = marshalPublish
+	_ = marshalFunction
 )
 
 // Hostname is the default hostname of the microservice.
 const Hostname = "configurator.core"
 
-// Endpoint routes.
-const (
-	RouteOfValues   = `:888/values`    // MARKER: Values
-	RouteOfRefresh  = `:444/refresh`   // MARKER: Refresh
-	RouteOfSyncRepo = `:888/sync-repo` // MARKER: SyncRepo
+// Def defines an endpoint of the microservice.
+type Def struct {
+	Method string
+	Route  string
+}
 
-	// Deprecated routes
-	RouteOfValues443  = `:443/values`  // MARKER: Values443
-	RouteOfRefresh443 = `:443/refresh` // MARKER: Refresh443
-	RouteOfSync443    = `:443/sync`    // MARKER: Sync443
-)
+// URL is the full URL to the endpoint.
+func (d *Def) URL() string {
+	return httpx.JoinHostAndPath(Hostname, d.Route)
+}
 
-// Endpoint URLs.
 var (
-	URLOfValues   = httpx.JoinHostAndPath(Hostname, RouteOfValues)   // MARKER: Values
-	URLOfRefresh  = httpx.JoinHostAndPath(Hostname, RouteOfRefresh)  // MARKER: Refresh
-	URLOfSyncRepo = httpx.JoinHostAndPath(Hostname, RouteOfSyncRepo) // MARKER: SyncRepo
-
-	// Deprecated URLs
-	URLOfValues443  = httpx.JoinHostAndPath(Hostname, RouteOfValues443)  // MARKER: Values443
-	URLOfRefresh443 = httpx.JoinHostAndPath(Hostname, RouteOfRefresh443) // MARKER: Refresh443
-	URLOfSync443    = httpx.JoinHostAndPath(Hostname, RouteOfSync443)    // MARKER: Sync443
+	// HINT: Insert endpoint definitions here
+	Values     = Def{Method: "ANY", Route: `:888/values`}    // MARKER: Values
+	Refresh    = Def{Method: "ANY", Route: `:444/refresh`}   // MARKER: Refresh
+	SyncRepo   = Def{Method: "ANY", Route: `:888/sync-repo`} // MARKER: SyncRepo
+	Values443  = Def{Method: "ANY", Route: `:443/values`}    // MARKER: Values443
+	Refresh443 = Def{Method: "ANY", Route: `:443/refresh`}   // MARKER: Refresh443
+	Sync443    = Def{Method: "ANY", Route: `:443/sync`}      // MARKER: Sync443
 )
+
+// multicastResponse packs the response of a functional multicast.
+type multicastResponse struct {
+	data         any
+	HTTPResponse *http.Response
+	err          error
+}
 
 // Client is a lightweight proxy for making unicast calls to the microservice.
 type Client struct {
@@ -73,10 +82,7 @@ type Client struct {
 
 // NewClient creates a new unicast client proxy to the microservice.
 func NewClient(caller service.Publisher) Client {
-	return Client{
-		svc:  caller,
-		host: Hostname,
-	}
+	return Client{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
@@ -90,11 +96,7 @@ func (_c Client) ForHost(host string) Client {
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c Client) WithOptions(opts ...pub.Option) Client {
-	return Client{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return Client{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastClient is a lightweight proxy for making multicast calls to the microservice.
@@ -106,28 +108,17 @@ type MulticastClient struct {
 
 // NewMulticastClient creates a new multicast client proxy to the microservice.
 func NewMulticastClient(caller service.Publisher) MulticastClient {
-	return MulticastClient{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastClient{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
 func (_c MulticastClient) ForHost(host string) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastClient{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -139,28 +130,17 @@ type MulticastTrigger struct {
 
 // NewMulticastTrigger creates a new multicast trigger of events of the microservice.
 func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastTrigger{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the trigger with a different hostname to be applied to requests.
 func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the trigger with options to be applied to requests.
 func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // Hook assists in the subscription to the events of the microservice.
@@ -172,28 +152,99 @@ type Hook struct {
 
 // NewHook creates a new hook to the events of the microservice.
 func NewHook(listener service.Subscriber) Hook {
-	return Hook{
-		svc:  listener,
-		host: Hostname,
-	}
+	return Hook{svc: listener, host: Hostname}
 }
 
 // ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
 func (c Hook) ForHost(host string) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: host,
-		opts: c.opts,
-	}
+	return Hook{svc: c.svc, host: host, opts: c.opts}
 }
 
 // WithOptions returns a copy of the hook with options to be applied to subscriptions.
 func (c Hook) WithOptions(opts ...sub.Option) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: c.host,
-		opts: append(c.opts, opts...),
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
+}
+
+// marshalRequest supports functional endpoints.
+func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
+	if method == "ANY" {
+		method = "POST"
 	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return err // No trace
+	}
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.ReadOutputPayload(httpRes, out)
+	return errors.Trace(err)
+}
+
+// marshalPublish supports multicast functional endpoints.
+func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) iter.Seq[*multicastResponse] {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return func(yield func(*multicastResponse) bool) {
+			yield(&multicastResponse{err: err})
+		}
+	}
+	_queue := svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	return func(yield func(*multicastResponse) bool) {
+		for qi := range _queue {
+			httpResp, err := qi.Get()
+			if err == nil {
+				reflect.ValueOf(out).Elem().SetZero()
+				err = httpx.ReadOutputPayload(httpResp, out)
+			}
+			if err != nil {
+				if !yield(&multicastResponse{err: err, HTTPResponse: httpResp}) {
+					return
+				}
+			} else {
+				if !yield(&multicastResponse{data: out, HTTPResponse: httpResp}) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// marshalFunction handled marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // ValuesIn are the input arguments of Values.
@@ -206,95 +257,41 @@ type ValuesOut struct { // MARKER: Values
 	Values map[string]string `json:"values,omitzero"`
 }
 
-// ValuesResponse is the response to Values.
-type ValuesResponse struct { // MARKER: Values
-	data         ValuesOut
-	HTTPResponse *http.Response
-	err          error
-}
+// ValuesResponse packs the response of Values.
+type ValuesResponse multicastResponse // MARKER: Values
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Values.
 func (_res *ValuesResponse) Get() (values map[string]string, err error) { // MARKER: Values
-	return _res.data.Values, _res.err
+	_d := _res.data.(*ValuesOut)
+	return _d.Values, _res.err
 }
 
 /*
 Values returns the values associated with the specified config property names for the caller microservice.
 */
 func (_c Client) Values(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfValues)
-	_in := ValuesIn{
-		Names: names,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out ValuesOut
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return _out.Values, nil
+	_in := ValuesIn{Names: names}
+	_out := ValuesOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values.Method, Values.Route, &_in, &_out)
+	return _out.Values, err // No trace
 }
 
 /*
 Values returns the values associated with the specified config property names for the caller microservice.
 */
-func (_c MulticastClient) Values(ctx context.Context, names []string) <-chan *ValuesResponse { // MARKER: Values
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfValues)
-	_in := ValuesIn{
-		Names: names,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *ValuesResponse, 1)
-		_res <- &ValuesResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *ValuesResponse, cap(_ch))
-	for _i := range _ch {
-		var _r ValuesResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) Values(ctx context.Context, names []string) iter.Seq[*ValuesResponse] { // MARKER: Values
+	_in := ValuesIn{Names: names}
+	_out := ValuesOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Values.Method, Values.Route, &_in, &_out)
+	return func(yield func(*ValuesResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*ValuesResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 // RefreshIn are the input arguments of Refresh.
@@ -305,14 +302,10 @@ type RefreshIn struct { // MARKER: Refresh
 type RefreshOut struct { // MARKER: Refresh
 }
 
-// RefreshResponse is the response to Refresh.
-type RefreshResponse struct { // MARKER: Refresh
-	data         RefreshOut
-	HTTPResponse *http.Response
-	err          error
-}
+// RefreshResponse packs the response of Refresh.
+type RefreshResponse multicastResponse // MARKER: Refresh
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Refresh.
 func (_res *RefreshResponse) Get() (err error) { // MARKER: Refresh
 	return _res.err
 }
@@ -322,76 +315,29 @@ Refresh tells all microservices to contact the configurator and refresh their co
 An error is returned if any of the values sent to the microservices fails validation.
 */
 func (_c Client) Refresh(ctx context.Context) (err error) { // MARKER: Refresh
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRefresh)
 	_in := RefreshIn{}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out RefreshOut
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return
+	_out := RefreshOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh.Method, Refresh.Route, &_in, &_out)
+	return err // No trace
 }
 
 /*
 Refresh tells all microservices to contact the configurator and refresh their configs.
 An error is returned if any of the values sent to the microservices fails validation.
 */
-func (_c MulticastClient) Refresh(ctx context.Context) <-chan *RefreshResponse { // MARKER: Refresh
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRefresh)
+func (_c MulticastClient) Refresh(ctx context.Context) iter.Seq[*RefreshResponse] { // MARKER: Refresh
 	_in := RefreshIn{}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *RefreshResponse, 1)
-		_res <- &RefreshResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *RefreshResponse, cap(_ch))
-	for _i := range _ch {
-		var _r RefreshResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+	_out := RefreshOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Refresh.Method, Refresh.Route, &_in, &_out)
+	return func(yield func(*RefreshResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*RefreshResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 // SyncRepoIn are the input arguments of SyncRepo.
@@ -404,14 +350,10 @@ type SyncRepoIn struct { // MARKER: SyncRepo
 type SyncRepoOut struct { // MARKER: SyncRepo
 }
 
-// SyncRepoResponse is the response to SyncRepo.
-type SyncRepoResponse struct { // MARKER: SyncRepo
-	data         SyncRepoOut
-	HTTPResponse *http.Response
-	err          error
-}
+// SyncRepoResponse packs the response of SyncRepo.
+type SyncRepoResponse multicastResponse // MARKER: SyncRepo
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of SyncRepo.
 func (_res *SyncRepoResponse) Get() (err error) { // MARKER: SyncRepo
 	return _res.err
 }
@@ -420,81 +362,28 @@ func (_res *SyncRepoResponse) Get() (err error) { // MARKER: SyncRepo
 SyncRepo is used to synchronize values among replica peers of the configurator.
 */
 func (_c Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: SyncRepo
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfSyncRepo)
-	_in := SyncRepoIn{
-		Timestamp: timestamp,
-		Values:    values,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out SyncRepoOut
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return
+	_in := SyncRepoIn{Timestamp: timestamp, Values: values}
+	_out := SyncRepoOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, SyncRepo.Method, SyncRepo.Route, &_in, &_out)
+	return err // No trace
 }
 
 /*
 SyncRepo is used to synchronize values among replica peers of the configurator.
 */
-func (_c MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *SyncRepoResponse { // MARKER: SyncRepo
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfSyncRepo)
-	_in := SyncRepoIn{
-		Timestamp: timestamp,
-		Values:    values,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *SyncRepoResponse, 1)
-		_res <- &SyncRepoResponse{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *SyncRepoResponse, cap(_ch))
-	for _i := range _ch {
-		var _r SyncRepoResponse
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) iter.Seq[*SyncRepoResponse] { // MARKER: SyncRepo
+	_in := SyncRepoIn{Timestamp: timestamp, Values: values}
+	_out := SyncRepoOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, SyncRepo.Method, SyncRepo.Route, &_in, &_out)
+	return func(yield func(*SyncRepoResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*SyncRepoResponse)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 // Values443In are the input arguments of Values443.
@@ -507,95 +396,41 @@ type Values443Out struct { // MARKER: Values443
 	Values map[string]string `json:"values,omitzero"`
 }
 
-// Values443Response is the response to Values443.
-type Values443Response struct { // MARKER: Values443
-	data         Values443Out
-	HTTPResponse *http.Response
-	err          error
-}
+// Values443Response packs the response of Values443.
+type Values443Response multicastResponse // MARKER: Values443
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Values443.
 func (_res *Values443Response) Get() (values map[string]string, err error) { // MARKER: Values443
-	return _res.data.Values, _res.err
+	_d := _res.data.(*Values443Out)
+	return _d.Values, _res.err
 }
 
 /*
-Values443 is deprecated.
+Deprecated.
 */
 func (_c Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values443
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfValues443)
-	_in := Values443In{
-		Names: names,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out Values443Out
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return _out.Values, nil
+	_in := Values443In{Names: names}
+	_out := Values443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values443.Method, Values443.Route, &_in, &_out)
+	return _out.Values, err // No trace
 }
 
 /*
-Values443 is deprecated.
+Deprecated.
 */
-func (_c MulticastClient) Values443(ctx context.Context, names []string) <-chan *Values443Response { // MARKER: Values443
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfValues443)
-	_in := Values443In{
-		Names: names,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *Values443Response, 1)
-		_res <- &Values443Response{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *Values443Response, cap(_ch))
-	for _i := range _ch {
-		var _r Values443Response
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) Values443(ctx context.Context, names []string) iter.Seq[*Values443Response] { // MARKER: Values443
+	_in := Values443In{Names: names}
+	_out := Values443Out{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Values443.Method, Values443.Route, &_in, &_out)
+	return func(yield func(*Values443Response) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*Values443Response)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 // Refresh443In are the input arguments of Refresh443.
@@ -606,91 +441,40 @@ type Refresh443In struct { // MARKER: Refresh443
 type Refresh443Out struct { // MARKER: Refresh443
 }
 
-// Refresh443Response is the response to Refresh443.
-type Refresh443Response struct { // MARKER: Refresh443
-	data         Refresh443Out
-	HTTPResponse *http.Response
-	err          error
-}
+// Refresh443Response packs the response of Refresh443.
+type Refresh443Response multicastResponse // MARKER: Refresh443
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Refresh443.
 func (_res *Refresh443Response) Get() (err error) { // MARKER: Refresh443
 	return _res.err
 }
 
 /*
-Refresh443 is deprecated.
+Deprecated.
 */
 func (_c Client) Refresh443(ctx context.Context) (err error) { // MARKER: Refresh443
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRefresh443)
 	_in := Refresh443In{}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out Refresh443Out
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return
+	_out := Refresh443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh443.Method, Refresh443.Route, &_in, &_out)
+	return err // No trace
 }
 
 /*
-Refresh443 is deprecated.
+Deprecated.
 */
-func (_c MulticastClient) Refresh443(ctx context.Context) <-chan *Refresh443Response { // MARKER: Refresh443
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfRefresh443)
+func (_c MulticastClient) Refresh443(ctx context.Context) iter.Seq[*Refresh443Response] { // MARKER: Refresh443
 	_in := Refresh443In{}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *Refresh443Response, 1)
-		_res <- &Refresh443Response{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *Refresh443Response, cap(_ch))
-	for _i := range _ch {
-		var _r Refresh443Response
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+	_out := Refresh443Out{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Refresh443.Method, Refresh443.Route, &_in, &_out)
+	return func(yield func(*Refresh443Response) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*Refresh443Response)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
 
 // Sync443In are the input arguments of Sync443.
@@ -703,95 +487,38 @@ type Sync443In struct { // MARKER: Sync443
 type Sync443Out struct { // MARKER: Sync443
 }
 
-// Sync443Response is the response to Sync443.
-type Sync443Response struct { // MARKER: Sync443
-	data         Sync443Out
-	HTTPResponse *http.Response
-	err          error
-}
+// Sync443Response packs the response of Sync443.
+type Sync443Response multicastResponse // MARKER: Sync443
 
-// Get retrieves the return values.
+// Get unpacks the return arguments of Sync443.
 func (_res *Sync443Response) Get() (err error) { // MARKER: Sync443
 	return _res.err
 }
 
 /*
-Sync443 is deprecated.
+Deprecated.
 */
 func (_c Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: Sync443
-	var _err error
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfSync443)
-	_in := Sync443In{
-		Timestamp: timestamp,
-		Values:    values,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	_httpRes, _err := _c.svc.Request(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	if _err != nil {
-		err = _err // No trace
-		return
-	}
-	var _out Sync443Out
-	_err = httpx.ReadOutputPayload(_httpRes, &_out)
-	if _err != nil {
-		err = errors.Trace(_err)
-		return
-	}
-	return
+	_in := Sync443In{Timestamp: timestamp, Values: values}
+	_out := Sync443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Sync443.Method, Sync443.Route, &_in, &_out)
+	return err // No trace
 }
 
 /*
-Sync443 is deprecated.
+Deprecated.
 */
-func (_c MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) <-chan *Sync443Response { // MARKER: Sync443
-	_method := "POST"
-	_url := httpx.JoinHostAndPath(_c.host, RouteOfSync443)
-	_in := Sync443In{
-		Timestamp: timestamp,
-		Values:    values,
-	}
-	_query, _body, _err := httpx.WriteInputPayload(_method, _in)
-	if _err != nil {
-		_res := make(chan *Sync443Response, 1)
-		_res <- &Sync443Response{err: _err} // No trace
-		close(_res)
-		return _res
-	}
-	_ch := _c.svc.Publish(
-		ctx,
-		pub.Method(_method),
-		pub.URL(_url),
-		pub.Query(_query),
-		pub.Body(_body),
-		pub.Options(_c.opts...),
-	)
-	_res := make(chan *Sync443Response, cap(_ch))
-	for _i := range _ch {
-		var _r Sync443Response
-		_httpRes, _err := _i.Get()
-		_r.HTTPResponse = _httpRes
-		if _err != nil {
-			_r.err = _err // No trace
-		} else {
-			_err = httpx.ReadOutputPayload(_httpRes, &_r.data)
-			if _err != nil {
-				_r.err = errors.Trace(_err)
+func (_c MulticastClient) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) iter.Seq[*Sync443Response] { // MARKER: Sync443
+	_in := Sync443In{Timestamp: timestamp, Values: values}
+	_out := Sync443Out{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Sync443.Method, Sync443.Route, &_in, &_out)
+	return func(yield func(*Sync443Response) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*Sync443Response)(_r)) {
+				return
 			}
 		}
-		_res <- &_r
 	}
-	close(_res)
-	return _res
 }
