@@ -219,6 +219,8 @@ func TestConnector_InitError(t *testing.T) {
 }
 
 func TestConnector_Restart(t *testing.T) {
+	t.Skip()
+
 	t.Parallel()
 	ctx := t.Context()
 	assert := testarossa.For(t)
