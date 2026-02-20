@@ -130,6 +130,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 ## Features
 
 ### Transport
+
 | | |
 |---|---|
 | [Unicast](./docs/blocks/unicast.md) | 1:1 request/response between microservices |
@@ -144,6 +145,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Short-circuit](./docs/tech/short-circuit.md) | In-memory transport for co-located services |
 
 ### Observability
+
 | | |
 |---|---|
 | [Distributed tracing](./docs/blocks/distrib-tracing.md) | Cross-service call visualization via OpenTelemetry |
@@ -152,6 +154,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Error capture](./docs/blocks/error-capture.md) | Stack traces preserved across service boundaries |
 
 ### Developer Experience
+
 | | |
 |---|---|
 | [Client stubs](./docs/blocks/client-stubs.md) | Type-safe generated clients |
@@ -161,6 +164,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Tickers](./docs/blocks/tickers.md) | Recurring scheduled jobs |
 
 ### Robust Runtime
+
 | | |
 |---|---|
 | [Configuration](./docs/blocks/configuration.md) | Centralized YAML-based config |
