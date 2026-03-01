@@ -48,12 +48,10 @@ func TestConnector_Echo(t *testing.T) {
 
 	beta := New("beta.echo.connector")
 	beta.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		if r.Body != nil {
-			body, err := io.ReadAll(r.Body)
-			assert.NoError(err)
-			_, err = w.Write(body)
-			assert.NoError(err)
-		}
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(err)
+		_, err = w.Write(body)
+		assert.NoError(err)
 		return nil
 	})
 
@@ -68,12 +66,14 @@ func TestConnector_Echo(t *testing.T) {
 	// Send message without a body
 	response, err := alpha.GET(ctx, "https://beta.echo.connector/echo")
 	assert.NoError(err)
-	assert.Nil(response.Body)
+	body, err := io.ReadAll(response.Body)
+	assert.NoError(err)
+	assert.Len(body, 0)
 
 	// Send message and validate that it's echoed back
 	response, err = alpha.POST(ctx, "https://beta.echo.connector/echo", []byte("Hello"))
 	assert.NoError(err)
-	body, err := io.ReadAll(response.Body)
+	body, err = io.ReadAll(response.Body)
 	assert.NoError(err)
 	assert.Equal([]byte("Hello"), body)
 
@@ -168,11 +168,7 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 		}
 		block := mem.Alloc(sz)
 		for {
-			var n int
-			var err error
-			if r.Body != nil {
-				n, err = io.ReadFull(r.Body, block[:sz])
-			}
+			n, err := io.ReadFull(r.Body, block[:sz])
 			if n == 0 || err == io.EOF {
 				break
 			}
@@ -182,9 +178,7 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 			w.Write(block[:n])
 		}
 		mem.Free(block)
-		if r.Body != nil {
-			r.Body.Close()
-		}
+		r.Body.Close()
 		return nil
 	})
 
@@ -366,12 +360,10 @@ func serialChain(b *testing.B, payloadSize int) {
 		} else {
 			// Echo back the request
 			echoCount.Add(1)
-			if r.Body != nil {
-				buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-				io.Copy(buf, r.Body)
-				w.Write(buf.Bytes())
-				mem.Free(buf.Bytes())
-			}
+			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+			io.Copy(buf, r.Body)
+			w.Write(buf.Bytes())
+			mem.Free(buf.Bytes())
 		}
 		return nil
 	})
@@ -480,12 +472,10 @@ func echoParallel(b *testing.B, concurrency int, payloadSize int) {
 	var errCount atomic.Int32
 	alpha.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
 		echoCount.Add(1)
-		if r.Body != nil {
-			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-			io.Copy(buf, r.Body)
-			w.Write(buf.Bytes())
-			mem.Free(buf.Bytes())
-		}
+		buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+		io.Copy(buf, r.Body)
+		w.Write(buf.Bytes())
+		mem.Free(buf.Bytes())
 		return nil
 	})
 
@@ -572,13 +562,11 @@ func echoParallelHTTP(b *testing.B, concurrency int, payloadSize int) {
 		Addr: ":5555",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			echoCount.Add(1)
-			if r.Body != nil {
-				buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-				io.Copy(buf, r.Body)
-				w.Write(buf.Bytes())
-				mem.Free(buf.Bytes())
-				r.Body.Close()
-			}
+			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+			io.Copy(buf, r.Body)
+			w.Write(buf.Bytes())
+			mem.Free(buf.Bytes())
+			r.Body.Close()
 		}),
 	}
 	go httpServer.ListenAndServe()

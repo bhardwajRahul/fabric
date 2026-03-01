@@ -113,6 +113,9 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 		}
 		msg.Request = httpReq
 	}
+	if msg.Request.Body == nil {
+		msg.Request.Body = http.NoBody
+	}
 
 	err := c.ackRequest(msg, s)
 	if err != nil {

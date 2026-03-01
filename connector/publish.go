@@ -201,6 +201,9 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) iter.Seq[
 		err = errors.Trace(err, c.Span(ctx).TraceID())
 		return pub.NewSoloResponseQueue(pub.NewErrorResponse(err))
 	}
+	if req.Body == nil {
+		req.Body = http.NoBody
+	}
 	for name, value := range req.Header {
 		httpReq.Header[name] = value
 	}
