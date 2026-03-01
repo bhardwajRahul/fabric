@@ -26,7 +26,7 @@ If the `frameworkVersion` in `manifest.yaml` is earlier than 1.23.0, this direct
 
 #### Step 3: Upgrade in Parallel
 
-Use the skill `microbus/upgrade-microservice-v1.23.0` to upgrade each of the identified microservices. You may invoke sub agents to perform the upgrade in parallel.
+Read and follow ALL steps of the skill `microbus/upgrade-microservice-v1.23.0` to upgrade each of the identified microservices separately. You may invoke sub agents to perform the upgrade in parallel.
 
 #### Step 4: Breaking Changes (After Microservices)
 
