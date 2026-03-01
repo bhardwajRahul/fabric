@@ -44,14 +44,14 @@ Before deleting the existing boilerplate, read `intermediate.go` and note the cu
 
 #### Step 4: Delete Existing Boilerplate Files
 
-Delete the following files.
+**CRITICAL**: Delete the following boilerplate files. The goal of this workflow is to create them from scratch. Do NOT skip deletion and edit in place.
 
 - `myserviceapi/client.go`
 - `resources/embed.go`
 - `intermediate.go`
 - `mock.go`
 
-Do NOT delete `service.go`, `service_test.go`, `manifest.yaml`, `AGENTS.md`, `CLAUDE.md`, `PROMPTS.md`, or any other files.
+**CRITICAL**: Do NOT delete `service.go`, `service_test.go`, `manifest.yaml`, `AGENTS.md`, `CLAUDE.md`, `PROMPTS.md`, or any other files.
 
 #### Step 5: Initialize Boilerplate Files
 
