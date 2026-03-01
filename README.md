@@ -43,7 +43,7 @@ Microservices are the right architecture for most growing systems, but the conve
 ### Prerequisites
 
 - Your favorite coding agent
-- [Go](https://go.dev/) 1.24+
+- [Go](https://go.dev/) 1.26+
 - [NATS](https://nats.io) messaging bus (required in high-availability production settings, optional during development)
 - [LGTM stack](https://github.com/grafana/docker-otel-lgtm) OpenTelemetry observability stack (optional)
 
