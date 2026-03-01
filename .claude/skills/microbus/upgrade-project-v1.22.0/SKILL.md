@@ -1,6 +1,6 @@
 ---
-name: Upgrade a Project to V1.22.0
-description: Upgrades all microservices to v1.22.0.
+name: Upgrading a Project to v1.22.0
+description: Upgrades the project and all microservices to v1.22.0.
 ---
 
 ## Workflow

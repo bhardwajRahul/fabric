@@ -1,9 +1,9 @@
 ---
-name: Initialize a Microbus Project
+name: Initializing a Microbus Project
 description: Sets up a project with the latest the Microbus framework. Use when explicitly asked by the user to initialize a project to use the Microbus framework, or to upgrade an existing Microbus project to the latest version of the framework.
 ---
 
-**CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this project.
+**CRITICAL**: Do NOT explore or analyze the project unless explicitly instructed to do so. The instructions in this skill are self-contained.
 
 ## Workflow
 
@@ -11,52 +11,22 @@ Copy this checklist and track your progress:
 
 ```
 Initialize a project to use Microbus:
-- [ ] Step 1: Download latest agent rules and skills
-- [ ] Step 2: Determine old version of Microbus
-- [ ] Step 3: Get the latest version of Microbus
-- [ ] Step 4: Prepare main
-- [ ] Step 5: Prepare agent files
-- [ ] Step 6: Prepare config files
-- [ ] Step 7: Prepare env files
-- [ ] Step 8: Prepare .gitignore
-- [ ] Step 9: Prepare launch.json
-- [ ] Step 10: Upgrade
-- [ ] Step 11: Tidy up
+- [ ] Step 1: Check if a Microbus project
+- [ ] Step 2: Prepare main
+- [ ] Step 3: Prepare agent files
+- [ ] Step 4: Prepare config files
+- [ ] Step 5: Prepare env files
+- [ ] Step 6: Prepare .gitignore
+- [ ] Step 7: Prepare launch.json
 ```
 
-#### Step 1: Download Latest Agent Rules and Skills
+#### Step 1: Check if a Microbus Project
 
-Download the latest coding agent rules and skills from Github.
+If `go.mod` does not exist in the project directory, this is not a Go project. Exit this workflow.
 
-```shell
-git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
-rm -rf .claude/rules/microbus.md
-rm -rf .claude/rules/skills/microbus
-cp -r temp-clone/.claude .
-rm -rf temp-clone
-```
+If `go.mod` does not include a reference to `github.com/microbus-io/fabric`, this is not a `Microbus` project. Exit this workflow.
 
-Read all markdown files in `./claude/rules/` to familiarize with the `Microbus` framework.
-
-#### Step 2: Determine Old Version of Microbus
-
-Look in `go.mod` and identify the current version of the `github.com/microbus-io/fabric` dependency. This is the "old framework version". If the dependency is not found, skip this step.
-
-#### Step 3: Get the Latest Version of Microbus
-
-Get the latest version of `Microbus` and tidy up.
-
-```shell
-go get github.com/microbus-io/fabric
-```
-
-Tidy up `go.mod`. If it fails, continue to the next step. An upgrade may be necessary first.
-
-```shell
-go mod tidy
-```
-
-#### Step 4: Prepare `main`
+#### Step 2: Prepare `main`
 
 Create the `main` directory in the root of the project if one does not exist.
 
@@ -121,25 +91,23 @@ If the file already exists, prepend the content to the existing file unless alre
 MICROBUS_DEPLOYMENT: LOCAL
 ```
 
-#### Step 5: Prepare Agent Files
+#### Step 3: Prepare Agent Files
 
 Create `CLAUDE.md` at the root of the project with the following content.
-If the file already exists, prepend the content to the existing file unless already there.
+If the file already exists, prepend the content to the existing file unless it is already there.
 
 ```md
 **CRITICAL**: Read `AGENTS.md` immediately.
 ```
 
 Create `AGENTS.md` at the root of the project with the following content.
-If the file already exists, prepend the content to the existing file unless already there.
+If the file already exists, prepend the content to the existing file unless it is already there.
 
 ```md
-**CRITICAL SETUP INSTRUCTIONS**: At the start of EVERY conversation, BEFORE responding to the user's first message, you MUST:
-- The directory `.claude/rules/` contains essential project-specific instructions and guidelines for this codebase. Read all `.md` files in `.claude/rules/` immediately
-- This project follows a microservices architecture based on the Microbus framework. Follow all instructions and guidelines in `.claude/rules/microbus.md`
+**CRITICAL**: This project uses the Microbus framework. Read all `.md` files in `.claude/rules/` before starting any task.
 ```
 
-#### Step 6: Prepare Config Files
+#### Step 4: Prepare Config Files
 
 Create `config.yaml` at the root of the project with the following content verbatim.
 If the file already exists, do not update it.
@@ -163,7 +131,7 @@ myservice.hostname:
   ExampleSecret: secret value
 ```
 
-#### Step 7: Prepare Env Files
+#### Step 5: Prepare Env Files
 
 Create `env.yaml` and `env.local.yaml` at the root of the project with the following content verbatim.
 If the files already exist, do not update them.
@@ -207,7 +175,7 @@ If the files already exist, do not update them.
 # MICROBUS_PROMETHEUS_EXPORTER: 1
 ```
 
-#### Step 8: Prepare `.gitignore`
+#### Step 6: Prepare `.gitignore`
 
 Create `.gitignore` at the root of the project with the following content.
 If the file already exists, append the content to the existing file unless already there.
@@ -220,7 +188,7 @@ If the file already exists, append the content to the existing file unless alrea
 .DS_Store
 ```
 
-#### Step 9: Prepare `launch.json`
+#### Step 7: Prepare `launch.json`
 
 Create `.vscode/launch.json` relative to the root of the project with the following content.
 If the file already exists, add the `Main` configuration to the existing file instead unless already there.
@@ -242,19 +210,4 @@ If the file already exists, add the `Main` configuration to the existing file in
 		},
 	]
 }
-```
-
-#### Step 10: Upgrade
-
-Skip this step if the old framework version could not be determined. Otherwise, perform the following sequentially in order:
-
-- If the old framework version is earlier than `1.22.0`, follow the `microbus/upgrade-project-v1.22.0` skill. 
-- If the old framework version is earlier than `1.23.0`, follow the `microbus/upgrade-project-v1.23.0` skill. 
-
-#### Step 11: Tidy Up
-
-Tidy up `go.mod`.
-
-```shell
-go mod tidy
 ```
