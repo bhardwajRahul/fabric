@@ -45,7 +45,7 @@ Microservices are the right architecture for most growing systems, but the conve
 - Your favorite coding agent
 - [Go](https://go.dev/) 1.26+
 - [NATS](https://nats.io) messaging bus (required in high-availability production settings, optional during development)
-- [LGTM stack](https://github.com/grafana/docker-otel-lgtm) OpenTelemetry observability stack (optional)
+- [LGTM](https://github.com/grafana/docker-otel-lgtm) OpenTelemetry observability stack (optional)
 
 ### Bootstrap
 
@@ -229,6 +229,6 @@ Corporation? Contact us for sponsorship opportunities.
 
 ## Legal
 
-The Microbus framework is the copyrighted work of various contributors. It is licensed to you free of charge by `Microbus LLC` - a Delaware limited liability company formed to hold rights to the combined intellectual property of all contributors - under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+The Microbus framework is the copyrighted work of various contributors. It is licensed to you free of charge by Microbus LLC - a Delaware limited liability company formed to hold rights to the combined intellectual property of all contributors - under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
 
 Refer to the list of [third-party open source software](./ATTRIBUTION.md) for licensing information of components used by the Microbus framework.
