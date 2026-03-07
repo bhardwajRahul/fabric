@@ -19,6 +19,7 @@ package frame
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -26,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/boolexp"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/utils"
@@ -460,34 +462,76 @@ func (f Frame) SetLocality(locality string) {
 	}
 }
 
-// HeaderActor associates an actor with the frame.
-func (f Frame) SetActor(actor any) error {
-	if utils.IsNil(actor) {
+// SetActor sets the actor of the frame as an unsigned JWT with the given claims.
+// The claims object is marshaled to JSON and used as the JWT payload.
+// A nil claims object clears the actor.
+// Unsigned tokens are only accepted in the TESTING deployment.
+// Use [Frame.SetToken] with a signed JWT from the access token service in production code.
+func (f Frame) SetActor(claims any) error {
+	if claims == nil {
 		f.h.Del(HeaderActor)
 		return nil
 	}
-	buf, err := json.Marshal(actor)
+	b, err := json.Marshal(claims)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	buf = bytes.TrimSpace(buf)
-	value := utils.UnsafeBytesToString(buf)
-	if value == "" {
-		f.h.Del(HeaderActor)
-	} else {
-		f.h.Set(HeaderActor, value)
+	if !bytes.HasPrefix(b, []byte("{")) || !bytes.HasSuffix(b, []byte("}")) {
+		return errors.New("claims must marshal to a JSON object")
 	}
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString(b)
+	f.h.Set(HeaderActor, header+"."+payload+".")
 	return nil
+}
+
+// SetToken sets the actor JWT associated with the frame.
+// The token must be a signed JWT. An empty string clears the actor.
+func (f Frame) SetToken(token string) error {
+	if token == "" {
+		f.h.Del(HeaderActor)
+		return nil
+	}
+	if !utils.LooksLikeJWT(token) {
+		return errors.New("actor must be a signed JWT")
+	}
+	f.h.Set(HeaderActor, token)
+	return nil
+}
+
+// actorClaims parses the actor header as a JWT and returns the claims.
+// The header must contain a signed JWT; non-JWT values are ignored.
+func (f Frame) actorClaims() (jwt.MapClaims, error) {
+	value := f.h.Get(HeaderActor)
+	if value == "" || !utils.LooksLikeJWT(value) {
+		return nil, nil
+	}
+	token, _, err := jwt.NewParser().ParseUnverified(value, jwt.MapClaims{})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, nil
+	}
+	return claims, nil
 }
 
 // ParseActor parses the actor associated with the frame into the provided object.
 // The OK flag indicates whether or not an actor is associated with the frame.
 func (f Frame) ParseActor(obj any) (ok bool, err error) {
-	value := f.h.Get(HeaderActor)
-	if value == "" {
+	claims, err := f.actorClaims()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if claims == nil {
 		return false, nil
 	}
-	err = json.NewDecoder(strings.NewReader(value)).Decode(&obj)
+	b, err := json.Marshal(claims)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	err = json.Unmarshal(b, &obj)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -501,15 +545,11 @@ func (f Frame) ParseActor(obj any) (ok bool, err error) {
 // For example, "iss=='my_issuer' && (roles.admin || roles.manager) && foo!='baz' && level>=5 && region=~'US'" evaluates to true
 // for the actor {"iss":"my_issuer","sub":"harry@hogwarts.edu","roles":["admin"],"foo":"bar","level":5,"region":"AMER US"}.
 func (f Frame) IfActor(boolExp string) (ok bool, err error) {
-	value := f.h.Get(HeaderActor)
-	var claims map[string]any
-	if value != "" {
-		err = json.NewDecoder(strings.NewReader(value)).Decode(&claims)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
+	claims, err := f.actorClaims()
+	if err != nil {
+		return false, errors.Trace(err)
 	}
-	satisfy, err := boolexp.Eval(boolExp, claims)
+	satisfy, err := boolexp.Eval(boolExp, map[string]any(claims))
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -519,21 +559,16 @@ func (f Frame) IfActor(boolExp string) (ok bool, err error) {
 // Tenant returns the tenant claim of the actor, or 0 if it is not present or not numeric.
 // The tenant claim is expected to be named "tid" or "tenant".
 func (f Frame) Tenant() (tid int, err error) {
-	value := f.h.Get(HeaderActor)
-	if value == "" {
-		return 0, nil
-	}
-	var properties map[string]any
-	err = json.NewDecoder(strings.NewReader(value)).Decode(&properties)
+	claims, err := f.actorClaims()
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if properties == nil {
+	if claims == nil {
 		return 0, nil
 	}
-	tenant, ok := properties["tid"]
+	tenant, ok := claims["tid"]
 	if !ok {
-		tenant, ok = properties["tenant"]
+		tenant, ok = claims["tenant"]
 	}
 	if !ok {
 		return 0, nil

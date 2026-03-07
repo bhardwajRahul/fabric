@@ -1,13 +1,13 @@
 # Ports
 
-The concept of a port in `Microbus` can mean one of two things: a real TCP port, or a virtual emulated port.
+The concept of a port in Microbus can mean one of two things: a real TCP port, or a virtual emulated port.
 
 ### Real TCP Ports
 
-`Microbus` uses actual TCP ports for a few use cases.
+Microbus uses actual TCP ports for a few use cases.
 
 <img src="./ports-1.drawio.svg">
-<p><p>
+<p></p>
 
 The [HTTP ingress proxy](../structure/coreservices-httpingress.md) listens for incoming HTTP requests on one or more TCP ports, by default `:8080`. A public-facing HTTP ingress proxy in a production setting will most likely be configured to listen on the standard HTTP ports `:443` and `:80`.
 

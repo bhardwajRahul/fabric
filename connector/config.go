@@ -33,13 +33,12 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// SetOnConfigChanged adds a function to be called when a new config was received from the configurator.
-// Callbacks are called in the order they were added.
+// SetOnConfigChanged sets the function to be called when a new config was received from the configurator.
 func (c *Connector) SetOnConfigChanged(handler service.ConfigChangedHandler) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	c.onConfigChanged = append(c.onConfigChanged, handler)
+	c.onConfigChanged = handler
 	return nil
 }
 
@@ -102,20 +101,18 @@ func (c *Connector) SetConfig(name string, value any) error {
 	config.Value = v
 	config.Set = true
 
-	// Call the callback functions, if provided
-	if c.isPhase(startedUp) && config.Value != origValue {
-		for _, callback := range c.onConfigChanged {
-			err := errors.CatchPanic(func() error {
-				return callback(
-					c.Lifetime(),
-					func(n string) bool {
-						return strings.EqualFold(n, name)
-					},
-				)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
+	// Call the callback function, if provided
+	if c.isPhase(startedUp) && config.Value != origValue && c.onConfigChanged != nil {
+		err := errors.CatchPanic(func() error {
+			return c.onConfigChanged(
+				c.Lifetime(),
+				func(n string) bool {
+					return strings.EqualFold(n, name)
+				},
+			)
+		})
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -245,19 +242,17 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 	c.configLock.Unlock()
 
 	// Call the callback function, if provided
-	if callback && len(changed) > 0 {
-		for i := range c.onConfigChanged {
-			err := errors.CatchPanic(func() error {
-				return c.onConfigChanged[i](
-					ctx,
-					func(name string) bool {
-						return changed[name]
-					},
-				)
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
+	if callback && len(changed) > 0 && c.onConfigChanged != nil {
+		err := errors.CatchPanic(func() error {
+			return c.onConfigChanged(
+				ctx,
+				func(name string) bool {
+					return changed[name]
+				},
+			)
+		})
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 

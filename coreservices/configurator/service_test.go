@@ -273,6 +273,47 @@ callback.configurator:
 	assert.Equal("baz", con.Config("foo"))
 }
 
+func TestConfigurator_CoalesceRefresh(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	configSvc := NewService()
+
+	// Simulate an in-progress refresh
+	blocked := make(chan struct{})
+	configSvc.refreshLock.Lock()
+	configSvc.refreshDone = blocked
+	configSvc.refreshLock.Unlock()
+
+	// A concurrent Refresh should wait for the in-progress one
+	returned := make(chan error, 1)
+	go func() {
+		returned <- configSvc.Refresh(context.Background())
+	}()
+
+	// Verify the goroutine is blocked
+	select {
+	case <-returned:
+		assert.True(false, "Refresh returned while another refresh is in progress")
+	case <-time.After(100 * time.Millisecond):
+		// Expected: still blocked
+	}
+
+	// Complete the simulated refresh
+	configSvc.refreshLock.Lock()
+	close(blocked)
+	configSvc.refreshDone = nil
+	configSvc.refreshLock.Unlock()
+
+	// The coalesced goroutine should now return without error
+	select {
+	case err := <-returned:
+		assert.NoError(err)
+	case <-time.After(time.Second):
+		assert.True(false, "Refresh did not return after coalescing")
+	}
+}
+
 func TestConfigurator_PeerSync(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

@@ -8,7 +8,7 @@ Path arguments are request arguments that are extracted from a URL's path rather
 
 In the typical case, endpoints of a microservice have fixed URLs at which they are reachable.
 
-An endpoint such as `Add(x int, y int) (sum int)` is typically reachable at the internal `Microbus` URL of `https://calculator.example/add` or the external URL of `https://localhost:8080/calculator.example/add` assuming that the ingress proxy is listening at `localhost:8080`. The arguments `x` and `y` of the function are unmarshaled from the request query argument or from the body of the request.
+An endpoint such as `Add(x int, y int) (sum int)` is typically reachable at the internal Microbus URL of `https://calculator.example/add` or the external URL of `https://localhost:8080/calculator.example/add` assuming that the ingress proxy is listening at `localhost:8080`. The arguments `x` and `y` of the function are unmarshaled from the request query argument or from the body of the request.
 
 ```http
 GET /add?x=5&y=5 HTTP/1.1
@@ -26,7 +26,7 @@ Host: calculator.example
 
 A fixed path is consistent with the [RPC over JSON](../tech/rpc-vs-rest.md) style of API but is insufficient for implementing a [RESTful](../tech/rpc-vs-rest.md) style of API where it is common to expect input arguments in the path of the request. This is where path arguments come into play.
 
-A variable path allows the `Load(id int) (article *Article)` endpoint to be reachable at the internal `Microbus` wildcard URL of `https://article/{id}`. The function's `id` argument is unmarshaled from the path argument of the same name.
+A variable path allows the `Load(id int) (article *Article)` endpoint to be reachable at the internal Microbus wildcard URL of `https://article/{id}`. The function's `id` argument is unmarshaled from the path argument of the same name.
 
 ```http
 GET /1 HTTP/1.1

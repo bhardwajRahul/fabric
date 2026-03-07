@@ -53,7 +53,7 @@ var (
 
 const (
 	Hostname = configuratorapi.Hostname
-	Version  = 252
+	Version  = 253
 )
 
 // ToDo is implemented by the service or mock.

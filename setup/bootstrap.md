@@ -22,11 +22,11 @@ Bootstrap a project to use Microbus:
 
 #### Step 1: Confirm Directory
 
-Confirm with the user in what directory they would like to bootstrap `Microbus`. Suggest the current working directory by default. Use the chosen directory as the project directory for future steps.
+Confirm with the user in what directory they would like to bootstrap Microbus. Suggest the current working directory by default. Use the chosen directory as the project directory for future steps.
 
 #### Step 2: Check if Already Bootstrapped
 
-If `go.mod` exists in the project directory and includes a reference to `github.com/microbus-io/fabric`, the project is already bootstrapped for `Microbus` and no action is required. Exit this workflow.
+If `go.mod` exists in the project directory and includes a reference to `github.com/microbus-io/fabric`, the project is already bootstrapped for Microbus and no action is required. Exit this workflow.
 
 #### Step 3: Init the Module
 
@@ -35,12 +35,12 @@ If `go.mod` already exists, skip this step.
 Ask the user for the name of the module to set for this project. Then use it as the input to `go mod init`.
 
 ```shell
-go mod init github.com/my-company/myproject
+go mod init github.com/mycompany/myproject
 ```
 
 #### Step 4: Get the Latest Microbus Package
 
-Get the latest version of the `Microbus` package.
+Get the latest version of the Microbus package.
 
 ```shell
 go get github.com/microbus-io/fabric

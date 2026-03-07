@@ -1,6 +1,6 @@
 # Structured Logging
 
-Logging is one of the pillars of observability alongside [distributed tracing](../blocks/distrib-tracing.md) and [metrics](../blocks/metrics.md). `Microbus` uses Go's standard `log/slog` for logging with output directed to `stderr`.
+Logging is one of the pillars of observability alongside [distributed tracing](../blocks/distrib-tracing.md) and [metrics](../blocks/metrics.md). Microbus uses Go's standard `log/slog` for logging with output directed to `stderr`.
 
 Logs are printed in human-friendly format in the `LOCAL` and `TESTING` [deployment environments](../tech/deployments.md) and in JSON in `PROD` and `LAB`.
 

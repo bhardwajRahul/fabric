@@ -19,6 +19,8 @@ package httpingress
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,13 +32,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/coreservices/accesstoken/accesstokenapi"
+	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
+	"github.com/microbus-io/fabric/utils"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -48,15 +54,17 @@ The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
-	httpServers    map[int]*http.Server
-	mux            sync.Mutex
-	allowedOrigins map[string]bool
-	portMappings   map[string]string
-	reqMemoryUsed  int64
-	secure443      bool
-	blockedPaths   map[string]bool
-	middleware     *middleware.Chain
-	handler        connector.HTTPHandler
+	httpServers     map[int]*http.Server
+	mux             sync.Mutex
+	allowedOrigins  map[string]bool
+	portMappings    map[string]string
+	reqMemoryUsed   int64
+	secure443       bool
+	blockedPaths    map[string]bool
+	middleware      *middleware.Chain
+	handler         connector.HTTPHandler
+	bearerTokenMu   sync.RWMutex
+	bearerTokenKeys map[string]ed25519.PublicKey
 }
 
 // OnStartup is called when the microservice is started up.
@@ -541,4 +549,102 @@ func (svc *Service) OnChangedBlockedPaths(ctx context.Context) (err error) { // 
 	}
 	svc.blockedPaths = newPaths
 	return nil
+}
+
+// lookupBearerTokenKey returns the cached Ed25519 public key for the given kid.
+func (svc *Service) lookupBearerTokenKey(kid string) (ed25519.PublicKey, bool) {
+	svc.bearerTokenMu.RLock()
+	defer svc.bearerTokenMu.RUnlock()
+	key, ok := svc.bearerTokenKeys[kid]
+	return key, ok
+}
+
+// fetchBearerTokenKeys fetches JWKS from the given host and updates the key cache.
+func (svc *Service) fetchBearerTokenKeys(ctx context.Context, host string) error {
+	jwks, err := bearertokenapi.NewClient(svc).ForHost(host).JWKS(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	svc.bearerTokenMu.Lock()
+	defer svc.bearerTokenMu.Unlock()
+	if svc.bearerTokenKeys == nil {
+		svc.bearerTokenKeys = make(map[string]ed25519.PublicKey)
+	}
+	for _, jwk := range jwks {
+		pubBytes, err := base64.RawURLEncoding.DecodeString(jwk.X)
+		if err != nil {
+			continue
+		}
+		svc.bearerTokenKeys[jwk.KID] = ed25519.PublicKey(pubBytes)
+	}
+	return nil
+}
+
+// exchangeToken validates the external bearer token and returns a corresponding internal access token.
+func (svc *Service) exchangeToken(ctx context.Context, bearerToken string) (accessToken string, err error) {
+	if !utils.LooksLikeJWT(bearerToken) {
+		return "", nil
+	}
+
+	// Parse the external bearer JWT (unverified) to extract issuer and kid
+	parsedToken, _ := jwt.Parse(bearerToken, nil)
+	if parsedToken == nil {
+		return "", nil
+	}
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", nil
+	}
+
+	// Extract the issuer hostname
+	host := ""
+	if issStr, ok := claims["iss"].(string); ok {
+		if strings.HasPrefix(issStr, "microbus://") {
+			host = issStr[len("microbus://"):]
+		}
+	}
+	if host == "" {
+		return "", nil
+	}
+
+	// Extract kid from JWT header
+	kid, _ := parsedToken.Header["kid"].(string)
+	if kid == "" {
+		return "", nil
+	}
+
+	// Look up the public key, refresh cache if needed
+	key, found := svc.lookupBearerTokenKey(kid)
+	if !found {
+		err = svc.fetchBearerTokenKeys(ctx, host)
+		if err != nil {
+			if errors.StatusCode(err) == http.StatusNotFound {
+				return "", nil
+			}
+			return "", errors.Trace(err)
+		}
+		key, found = svc.lookupBearerTokenKey(kid)
+		if !found {
+			return "", nil
+		}
+	}
+
+	// Verify the JWT signature
+	verified, err := jwt.Parse(bearerToken, func(t *jwt.Token) (any, error) {
+		return key, nil
+	})
+	if err != nil {
+		return "", nil
+	}
+	verifiedClaims, ok := verified.Claims.(jwt.MapClaims)
+	if !ok || verifiedClaims == nil {
+		return "", nil
+	}
+
+	// Mint an internal access token JWT with the validated claims
+	accessToken, err = accesstokenapi.NewClient(svc).Mint(ctx, map[string]any(verifiedClaims))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return accessToken, nil
 }

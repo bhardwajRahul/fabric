@@ -20,12 +20,17 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/microbus-io/boolexp"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
@@ -344,7 +349,12 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 
 	// Time budget
 	budget := frame.Of(httpReq).TimeBudget()
-	if budget > 0 && budget <= c.networkRoundtrip {
+	if budget <= 0 {
+		budget = c.defaultTimeBudget
+	}
+	budget = min(budget, c.maxTimeBudget)
+	frame.Of(httpReq).SetTimeBudget(budget)
+	if budget <= c.networkRoundtrip {
 		return errors.New("timeout", http.StatusRequestTimeout)
 	}
 
@@ -381,27 +391,19 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	httpRecorder := httpx.NewResponseRecorder()
 	var handlerErr error
 
-	// Prepare the context
+	// Prepare the context with a timeout set to the time budget reduced by a network hop
 	ctx = frame.ContextWithClonedFrameOf(ctx, httpReq.Header)
-	cancel := func() {}
-	if budget > 0 {
-		// Set the context's timeout to the time budget reduced by a network hop
-		ctx, cancel = context.WithTimeout(ctx, budget-c.networkRoundtrip)
-	}
+	ctx, cancel := context.WithTimeout(ctx, budget-c.networkRoundtrip)
 	httpReq = httpReq.WithContext(ctx)
 	httpReq.Header = frame.Of(ctx).Header()
 
 	// Check actor constraints
 	if s.RequiredClaims != "" {
-		if httpReq.Header.Get(frame.HeaderActor) == "" {
+		actor := httpReq.Header.Get(frame.HeaderActor)
+		if actor == "" || !utils.LooksLikeJWT(actor) {
 			handlerErr = errors.New("", http.StatusUnauthorized)
 		} else {
-			satisfied, err := frame.Of(httpReq).IfActor(s.RequiredClaims)
-			if err != nil {
-				handlerErr = errors.Trace(err)
-			} else if !satisfied {
-				handlerErr = errors.New("", http.StatusForbidden)
-			}
+			handlerErr = c.verifyToken(actor, s.RequiredClaims)
 		}
 	}
 
@@ -560,6 +562,116 @@ func (c *Connector) notifyOnNewSubs(subs ...*sub.Subscription) error {
 		pub.Multicast(),
 	)
 	for range ch {
+	}
+	return nil
+}
+
+// verifyToken verifies the signature of an actor JWT.
+// If the kid is unknown, it fetches JWKS from the issuer host.
+func (c *Connector) verifyToken(token string, requiredClaims string) error {
+	// Get the alg and kid from the token's header
+	parsed, _, err := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
+	if err != nil {
+		return errors.New("", http.StatusUnauthorized)
+	}
+	alg, _ := parsed.Header["alg"].(string)
+	if alg == "none" && c.deployment == TESTING {
+		// Recognize unsigned tokens set by [frame.Frame.SetActor] during tests
+		return nil
+	}
+	kid, _ := parsed.Header["kid"].(string)
+	if kid == "" {
+		return errors.New("", http.StatusUnauthorized)
+	}
+
+	// Verify the token with the issuer
+	claims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return errors.New("", http.StatusUnauthorized)
+	}
+	issStr, _ := claims["iss"].(string)
+	if !strings.HasPrefix(issStr, "microbus://") {
+		return errors.New("", http.StatusUnauthorized)
+	}
+	host := issStr[len("microbus://"):]
+
+	// Look up the public key, refresh cache if needed
+	key, found := c.lookupActorKey(kid)
+	if !found {
+		err = c.fetchActorKeys(host)
+		if err != nil {
+			return errors.New("", http.StatusUnauthorized)
+		}
+		key, found = c.lookupActorKey(kid)
+		if !found {
+			return errors.New("", http.StatusUnauthorized)
+		}
+	}
+
+	// Verify the JWT signature
+	_, err = jwt.Parse(token, func(t *jwt.Token) (any, error) {
+		return key, nil
+	})
+	if err != nil {
+		return errors.New("", http.StatusUnauthorized)
+	}
+
+	// Check the required claims against the access token's claims
+	satisfy, err := boolexp.Eval(requiredClaims, map[string]any(claims))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !satisfy {
+		return errors.New("", http.StatusForbidden)
+	}
+
+	return nil
+}
+
+// lookupActorKey returns the cached Ed25519 public key for the given kid.
+func (c *Connector) lookupActorKey(kid string) (ed25519.PublicKey, bool) {
+	c.actorKeysLock.RLock()
+	defer c.actorKeysLock.RUnlock()
+	key, ok := c.actorKeys[kid]
+	return key, ok
+}
+
+// fetchActorKeys fetches JWKS from the given host at :888/jwks and updates the key cache.
+func (c *Connector) fetchActorKeys(host string) error {
+	resp, err := c.Request(
+		c.Lifetime(),
+		pub.GET("https://"+host+":888/jwks"),
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var jwksResp struct {
+		Keys []struct {
+			KID string `json:"kid"`
+			X   string `json:"x"`
+		} `json:"keys"`
+	}
+	err = json.Unmarshal(body, &jwksResp)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.actorKeysLock.Lock()
+	defer c.actorKeysLock.Unlock()
+	if c.actorKeys == nil {
+		c.actorKeys = make(map[string]ed25519.PublicKey)
+	}
+	for _, jwk := range jwksResp.Keys {
+		pubBytes, err := base64.RawURLEncoding.DecodeString(jwk.X)
+		if err != nil {
+			continue
+		}
+		c.actorKeys[jwk.KID] = ed25519.PublicKey(pubBytes)
 	}
 	return nil
 }

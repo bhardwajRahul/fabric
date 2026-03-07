@@ -1,6 +1,6 @@
 # Package `connector`
 
-The `Connector` is the most fundamental construct of the framework, providing key capabilities to `Microbus` microservices:
+The `Connector` is the most fundamental construct of the framework, providing key capabilities to Microbus microservices:
 
 - Startup and shutdown with corresponding callbacks
 - Service hostname and a random instance ID, both used to address the microservice

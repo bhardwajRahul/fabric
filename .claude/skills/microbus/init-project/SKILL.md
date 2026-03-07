@@ -12,21 +12,22 @@ Copy this checklist and track your progress:
 ```
 Initialize a project to use Microbus:
 - [ ] Step 1: Check if a Microbus project
-- [ ] Step 2: Prepare main
+- [ ] Step 2: Prepare main package
 - [ ] Step 3: Prepare agent files
 - [ ] Step 4: Prepare config files
 - [ ] Step 5: Prepare env files
-- [ ] Step 6: Prepare .gitignore
-- [ ] Step 7: Prepare launch.json
+- [ ] Step 6: Prepare git ignore
+- [ ] Step 7: Prepare VS Code launch
+- [ ] Step 8: Prepare authentication
 ```
 
 #### Step 1: Check if a Microbus Project
 
 If `go.mod` does not exist in the project directory, this is not a Go project. Exit this workflow.
 
-If `go.mod` does not include a reference to `github.com/microbus-io/fabric`, this is not a `Microbus` project. Exit this workflow.
+If `go.mod` does not include a reference to `github.com/microbus-io/fabric`, this is not a Microbus project. Exit this workflow.
 
-#### Step 2: Prepare `main`
+#### Step 2: Prepare Main Package
 
 Create the `main` directory in the root of the project if one does not exist.
 
@@ -34,55 +35,8 @@ Create the `main` directory in the root of the project if one does not exist.
 mkdir -p main
 ```
 
-Create `main/main.go` with the following verbatim.
+Create `main/main.go` the content of the template `main.go` located in the directory of this skill..
 If the file already exists, do not update it.
-
-```go
-package main
-
-import (
-	"fmt"
-	"os"
-
-	"github.com/microbus-io/fabric/application"
-	"github.com/microbus-io/fabric/coreservices/configurator"
-	"github.com/microbus-io/fabric/coreservices/httpegress"
-	"github.com/microbus-io/fabric/coreservices/httpingress"
-	"github.com/microbus-io/fabric/coreservices/openapiportal"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer"
-)
-
-/*
-main runs the application.
-*/
-func main() {
-	app := application.New()
-	app.Add(
-		// Configurator should start first
-		configurator.NewService(),
-	)
-	app.Add(
-		// Core microservices
-		httpegress.NewService(),
-		openapiportal.NewService(),
-		tokenissuer.NewService(),
-		// metrics.NewService(),
-	)
-	app.Add(
-		// HINT: Add solution microservices here
-	)
-	app.Add(
-		// When everything is ready, begin to accept external requests
-		httpingress.NewService(),
-		// smtpingress.NewService(),
-	)
-	err := app.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%+v", err)
-		os.Exit(19)
-	}
-}
-```
 
 Create `main/env.yaml` with the following verbatim.
 If the file already exists, prepend the content to the existing file unless already there.
@@ -133,52 +87,11 @@ myservice.hostname:
 
 #### Step 5: Prepare Env Files
 
-Create `env.yaml` and `env.local.yaml` at the root of the project with the following content verbatim.
-If the files already exist, do not update them.
+Create `env.yaml` and `env.local.yaml` at the root of the project the content of the template `env.yaml` located in the directory of this skill. If the files already exist, do not overwrite them.
 
-```yaml
-# NATS connection settings
-# MICROBUS_NATS: nats://127.0.0.1:4222
-# MICROBUS_NATS_USER:
-# MICROBUS_NATS_PASSWORD:
-# MICROBUS_NATS_TOKEN:
-# MICROBUS_NATS_USER_JWT:
-# MICROBUS_NATS_NKEY_SEED:
+#### Step 6: Prepare Git Ignore
 
-# The deployment impacts certain aspects of the framework such as the log format and verbosity
-#   PROD - production deployments
-#   LAB - fully-functional non-production deployments such as dev integration, testing, staging, etc.
-#   LOCAL - developing locally
-#   TESTING - unit and integration testing
-# MICROBUS_DEPLOYMENT: LOCAL
-
-# The plane of communication isolates communication among a group of microservices
-# MICROBUS_PLANE: microbus
-
-# The geographic locality of the application
-# MICROBUS_LOCALITY: west.us
-
-# Enable logging of debug-level messages
-# MICROBUS_LOG_DEBUG: 1
-
-# OpenTelemetry
-# https://opentelemetry.io/docs/specs/otel/protocol/exporter/
-# https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
-# OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-# OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
-# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:
-# OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
-
-# OTEL_METRIC_EXPORT_INTERVAL: 60000
-
-# Enable metric collection to enable Prometheus polling
-# MICROBUS_PROMETHEUS_EXPORTER: 1
-```
-
-#### Step 6: Prepare `.gitignore`
-
-Create `.gitignore` at the root of the project with the following content.
-If the file already exists, append the content to the existing file unless already there.
+Create `.gitignore` at the root of the project with the following content. If the file already exists, append the content to the existing file unless already there.
 
 ```gitignore
 # Microbus
@@ -188,10 +101,9 @@ If the file already exists, append the content to the existing file unless alrea
 .DS_Store
 ```
 
-#### Step 7: Prepare `launch.json`
+#### Step 7: Prepare VS Code Launch
 
-Create `.vscode/launch.json` relative to the root of the project with the following content.
-If the file already exists, add the `Main` configuration to the existing file instead unless already there.
+Create `.vscode/launch.json` relative to the root of the project with the following content. If the file already exists, add the `Main` configuration to the existing file instead unless already there.
 
 ```json
 {
@@ -210,4 +122,28 @@ If the file already exists, add the `Main` configuration to the existing file in
 		},
 	]
 }
+```
+
+#### Step 8: Prepare Authentication
+
+Create the `act` directory in the root of the project if one does not exist.
+
+```shell
+mkdir -p act
+```
+
+Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it.
+
+Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKeyPEM` config of the `bearer.token.core` microservice.
+
+```shell
+openssl genpkey -algorithm Ed25519 -out private.pem
+```
+
+```yaml
+bearer.token.core:
+  PrivateKeyPEM: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEIL...
+    -----END PRIVATE KEY-----
 ```

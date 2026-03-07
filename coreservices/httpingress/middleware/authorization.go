@@ -17,50 +17,40 @@ limitations under the License.
 package middleware
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/utils"
 )
 
 // Authorization returns a middleware that looks for a token in the "Authorization: Bearer" header or the "Authorization" cookie.
-// If the token is validated with its issuer, it assicuates the corresponding actor with the request.
-func Authorization(tokenValidator func(ctx context.Context, token string) (actor any, valid bool, err error)) Middleware {
+// If the external bearer token is validated with its issuer, the exchange callback returns a signed internal access token JWT to set as the actor.
+func Authorization(exchange func(ctx context.Context, bearerToken string) (accessToken string, err error)) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {
-			// Look for authorization token
-			token := ""
+			// Look for authorization bearerToken
+			bearerToken := ""
 			if c, _ := r.Cookie("Authorization"); c != nil {
-				token = c.Value
+				bearerToken = c.Value
 			}
 			authorizationHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authorizationHeader, "Bearer ") {
-				token = authorizationHeader[7:]
+				bearerToken = authorizationHeader[7:]
 			}
-			if token != "" {
-				// Validate the token
-				actor, valid, err := tokenValidator(r.Context(), token) // Callback
+			if bearerToken != "" {
+				// Validate the token and mint an internal JWT
+				accessToken, err := exchange(r.Context(), bearerToken) // Callback
 				if err != nil {
 					return errors.Trace(err)
 				}
 				// Set the actor header
-				if valid && actor != nil {
-					if str, ok := actor.(string); ok && strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}") {
-						r.Header.Set(frame.HeaderActor, str)
-					} else {
-						buf, err := json.Marshal(actor)
-						if err != nil {
-							return errors.Trace(err)
-						}
-						buf = bytes.TrimSpace(buf)
-						str := utils.UnsafeBytesToString(buf)
-						r.Header.Set(frame.HeaderActor, str)
+				if accessToken != "" {
+					err = frame.Of(r).SetToken(accessToken)
+					if err != nil {
+						return errors.Trace(err)
 					}
 				}
 			}

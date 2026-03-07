@@ -83,7 +83,9 @@ Create `CLAUDE.md` with the following content verbatim.
 **CRITICAL**: Read `AGENTS.md` immediately.
 ```
 
-Create `PROMPTS.md` with the prompt to create this microservice. Save the prompt under a `## Title`.
+Create `PROMPTS.md` with the prompt used to create this microservice. Rephrase the language to include context that was not made explicit in the original prompt. The intent is to maintain an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.
+
+Save the prompt as follows.
 
 ```md
 ## Prompt title
@@ -95,7 +97,7 @@ Prompt comes here...
 
 Create `myserviceapi/client.go` with the content of the template `client.go` located in the directory of this skill.
 
-- The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/my-company/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
+- The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
 
 #### Step 5: Prepare `embed.go`
 

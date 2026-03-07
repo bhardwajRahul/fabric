@@ -4,7 +4,7 @@ Caching is a powerful and common technique that reduces load on downstream datab
 
 ### Localized Cache
 
-In `Microbus`, each microservice holds in-memory an [LRU cache](../structure/lru.md) that is shared with all peer replicas of the microservice, but not with other microservices. Each replica's local LRU cache is a segment of the entire cache. The cache uses pub/sub to communicate and synchronize with peers.
+In Microbus, each microservice holds in-memory an [LRU cache](../structure/lru.md) that is shared with all peer replicas of the microservice, but not with other microservices. Each replica's local LRU cache is a segment of the entire cache. The cache uses pub/sub to communicate and synchronize with peers.
 
 <img src="./distrib-cache-1.drawio.svg">
 <p></p>

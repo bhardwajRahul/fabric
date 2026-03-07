@@ -122,8 +122,8 @@ func slogToTracingAttrs(prefix string, f slog.Attr) []attribute.KeyValue {
 	return nil
 }
 
-// Log records a log event on the span.
-func (s Span) Log(severity string, msg string, args ...any) {
+// log records a log event on the span.
+func (s Span) log(severity string, msg string, args ...any) {
 	if s.internal == nil {
 		return
 	}
@@ -138,6 +138,26 @@ func (s Span) Log(severity string, msg string, args ...any) {
 		return true
 	})
 	s.internal.AddEvent("log", trace.WithAttributes(attrs...))
+}
+
+// LogDebug records a debug log event on the span.
+func (s Span) LogDebug(msg string, args ...any) {
+	s.log("debug", msg, args...)
+}
+
+// LogInfo records an info log event on the span.
+func (s Span) LogInfo(msg string, args ...any) {
+	s.log("info", msg, args...)
+}
+
+// LogWarn records a warning log event on the span.
+func (s Span) LogWarn(msg string, args ...any) {
+	s.log("warn", msg, args...)
+}
+
+// LogError records an error log event on the span.
+func (s Span) LogError(msg string, args ...any) {
+	s.log("error", msg, args...)
 }
 
 /*

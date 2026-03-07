@@ -18,16 +18,12 @@ package httpingress
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
-	"github.com/microbus-io/fabric/utils"
 )
 
 // Middleware names
@@ -94,44 +90,9 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m.Append(Timeout, middleware.Timeout(func() time.Duration {
 		return svc.TimeBudget()
 	}))
-	m.Append(Authorization, middleware.Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
-		host := func() string {
-			if !utils.LooksLikeJWT(token) {
-				return ""
-			}
-			parsedToken, _ := jwt.Parse(token, nil)
-			if parsedToken == nil {
-				return ""
-			}
-			claims, ok := parsedToken.Claims.(jwt.MapClaims)
-			if !ok {
-				return ""
-			}
-			iss, ok := claims["iss"]
-			if ok {
-				issStr, ok := iss.(string)
-				if ok {
-					if strings.HasPrefix(issStr, "microbus://") {
-						return issStr[len("microbus://"):]
-					}
-				}
-			}
-			validator, ok := claims["validator"] // Backward compatibility
-			if ok {
-				validatorStr, ok := validator.(string)
-				if ok {
-					return validatorStr
-				}
-			}
-			return ""
-		}()
-		if host != "" {
-			actor, valid, err = tokenissuerapi.NewClient(svc).ForHost(host).ValidateToken(ctx, token)
-			if errors.StatusCode(err) == http.StatusNotFound {
-				return nil, false, nil
-			}
-		}
-		return actor, valid, errors.Trace(err)
+	m.Append(Authorization, middleware.Authorization(func(ctx context.Context, bearerToken string) (accessToken string, err error) {
+		accessToken, err = svc.exchangeToken(ctx, bearerToken)
+		return accessToken, errors.Trace(err)
 	}))
 	m.Append(Ready, middleware.NoOp()) // Marker
 	m.Append(CacheControl, middleware.CacheControl("no-cache, no-store, max-age=0"))

@@ -1,6 +1,6 @@
 # Quick Start
 
-Go for a tour of `Microbus` along with your coding agent. The agent will bootstrap a project, download example microservices, and walk you through each one interactively.
+Go for a tour of Microbus along with your coding agent. The agent will bootstrap a project, download example microservices, and walk you through each one interactively.
 
 > HEY CLAUDE...
 >

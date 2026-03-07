@@ -24,7 +24,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
+	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
 	"github.com/microbus-io/fabric/examples/login/loginapi"
 	"github.com/microbus-io/fabric/frame"
 )
@@ -87,7 +87,7 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) { 
 	ok := submitted && userRoles[u] != nil && p == "password"
 	if ok {
 		// Use the core issuer to create a JWT
-		signedJWT, err := tokenissuerapi.NewClient(svc).IssueToken(ctx, jwt.MapClaims{
+		signedJWT, err := bearertokenapi.NewClient(svc).Mint(ctx, map[string]any{
 			"sub":   u,
 			"roles": userRoles[u],
 		})

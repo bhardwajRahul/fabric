@@ -220,9 +220,11 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) iter.Seq[
 	if req.Timeout > 0 && (timeout == 0 || req.Timeout < timeout) {
 		timeout = req.Timeout
 	}
-	if timeout > 0 {
-		frame.Of(httpReq).SetTimeBudget(timeout)
+	if timeout <= 0 {
+		timeout = c.defaultTimeBudget
 	}
+	timeout = min(timeout, c.maxTimeBudget)
+	frame.Of(httpReq).SetTimeBudget(timeout)
 
 	// Fragment large requests
 	fragger, err := httpx.NewFragRequest(httpReq, c.maxFragmentSize)

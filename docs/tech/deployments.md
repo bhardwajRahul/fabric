@@ -1,9 +1,9 @@
 # Deployments
 
-`Microbus` recognizes four deployment environments:
+Microbus recognizes four deployment environments:
 
 - `PROD` represents a production deployment
-- `LAB` represents a fully-functional non-production deployments such as dev integration, testing, staging, etc.
+- `LAB` represents a fully-functional non-production deployment such as dev integration, testing, staging, etc.
 - `LOCAL` represents development on an engineer's local machine
 - `TESTING` represents a unit test running a testing application
 

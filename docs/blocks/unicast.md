@@ -1,11 +1,11 @@
 # Unicast Messaging
 
 One of the challenges with messaging buses is that they have an unfamiliar pattern that doesn't map well to modern web standards. When it comes to microservices, most developers are accustomed to thinking in terms of synchronous HTTP, not asynchronous messaging over a bus.
-`Microbus` overcomes this gap by emulating the familiar synchronous request/response pattern of HTTP over the asynchronous messaging pattern of NATS.
+Microbus overcomes this gap by emulating the familiar synchronous request/response pattern of HTTP over the asynchronous messaging pattern of NATS.
 
-For starters, while NATS supports a purely arbitrary binary message format, `Microbus`'s messages adhere to the HTTP/1.1 request and response message formats. This is done for several reasons:
+For starters, while NATS supports a purely arbitrary binary message format, Microbus's messages adhere to the HTTP/1.1 request and response message formats. This is done for several reasons:
 
-- The HTTP format includes a meta-data section in the form of headers in addition to an unrestricted binary body. The headers are ideal for sending the control information necessary to make the `Microbus` magic happen
+- The HTTP format includes a meta-data section in the form of headers in addition to an unrestricted binary body. The headers are ideal for sending the control information necessary to make the Microbus magic happen
 - The HTTP format is familiar to developers
 - There are plenty of tools and libraries to work with the HTTP format
 - Conversion to and from "real" HTTP by the [ingress proxy service](../structure/coreservices-httpingress.md) is trivial
@@ -76,7 +76,7 @@ Hello]
 
 Before handling the request, microservice `beta.echo.connector` responds to it by immediately publishing an ack message to the response channel of `alpha.echo.connector`, making sure to echo back the message ID in `Microbus-Msg-Id` and to include its identity in `Microbus-From-Host` and `Microbus-From-Id`. The binary format of the message is that of the standard HTTP/1.1 response.
 
-The ack message is used to inform the client that the request has been received and that it should expect a response. If an ack message is not received quickly, the client times out. Acks enable clients to quickly differentiate between the situations of not having a server that can respond, or having a server that responds slowly. This concept is unique to `Microbus`. In essence, the server responds with two responses to each request.
+The ack message is used to inform the client that the request has been received and that it should expect a response. If an ack message is not received quickly, the client times out. Acks enable clients to quickly differentiate between the situations of not having a server that can respond, or having a server that responds slowly. This concept is unique to Microbus. In essence, the server responds with two responses to each request.
 
 ```
 [TRC] cid:2 - ->> MSG_PAYLOAD: [HTTP/1.1 202 Accepted

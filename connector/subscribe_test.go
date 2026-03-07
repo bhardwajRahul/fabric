@@ -19,12 +19,18 @@ package connector
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
@@ -892,64 +898,108 @@ func TestConnector_Actor(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	// Create the microservice
+	type JWK struct {
+		KTY string `json:"kty"`
+		CRV string `json:"crv"`
+		X   string `json:"x"`
+		KID string `json:"kid"`
+	}
+
+	// Generate a key pair for the mock token issuer
+	pub25519, priv25519, err := ed25519.GenerateKey(rand.Reader)
+	assert.NoError(err)
+	hash := sha256.Sum256(pub25519)
+	kid := base64.RawURLEncoding.EncodeToString(hash[:8])
+	signToken := func(claims jwt.MapClaims) (string, error) {
+		claims["iss"] = "microbus://issuer.actor.connector"
+		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+		token.Header["kid"] = kid
+		signed, err := token.SignedString(priv25519)
+		if err != nil {
+			return "", err
+		}
+		return signed, nil
+	}
+
+	// Create a mock token issuer that serves JWKS
+	issuer := New("issuer.actor.connector")
+	issuer.Subscribe("GET", ":888/jwks",
+		func(w http.ResponseWriter, r *http.Request) error {
+			jwks := struct {
+				Keys []JWK `json:"keys"`
+			}{}
+			jwks.Keys = append(jwks.Keys, JWK{
+				KTY: "OKP",
+				CRV: "Ed25519",
+				X:   base64.RawURLEncoding.EncodeToString(pub25519),
+				KID: kid,
+			})
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(jwks)
+		},
+	)
+
+	// Create the microservice under test
 	entered := 0
-	con := New("actor.connector")
+	con := New("con.actor.connector")
 	con.Subscribe("GET", "student",
 		func(w http.ResponseWriter, r *http.Request) error {
 			entered++
 			return nil
 		},
-		sub.RequiredClaims(`iss=="hogwats.issuer" && (roles=~"student" || roles=~"professor")`),
+		sub.RequiredClaims(`iss=="microbus://issuer.actor.connector" && (roles.student || roles.professor)`),
 	)
 	con.Subscribe("GET", "professor",
 		func(w http.ResponseWriter, r *http.Request) error {
 			entered++
 			return nil
 		},
-		sub.RequiredClaims(`iss=="hogwats.issuer" && roles=~"professor"`),
+		sub.RequiredClaims(`iss=="microbus://issuer.actor.connector" && roles.professor`),
 	)
 
-	// Startup the microservice
+	// Startup both connectors
 	ctx := t.Context()
-	err := con.Startup(ctx)
+	err = issuer.Startup(ctx)
+	assert.NoError(err)
+	defer issuer.Shutdown(ctx)
+	err = con.Startup(ctx)
 	assert.NoError(err)
 	defer con.Shutdown(ctx)
 
 	// Without a token
-	_, err = con.GET(ctx, "https://actor.connector/student")
+	_, err = con.GET(ctx, "https://con.actor.connector/student")
 	assert.Error(err)
 	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))
 	assert.Equal(0, entered)
-	_, err = con.GET(ctx, "https://actor.connector/professor")
+	_, err = con.GET(ctx, "https://con.actor.connector/professor")
 	assert.Error(err)
 	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))
 	assert.Equal(0, entered)
 
 	// Create token for wizard role
-	harry := map[string]any{
-		"iss":   "hogwats.issuer",
+	harry, err := signToken(jwt.MapClaims{
 		"sub":   "harry@hogwarts.edu",
-		"roles": "wizard student",
-	}
-	_, err = con.Request(ctx, pub.GET("https://actor.connector/student"), pub.Actor(harry))
+		"roles": []string{"wizard", "student"},
+	})
+	assert.NoError(err)
+	_, err = con.Request(ctx, pub.GET("https://con.actor.connector/student"), pub.Token(harry))
 	assert.NoError(err)
 	assert.Equal(1, entered)
-	_, err = con.Request(ctx, pub.GET("https://actor.connector/professor"), pub.Actor(harry))
+	_, err = con.Request(ctx, pub.GET("https://con.actor.connector/professor"), pub.Token(harry))
 	assert.Error(err)
 	assert.Equal(http.StatusForbidden, errors.StatusCode(err))
 	assert.Equal(1, entered)
 
 	// Create token for professor role
-	dumbledore := map[string]any{
-		"iss":   "hogwats.issuer",
+	dumbledore, err := signToken(jwt.MapClaims{
 		"sub":   "dumbledore@hogwarts.edu",
-		"roles": "wizard professor headmaster",
-	}
-	_, err = con.Request(ctx, pub.GET("https://actor.connector/student"), pub.Actor(dumbledore))
+		"roles": []string{"wizard", "professor", "headmaster"},
+	})
+	assert.NoError(err)
+	_, err = con.Request(ctx, pub.GET("https://con.actor.connector/student"), pub.Token(dumbledore))
 	assert.NoError(err)
 	assert.Equal(2, entered)
-	_, err = con.Request(ctx, pub.GET("https://actor.connector/professor"), pub.Actor(dumbledore))
+	_, err = con.Request(ctx, pub.GET("https://con.actor.connector/professor"), pub.Token(dumbledore))
 	assert.NoError(err)
 	assert.Equal(3, entered)
 }

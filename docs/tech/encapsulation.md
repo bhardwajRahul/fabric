@@ -1,6 +1,6 @@
 # Encapsulation Pattern
 
-`Microbus` employs the principle of information hiding and opts to encapsulate the underlying technologies behind its own simplified interfaces. There are various reasons for this pattern:
+Microbus employs the principle of information hiding and opts to encapsulate the underlying technologies behind its own simplified interfaces. There are various reasons for this pattern:
 
 - Providing a cohesive experience to developers
 - Enforcing uniformity across all microservices brings familiarity when looking at someone else's code, lowers the learning curve, and ultimately increases velocity

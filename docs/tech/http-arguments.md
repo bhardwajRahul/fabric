@@ -1,6 +1,6 @@
 # HTTP Magic Arguments
 
-Functional endpoints support three specially named arguments to allow finer control over the marshaling to and unmarhsaling from the underlying HTTP protocol.
+Functional endpoints support three specially named arguments to allow finer control over the marshaling to and unmarshaling from the underlying HTTP protocol.
 
 - An input argument named `httpRequestBody` receives the unmarshaled request body (JSON or URL encoded)
 - An output argument `httpResponseBody` is marshaled as the response (JSON)

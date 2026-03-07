@@ -205,12 +205,11 @@ func (c *Connector) termMeter(ctx context.Context) (err error) {
 }
 
 // SetOnObserveMetrics adds a function to be called just before metrics are produced to allow observing them just in time.
-// Callbacks are called in the order they were added.
 func (c *Connector) SetOnObserveMetrics(handler service.ObserveMetricsHandler) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	c.onObserveMetrics = append(c.onObserveMetrics, handler)
+	c.onObserveMetrics = handler
 	return nil
 }
 
@@ -241,7 +240,7 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 	_ = c.RecordGauge(ctx, "microbus_cache_elements", float64(c.distribCache.LocalCache().Len()))
 	_ = c.RecordGauge(ctx, "microbus_cache_memory_bytes", float64(c.distribCache.LocalCache().Weight()))
 
-	if len(c.onObserveMetrics) == 0 {
+	if c.onObserveMetrics == nil {
 		return nil
 	}
 
@@ -250,11 +249,11 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 	c.pendingOps.Add(1)
 	startTime := time.Now()
 
-	// Call the callback functions
+	// Call the callback function
 	var err error
-	for _, callback := range c.onObserveMetrics {
+	{
 		callbackErr := errors.CatchPanic(func() error {
-			return callback(ctx)
+			return c.onObserveMetrics(ctx)
 		})
 		if callbackErr != nil {
 			c.LogError(ctx, "Producing metrics",

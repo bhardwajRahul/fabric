@@ -28,31 +28,21 @@ import (
 	"github.com/microbus-io/testarossa"
 )
 
-var signatureKey = strings.Repeat("0123456789abcdef", 4)
-
-func newSignedToken(claims jwt.MapClaims) string {
-	x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	s, _ := x.SignedString([]byte(signatureKey))
-	return s
-}
-
-func validator(ctx context.Context, token string) (actor any, valid bool, err error) {
-	parsedToken, _ := jwt.Parse(token, func(t *jwt.Token) (any, error) {
-		return []byte(signatureKey), nil
-	})
-	return parsedToken.Claims, parsedToken.Valid && parsedToken.Claims.(jwt.MapClaims)["ok"].(bool), nil
-}
+var (
+	bearerTokenSigKey = strings.Repeat("0123456789abcdef", 4)
+	accessTokenSigKey = strings.Repeat("0011223344556677", 4)
+)
 
 func TestAuthorization_Validation(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	mw := Authorization(validator)
+	mw := Authorization(exchange)
 
 	// Valid token
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/page", nil)
-	r.Header.Set("Authorization", "Bearer "+newSignedToken(jwt.MapClaims{"sub": "foo@example.com", "ok": true}))
+	r.Header.Set("Authorization", "Bearer "+mintBearerToken(jwt.MapClaims{"sub": "foo@example.com", "ok": true}))
 
 	received := false
 	err := mw(func(w http.ResponseWriter, r *http.Request) (err error) {
@@ -66,7 +56,7 @@ func TestAuthorization_Validation(t *testing.T) {
 	// Invalid token
 	w = httpx.NewResponseRecorder()
 	r, _ = http.NewRequest("GET", "/page", nil)
-	r.Header.Set("Authorization", "Bearer "+newSignedToken(jwt.MapClaims{"sub": "foo@example.com", "ok": false}))
+	r.Header.Set("Authorization", "Bearer "+mintBearerToken(jwt.MapClaims{"sub": "foo@example.com", "ok": false}))
 
 	received = true
 	err = mw(func(w http.ResponseWriter, r *http.Request) (err error) {
@@ -85,7 +75,7 @@ func TestAuthorization_IncorrectSignature(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "foo@example.com", "ok": true})
 	incorrectlySignedToken, _ := token.SignedString([]byte("incorrect-signature"))
 
-	mw := Authorization(validator)
+	mw := Authorization(exchange)
 
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/page", nil)
@@ -110,14 +100,14 @@ func TestAuthorization_Order(t *testing.T) {
 		By  string `json:"by"`
 	}{}
 
-	mw := Authorization(validator)
+	mw := Authorization(exchange)
 
 	// Authorization cookie
 	w := httpx.NewResponseRecorder()
 	r, _ := http.NewRequest("GET", "/page", nil)
 	r.AddCookie(&http.Cookie{
 		Name:     "Authorization",
-		Value:    newSignedToken(jwt.MapClaims{"sub": "foo@example.com", "by": "cookie", "ok": true}),
+		Value:    mintBearerToken(jwt.MapClaims{"sub": "foo@example.com", "by": "cookie", "ok": true}),
 		MaxAge:   60,
 		HttpOnly: true,
 		Secure:   false,
@@ -134,7 +124,7 @@ func TestAuthorization_Order(t *testing.T) {
 
 	// Authorization: Bearer
 	w = httpx.NewResponseRecorder()
-	r.Header.Set("Authorization", "Bearer "+newSignedToken(jwt.MapClaims{"sub": "foo@example.com", "by": "header", "ok": true}))
+	r.Header.Set("Authorization", "Bearer "+mintBearerToken(jwt.MapClaims{"sub": "foo@example.com", "by": "header", "ok": true}))
 	assert.Contains(r.Header.Get("Cookie"), "Authorization") // Cookie is still there but overridden by header
 	err = mw(func(w http.ResponseWriter, r *http.Request) (err error) {
 		frame.Of(r).ParseActor(&actor)
@@ -150,9 +140,9 @@ func TestAuthorization_MalformedJWT(t *testing.T) {
 	assert := testarossa.For(t)
 
 	validatorCalled := false
-	mw := Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
+	mw := Authorization(func(ctx context.Context, token string) (actorJWT string, err error) {
 		validatorCalled = true
-		return nil, false, nil
+		return "", nil
 	})
 
 	// AuthToken header
@@ -176,9 +166,9 @@ func TestAuthorization_NoJWT(t *testing.T) {
 	assert := testarossa.For(t)
 
 	validatorCalled := false
-	mw := Authorization(func(ctx context.Context, token string) (actor any, valid bool, err error) {
+	mw := Authorization(func(ctx context.Context, token string) (actorJWT string, err error) {
 		validatorCalled = true
-		return nil, false, nil
+		return "", nil
 	})
 
 	// AuthToken header
@@ -194,4 +184,33 @@ func TestAuthorization_NoJWT(t *testing.T) {
 		assert.False(received)
 		assert.False(validatorCalled)
 	}
+}
+
+func mintBearerToken(claims jwt.MapClaims) string {
+	x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, _ := x.SignedString([]byte(bearerTokenSigKey))
+	return s
+}
+
+func mintAccessToken(claims jwt.MapClaims) string {
+	x := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, _ := x.SignedString([]byte(accessTokenSigKey))
+	return s
+}
+
+func exchange(ctx context.Context, bearerToken string) (accessToken string, err error) {
+	parsedToken, _ := jwt.Parse(bearerToken, func(t *jwt.Token) (any, error) {
+		return []byte(bearerTokenSigKey), nil
+	})
+	if parsedToken == nil || !parsedToken.Valid {
+		return "", nil
+	}
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", nil
+	}
+	if okVal, exists := claims["ok"]; !exists || !okVal.(bool) {
+		return "", nil
+	}
+	return mintAccessToken(claims), nil
 }

@@ -47,7 +47,7 @@ The definition of the object's struct is in `object.go` in the API directory of 
 
 ### Object Key Definition
 
-The object's key is defined in `objectkey.go` in the API directory of the microservice. Internally, the key is represented an a numerical ID.
+The object's key is defined in `objectkey.go` in the API directory of the microservice. Internally, the key is represented as a numerical ID.
 
 By default, the key is encrypted when marshaled to JSON and decrypted when unmarshaled so as not to expose the table's cardinality to external users. Set `cipherEnabled` to `false` to disable the encryption. Do not alter the cipher key nor its nonce.
 
@@ -86,7 +86,7 @@ Prefer bulk operations over looping with singular operations to avoid the 1+N qu
 
 ### Migration Scripts
 
-SQL CRUD microservices use migration scripts to prepare the schema of the database table into which the object is stored. The migrations scripts are executed sequentially to enable evolution of the schema over time. A migration script will only executes once on a given database instance. The `resources/sql` directory of the microservice contains migrations scripts that are named with a numeric file name such as `1.sql`, `2.sql` etc. that represents their execution order.
+SQL CRUD microservices use migration scripts to prepare the schema of the database table into which the object is stored. The migration scripts are executed sequentially to enable evolution of the schema over time. A migration script only executes once on a given database instance. The `resources/sql` directory of the microservice contains migration scripts that are named with a numeric file name such as `1.sql`, `2.sql` etc. that represents their execution order.
 
 **IMPORTANT**: Create a new migration script whenever you are tasked with making changes to the schema. Do not modify existing scripts unless explicitly told to do so.
 
@@ -109,11 +109,11 @@ ALTER TABLE my_table ALTER COLUMN modified_column NVARCHAR(384) NOT NULL DEFAULT
 
 ### Column Mappings
 
-Column mapping bridge the divide between database columns and Go object fields. Column mapping happens in four case: on create, on store, on read and on query.
+Column mappings bridge the divide between database columns and Go object fields. Column mapping happens in four cases: on create, on store, on read and on query.
 
 `mapColumnsOnInsert` maps column names to their values during the initial `Create` action.
-- All `NOT NULL` columns that do not have a `DEFAULT` value define in the database schema must be mapped to a value
-- Values typically come from the corresponding field of the input `obj` but can be sources elsewhere
+- All `NOT NULL` columns that do not have a `DEFAULT` value defined in the database schema must be mapped to a value
+- Values typically come from the corresponding field of the input `obj` but can be sourced elsewhere
 - Wrap a value in `sequel.Nullify` if the database column is `NULL`-able
 - Wrap a string in `sequel.UnsafeSQL` to set the value using a SQL statement
 - Use `sequel.UnsafeSQL(db.NowUTC())` to set the value to the database's current time in UTC
@@ -132,11 +132,11 @@ columnMapping = map[string]any{
 
 `mapColumnsOnUpdate` maps column names to their values during followup `Store` actions.
 - Only modifiable columns need be mapped to a value
-- Values typically come from the corresponding field of the input `obj` but can be sources elsewhere
+- Values typically come from the corresponding field of the input `obj` but can be sourced elsewhere
 - Wrap a value in `sequel.Nullify` if the database column is `NULL`-able
 - Wrap a string in `sequel.UnsafeSQL` to set the value using a SQL statement
 - Use `sequel.UnsafeSQL(db.NowUTC())` to set the value to the database's current time in UTC
-- When setting a value of `time.Time`, convert it to UTC first.
+- When setting a value of `time.Time`, convert it to UTC first
 - Exclude columns that the actor is not allowed to modify
 
 ```go
@@ -150,7 +150,7 @@ columnMapping = map[string]any{
 
 `mapColumnsOnSelect` maps column names to their object fields during `List` actions.
 - Wrap the object field reference in `sequel.Nullable` if the database column is `NULL`-able but the Go type of the field is not
-- Use `sequel.Bind` to transform and apply the value manually to the object.
+- Use `sequel.Bind` to transform and apply the value manually to the object
 - Exclude columns that the actor is not allowed to read
 
 ```go
@@ -168,7 +168,7 @@ columnMapping = map[string]any{
 
 `prepareWhereClauses` prepares the conditions to add to the `WHERE` clause of the `SELECT` statement based on the input `Query`.
 - Conditions are `AND`ed together so all conditions must be met for a database record to match the query
-- **IMPORTANT**: Add `WHERE` conditions only for non-zero filtering option in the `Query`
+- **IMPORTANT**: Add `WHERE` conditions only for non-zero filtering options in the `Query`
 - Exclude columns that the actor is not allowed to filter on
 
 ```go
@@ -186,11 +186,13 @@ if !query.UpdatedAtLT.IsZero() {
 }
 ```
 
-Column mapping and query conditions can be made to be dependent on the claims associated with the actor of the request. For example, an admin may be allowed to read additional columns from the `user` table, or a guest user may be applies a `WHERE` condition in order to restrict their view of the results.
+Column mapping and query conditions can be made to be dependent on the claims associated with the actor of the request. For example, an admin may be allowed to read additional columns from the `user` table, or a guest user may apply a `WHERE` condition in order to restrict their view of the results.
 
 ```go
-var actor Actor
-frame.Of(ctx).ParseActor(&actor)
+actor, err := act.Of(ctx)
+if err != nil {
+	return errors.Trace(err)
+}
 if actor.IsAdmin() {
 	// ...
 } else {
@@ -296,7 +298,7 @@ defer func() {
 
 ### Configuring the Datasource Name for Testing
 
-Running tests require the microservices under test to be able to connect to the SQL database. The data source name is configured in `config.local.yaml` at the root of the project. If tests fail to connect to the database, prompt the user to update `config.local.yaml` with the appropriate credentials.
+Running tests requires the microservices under test to be able to connect to the SQL database. The data source name is configured in `config.local.yaml` at the root of the project. If tests fail to connect to the database, prompt the user to update `config.local.yaml` with the appropriate credentials.
 
 ```yaml
 all:

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,25 +19,17 @@ package middleware
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/microbus-io/fabric/connector"
 )
 
 // Timeout returns a middleware that applies a timeout to the request.
-// The value of the Request-Timeout header is used if provided in the request. Otherwise, the time budget is used.
 func Timeout(budget func() time.Duration) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) (err error) {
 			ctx := r.Context()
 			timeBudget := budget()
-			if r.Header.Get("Request-Timeout") != "" {
-				headerTimeoutSecs, err := strconv.Atoi(r.Header.Get("Request-Timeout"))
-				if err == nil && headerTimeoutSecs > 0 {
-					timeBudget = time.Duration(headerTimeoutSecs) * time.Second
-				}
-			}
 			if timeBudget > 0 {
 				var cancel context.CancelFunc
 				delegateCtx, cancel := context.WithTimeout(ctx, timeBudget)

@@ -1,6 +1,6 @@
 # Control Subscriptions
 
-All microservices on the `Microbus` subscribe to handle control messages on the reserved port `:888` in addition to any subscriptions they create for their own use case.
+All microservices on the Microbus subscribe to handle control messages on the reserved port `:888` in addition to any subscriptions they create for their own use case.
 
 ### Ping
 

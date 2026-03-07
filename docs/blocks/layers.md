@@ -1,12 +1,12 @@
 # Architecture
 
-`Microbus` solutions can be seen as comprising of 5 layers:
+Microbus solutions can be seen as comprising of 5 layers:
 
 - At the bottom of the stack is a curated selection of OSS technologies that are utilized and abstracted away by the next layer, the `Connector`
 - The [`Connector`](../structure/connector.md) construct is the base class from which all microservices are derived. It provides a consistent API to most of the building blocks that are required for a microservice to operate and mesh with other microservices. Quite often they rely on OSS under the hood
 - [Coding agents](../blocks/coding-agents.md) such as Claude generate the code that is specific to the semantics of each individual microservice
 - The core microservices and the solution microservices are built using the coding agent
-- Microservices are bundled together into [applications](../structure/application.md) according to the desired [topology](../blocks/topology.md)
+- Microservices are co-located inside [applications](../structure/application.md) according to the desired [topology](../blocks/topology.md)
 
 <p></p>
 <img src="./layers-1.drawio.svg">
@@ -14,7 +14,7 @@
 
 ## Applications
 
-Microservices in `Microbus` are not by themselves runnable, rather they are bundled in applications that manage their lifecycle.
+Microservices in Microbus are not by themselves runnable, rather they are bundled in applications that manage their lifecycle.
 
 **Adaptable topology** - Applications can contain any number of microservices, making them a flexible vehicle in the construction of the production [topology](../blocks/topology.md). A small solution might run all its microservices in a single application, while a larger one might split them across multiple applications deployed to different machines or availability zones. The topology can evolve over time without changes to the microservices themselves.
 
@@ -28,11 +28,11 @@ These are the microservices that implement the business logic of your solution. 
 
 ## Core Microservices
 
-`Microbus` comes bundled with a few [core microservices](../structure/coreservices.md) that implement common functionality required by most if not all `Microbus` applications.
+Microbus comes bundled with a few [core microservices](../structure/coreservices.md) that implement common functionality required by most if not all Microbus applications.
 
-**HTTP ingress** - The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP-based clients and microservices running on `Microbus`.
+**HTTP ingress** - The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP-based clients and microservices running on Microbus.
 
-**HTTP egress** - The [HTTP egress proxy](../structure/coreservices-httpegress.md) relays HTTP requests to non-`Microbus` URLs.
+**HTTP egress** - The [HTTP egress proxy](../structure/coreservices-httpegress.md) relays HTTP requests to non-Microbus URLs.
 
 **SMTP ingress** - The [SMTP ingress](../structure/coreservices-smtpingress.md) microservice captures incoming emails and transforms them to actionable events.
 
@@ -42,13 +42,15 @@ These are the microservices that implement the business logic of your solution. 
 
 **OpenAPI portal** - The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI documents of each and every microservices.
 
-**Token issuer** - The [token issuer](../structure/coreservices-tokenissuer.md) microservice issues and validates tokens in the form of JWTs. Tokens enable the authentication of actors and the authorization of their requests based on a set of claims.
+**Bearer token** - The [bearer token](../structure/coreservices-bearertoken.md) microservice issues long-lived JWTs for external actor authentication. These tokens are signed with PEM-configured Ed25519 keys and are typically returned to end users after successful authentication.
+
+**Access token** - The [access token](../structure/coreservices-accesstoken.md) microservice issues short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation. On each incoming request, the HTTP ingress proxy exchanges the external bearer token for an internal access token, enriching it with additional claims via configurable transformers. The access token's claims serve as the basis for authorization decisions throughout the call stack.
 
 ## Coding Agents
 
-[Coding agents](../blocks/coding-agents.md) are fully empowered in `Microbus` to produce code rapidly (RAD). Coding agents generate boilerplate code, business logic, tests and documentation.
+[Coding agents](../blocks/coding-agents.md) are fully empowered in Microbus to produce code rapidly (RAD). Coding agents generate boilerplate code, business logic, tests and documentation.
 
-**Agent rules** - The [rules file](../blocks/agent-rules.md) `.claude/rules/microbus.md` teaches the agent the conventions and patterns of the `Microbus` framework. It covers project structure, naming conventions, error handling, logging, and the idiomatic ways of using the `Connector` API. This file is updated with each release of `Microbus` and should not be edited by hand.
+**Agent rules** - The [rules file](../blocks/agent-rules.md) `.claude/rules/microbus.md` teaches the agent the conventions and patterns of the Microbus framework. It covers project structure, naming conventions, error handling, logging, and the idiomatic ways of using the `Connector` API. This file is updated with each release of Microbus and should not be edited by hand.
 
 **Agent skills** - The `.claude/skills/` directory contains a collection of [predefined workflows](../blocks/agent-skills.md) that guide the agent step by step when adding, removing or modifying features of a microservice. Skills make the agent's behavior predictable and its output consistent across microservices and developers.
 
@@ -64,7 +66,7 @@ These are the microservices that implement the business logic of your solution. 
 
 **Automatic documentation** - As a coding agent works on a microservice, it automatically maintains [documentation](../blocks/auto-doc.md) alongside the code. This includes the `manifest.yaml` that catalogs the microservice's [features](../blocks/features.md), the `PROMPTS.md` audit trail, and the `AGENTS.md` design record. Documentation stays in sync with the implementation because both are produced by the same agent in the same pass.
 
-**Uniform code structure** - A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of the way coding agents work in `Microbus`. A familiar code structure helps agents get oriented quickly.
+**Uniform code structure** - A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of the way coding agents work in Microbus. A familiar code structure helps agents get oriented quickly.
 
 **New project bootstrapping** - The [bootstrapping of new projects](../blocks/project-bootstrapping.md) is automated.
 
@@ -74,7 +76,7 @@ The [`Connector`](../structure/connector.md) is the base class of all microservi
 
 ### Transport
 
-`Microbus` uses a messaging bus for the transport layer of service-to-service communications.
+Microbus uses a messaging bus for the transport layer of service-to-service communications.
 
 **Unicast 1:1** - [Unicast request/response](../blocks/unicast.md) is an emulation of the familiar synchronous 1:1 request/response pattern of HTTP over the asynchronous messaging pattern of the underlying transport bus.
 
@@ -106,7 +108,7 @@ The [`Connector`](../structure/connector.md) is the base class of all microservi
 
 ### General
 
-**Configuration** - [Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In `Microbus`, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
+**Configuration** - [Configuration](../blocks/configuration.md) properties are common means to initialize and customize microservices without the need for code changes. In Microbus, microservices define their configuration properties but obtain the runtime values of those properties from the [configurator](../structure/coreservices-configurator.md).
 
 **Authorization** - Microservices may stipulate that incoming requests be authenticated and authorized. Requirements are expressed as boolean expressions over the JWT claims of the actor associated with the request. Requests that do not satisfy the [authorization](../blocks/authorization.md) requirements are denied.
 
@@ -122,12 +124,12 @@ The [`Connector`](../structure/connector.md) is the base class of all microservi
 
 ## OSS
 
-**NATS** - [NATS](https://www.nats.io) sits at the core of `Microbus` and makes much of its magic possible. NATS is a full-mesh, highly-available, lighting-fast, real-time, at-most-once, messaging bus that supports dynamic subscriptions. It enables request/response, publish/subscribe, load-balancing and dynamic discovery.
+**NATS** - [NATS](https://www.nats.io) sits at the core of Microbus and makes much of its magic possible. NATS is a full-mesh, highly-available, lighting-fast, real-time, at-most-once, messaging bus that supports dynamic subscriptions. It enables request/response, publish/subscribe, load-balancing and dynamic discovery.
 
 **OpenTelemetry** - [OpenTelemetry](https://opentelemetry.io) is a standard for the collection of metrics, distributed tracing and logs.
 
 **Grafana** - [Grafana](https://grafana.com)'s LGTM stack is a bundle of applications (Loki, Grafana, Tempo, Mimir) that collect and visualize OpenTelemetry.
 
-**OpenAPI** - [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on `Microbus` are publicly described with OpenAPI.
+**OpenAPI** - [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on Microbus are publicly described with OpenAPI.
 
 **JWT** - [JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.

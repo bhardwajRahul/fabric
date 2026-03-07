@@ -1,6 +1,6 @@
 # Third-Party OSS
 
-The following open source software (OSS) is used or referenced by the `Microbus` framework.
+The following open source software (OSS) is used or referenced by the Microbus framework.
 
 | Name | License | Copyright |
 |------|---------|-----------|

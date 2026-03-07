@@ -20,7 +20,7 @@ Post-change housekeeping:
 
 #### Step 1: Update Manifest
 
-Update `manifest.yaml` to reflect the changes. Ensure that all sections accurately describe the current state of the microservice's features, including `general`, `functions`, `webs`, `configs`, `tickers`, `metrics`, `outboundEvents`, `inboundEvents`, and `downstream`.
+Update `manifest.yaml` to reflect the changes. Ensure that all sections accurately describe the current state of the microservice's features, including `general`, `functions`, `webs`, `configs`, `tickers`, `metrics`, `outboundEvents`, `inboundEvents`, and `downstream`. Set `modifiedAt` under `general` to the current time in RFC 3339 format.
 
 #### Step 2: Document the Microservice
 
@@ -34,9 +34,11 @@ Increment the `Version` const in `intermediate.go`.
 
 #### Step 4: Prompt History
 
+Skip this step if the microservice's directory does not include `PROMPTS.md`.
+
 Update `PROMPTS.md` in the microservice's directory with the prompt that motivated this change. Rephrase the language to include context that was not made explicit in the original prompt. The intent is to maintain an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.
 
-Save each prompt under a `## Title`.
+Append the prompt as follows.
 
 ```md
 ## Prompt title

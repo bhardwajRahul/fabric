@@ -1,12 +1,12 @@
 # RPC Over JSON vs REST API Styles
 
-Two of the most common styles of web API design are RPC over JSON and REST. The choice between them is a matter of preference rather than functional and is akin to the choice between [tabs and spaces](https://www.youtube.com/watch?v=SsoOG6ZeyUI). Luckily, with `Microbus` you don't have to choose: you can have both.
+Two of the most common styles of web API design are RPC over JSON and REST. The choice between them is a matter of preference rather than functional and is akin to the choice between [tabs and spaces](https://www.youtube.com/watch?v=SsoOG6ZeyUI). Luckily, with Microbus you don't have to choose: you can have both.
 
 ### RPC Over JSON
 
-RPC is an acronym of remote procedure call and indeed this API style comes from a backend-centric perspective where each operation on the backend is a procedure. Endpoints on the backend are mapped to a URL path that reflects their name. Input arguments are passed as JSON in the body of the HTTP request or as query arguments. Output arguments are returned in the body of the HTTP response. In `Microbus`, RPC is the default API style exactly because it is a consistent and unambiguous way to map the HTTP request to the underlying Go implementation of the endpoint.
+RPC is an acronym of remote procedure call and indeed this API style comes from a backend-centric perspective where each operation on the backend is a procedure. Endpoints on the backend are mapped to a URL path that reflects their name. Input arguments are passed as JSON in the body of the HTTP request or as query arguments. Output arguments are returned in the body of the HTTP response. In Microbus, RPC is the default API style exactly because it is a consistent and unambiguous way to map the HTTP request to the underlying Go implementation of the endpoint.
 
-Consider a simple example of an RPC `Add(x int, y int) (sum int)`. `Microbus` automatically generates marshaling and unmarshaling code that can process the following `GET` or `POST` requests:
+Consider a simple example of an RPC `Add(x int, y int) (sum int)`. Microbus automatically generates marshaling and unmarshaling code that can process the following `GET` or `POST` requests:
 
 In a `GET` request, input arguments are read from the query arguments.
 

@@ -1,6 +1,6 @@
 # Authorization
 
-Multiple components work together to form the authentication and authorization flows in `Microbus`.
+Multiple components work together to form the authentication and authorization flows in Microbus.
 
 <img src="./authorization-1.drawio.svg">
 
@@ -8,7 +8,7 @@ Multiple components work together to form the authentication and authorization f
 
 To get started, the client submits credentials to an authenticator microservice. In the simplest form, credentials are a username and a password obtained from the user via a web form. If the credentials are valid, a [JWT](https://jwt.io/introduction) token is issued and returned back to the client.
 
-`Microbus` does not include authenticators out of the box. The [login example](../structure/examples-login.md) microservice demonstrates how such a microservice may look like when the client is a browser. A `Set-Cookie` response header returns the JWT to the browser, which in turn sends it back with all consecutive requests in a `Cookie` request header. The cookie is named `Authorization` to allow the authorization [middleware](../structure/coreservices-httpingress-middleware.md) to easily locate it.
+Microbus does not include authenticators out of the box. The [login example](../structure/examples-login.md) microservice demonstrates how such a microservice may look like when the client is a browser. A `Set-Cookie` response header returns the JWT to the browser, which in turn sends it back with all consecutive requests in a `Cookie` request header. The cookie is named `Authorization` to allow the authorization [middleware](../structure/coreservices-httpingress-middleware.md) to easily locate it.
 
 ### Flow 2: Authorization
 

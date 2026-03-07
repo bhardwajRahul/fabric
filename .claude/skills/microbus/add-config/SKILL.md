@@ -24,7 +24,8 @@ Creating or modifying a configuration property:
 - [ ] Step 9: Use the config
 - [ ] Step 10: Extend the mock
 - [ ] Step 11: Test the callback
-- [ ] Step 12: Housekeeping
+- [ ] Step 12: Add to config file
+- [ ] Step 13: Housekeeping
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -341,6 +342,19 @@ t.Run("test_case_name", func(t *testing.T) {
 
 Do not remove the `HINT` comments.
 
-#### Step 12: Housekeeping
+#### Step 12: Add to Config File
+
+Add a commented-out entry for the new configuration property to the appropriate config file at the root of the project, nested under the hostname of the microservice. Use the default value if one was defined, or leave it blank otherwise.
+
+If the config is secret, add it to `config.local.yaml`. If the config is not secret, add it to `config.yaml`. Create the file if it does not exist.
+
+If a section for the hostname already exists in the file, add the new property to that section. Otherwise, create a new section.
+
+```yaml
+my.service.hostname:
+  # MyConfig: default
+```
+
+#### Step 13: Housekeeping
 
 Follow the `microbus/housekeeping` skill.

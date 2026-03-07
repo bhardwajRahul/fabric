@@ -26,7 +26,9 @@ import (
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer"
+	"github.com/microbus-io/fabric/coreservices/accesstoken"
+	"github.com/microbus-io/fabric/coreservices/accesstoken/accesstokenapi"
+	"github.com/microbus-io/fabric/coreservices/bearertoken"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -47,7 +49,8 @@ func TestLogin_Login(t *testing.T) { // MARKER: Login
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 	)
@@ -118,7 +121,8 @@ func TestLogin_Logout(t *testing.T) { // MARKER: Logout
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 	)
@@ -132,7 +136,9 @@ func TestLogin_Logout(t *testing.T) { // MARKER: Logout
 			Subject: "someone@example.com",
 			Roles:   []string{"m", "u"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Logout(ctx, "GET", "", nil)
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		res, err := client.WithOptions(pub.Token(actorJWT)).Logout(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusTemporaryRedirect) {
 			// Check that the Authorization cookie is cleared
 			cookies := res.Header.Values("Set-Cookie")
@@ -159,7 +165,8 @@ func TestLogin_Welcome(t *testing.T) { // MARKER: Welcome
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 	)
@@ -173,7 +180,9 @@ func TestLogin_Welcome(t *testing.T) { // MARKER: Welcome
 			Subject: "someone@example.com",
 			Roles:   []string{"m", "u"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", nil)
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		res, err := client.WithOptions(pub.Token(actorJWT)).Welcome(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -190,7 +199,9 @@ func TestLogin_Welcome(t *testing.T) { // MARKER: Welcome
 			Subject: "someone@example.com",
 			Roles:   []string{"a"},
 		}
-		res, err := client.WithOptions(pub.Actor(actor)).Welcome(ctx, "GET", "", nil)
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		res, err := client.WithOptions(pub.Token(actorJWT)).Welcome(ctx, "GET", "", nil)
 		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
@@ -215,7 +226,8 @@ func TestLogin_AdminOnly(t *testing.T) { // MARKER: AdminOnly
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 	)
@@ -237,7 +249,9 @@ func TestLogin_AdminOnly(t *testing.T) { // MARKER: AdminOnly
 			Subject: "someone@example.com",
 			Roles:   []string{"m", "u"},
 		}
-		_, err := client.WithOptions(pub.Actor(actor)).AdminOnly(ctx, "")
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		_, err = client.WithOptions(pub.Token(actorJWT)).AdminOnly(ctx, "")
 		assert.Error(err)
 	})
 
@@ -249,7 +263,9 @@ func TestLogin_AdminOnly(t *testing.T) { // MARKER: AdminOnly
 			Subject: "someone@example.com",
 			Roles:   []string{"a"},
 		}
-		_, err := client.WithOptions(pub.Actor(actor)).AdminOnly(ctx, "")
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		_, err = client.WithOptions(pub.Token(actorJWT)).AdminOnly(ctx, "")
 		assert.NoError(err)
 	})
 }
@@ -269,7 +285,8 @@ func TestLogin_ManagerOnly(t *testing.T) { // MARKER: ManagerOnly
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 	)
@@ -291,7 +308,9 @@ func TestLogin_ManagerOnly(t *testing.T) { // MARKER: ManagerOnly
 			Subject: "someone@example.com",
 			Roles:   []string{"a"},
 		}
-		_, err := client.WithOptions(pub.Actor(actor)).ManagerOnly(ctx, "")
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		_, err = client.WithOptions(pub.Token(actorJWT)).ManagerOnly(ctx, "")
 		assert.Error(err)
 	})
 
@@ -303,7 +322,9 @@ func TestLogin_ManagerOnly(t *testing.T) { // MARKER: ManagerOnly
 			Subject: "someone@example.com",
 			Roles:   []string{"m"},
 		}
-		_, err := client.WithOptions(pub.Actor(actor)).ManagerOnly(ctx, "")
+		actorJWT, err := accesstokenapi.NewClient(tester).Mint(ctx, actor)
+		assert.NoError(err)
+		_, err = client.WithOptions(pub.Token(actorJWT)).ManagerOnly(ctx, "")
 		assert.NoError(err)
 	})
 }

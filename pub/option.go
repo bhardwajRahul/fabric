@@ -18,6 +18,7 @@ package pub
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -314,20 +315,43 @@ func Noop() Option {
 	}
 }
 
-// Actor sets the actor associated with the request. It overwrites any previously set value.
-func Actor(actor any) Option {
+// Actor sets the actor of the request as an unsigned JWT with the given claims.
+// The claims object is marshaled to JSON and used as the JWT payload.
+// A nil claims object clears the actor.
+// Unsigned tokens are only accepted in the TESTING deployment.
+// Use [Token] with a signed JWT from the access token service in production code.
+func Actor(claims any) Option {
 	return func(req *Request) error {
-		buf, err := json.Marshal(actor)
+		if claims == nil {
+			req.Header.Del(frame.HeaderActor)
+			return nil
+		}
+		b, err := json.Marshal(claims)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		buf = bytes.TrimSpace(buf)
-		value := utils.UnsafeBytesToString(buf)
-		if value != "" {
-			req.Header.Set(frame.HeaderActor, value)
-		} else {
-			req.Header.Del(frame.HeaderActor)
+		if !bytes.HasPrefix(b, []byte("{")) || !bytes.HasSuffix(b, []byte("}")) {
+			return errors.New("claims must marshal to a JSON object")
 		}
+		header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+		payload := base64.RawURLEncoding.EncodeToString(b)
+		req.Header.Set(frame.HeaderActor, header+"."+payload+".")
+		return nil
+	}
+}
+
+// Token sets the JWT associated with the actor of the request. It overwrites any previously set value.
+// The token must be a signed JWT. An empty string clears the token.
+func Token(actorJWT string) Option {
+	return func(req *Request) error {
+		if actorJWT == "" {
+			req.Header.Del(frame.HeaderActor)
+			return nil
+		}
+		if !utils.LooksLikeJWT(actorJWT) {
+			return errors.New("actor must be a signed JWT")
+		}
+		req.Header.Set(frame.HeaderActor, actorJWT)
 		return nil
 	}
 }

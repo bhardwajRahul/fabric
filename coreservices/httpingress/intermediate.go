@@ -117,10 +117,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// Configs
 	svc.DefineConfig( // MARKER: TimeBudget
 		"TimeBudget",
-		cfg.Description(`TimeBudget specifies the timeout for handling a request, after it has been read.
-A value of 0 or less indicates no time budget.`),
+		cfg.Description(`TimeBudget specifies the timeout for handling a request, after it has been read.`),
 		cfg.DefaultValue(`20s`),
-		cfg.Validation(`dur [0s,]`),
+		cfg.Validation(`dur [1s,15m]`),
 	)
 	svc.DefineConfig( // MARKER: Ports
 		"Ports",
@@ -277,7 +276,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 

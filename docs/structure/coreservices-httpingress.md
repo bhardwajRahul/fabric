@@ -1,13 +1,13 @@
 # Package `coreservices/httpingress`
 
-Think of `Microbus` as a closed garden that requires a special key to access. In order to send and receive messages on `Microbus`, it's necessary to communicate over NATS using a specific protocol. This is basically what the `Connector` facilitates for service-to-service calls.
+Think of Microbus as a closed garden that requires a special key to access. In order to send and receive messages on Microbus, it's necessary to communicate over NATS using a specific protocol. This is basically what the `Connector` facilitates for service-to-service calls.
 
-Practically all solutions require interaction with a source that is outside `Microbus`. The most common scenario is perhaps a request generated from a web browser to a public API endpoint. In this case, something needs to bridge the gap between the incoming real HTTP request and the HTTP messages that travel over `Microbus`. This is where the HTTP ingress proxy comes into play.
+Practically all solutions require interaction with a source that is outside Microbus. The most common scenario is perhaps a request generated from a web browser to a public API endpoint. In this case, something needs to bridge the gap between the incoming real HTTP request and the HTTP messages that travel over Microbus. This is where the HTTP ingress proxy comes into play.
 
 <img src="./coreservices-httpingress-1.drawio.svg">
 <p></p>
 
-On one end, the HTTP ingress proxy listens on port `:8080` for real HTTP requests; on the other end it is connected to NATS. The ingress proxy converts real requests into requests on the bus; and on the flip side, converts responses from the bus to real responses. Because the bus messages in `Microbus` are formatted themselves as HTTP messages, this conversion is trivial, with minor adjustments:
+On one end, the HTTP ingress proxy listens on port `:8080` for real HTTP requests; on the other end it is connected to NATS. The ingress proxy converts real requests into requests on the bus; and on the flip side, converts responses from the bus to real responses. Because the bus messages in Microbus are formatted themselves as HTTP messages, this conversion is trivial, with minor adjustments:
 
 - The proxy filters out `Microbus-` control headers from coming in or leaking out
 - The first segment of the path of the real HTTP request is treated as the hostname of the microservice on the bus. So for example, `POST` request `http://localhost:8080/echo.example/echo` is translated to a bus `POST` request `https://echo.example/echo` which is then mapped to the NATS subject `microbus.443.example.echo.|.POST.echo`.
@@ -55,7 +55,6 @@ Four config properties are used to safeguard against long requests:
 
 The HTTP ingress proxy respects the following incoming headers:
 
-- `Request-Timeout` can be used to override the default time-budget of the request
 - `Accept-Encoding` with `br`, `deflate` or `gzip` can be used to compress the response
 - `X-Forwarded-Host`, `X-Forwarded-Port`, `X-Forwarded-Proto` and `X-Forwarded-Prefix` are augmented with the ingress proxy's information 
 - `Origin` may cause a request to be blocked

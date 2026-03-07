@@ -1,6 +1,6 @@
 # Automatic Documentation
 
-`Microbus` keeps documentation in sync with code by making documentation updates a required step in every coding agent skill workflow. When an agent adds, modifies or removes a feature from a microservice, the skill's checklist includes steps to update the relevant documentation files. This means documentation is never an afterthought — it's part of the definition of done.
+Microbus keeps documentation in sync with code by making documentation updates a required step in every coding agent skill workflow. When an agent adds, modifies or removes a feature from a microservice, the skill's checklist includes steps to update the relevant documentation files. This means documentation is never an afterthought — it's part of the definition of done.
 
 Each microservice maintains three documentation files:
 

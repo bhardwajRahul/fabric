@@ -22,14 +22,16 @@ general:
 downstream:
   - hostname: metrics.core
     package: github.com/microbus-io/fabric/coreservices/metrics
-  - hostname: tokenissuer.core
-    package: github.com/microbus-io/fabric/coreservices/tokenissuer
+  - hostname: bearer.token.core
+    package: github.com/microbus-io/fabric/coreservices/bearertoken
+  - hostname: access.token.core
+    package: github.com/microbus-io/fabric/coreservices/accesstoken
 
 configs:
   TimeBudget:
-    description: TimeBudget specifies the timeout for handling a request, after it has been read. A value of 0 or less indicates no time budget.
+    description: TimeBudget specifies the timeout for handling a request, after it has been read.
     signature: TimeBudget() (budget time.Duration)
-    validation: dur [0s,]
+    validation: dur [1s,15m]
     default: 20s
   Ports:
     description: Ports is a comma-separated list of HTTP ports on which to listen for requests.

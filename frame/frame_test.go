@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,14 +18,36 @@ package frame
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/testarossa"
 )
+
+// signTestJWT signs the given claims into a JWT using a throwaway Ed25519 key.
+func signTestJWT(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwtClaims := jwt.MapClaims{}
+	for k, v := range claims {
+		jwtClaims[k] = v
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwtClaims)
+	signed, err := token.SignedString(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
+}
 
 func TestFrame_Of(t *testing.T) {
 	t.Parallel()
@@ -179,10 +201,12 @@ func TestFrame_ParseActor(t *testing.T) {
 	// Map
 	m1 := map[string]any{"iss": "my_issuer", "number": 6.0, "string": "example", "array": []any{"x", "y", "z"}}
 	var m2 map[string]any
-	f.SetActor(m1)
+	f.SetToken(signTestJWT(t, m1))
 	ok, err := f.ParseActor(&m2)
 	if assert.NoError(err) && assert.True(ok) {
-		assert.Equal(m1, m2)
+		assert.Equal("my_issuer", m2["iss"])
+		assert.Equal(6.0, m2["number"])
+		assert.Equal("example", m2["string"])
 	}
 
 	// Object
@@ -192,21 +216,31 @@ func TestFrame_ParseActor(t *testing.T) {
 		String string   `json:"string"`
 		Array  []string `json:"array"`
 	}
-	o1 := Obj{Iss: "my_issuer", Number: 6.0, String: "example", Array: []string{"x", "y", "z"}}
 	var o2 Obj
-	f.SetActor(o1)
+	f.SetToken(signTestJWT(t, map[string]any{"iss": "my_issuer", "number": 6.0, "string": "example", "array": []any{"x", "y", "z"}}))
 	ok, err = f.ParseActor(&o2)
 	if assert.NoError(err) && assert.True(ok) {
-		assert.Equal(o1, o2)
+		assert.Equal("my_issuer", o2.Iss)
+		assert.Equal(6.0, o2.Number)
+		assert.Equal("example", o2.String)
+		assert.Equal([]string{"x", "y", "z"}, o2.Array)
 	}
 
 	// Overwrite with another object
-	o1 = Obj{Iss: "another_issuer", Number: 8.0, String: "foo", Array: []string{"a", "b", "c"}}
-	f.SetActor(o1)
+	f.SetToken(signTestJWT(t, map[string]any{"iss": "another_issuer", "number": 8.0, "string": "foo", "array": []any{"a", "b", "c"}}))
 	ok, err = f.ParseActor(&o2)
 	if assert.NoError(err) && assert.True(ok) {
-		assert.Equal(o1, o2)
+		assert.Equal("another_issuer", o2.Iss)
+		assert.Equal(8.0, o2.Number)
+		assert.Equal("foo", o2.String)
+		assert.Equal([]string{"a", "b", "c"}, o2.Array)
 	}
+
+	// Plain JSON is ignored
+	f.Header().Set(HeaderActor, `{"iss":"plain"}`)
+	ok, err = f.ParseActor(&m2)
+	assert.NoError(err)
+	assert.False(ok)
 }
 
 func TestFrame_IfActor(t *testing.T) {
@@ -234,16 +268,13 @@ func TestFrame_IfActor(t *testing.T) {
 	}
 
 	// Set actor
-	f.SetActor(map[string]any{
+	f.SetToken(signTestJWT(t, map[string]any{
 		"iss":        "first_issuer",
 		"sub":        "subject@first.com",
 		"super_user": true,
-		"roles":      "admin, manager, user",
+		"roles":      []string{"admin", "manager", "user"},
 		"groups":     []any{"sales", "engineering"},
-	})
-
-	// Should trim newline
-	assert.NotContains(f.Header().Get(HeaderActor), "\n")
+	}))
 
 	// True
 	ok, err = f.IfActor("iss=='first_issuer'")
@@ -258,7 +289,7 @@ func TestFrame_IfActor(t *testing.T) {
 	if assert.NoError(err) {
 		assert.True(ok)
 	}
-	ok, err = f.IfActor("roles=~'manager' && sub!~'example.com'")
+	ok, err = f.IfActor("roles.manager && sub!~'example.com'")
 	if assert.NoError(err) {
 		assert.True(ok)
 	}
@@ -272,7 +303,7 @@ func TestFrame_IfActor(t *testing.T) {
 	if assert.NoError(err) {
 		assert.False(ok)
 	}
-	ok, err = f.IfActor("groups.hr || roles=~'director'")
+	ok, err = f.IfActor("groups.hr || roles.director")
 	if assert.NoError(err) {
 		assert.False(ok)
 	}

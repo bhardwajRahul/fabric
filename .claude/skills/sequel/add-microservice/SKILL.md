@@ -20,7 +20,7 @@ Creating a new microservice:
 - [ ] Step 3: Copy Template Files
 - [ ] Step 4: Find and Replace
 - [ ] Step 5: Add to Main App
-- [ ] Step 6: Update Local Configuration
+- [ ] Step 6: Add to config file
 - [ ] Step 7: Housekeeping
 - [ ] Step 8: Propose Object Fields
 ```
@@ -29,7 +29,7 @@ Creating a new microservice:
 
 Determine the singular noun representing the object being persisted, for example, "User", "Notebook", "Sales Order", etc. In subsequent steps, `mynoun` is used as a placeholder for the lowercase form of this noun with spaces removed (e.g. `user`, `notebook`, `salesorder`).
 
-Determine the hostname. The hostname is how this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/my-company/myproject/some/path/mynoun`, set the hostname to `mynoun.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname.
+Determine the hostname. The hostname is how this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/mynoun`, set the hostname to `mynoun.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname.
 
 #### Step 2: Create a Directory Structure for the New Microservice
 
@@ -77,7 +77,7 @@ Use `sed` or a similar tool to perform the following **case-sensitive** find-and
 
 Perform these replacements in order:
 
-1. Replace `github.com/microbus-io/fabric/busstop` with the package path of this microservice, e.g. `github.com/my-company/myproject/mynoun`
+1. Replace `github.com/microbus-io/fabric/busstop` with the package path of this microservice, e.g. `github.com/mycompany/myproject/mynoun`
 2. Replace `busstopapi` with the name of the API directory `mynounapi`
 3. Replace `busstop.hostname` with the hostname of this microservice
 4. Replace `BusStop` with the singular noun of this microservice in PascalCase, i.e. `MyNoun`
@@ -97,7 +97,7 @@ Find `main/main.go` relative to the project root. Add the new microservice to th
 ```go
 import (
 	// ...
-	"github.com/my-company/myproject/mynoun"
+	"github.com/mycompany/myproject/mynoun"
 )
 
 func main() {
@@ -110,7 +110,7 @@ func main() {
 }
 ```
 
-#### Step 6: Update Local Configuration
+#### Step 6: Add to Config File
 
 Look for `config.local.yaml` at the root of the project. If the file does not exist, create it.
 

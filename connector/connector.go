@@ -18,6 +18,7 @@ package connector
 
 import (
 	"context"
+	"crypto/ed25519"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -62,8 +63,8 @@ type Connector struct {
 	version     int
 	locality    string
 
-	onStartup       []service.StartupHandler
-	onShutdown      []service.ShutdownHandler
+	onStartup       service.StartupHandler
+	onShutdown      service.ShutdownHandler
 	lifetimeCtx     context.Context
 	ctxCancel       context.CancelFunc
 	pendingOps      atomic.Int32
@@ -76,7 +77,7 @@ type Connector struct {
 	meterProvider     *sdkmetric.MeterProvider
 	meter             metric.Meter
 	metricInstruments map[string]*metricInstrument
-	onObserveMetrics  []service.ObserveMetricsHandler
+	onObserveMetrics  service.ObserveMetricsHandler
 	metricCommonAttrs []attribute.KeyValue
 
 	traceProvider  *sdktrace.TracerProvider
@@ -90,12 +91,14 @@ type Connector struct {
 	plane         string
 	controlSubs   bool
 
-	reqs             utils.SyncMap[string, *transferChan]
-	networkRoundtrip time.Duration
-	maxCallDepth     int
-	maxFragmentSize  int64
-	multicastChanCap int
-	ackTimeout       time.Duration
+	reqs               utils.SyncMap[string, *transferChan]
+	networkRoundtrip   time.Duration
+	defaultTimeBudget  time.Duration
+	maxTimeBudget      time.Duration
+	maxCallDepth       int
+	maxFragmentSize    int64
+	multicastChanCap   int
+	ackTimeout         time.Duration
 
 	requestDefrags  *lru.Cache[string, *httpx.DefragRequest]
 	responseDefrags *lru.Cache[string, *httpx.DefragResponse]
@@ -106,7 +109,7 @@ type Connector struct {
 
 	configs         map[string]*cfg.Config
 	configLock      sync.Mutex
-	onConfigChanged []service.ConfigChangedHandler
+	onConfigChanged service.ConfigChangedHandler
 
 	logger   *slog.Logger
 	logDebug bool
@@ -117,6 +120,9 @@ type Connector struct {
 	distribCache *dlru.Cache
 	resourcesFS  fs.FS
 	stringBundle map[string]map[string]string
+
+	actorKeysLock sync.RWMutex
+	actorKeys     map[string]ed25519.PublicKey
 }
 
 // NewConnector constructs a new Connector.
@@ -125,6 +131,8 @@ func NewConnector() *Connector {
 		id:                strings.ToLower(utils.RandomIdentifier(10)),
 		configs:           map[string]*cfg.Config{},
 		networkRoundtrip:  300 * time.Millisecond,
+		defaultTimeBudget: 20 * time.Second,
+		maxTimeBudget:     15 * time.Minute,
 		ackTimeout:        300 * time.Millisecond,
 		maxCallDepth:      64,
 		tickers:           map[string]*tickerCallback{},

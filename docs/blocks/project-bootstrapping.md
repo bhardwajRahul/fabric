@@ -1,6 +1,6 @@
 # Project Bootstrapping
 
-Make a new directory to hold the files of your `Microbus`-based project.
+Make a new directory to hold the files of your Microbus-based project.
 
 ```shell
 mkdir myproject

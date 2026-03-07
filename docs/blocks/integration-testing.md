@@ -4,9 +4,9 @@ Thorough testing is an important cornerstone of good software. Testing a microse
 
 ## Testing App
 
-`Microbus` takes a different approach and spins up the actual downstream microservices along with the microservice being tested into a single process. The microservices are collected into an isolated [`Application`](../structure/application.md) that is started up for the duration of running the test and shutdown immediately thereafter. The microservices communicate on a random [plane of communications](../blocks/unicast.md), which keeps them isolated from other tests that may run in parallel.
+Microbus takes a different approach and spins up the actual downstream microservices along with the microservice being tested into a single process. The microservices are collected into an isolated [`Application`](../structure/application.md) that is started up for the duration of running the test and shutdown immediately thereafter. The microservices communicate on a random [plane of communications](../blocks/unicast.md), which keeps them isolated from other tests that may run in parallel.
 
-Mocks can be added to the application when it's impractical to run the actual downstream microservice, for example if that microservice is calling a third-party web service such as a payment processor. The preference however should be to include the actual microservice whenever possible and not rely on mocks. Note that in `Microbus` it is the microservices that are mocked rather than the clients. The upstream microservice still sends messages to the downstream, they are just responded to by the mock.
+Mocks can be added to the application when it's impractical to run the actual downstream microservice, for example if that microservice is calling a third-party web service such as a payment processor. The preference however should be to include the actual microservice whenever possible and not rely on mocks. Note that in Microbus it is the microservices that are mocked rather than the clients. The upstream microservice still sends messages to the downstream, they are just responded to by the mock.
 
 <img src="./integration-testing-1.drawio.svg">
 
@@ -246,7 +246,7 @@ func TestPayment_ChargeUser(t *testing.T) {
 
 At times it is desirable to test aspects of the application that have a temporal dimension. For example, an algorithm may place more weight on newer rather than older content, or perhaps generate a daily histogram of time-series data over a period of a year. In such cases, one would want to perform operations as if they occurred at different times, not only now.
 
-`Microbus` enables this scenario by attaching a clock shift (offset) to the context using the `SetClockShift` method of the [frame](../structure/frame.md). The connector's `Now(ctx)` method then takes the clock shift into account before returning the "current" time.
+Microbus enables this scenario by attaching a clock shift (offset) to the context using the `SetClockShift` method of the [frame](../structure/frame.md). The connector's `Now(ctx)` method then takes the clock shift into account before returning the "current" time.
 
 To shift the clock in the test:
 
@@ -292,7 +292,7 @@ Note that shifting the clock will not cause any timeouts or deadlines to be trig
 
 ## Manipulating the Context
 
-`Microbus` uses the `ctx` or `r.Context()` to pass-in adjunct data that does not affect the business logic of the endpoint. The context is extended with a [frame](../structure/frame.md) which internally holds an `http.Header` that includes various `Microbus` key-value pairs. Shifting the clock is one common example, another is the language.
+Microbus uses the `ctx` or `r.Context()` to pass-in adjunct data that does not affect the business logic of the endpoint. The context is extended with a [frame](../structure/frame.md) which internally holds an `http.Header` that includes various Microbus key-value pairs. Shifting the clock is one common example, another is the language.
 
 Use the `frame.Frame` to access and manipulate this header:
 
@@ -312,7 +312,7 @@ A test is generated for each one of the microservice's endpoints. Use them to de
 
 ### Downstream Microservices
 
-Take advantage of `Microbus`'s unique ability to run integration tests inside Go's unit test framework.
+Take advantage of Microbus's unique ability to run integration tests inside Go's unit test framework.
 Include in the testing app all the downstream microservices that the microservice under test is dependent upon. Create tests for any of the assumptions that the microservice under test is making about the behavior of the downstream microservices.
 
 ### Scenarios

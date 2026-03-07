@@ -20,8 +20,8 @@ general:
   frameworkVersion: 1.23.0
 
 downstream:
-  - hostname: tokenissuer.core
-    package: github.com/microbus-io/fabric/coreservices/tokenissuer
+  - hostname: bearer.token.core
+    package: github.com/microbus-io/fabric/coreservices/bearertoken
 
 webs:
   Login:

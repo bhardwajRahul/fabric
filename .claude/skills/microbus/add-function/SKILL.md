@@ -54,12 +54,7 @@ Constraints:
 - The function name must start with an uppercase letter
 - A return argument named `httpStatusCode` must be of type `int`
 - If the return argument `httpResponseBody` is present, no other return argument other than `httpStatusCode` and `error` can be present
-
-There are three magic variable names that are useful when constructing a REST API.
-
-- An input argument `httpRequestBody` has the request's body read directly into it. Other input arguments, if present, are read from the query arguments of the request. Use this pattern when an endpoint accepts a single object that is defined elsewhere. Handling a `PUT` request is an example
-- Similarly, an output argument `httpResponseBody` has the request's body read directly into it. No other output arguments other than `httpStatusCode` can be returned if `httpResponseBody` is present. Use this pattern when an endpoint returns a single object that is defined elsewhere. Handling a `GET` request is an example
-- An output argument named `httpStatusCode` of type `int` will allow the function to set the request's status code. Returning `http.StatusCreated` after a `POST` request is an example
+- The magic HTTP argument names `httpRequestBody`, `httpResponseBody` and `httpStatusCode` are documented in the rules file under "Magic HTTP Arguments"
 
 #### Step 3: Extend the `ToDo` Interface
 

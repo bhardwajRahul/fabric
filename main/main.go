@@ -17,19 +17,22 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/fabric/application"
+	"github.com/microbus-io/fabric/coreservices/accesstoken"
+	"github.com/microbus-io/fabric/coreservices/bearertoken"
 	"github.com/microbus-io/fabric/coreservices/configurator"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/metrics"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer"
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
 	"github.com/microbus-io/fabric/examples/eventsink"
@@ -55,7 +58,20 @@ func main() {
 		httpegress.NewService(),
 		openapiportal.NewService(),
 		metrics.NewService(),
-		tokenissuer.NewService(),
+		bearertoken.NewService().Init(func(svc *bearertoken.Service) (err error) {
+			svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
+				// HINT: Enrich the claims of the external bearer token here
+				return nil
+			})
+			return nil
+		}),
+		accesstoken.NewService().Init(func(svc *accesstoken.Service) (err error) {
+			svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
+				// HINT: Enrich the claims of the internal access token here
+				return nil
+			})
+			return nil
+		}),
 	)
 	app.Add(
 		// Example microservices

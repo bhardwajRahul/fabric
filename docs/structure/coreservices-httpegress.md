@@ -1,6 +1,6 @@
 # Package `coreservices/httpegress`
 
-The HTTP egress proxy is a core microservice that relays HTTP requests to external non-`Microbus` URLs. It is a thin wrapper over the standard `net/http` client but provides the following benefits:
+The HTTP egress proxy is a core microservice that relays HTTP requests to external non-Microbus URLs. It is a thin wrapper over the standard `net/http` client but provides the following benefits:
 
 - Requests are easily mockable in tests
 - The [time budget](../blocks/time-budget.md) is correctly taken into account
@@ -37,4 +37,4 @@ To mock the egress microservice, create `Mock` of it and handle the request manu
 	}
 ```
 
-Note that the single endpoint of the HTTP egress microservice `MakeRequest` is listening on internal `Microbus` [port](../tech/ports.md) `:444` rather than `:443`. That is because port `:443` is open by default to the outside via the [HTTP ingress proxy](../structure/coreservices-httpingress.md).
+Note that the single endpoint of the HTTP egress microservice `MakeRequest` is listening on internal Microbus [port](../tech/ports.md) `:444` rather than `:443`. That is because port `:443` is open by default to the outside via the [HTTP ingress proxy](../structure/coreservices-httpingress.md).

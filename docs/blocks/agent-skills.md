@@ -2,7 +2,7 @@
 
 Skills are predefined workflows in `.claude/skills/` that guide a [coding agent](../blocks/coding-agents.md) step by step through complex multi-step tasks. When a developer's prompt matches a skill, the agent follows that skill's workflow rather than improvising. This makes the agent's behavior predictable and its output consistent across microservices and developers.
 
-Without skills, a coding agent must infer the right approach from general patterns, which leads to inconsistencies: different naming conventions, missing test coverage, forgotten manifest updates, or structural drift between microservices. Skills eliminate that variance by encoding `Microbus`'s conventions into an explicit recipe the agent follows every time.
+Without skills, a coding agent must infer the right approach from general patterns, which leads to inconsistencies: different naming conventions, missing test coverage, forgotten manifest updates, or structural drift between microservices. Skills eliminate that variance by encoding Microbus's conventions into an explicit recipe the agent follows every time.
 
 ### Anatomy of a Skill
 

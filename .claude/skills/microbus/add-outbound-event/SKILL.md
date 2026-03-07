@@ -101,7 +101,7 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 Append the function's payload structs to `myserviceapi/client.go`.
 Use PascalCase for the field names and camelCase for the `json` tag names.
 
-`OnMyEventIn` holds the input arguments of the function, excluding `ctx context.Context`. If an argument is named `httpRequestBody`, set its `json` tag value to `-`.
+`OnMyEventIn` holds the input arguments of the function, excluding `ctx context.Context`.
 
 ```go
 // OnMyEventIn are the input arguments of OnMyEvent.
@@ -111,7 +111,7 @@ type OnMyEventIn struct { // MARKER: OnMyEvent
 }
 ```
 
-`OnMyEventOut` holds the output arguments of the function, excluding `err error`. If an argument is named `httpStatusCode`, set its `json` tag value to `-`.
+`OnMyEventOut` holds the output arguments of the function, excluding `err error`.
 
 ```go
 // OnMyEventOut are the output arguments of OnMyEvent.

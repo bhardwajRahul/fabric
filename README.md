@@ -21,11 +21,11 @@ Your coding agent can already code. Microbus teaches it to master the complex do
 
 **At scale** - Every microservice is independent. Multiple agents work on different services simultaneously without merge conflicts or coordination overhead.
 
-[Get started](#get-started) in minutes. `Microbus` is free and open source under the Apache 2.0 license.
+[Get started](#get-started) in minutes. Microbus is free and open source under the Apache 2.0 license.
 
 ## Why Microbus?
 
-Microservices are the right architecture for most growing systems, but the conventional toolchain is daunting: container orchestration, service meshes, API gateways, distributed tracing pipelines. `Microbus` replaces that complexity with a single framework where microservices communicate over [NATS](https://nats.io) using familiar HTTP semantics.
+Microservices are the right architecture for most growing systems, but the conventional toolchain is daunting: container orchestration, service meshes, API gateways, distributed tracing pipelines. Microbus replaces that complexity with a single framework where microservices communicate over [NATS](https://nats.io) using familiar HTTP semantics.
 
 <img src="./docs/tech/nutshell-1.drawio.svg">
 <p></p>
@@ -49,7 +49,7 @@ Microservices are the right architecture for most growing systems, but the conve
 
 ### Bootstrap
 
-Ask your coding agent to bootstrap `Microbus`:
+Ask your coding agent to bootstrap Microbus:
 
 > HEY CLAUDE...
 >
@@ -75,7 +75,7 @@ Ready to build your own solution? [Bootstrap a new project](./docs/howto/new-pro
 
 ## Build with a Coding Agent
 
-`Microbus` is designed to work hand-in-hand with coding agents like [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The framework's structured project layout and embedded [guidance](./docs/blocks/coding-agents.md#how-agents-are-guided) keep the agent's context window small and its output accurate.
+Microbus is designed to work hand-in-hand with coding agents like [Claude Code](https://docs.anthropic.com/en/docs/claude-code). The framework's structured project layout and embedded [guidance](./docs/blocks/coding-agents.md#how-agents-are-guided) keep the agent's context window small and its output accurate.
 
 Prompt your way to a fully-implemented microservice:
 
@@ -95,7 +95,7 @@ Prompt your way to a fully-implemented microservice:
 
 Six prompts. Under 10 minutes. 819 lines of code at 87% test coverage.
 
-Learn more about how [coding agents](./docs/blocks/coding-agents.md) work within the `Microbus` framework.
+Learn more about how [coding agents](./docs/blocks/coding-agents.md) work within the Microbus framework.
 
 ## Production Ready
 
@@ -193,7 +193,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 - [Ports](./docs/tech/ports.md) - External and internal ports
 - [RPC over JSON vs REST](./docs/tech/rpc-vs-rest.md) - API style comparison
 - [Local development](./docs/tech/local-dev.md) - Running a full solution in your IDE
-- [Package catalog](./docs/structure/packages.md) - Introduction to `Microbus`'s codebase
+- [Package catalog](./docs/structure/packages.md) - Introduction to Microbus's codebase
 
 ### Design
 
@@ -207,7 +207,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 
 We want your feedback. Clone the repo, try things out and let us know what worked for you, what didn't and what you'd like to see improved.
 
-Help us spread the word. Let your peers and the Go community know about `Microbus`.
+Help us spread the word. Let your peers and the Go community know about Microbus.
 
 Give us a Github star.
 
@@ -229,6 +229,6 @@ Corporation? Contact us for sponsorship opportunities.
 
 ## Legal
 
-The `Microbus` framework is the copyrighted work of various contributors. It is licensed to you free of charge by `Microbus LLC` - a Delaware limited liability company formed to hold rights to the combined intellectual property of all contributors - under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
+The Microbus framework is the copyrighted work of various contributors. It is licensed to you free of charge by `Microbus LLC` - a Delaware limited liability company formed to hold rights to the combined intellectual property of all contributors - under the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0).
 
-Refer to the list of [third-party open source software](./ATTRIBUTION.md) for licensing information of components used by the `Microbus` framework.
+Refer to the list of [third-party open source software](./ATTRIBUTION.md) for licensing information of components used by the Microbus framework.

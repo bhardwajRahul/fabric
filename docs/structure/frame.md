@@ -13,7 +13,7 @@ func (svc *Service) WebEndpoint(w http.ResponseWriter, r *http.Request) (err err
 }
 ```
 
-Functional endpoints do not have an HTTP request argument, so `Microbus` places the HTTP requests headers in a context's value instead. The same pattern is used to obtain the frame `Of` the `context.Context`
+Functional endpoints do not have an HTTP request argument, so Microbus places the HTTP requests headers in a context's value instead. The same pattern is used to obtain the frame `Of` the `context.Context`
 
 ```go
 func (svc *Service) FunctionEndpoint(ctx context.Context, x int, y int) (ok bool, err error) {
@@ -88,21 +88,25 @@ func (svc *Service) WebEndpoint(w http.ResponseWriter, r *http.Request) (err err
 	frame.Of(r).ParseActor(&actor)
 	userName := actor.FullName
 
-	// Impersonate another user using WithOptions (recommended)
+	// Mint a signed access token for the impersonated actor
 	impersonatedActor := Actor{
 		Subject: "someone_else@example.com",
 		Name:    "Someone Else",
 		Roles:   "manager",
 	}
+	token, err := accesstokenapi.NewClient(svc).Mint(ctx, impersonatedActor)
+
+	// Impersonate another actor using WithOptions (recommended)
 	err = downstreamapi.NewClient(svc).
-		WithOptions(pub.Actor(impersonatedActor)).
+		WithOptions(pub.Token(token)).
 		OnBehalfOf(ctx)
 	// ...
 
-	// Impersonate another user using a cloned context
+	// Impersonate another actor using a cloned context
 	clonedCtx := frame.CloneContext(r.Context())
-	clonedCtx.SetActor(impersonatedActor)
+	frame.Of(clonedCtx).SetToken(token)
 	err = downstreamapi.NewClient(svc).OnBehalfOf(clonedCtx)
+	// ...
 }
 ```
 

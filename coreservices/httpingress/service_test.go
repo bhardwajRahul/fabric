@@ -36,9 +36,10 @@ import (
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/accesstoken"
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer"
-	"github.com/microbus-io/fabric/coreservices/tokenissuer/tokenissuerapi"
+	"github.com/microbus-io/fabric/coreservices/bearertoken"
+	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
 )
 
 func TestHttpingress_Incoming(t *testing.T) {
@@ -84,7 +85,8 @@ func TestHttpingress_Incoming(t *testing.T) {
 	app := application.New()
 	app.Add(
 		// HINT: Add microservices or mocks required for this test
-		tokenissuer.NewService(),
+		accesstoken.NewService(),
+		bearertoken.NewService(),
 		svc,
 		tester,
 		connector.New("ports").Init(func(c *connector.Connector) (err error) {
@@ -638,9 +640,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 		assert.NoError(err)
 		assert.Equal(0, countActors)
 
-		// Attempt to impersonate issuer (wrong key)
+		// Attempt to impersonate issuer (wrong key, no kid)
 		jwtToken = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"iss": tokenissuerapi.Hostname,
+			"iss": "microbus://" + bearertokenapi.Hostname,
 			"iat": now.Unix(),
 			"exp": now.Add(time.Hour).Unix(),
 		})
@@ -654,14 +656,14 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Do not accept incoming Microbus-Actor header
 		req.Header.Del("Authorization")
-		req.Header.Set(frame.HeaderActor, `{"iss":"`+tokenissuerapi.Hostname+`"}`)
+		req.Header.Set(frame.HeaderActor, `{"iss":"microbus://`+bearertokenapi.Hostname+`"}`)
 
 		_, err = httpClient.Do(req)
 		assert.NoError(err)
 		assert.Equal(0, countActors)
 
 		// Valid as Authorization Bearer header
-		signedJWT, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, nil)
+		signedJWT, err = bearertokenapi.NewClient(tester).Mint(ctx, nil)
 		assert.NoError(err)
 		req.Header.Del(frame.HeaderActor)
 		req.Header.Set("Authorization", "Bearer "+signedJWT)
@@ -709,7 +711,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 
 		// Request with insufficient auth token should be rejected
-		signedToken, err := tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{
+		signedToken, err := bearertokenapi.NewClient(tester).Mint(ctx, map[string]any{
 			"role": "minor",
 		})
 		assert.NoError(err)
@@ -728,7 +730,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 
 		// Request with valid auth token should be served
-		signedToken, err = tokenissuerapi.NewClient(tester).IssueToken(ctx, jwt.MapClaims{
+		signedToken, err = bearertokenapi.NewClient(tester).Mint(ctx, map[string]any{
 			"role": "major",
 		})
 		assert.NoError(err)

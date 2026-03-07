@@ -61,7 +61,7 @@ func (c *Connector) LogDebug(ctx context.Context, msg string, args ...any) {
 	if !span.IsEmpty() {
 		traceID := span.TraceID()
 		if c.deployment != PROD {
-			span.Log("debug", msg, args...)
+			span.LogDebug(msg, args...)
 		}
 		args = append(args, "trace", traceID)
 	}
@@ -90,7 +90,7 @@ func (c *Connector) LogInfo(ctx context.Context, msg string, args ...any) {
 	if !span.IsEmpty() {
 		traceID := span.TraceID()
 		if c.deployment != PROD {
-			span.Log("info", msg, args...)
+			span.LogInfo(msg, args...)
 		}
 		args = append(args, "trace", traceID)
 	}
@@ -119,7 +119,7 @@ func (c *Connector) LogWarn(ctx context.Context, msg string, args ...any) {
 	if !span.IsEmpty() {
 		traceID := span.TraceID()
 		if c.deployment != PROD {
-			span.Log("warn", msg, args...)
+			span.LogWarn(msg, args...)
 		}
 		args = append(args, "trace", traceID)
 	}
@@ -165,7 +165,7 @@ func (c *Connector) LogError(ctx context.Context, msg string, args ...any) {
 	if !span.IsEmpty() {
 		traceID := span.TraceID()
 		if c.deployment != PROD {
-			span.Log("error", msg, args...)
+			span.LogError(msg, args...)
 		}
 		args = append(args, "trace", traceID)
 	}

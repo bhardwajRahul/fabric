@@ -2,7 +2,7 @@
 
 It's a common practice for microservices to define properties whose values can be configured without code changes, often by operators. Connection strings to a database, number of rows to display in a table, a timeout value, are all examples of configuration properties.
 
-In `Microbus`, the microservice owns the definition of its config properties, while [the configurator core microservice](../structure/coreservices-configurator.md) owns their values. The former means that microservices are self-descriptive and independent, which is important in a distributed development environment. The latter means that managing configuration values and pushing them to a live system are centrally controlled, which is important because configs can contain secrets and because pushing the wrong config values can destabilize a deployment.
+In Microbus, the microservice owns the definition of its config properties, while [the configurator core microservice](../structure/coreservices-configurator.md) owns their values. The former means that microservices are self-descriptive and independent, which is important in a distributed development environment. The latter means that managing configuration values and pushing them to a live system are centrally controlled, which is important because configs can contain secrets and because pushing the wrong config values can destabilize a deployment.
 
 ### Definition
 

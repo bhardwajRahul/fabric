@@ -1,15 +1,15 @@
 # Features of a Microservice
 
-A `Microbus` microservice is composed of several types of features that together define its API, behavior and observability. Each feature is implemented in `service.go` and cataloged in the microservice's `manifest.yaml`.
+A Microbus microservice is composed of several types of features that together define its API, behavior and observability. Each feature is implemented in `service.go` and cataloged in the microservice's `manifest.yaml`.
 
 <img src="./features-1.drawio.svg">
-<p><p>
+<p></p>
 
 ## Functional Endpoints
 
-Functional endpoints are typed request/response functions that make a microservice's capabilities available to other microservices. They are the primary means of service-to-service communication in `Microbus`.
+Functional endpoints are typed request/response functions that make a microservice's capabilities available to other microservices. They are the primary means of service-to-service communication in Microbus.
 
-A functional endpoint has a Go-style signature with input and output arguments. `Microbus` takes care of marshaling and unmarshaling arguments behind the scenes. Input arguments are extracted from the HTTP request path, query string, or JSON body. Output arguments are marshaled as JSON in the response body.
+A functional endpoint has a Go-style signature with input and output arguments. Microbus takes care of marshaling and unmarshaling arguments behind the scenes. Input arguments are extracted from the HTTP request path, query string, or JSON body. Output arguments are marshaled as JSON in the response body.
 
 ```go
 func (svc *Service) Add(ctx context.Context, x int, y int) (sum int, err error) {
@@ -208,7 +208,7 @@ The `ctx` passed to the ticker is canceled when the microservice shuts down, all
 
 ## Metrics
 
-Metrics provide observability into the microservice's behavior. `Microbus` supports three metric types aligned with [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/metrics/data-model/):
+Metrics provide observability into the microservice's behavior. Microbus supports three metric types aligned with [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/metrics/data-model/):
 
 - **Counter** - a monotonically increasing value, useful for counting occurrences (e.g. requests handled, errors encountered)
 - **Gauge** - a value that can go up or down, useful for measuring current state (e.g. active connections, queue depth)

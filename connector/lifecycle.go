@@ -43,23 +43,21 @@ const (
 	shuttingDown
 )
 
-// SetOnStartup adds a function to be called during the starting up of the microservice.
-// Startup callbacks are called in the order they were added.
+// SetOnStartup sets the function to be called during the starting up of the microservice.
 func (c *Connector) SetOnStartup(handler service.StartupHandler) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	c.onStartup = append(c.onStartup, handler)
+	c.onStartup = handler
 	return nil
 }
 
-// SetOnShutdown adds a function to be called during the shutting down of the microservice.
-// Shutdown callbacks are called in the reverse order they were added.
+// SetOnShutdown sets the function to be called during the shutting down of the microservice.
 func (c *Connector) SetOnShutdown(handler service.ShutdownHandler) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	c.onShutdown = append(c.onShutdown, handler)
+	c.onShutdown = handler
 	return nil
 }
 
@@ -234,11 +232,11 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 		}
 	}
 
-	// Call the callback functions in order
+	// Call the callback function
 	c.onStartupCalled = true
-	for i := range c.onStartup {
+	if c.onStartup != nil {
 		err = errors.CatchPanic(func() error {
-			return c.onStartup[i](ctx)
+			return c.onStartup(ctx)
 		})
 		if err != nil {
 			err = errors.Trace(err)
@@ -328,15 +326,13 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		)
 	}
 
-	// Call the callback functions in reverse order
-	if c.onStartupCalled {
-		for i := len(c.onShutdown) - 1; i >= 0; i-- {
-			err = errors.CatchPanic(func() error {
-				return c.onShutdown[i](ctx)
-			})
-			if err != nil {
-				lastErr = errors.Trace(err)
-			}
+	// Call the callback function
+	if c.onStartupCalled && c.onShutdown != nil {
+		err = errors.CatchPanic(func() error {
+			return c.onShutdown(ctx)
+		})
+		if err != nil {
+			lastErr = errors.Trace(err)
 		}
 	}
 

@@ -344,7 +344,7 @@ Note: These milestones are maintained in separate branches in order to demonstra
 [Milestone 42](https://github.com/microbus-io/fabric/tree/milestone/42):
 
 - Support a directory name that is different from the microservice's package name
-- Updated thrid-party dependencies
+- Updated third-party dependencies
 - Ported the `errors` package to a separate module
 - Ported the code generator to a separate module
 - Ported the `EvalBoolExp` utility to a separate module
@@ -371,3 +371,15 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - `pub.Timeout` option
 - `con.Publish` returns an iterator instead of a channel
 - Skill to regenerate the boilerplate code of the microservice
+
+[Milestone 45](https://github.com/microbus-io/fabric/tree/milestone/45):
+
+- Bearer token issuer replacing the token issuer for long-lived external tokens
+- New access token issuer for short-lived internal tokens
+- Coalescing of calls to `Refresh` in the configurator
+- HTTP ingress proxy no longer respects an inbound `Request-Timeout` header
+- Time budget defaults to 20 sec and capped at 15 min universally
+- `OnStartup`, `OnShutdown`, `OnObserverMetrics` and `OnConfigChanged` callbacks on the `Connector` were simplified to a single handler
+- Architectural review agent skill
+- Enable auth during project init
+- Placed upgrade skills in a dedicated subdirectory

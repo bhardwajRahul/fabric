@@ -1,6 +1,6 @@
 # Coding Agents
 
-`Microbus` was designed from the ground up to make coding agents effective at creating microservices. Its architecture, conventions and tooling are optimized so that agents can work with small, well-defined units of code rather than sprawling monolithic codebases. The benefits include:
+Microbus was designed from the ground up to make coding agents effective at creating microservices. Its architecture, conventions and tooling are optimized so that agents can work with small, well-defined units of code rather than sprawling monolithic codebases. The benefits include:
 
 - **Tighter build-test-debug cycles** - microservices are small enough to build and test quickly, giving agents rapid feedback on their changes
 - **More accurate code** - focused context and clear conventions reduce the likelihood of hallucinations and errors
@@ -23,11 +23,11 @@ All code follows a [uniform code structure](../blocks/uniform-code.md). A famili
 
 ### How Agents Are Guided
 
-Coding agents don't operate on instinct alone. `Microbus` provides a layered system of instructions that train the agent to work correctly.
+Coding agents don't operate on instinct alone. Microbus provides a layered system of instructions that train the agent to work correctly.
 
 [`AGENTS.md`](../blocks/agents-md.md) files provide context at two levels. A global `AGENTS.md` at the root of the project includes instructions applicable to the project as a whole, while a local `AGENTS.md` in each microservice's directory keeps context specific to that microservice. The local file is maintained by the agent itself as it works.
 
-`.claude/rules/microbus.md` contains the conventions and patterns for working on a `Microbus` solution. This file is updated with each release of `Microbus` and should not be edited by hand.
+`.claude/rules/microbus.md` contains the conventions and patterns for working on a Microbus solution. This file is updated with each release of Microbus and should not be edited by hand.
 
 `PROMPTS.md` files in each microservice's directory keep an auditable trail of the prompts that shaped the microservice. This allows a future agent to reproduce the microservice from scratch.
 

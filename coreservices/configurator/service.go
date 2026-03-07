@@ -48,6 +48,8 @@ type Service struct {
 	repo          *repository
 	repoTimestamp time.Time
 	lock          sync.RWMutex
+	refreshLock   sync.Mutex
+	refreshDone   chan struct{}
 }
 
 // OnStartup is called when the microservice is started up.
@@ -139,6 +141,23 @@ Refresh tells all microservices to contact the configurator and refresh their co
 An error is returned if any of the values sent to the microservices fails validation.
 */
 func (svc *Service) Refresh(ctx context.Context) (err error) {
+	// Coalesce concurrent calls
+	svc.refreshLock.Lock()
+	if svc.refreshDone != nil {
+		done := svc.refreshDone
+		svc.refreshLock.Unlock()
+		<-done     // Wait for concurrent refresh to finish
+		return nil // Return with no further action
+	}
+	svc.refreshDone = make(chan struct{})
+	svc.refreshLock.Unlock()
+	defer func() {
+		svc.refreshLock.Lock()
+		close(svc.refreshDone)
+		svc.refreshDone = nil
+		svc.refreshLock.Unlock()
+	}()
+
 	err = svc.PeriodicRefresh(ctx)
 	if err != nil {
 		return errors.Trace(err)

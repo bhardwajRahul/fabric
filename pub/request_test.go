@@ -18,11 +18,14 @@ package pub
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"io"
 	"net/http"
 	"net/url"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/testarossa"
@@ -209,14 +212,12 @@ func TestPub_Apply(t *testing.T) {
 	r.Apply(Header("Foo", "Bar"))
 	assert.Equal("Bar", r.Header.Get("Foo"))
 
-	r.Apply(Actor(struct {
-		Sub   string   `json:"sub"`
-		Roles []string `json:"roles"`
-	}{
-		Sub:   "foo@example.com",
-		Roles: []string{"a", "b", "c"},
-	}))
-	assert.Equal(`{"sub":"foo@example.com","roles":["a","b","c"]}`, r.Header.Get(frame.HeaderActor))
+	actorJWT := signTestJWT(t, jwt.MapClaims{
+		"sub":   "foo@example.com",
+		"roles": []string{"a", "b", "c"},
+	})
+	r.Apply(Token(actorJWT))
+	assert.Equal(actorJWT, r.Header.Get(frame.HeaderActor))
 }
 
 func TestPub_QueryArgs(t *testing.T) {
@@ -290,4 +291,18 @@ func TestPub_FillPathArguments(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("GET", httpReq.Method)
 	assert.Equal("/user/5/details", httpReq.URL.Path)
+}
+
+func signTestJWT(t *testing.T, claims jwt.MapClaims) string {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	signed, err := token.SignedString(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }

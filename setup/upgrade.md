@@ -18,7 +18,7 @@ Upgrade the project to the latest Microbus framework:
 
 #### Step 1: Determine if Microbus Project
 
-Look in `go.mod` for the `github.com/microbus-io/fabric` dependency. If the dependency is not found, this is not a `Microbus` project. Do not proceed to the next step, exit this workflow.
+Look in `go.mod` for the `github.com/microbus-io/fabric` dependency. If the dependency is not found, this is not a Microbus project. Do not proceed to the next step, exit this workflow.
 
 #### Step 2: Download Agent Rules and Skills
 
@@ -30,12 +30,13 @@ rm -rf .claude/rules/microbus.md
 rm -rf .claude/rules/sequel.md
 rm -rf .claude/skills/microbus
 rm -rf .claude/skills/sequel
+rm -rf .claude/skills/upgrade
 cp -r temp-clone/.claude .
 rm -rf temp-clone
 ```
 
-**CRITICAL**: After copying, reread `.claude/rules/microbus.md` and all skill files referenced by this workflow. The downloaded versions may differ from what was previously loaded into context.
+**CRITICAL**: After copying, reread `.claude/rules/microbus.md` and all skills referenced by this workflow. The downloaded versions may differ from what was previously loaded into context.
 
 #### Step 3: Upgrade the Project
 
-Follow the skill in `microbus/upgrade-microbus` to upgrade the `Microbus` framework, skipping the step to download the latest agent rules and skills.
+Follow the skill `upgrade/microbus` to upgrade the project to the latest Microbus framework. Skip the step to download the latest agent rules and skills.
