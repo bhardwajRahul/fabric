@@ -15,6 +15,8 @@ Upgrade a Microbus project to v1.24.0:
 - [ ] Step 4: Tracing spans
 - [ ] Step 5: Token exchange callback
 - [ ] Step 6: Actor impersonation
+- [ ] Step 7: Manifests
+- [ ] Step 8: Configuration Files
 ```
 
 #### Step 1: Prepare Actor
@@ -25,9 +27,9 @@ Create the `act` directory in the root of the project if one does not exist.
 mkdir -p act
 ```
 
-Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it.
+Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it. The existing `Actor` struct may define different claims from the template — that is expected and the struct should not be changed.
 
-If the function `Of` in `act/actor.go` does not return an error, i.e. its signature is `Of(x any) Actor`, extend it to return an error and correct resulting compilation errors.
+If the function `Of` in `act/actor.go` does not return an error, i.e. its signature is `Of(x any) Actor`, extend it to return an error and correct resulting compilation errors. When fixing callers, return the error if the containing function can return an error; otherwise, discard it with `_`.
 
 ```go
 // Of extracts the actor from the HTTP request or context.
@@ -80,15 +82,18 @@ import (
 
 Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKeyPEM` config of the `bearer.token.core` microservice.
 
+If the deprecated `tokenissuer.core` had an `AuthTokenTTL` value, copy it to the `TokenTTL` config of `bearer.token.core`. The old `SecretKey` can be discarded — the bearer token service uses a different signing algorithm for which the upgrade generates a new key.
+
 ```shell
 openssl genpkey -algorithm Ed25519 -out private.pem
 ```
 
 ```yaml
 bearer.token.core:
+  TokenTTL: 720h
   PrivateKeyPEM: |
     -----BEGIN PRIVATE KEY-----
-    MC4CAQAwBQYDK2VwBCIEIL...
+    MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
     -----END PRIVATE KEY-----
 ```
 
@@ -109,3 +114,11 @@ The signature of the validator function passed to the `Authorization` middleware
 ```go
 token, err := accesstokenapi.NewClient(svc).Mint(ctx, actor)
 ```
+
+#### Step 7: Manifests
+
+Update the frameworkVersion in all manifest files to `1.24.0`.
+
+#### Step 8: Configuration Files
+
+Search for `tokenissuer.core` across all YAML files in the project and remove any references to it.
