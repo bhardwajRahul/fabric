@@ -443,7 +443,7 @@ func (svc *Service) OnChangedNumShards(ctx context.Context) (err error) {
 		svc.dbs = append(svc.dbs, db)
 		svc.dbsLock.Unlock()
 	}
-	svc.LogInfo(ctx, "Shards expanded", "from", oldCount, "to", newCount)
+	svc.LogDebug(ctx, "Shards expanded", "from", oldCount, "to", newCount)
 	return nil
 }
 
@@ -637,7 +637,7 @@ func (svc *Service) createWithGraph(ctx context.Context, shardNum int, workflowN
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	svc.LogInfo(ctx, "Flow created", "flow", workflowName, "task", entryPoint)
+	svc.LogDebug(ctx, "Flow created", "flow", workflowName, "task", entryPoint)
 
 	return fmt.Sprintf("%d-%d-%s", shardNum, newFlowID, flowToken), nil
 }
@@ -1155,7 +1155,7 @@ func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	svc.LogInfo(ctx, "Forked flow", "stepKey", stepKey, "workflow", workflowName)
+	svc.LogDebug(ctx, "Forked flow", "stepKey", stepKey, "workflow", workflowName)
 
 	return fmt.Sprintf("%d-%d-%s", shardNum, newFlowID, newFlowToken), nil
 }
@@ -2054,7 +2054,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 			return errors.Trace(err)
 		}
 		if len(breakpoints) > 0 && breakpoints[taskName] == "b" {
-			svc.LogInfo(ctx, "Breakpoint hit", "task", taskName, "step", stepDepth, "flow", workflowName)
+			svc.LogDebug(ctx, "Breakpoint hit", "task", taskName, "step", stepDepth, "flow", workflowName)
 
 			// Build the surgraph chain to interrupt all parent flows atomically
 			chainFlowIDs, chainStepIDs, chainCompositeIDs, err := svc.surgraphChain(ctx, shardNum, flowID, flowToken)
@@ -2244,7 +2244,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 	}
 
 	// Execute the task
-	svc.LogInfo(ctx, "Executing task", "task", taskName, "flow", workflowName)
+	svc.LogDebug(ctx, "Executing task", "task", taskName, "flow", workflowName)
 	resultFlow, err = svc.executeTask(taskCtx, taskName, flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
 	if err != nil {
 		// Record the input state on the span
@@ -2259,7 +2259,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 
 		// Check for error transition before failing the flow
 		if _, ok := graph.ErrorTransition(taskName); ok {
-			svc.LogInfo(ctx, "Task error routed", "task", taskName, "flow", workflowName, "error", err)
+			svc.LogDebug(ctx, "Task error routed", "task", taskName, "flow", workflowName, "error", err)
 			taskSpan.SetAttributes("workflow.command", "onError")
 			errorRouted = true
 
@@ -2328,7 +2328,7 @@ postExecution:
 	// the step's lease expires, pollPendingSteps resets it to pending,
 	// and re-execution will produce the interrupt again.
 	if interruptPayload, interrupted := resultFlow.InterruptRequested(); interrupted {
-		svc.LogInfo(ctx, "Task interrupted", "task", taskName, "flow", workflowName)
+		svc.LogDebug(ctx, "Task interrupted", "task", taskName, "flow", workflowName)
 		taskSpan.SetAttributes("workflow.command", "interrupt")
 
 		// Build the surgraph chain to interrupt all parent flows atomically
@@ -2414,7 +2414,7 @@ postExecution:
 	// changes and sets it to PENDING. The foreman picks it up and re-executes the task -
 	// the task sees the child's output in state and returns normally without signaling again.
 	if subgraphWorkflow, subgraphInput, subgraphRequested := resultFlow.SubgraphRequested(); subgraphRequested {
-		svc.LogInfo(ctx, "Task requested subgraph", "task", taskName, "flow", workflowName, "subgraph", subgraphWorkflow)
+		svc.LogDebug(ctx, "Task requested subgraph", "task", taskName, "flow", workflowName, "subgraph", subgraphWorkflow)
 		taskSpan.SetAttributes("workflow.command", "subgraph")
 
 		// Persist accumulated changes (state column is invariant).
@@ -2482,7 +2482,7 @@ postExecution:
 
 	// Handle retry (with optional sleep for backoff)
 	if maxAttempts, initialDelay, multiplier, maxDelay, retryRequested := resultFlow.RetryRequested(); retryRequested {
-		svc.LogInfo(ctx, "Task retried", "task", taskName, "flow", workflowName, "attempt", attempt)
+		svc.LogDebug(ctx, "Task retried", "task", taskName, "flow", workflowName, "attempt", attempt)
 		taskSpan.SetAttributes("workflow.command", "retry")
 
 		// Compute sleep delay: use backoff parameters if present, otherwise use flow.Sleep()
@@ -2523,10 +2523,10 @@ postExecution:
 	// the step is completed but no successor exists. This is a narrow window (~microseconds) and
 	// is acceptable for the simplification gained by removing the COMPLETING intermediate status.
 	if errorRouted {
-		svc.LogInfo(ctx, "Task error routed", "task", taskName, "flow", workflowName)
+		svc.LogDebug(ctx, "Task error routed", "task", taskName, "flow", workflowName)
 		svc.IncrementStepsExecuted(ctx, 1, taskName, "error_routed")
 	} else {
-		svc.LogInfo(ctx, "Task completed", "task", taskName, "flow", workflowName)
+		svc.LogDebug(ctx, "Task completed", "task", taskName, "flow", workflowName)
 		svc.IncrementStepsExecuted(ctx, 1, taskName, foremanapi.StatusCompleted)
 		taskSpan.SetAttributes("workflow.command", "next")
 	}
@@ -2579,7 +2579,7 @@ postExecution:
 			return errors.Trace(err)
 		}
 		if unfinishedSiblings > 0 {
-			svc.LogInfo(ctx, "Pending siblings", "task", taskName, "unfinished", unfinishedSiblings, "flow", workflowName)
+			svc.LogDebug(ctx, "Pending siblings", "task", taskName, "unfinished", unfinishedSiblings, "flow", workflowName)
 			return nil // Other branches still running; the last one to finish will advance the flow
 		}
 		if failedSiblings > 0 {
@@ -2612,7 +2612,7 @@ postExecution:
 		// Set flow to completed first so that if we crash before updating the step,
 		// the step's lease expires, pollPendingSteps enqueues it, and the
 		// terminal flow check in recovery processStep marks it completed.
-		svc.LogInfo(ctx, "Flow completed", "flow", workflowName)
+		svc.LogDebug(ctx, "Flow completed", "flow", workflowName)
 		if _, err := svc.completeFlow(ctx, shardNum, flowID, flowToken, notifyHostname); err != nil {
 			return errors.Trace(err)
 		}
@@ -2673,7 +2673,7 @@ postExecution:
 
 	var newStepIDs []int
 	for _, next := range realTasks {
-		svc.LogInfo(ctx, "Creating next task", "task", next.taskName, "flow", workflowName)
+		svc.LogDebug(ctx, "Creating next task", "task", next.taskName, "flow", workflowName)
 
 		// For forEach fan-out, inject the item into state (not changes)
 		stepStateJSON := nextStateJSON
@@ -2959,7 +2959,7 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 	}
 
 	// Enqueue the surgraph step for transition evaluation
-	svc.LogInfo(ctx, "Resuming surgraph after subgraph flow completion",
+	svc.LogDebug(ctx, "Resuming surgraph after subgraph flow completion",
 		"surgraphFlow", surgraphFlowID, "surgraphStep", surgraphStepDepth, "subgraph", subgraphWorkflowName)
 	foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, surgraphStepID)
 	return nil
@@ -3654,7 +3654,7 @@ func (svc *Service) PurgeExpiredFlows(ctx context.Context) (err error) { // MARK
 				}
 			}
 
-			svc.LogInfo(ctx, "Purged expired flows", "shard", shardIdx, "count", len(expiredFlowIDs))
+			svc.LogDebug(ctx, "Purged expired flows", "shard", shardIdx, "count", len(expiredFlowIDs))
 			return nil
 		}
 	}
