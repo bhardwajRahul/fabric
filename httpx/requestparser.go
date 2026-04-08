@@ -138,7 +138,7 @@ func ReadOutputPayload(res *http.Response, out any) (err error) {
 			f.SetInt(int64(res.StatusCode))
 		}
 	}
-	if res.Body != nil {
+	if res.Body != nil && res.Body != http.NoBody {
 		err = json.NewDecoder(res.Body).Decode(_decodeTarget)
 		if err != nil {
 			return errors.Trace(err)
