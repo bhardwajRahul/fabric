@@ -2620,17 +2620,7 @@ postExecution:
 		return nil
 	}
 
-	// Compute the merged state for the next step(s).
-	// Loads state and changes from all steps at this step_depth from the database.
-	// In the sequential case, this is just our own state + changes.
-	// In the fan-in case, changes from all siblings are merged.
 	nextStepDepth := stepDepth + 1
-	nextState, err := svc.mergeStepDepthState(ctx, db, flowID, stepDepth, graph.Reducers())
-	if err != nil {
-		return errors.Trace(err)
-	}
-	nextStateJSON, _ := json.Marshal(nextState)
-
 	sleepMs := sleepDur.Milliseconds()
 
 	// Atomically insert next steps and update the flow within a transaction.
@@ -2663,6 +2653,17 @@ postExecution:
 	if existingCount > 0 {
 		return nil // Another worker already created next steps
 	}
+
+	// Compute the merged state for the next step(s) inside the transaction
+	// to avoid SQLite deadlocks from concurrent readers blocking writers.
+	// Loads state and changes from all steps at this step_depth from the database.
+	// In the sequential case, this is just our own state + changes.
+	// In the fan-in case, changes from all siblings are merged.
+	nextState, err := svc.mergeStepDepthState(ctx, tx, flowID, stepDepth, graph.Reducers())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	nextStateJSON, _ := json.Marshal(nextState)
 
 	var newStepIDs []int
 	for _, next := range realTasks {
