@@ -41,19 +41,19 @@ type Service struct {
 
 // MarshalJSON produces the JSON representation of the OpenAPI document of the service.
 func (s *Service) MarshalJSON() ([]byte, error) {
-	doc := oapiDoc{
+	doc := Doc{
 		OpenAPI: "3.1.0",
-		Info: oapiInfo{
+		Info: Info{
 			Title:       s.ServiceName,
 			Description: s.Description,
 			Version:     strconv.Itoa(s.Version),
 		},
-		Paths: map[string]map[string]*oapiOperation{},
-		Components: &oapiComponents{
+		Paths: map[string]map[string]*Operation{},
+		Components: &Components{
 			Schemas:         map[string]*jsonschema.Schema{},
-			SecuritySchemes: map[string]*oapiSecurityScheme{},
+			SecuritySchemes: map[string]*SecurityScheme{},
 		},
-		Servers: []*oapiServer{
+		Servers: []*Server{
 			{
 				URL: "https://localhost/",
 			},
@@ -71,15 +71,15 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 
 	// Error schema
 	type Error errors.StreamedError
-	type Response struct {
+	type ErrorResponse struct {
 		Err Error `json:"err"`
 	}
-	errorType := reflect.TypeOf(Response{})
+	errorType := reflect.TypeOf(ErrorResponse{})
 	errorSchema := jsonschemaReflectFromType(errorType)
 	resolveRefs(doc, errorSchema, "error")
 
 	for _, ep := range s.Endpoints {
-		var op *oapiOperation
+		var op *Operation
 		if ep.InputArgs == nil {
 			ep.InputArgs = struct{}{}
 		}
@@ -93,7 +93,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 
 		// Path arguments
 		pathArgsOrder := []string{}
-		pathArgs := map[string]*oapiParameter{}
+		pathArgs := map[string]*Parameter{}
 		parts := strings.Split(path, "/")
 		argIndex := 0
 		for i := range parts {
@@ -109,7 +109,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					name = fmt.Sprintf("path%d+", argIndex)
 					parts[i] = "{" + name + "}"
 				}
-				pathArgs[name] = &oapiParameter{
+				pathArgs[name] = &Parameter{
 					In:   "path",
 					Name: name,
 					Schema: &jsonschema.Schema{
@@ -122,18 +122,22 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 		}
 		path = strings.Join(parts, "/")
 
+		// Extract parameter and result descriptions from the godoc
+		paramDescs, resultDescs := parseParamDescriptions(ep.Description)
+
 		// Functions
-		if ep.Type == "function" {
+		if ep.Type == "function" || ep.Type == "workflow" {
 			if ep.Method == "" || ep.Method == "ANY" {
 				ep.Method = "POST"
 			}
-			op = &oapiOperation{
-				Summary:     cleanEndpointSummary(ep.Summary),
-				Description: ep.Description,
-				Responses: map[string]*oapiResponse{
+			op = &Operation{
+				Summary:      cleanEndpointSummary(ep.Summary),
+				Description:  ep.Description,
+				XFeatureType: ep.Type,
+				Responses: map[string]*Response{
 					"2XX": {
 						Description: "OK",
-						Content: map[string]*oapiMediaType{
+						Content: map[string]*MediaType{
 							"application/json": {
 								Schema: &jsonschema.Schema{
 									Ref: "#/components/schemas/" + ep.Name + "_OUT",
@@ -153,6 +157,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 				schemaOut = jsonschemaReflect(ep.OutputArgs)
 			}
 			resolveRefs(doc, schemaOut, ep.Name+"_OUT")
+			applyDescriptionsToParams(doc, schemaOut, resultDescs)
 			doc.Components.Schemas[ep.Name+"_OUT"] = schemaOut
 
 			// httpRequestBody argument overrides the request body and forces all other arguments to be in the query or path
@@ -164,9 +169,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					resolveRefs(doc, schemaIn, ep.Name+"_IN")
 					doc.Components.Schemas[ep.Name+"_IN"] = schemaIn
 
-					op.RequestBody = &oapiRequestBody{
+					op.RequestBody = &RequestBody{
 						Required: true,
-						Content: map[string]*oapiMediaType{
+						Content: map[string]*MediaType{
 							"application/json": {
 								Schema: &jsonschema.Schema{
 									Ref: "#/components/schemas/" + ep.Name + "_IN",
@@ -186,7 +191,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					if name == "" || name == "httpRequestBody" {
 						continue
 					}
-					parameter := &oapiParameter{
+					parameter := &Parameter{
 						In:   "query",
 						Name: name,
 					}
@@ -213,17 +218,21 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 					}
 					parameter.Style = "deepObject"
 					parameter.Explode = true
+					if desc, ok := paramDescs[name]; ok {
+						parameter.Description = desc
+					}
 					op.Parameters = append(op.Parameters, parameter)
 				}
 			} else {
 				// IN is JSON in the request body
 				schemaIn := jsonschemaReflect(ep.InputArgs)
 				resolveRefs(doc, schemaIn, ep.Name+"_IN")
+				applyDescriptionsToParams(doc, schemaIn, paramDescs)
 				doc.Components.Schemas[ep.Name+"_IN"] = schemaIn
 
-				op.RequestBody = &oapiRequestBody{
+				op.RequestBody = &RequestBody{
 					Required: true,
-					Content: map[string]*oapiMediaType{
+					Content: map[string]*MediaType{
 						"application/json": {
 							Schema: &jsonschema.Schema{
 								Ref: "#/components/schemas/" + ep.Name + "_IN",
@@ -238,11 +247,12 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			if ep.Method == "" || ep.Method == "ANY" {
 				ep.Method = "GET"
 			}
-			op = &oapiOperation{
-				Summary:     cleanEndpointSummary(ep.Summary),
-				Description: ep.Description,
-				Parameters:  []*oapiParameter{},
-				Responses: map[string]*oapiResponse{
+			op = &Operation{
+				Summary:      cleanEndpointSummary(ep.Summary),
+				Description:  ep.Description,
+				XFeatureType: ep.Type,
+				Parameters:   []*Parameter{},
+				Responses: map[string]*Response{
 					"2XX": {
 						Description: "OK",
 					},
@@ -252,7 +262,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			if p >= 0 {
 				contentType := mime.TypeByExtension(ep.Route[p:])
 				if contentType != "" {
-					op.Responses["2XX"].Content = map[string]*oapiMediaType{
+					op.Responses["2XX"].Content = map[string]*MediaType{
 						contentType: {},
 					}
 				}
@@ -267,16 +277,16 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 		if ep.RequiredClaims != "" {
 			const securitySchemaName = "http_bearer_jwt"
 			if doc.Components.SecuritySchemes[securitySchemaName] == nil {
-				doc.Components.SecuritySchemes[securitySchemaName] = &oapiSecurityScheme{
+				doc.Components.SecuritySchemes[securitySchemaName] = &SecurityScheme{
 					Type:         "http",
 					Scheme:       "bearer",
 					BearerFormat: "JWT",
 				}
 			}
-			op.Security = append(op.Security, &oapiSecurityRequirement{securitySchemaName: {}})
-			op.Responses["401"] = &oapiResponse{
+			op.Security = append(op.Security, &SecurityRequirement{securitySchemaName: {}})
+			op.Responses["401"] = &Response{
 				Description: "Unauthorized",
-				Content: map[string]*oapiMediaType{
+				Content: map[string]*MediaType{
 					"application/json": {
 						Schema: &jsonschema.Schema{
 							Ref: "#/components/schemas/error_" + errorType.Name(),
@@ -285,9 +295,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 				},
 			}
 			if ep.RequiredClaims != "" {
-				op.Responses["403"] = &oapiResponse{
+				op.Responses["403"] = &Response{
 					Description: "Forbidden; token required with: " + ep.RequiredClaims,
-					Content: map[string]*oapiMediaType{
+					Content: map[string]*MediaType{
 						"application/json": {
 							Schema: &jsonschema.Schema{
 								Ref: "#/components/schemas/error_" + errorType.Name(),
@@ -298,9 +308,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 			}
 		}
 
-		op.Responses["4XX"] = &oapiResponse{
+		op.Responses["4XX"] = &Response{
 			Description: "User error",
-			Content: map[string]*oapiMediaType{
+			Content: map[string]*MediaType{
 				"application/json": {
 					Schema: &jsonschema.Schema{
 						Ref: "#/components/schemas/error_" + errorType.Name(),
@@ -308,9 +318,9 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 				},
 			},
 		}
-		op.Responses["5XX"] = &oapiResponse{
+		op.Responses["5XX"] = &Response{
 			Description: "Server error",
-			Content: map[string]*oapiMediaType{
+			Content: map[string]*MediaType{
 				"application/json": {
 					Schema: &jsonschema.Schema{
 						Ref: "#/components/schemas/error_" + errorType.Name(),
@@ -329,7 +339,7 @@ func (s *Service) MarshalJSON() ([]byte, error) {
 
 		// Add to paths
 		if doc.Paths[path] == nil {
-			doc.Paths[path] = map[string]*oapiOperation{}
+			doc.Paths[path] = map[string]*Operation{}
 		}
 		doc.Paths[path][strings.ToLower(ep.Method)] = op
 	}
@@ -363,6 +373,65 @@ func methodHasBody(method string) bool {
 	}
 }
 
+// applyDescriptionsToParams sets the description field on schema properties that match the given map of field names to descriptions.
+// Field names in the map use the Go argument name (camelCase), which is matched against the JSON tag name of each property.
+// If the schema is a $ref, the referenced schema is looked up in the document's components and descriptions are applied there.
+func applyDescriptionsToParams(doc Doc, schema *jsonschema.Schema, descs map[string]string) {
+	if schema == nil || len(descs) == 0 {
+		return
+	}
+	// If the schema is a $ref, resolve it to the actual schema in components
+	target := schema
+	if schema.Ref != "" && strings.HasPrefix(schema.Ref, "#/components/schemas/") {
+		refName := schema.Ref[len("#/components/schemas/"):]
+		if resolved, ok := doc.Components.Schemas[refName]; ok {
+			target = resolved
+		}
+	}
+	for pair := target.Properties.Oldest(); pair != nil; pair = pair.Next() {
+		if desc, ok := descs[pair.Key]; ok && pair.Value.Description == "" {
+			pair.Value.Description = desc
+		}
+	}
+}
+
+// parseParamDescriptions extracts parameter and result descriptions from a godoc-style description string.
+// It looks for "Input:" and "Output:" sections with bulleted lists in the form "- name: description".
+func parseParamDescriptions(description string) (params map[string]string, results map[string]string) {
+	params = map[string]string{}
+	results = map[string]string{}
+
+	lines := strings.Split(description, "\n")
+	var target map[string]string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "Input:"):
+			target = params
+		case strings.HasPrefix(trimmed, "Output:"):
+			target = results
+		case target != nil && strings.HasPrefix(trimmed, "- "):
+			// Parse "- name: description"
+			entry := strings.TrimPrefix(trimmed, "- ")
+			if name, desc, ok := strings.Cut(entry, ":"); ok {
+				name = strings.TrimSpace(name)
+				desc = strings.TrimSpace(desc)
+				if name != "" && desc != "" {
+					target[name] = desc
+				}
+			}
+		case trimmed == "":
+			// Blank line: keep current section (godoc lists have blank lines around them)
+		default:
+			// Non-list line ends the current section
+			if target != nil {
+				target = nil
+			}
+		}
+	}
+	return params, results
+}
+
 func fieldName(field reflect.StructField) string {
 	if field.Name[:1] != strings.ToUpper(field.Name[:1]) {
 		// Not a public field
@@ -384,7 +453,7 @@ func fieldName(field reflect.StructField) string {
 }
 
 // resolveRefs recursively resolves all type references in the schema and moves them to the component section of the OpenAPI document.
-func resolveRefs(doc oapiDoc, schema *jsonschema.Schema, endpoint string) {
+func resolveRefs(doc Doc, schema *jsonschema.Schema, endpoint string) {
 	if strings.HasPrefix(schema.Ref, "#/$defs/") {
 		// Move $defs into the components section of the document
 		// #/$defs/ABC ===> #/components/schemas/ENDPOINT_ABC

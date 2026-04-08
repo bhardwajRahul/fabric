@@ -22,6 +22,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 )
@@ -29,14 +30,15 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ calculatorapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockArithmetic func(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) // MARKER: Arithmetic
-	mockSquare     func(ctx context.Context, x int) (xEcho int, result int, err error)                                             // MARKER: Square
+	mockArithmetic             func(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) // MARKER: Arithmetic
+	mockSquare                 func(ctx context.Context, x int) (xEcho int, result int, err error)                                             // MARKER: Square
 	mockDistance               func(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error)                // MARKER: Distance
 	mockOnObserveSumOperations func(ctx context.Context) (err error)                                                                           // MARKER: SumOperations
 }

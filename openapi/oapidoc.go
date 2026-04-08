@@ -18,52 +18,53 @@ package openapi
 
 import "github.com/invopop/jsonschema"
 
-// oapiDoc is the root object of the OpenAPI document.
+// Doc is the root object of the OpenAPI document.
 // https://spec.openapis.org/oas/v3.1.0#openapi-object
-type oapiDoc struct {
-	OpenAPI    string                               `json:"openapi"`
-	Info       oapiInfo                             `json:"info"`
-	Servers    []*oapiServer                        `json:"servers,omitzero"`
-	Paths      map[string]map[string]*oapiOperation `json:"paths,omitzero"`
-	Components *oapiComponents                      `json:"components,omitzero"`
+type Doc struct {
+	OpenAPI    string                           `json:"openapi"`
+	Info       Info                             `json:"info"`
+	Servers    []*Server                        `json:"servers,omitzero"`
+	Paths      map[string]map[string]*Operation `json:"paths,omitzero"`
+	Components *Components                      `json:"components,omitzero"`
 }
 
-// oapiInfo provides metadata about the API.
+// Info provides metadata about the API.
 // https://spec.openapis.org/oas/v3.1.0#info-object
-type oapiInfo struct {
+type Info struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitzero"`
 	Version     string `json:"version,omitzero"`
 }
 
-// oapiServer represents a server.
+// Server represents a server.
 // https://spec.openapis.org/oas/v3.1.0#server-object
-type oapiServer struct {
+type Server struct {
 	URL         string `json:"url"`
 	Description string `json:"description,omitzero"`
 }
 
-// oapiOperation describes a single API operation on a path.
+// Operation describes a single API operation on a path.
 // https://spec.openapis.org/oas/v3.1.0#operation-object
-type oapiOperation struct {
-	Summary     string                     `json:"summary"`
-	Description string                     `json:"description,omitzero"`
-	Parameters  []*oapiParameter           `json:"parameters,omitzero"`
-	RequestBody *oapiRequestBody           `json:"requestBody,omitzero"`
-	Responses   map[string]*oapiResponse   `json:"responses,omitzero"`
-	Security    []*oapiSecurityRequirement `json:"security,omitzero"`
+type Operation struct {
+	Summary      string                 `json:"summary"`
+	Description  string                 `json:"description,omitzero"`
+	XFeatureType string                 `json:"x-feature-type,omitzero"`
+	Parameters   []*Parameter           `json:"parameters,omitzero"`
+	RequestBody  *RequestBody           `json:"requestBody,omitzero"`
+	Responses    map[string]*Response   `json:"responses,omitzero"`
+	Security     []*SecurityRequirement `json:"security,omitzero"`
 }
 
-// oapiComponents holds a set of reusable objects for different aspects of the OpenAPI schema.
+// Components holds a set of reusable objects for different aspects of the OpenAPI schema.
 // https://spec.openapis.org/oas/v3.1.0#components-object
-type oapiComponents struct {
-	Schemas         map[string]*jsonschema.Schema  `json:"schemas,omitzero"`
-	SecuritySchemes map[string]*oapiSecurityScheme `json:"securitySchemes,omitzero"`
+type Components struct {
+	Schemas         map[string]*jsonschema.Schema `json:"schemas,omitzero"`
+	SecuritySchemes map[string]*SecurityScheme    `json:"securitySchemes,omitzero"`
 }
 
-// oapiParameter describes a single operation parameter.
+// Parameter describes a single operation parameter.
 // https://spec.openapis.org/oas/v3.1.0#parameter-object
-type oapiParameter struct {
+type Parameter struct {
 	Name        string             `json:"name"`
 	In          string             `json:"in"`
 	Description string             `json:"description,omitzero"`
@@ -73,37 +74,37 @@ type oapiParameter struct {
 	Required    bool               `json:"required,omitzero"`
 }
 
-// oapiRequestBody describes a single request body.
+// RequestBody describes a single request body.
 // https://spec.openapis.org/oas/v3.1.0#request-body-object
-type oapiRequestBody struct {
-	Description string                    `json:"description,omitzero"`
-	Required    bool                      `json:"required,omitzero"`
-	Content     map[string]*oapiMediaType `json:"content,omitzero"`
+type RequestBody struct {
+	Description string                `json:"description,omitzero"`
+	Required    bool                  `json:"required,omitzero"`
+	Content     map[string]*MediaType `json:"content,omitzero"`
 }
 
-// oapiMediaType provides schema and examples for the media type identified by its key.
+// MediaType provides schema and examples for the media type identified by its key.
 // https://spec.openapis.org/oas/v3.1.0#media-type-object
-type oapiMediaType struct {
+type MediaType struct {
 	Description string             `json:"description,omitzero"`
 	Schema      *jsonschema.Schema `json:"schema,omitzero"`
 }
 
-// oapiResponse describes a single response from an API Operation.
+// Response describes a single response from an API Operation.
 // https://spec.openapis.org/oas/v3.1.0#response-object
-type oapiResponse struct {
-	Description string                    `json:"description,omitzero"`
-	Content     map[string]*oapiMediaType `json:"content,omitzero"`
+type Response struct {
+	Description string                `json:"description,omitzero"`
+	Content     map[string]*MediaType `json:"content,omitzero"`
 }
 
-// oapiSecurityScheme describes means of authentication.
+// SecurityScheme describes means of authentication.
 // https://spec.openapis.org/oas/v3.1.0#security-scheme-object
-type oapiSecurityScheme struct {
+type SecurityScheme struct {
 	Type         string `json:"type,omitzero"`
 	Description  string `json:"description,omitzero"`
 	Scheme       string `json:"scheme,omitzero"`
 	BearerFormat string `json:"bearerFormat,omitzero"`
 }
 
-// oapiSecurityRequirement specifies a security scheme required to access an API Operation.
+// SecurityRequirement specifies a security scheme required to access an API Operation.
 // https://spec.openapis.org/oas/v3.1.0#security-requirement-object
-type oapiSecurityRequirement map[string][]string
+type SecurityRequirement map[string][]string

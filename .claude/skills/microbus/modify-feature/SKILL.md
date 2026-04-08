@@ -1,6 +1,6 @@
 ---
 name: Modifying a Feature of a Microservice
-description: Modifies an existing functional endpoint, web handler endpoint, event source, event sink, configuration property, ticker or metric of a microservice. Use when explicitly asked by the user to modify a feature of a microservice.
+description: Modifies an existing functional endpoint, web handler endpoint, event source, event sink, task endpoint, workflow graph, configuration property, ticker or metric of a microservice. Use when explicitly asked by the user to modify a feature of a microservice.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
@@ -39,6 +39,8 @@ Determine the feature's name and type by reading the microservice's `manifest.ya
 | `metrics` | Metric | `microbus/add-metric` |
 | `outboundEvents` | Outbound event | `microbus/add-outbound-event` |
 | `inboundEvents` | Inbound event | `microbus/add-inbound-event` |
+| `tasks` | Task endpoint | `microbus/add-task` |
+| `workflows` | Workflow graph | `microbus/add-workflow` |
 
 #### Step 3: Consult the Corresponding "Add" Skill
 
@@ -52,10 +54,10 @@ Search for `MARKER: FeatureName` within the microservice's directory and its sub
 
 Categorize the requested change to understand its blast radius:
 
-- **Implementation only** — Changes to the handler body in `service.go`. Tests in `service_test.go` may also need to be updated to reflect the new behavior.
-- **Property change** — Changes to the route, method, required claims, description, config default or validation, ticker interval, or metric buckets. Affects a subset of the marked locations, typically `intermediate.go`, `myserviceapi/client.go`, and `manifest.yaml`.
-- **Signature change** — Arguments added, removed, renamed, or retyped. This has a wide blast radius: every file with the feature's marker must be updated. See the detailed list below.
-- **Rename** — The feature's name changes. This has the widest blast radius: all markers, identifiers, struct names, and references must be renamed across every file.
+- **Implementation only** - Changes to the handler body in `service.go`. Tests in `service_test.go` may also need to be updated to reflect the new behavior.
+- **Property change** - Changes to the route, method, required claims, description, config default or validation, ticker interval, or metric buckets. Affects a subset of the marked locations, typically `intermediate.go`, `myserviceapi/client.go`, and `manifest.yaml`.
+- **Signature change** - Arguments added, removed, renamed, or retyped. This has a wide blast radius: every file with the feature's marker must be updated. See the detailed list below.
+- **Rename** - The feature's name changes. This has the widest blast radius: all markers, identifiers, struct names, and references must be renamed across every file.
 
 These scopes can overlap. For example, a rename combined with a signature change should be treated as a single pass: rename all identifiers and markers while simultaneously updating the signature at each location.
 
@@ -71,12 +73,12 @@ For **property changes**, edit the relevant subset of marked locations. Common e
 - Required claims change: update the `Subscribe` call in `intermediate.go`, the OpenAPI registration in `intermediate.go`, and `manifest.yaml`
 
 For **signature changes**, update every marked location. All of the following must be updated to reflect the new signature:
-- `intermediate.go` — `ToDo` interface method, marshaler function, OpenAPI registration (Summary, InputArgs, OutputArgs)
-- `myserviceapi/client.go` — In/Out/Response structs and their methods, Client method, MulticastClient method
-- `myserviceapi/*.go` — Add definitions for new complex types; remove definitions for types no longer used
-- `service.go` — Handler function signature
-- `mock.go` — Mock field type, MockX setter signature, X executor signature, mock test case
-- `service_test.go` — Test cases that call the function with the old signature
+- `intermediate.go` - `ToDo` interface method, marshaler function, OpenAPI registration (Summary, InputArgs, OutputArgs)
+- `myserviceapi/client.go` - In/Out/Response structs and their methods, Client method, MulticastClient method
+- `myserviceapi/*.go` - Add definitions for new complex types; remove definitions for types no longer used
+- `service.go` - Handler function signature
+- `mock.go` - Mock field type, MockX setter signature, X executor signature, mock test case
+- `service_test.go` - Test cases that call the function with the old signature
 
 For **renames**, update every marked location with the new feature name. This includes all identifiers derived from the feature name (e.g., `MyFunction` becomes `NewName`, `doMyFunction` becomes `doNewName`, `MockMyFunction` becomes `MockNewName`, `MyFunctionIn` becomes `NewNameIn`, `RouteOfMyFunction` becomes `RouteOfNewName`, etc.) and all `MARKER` comments. In `service_test.go`, also rename the test function (e.g., `TestMyService_MyFunction` becomes `TestMyService_NewName`) and the mock subtest name.
 

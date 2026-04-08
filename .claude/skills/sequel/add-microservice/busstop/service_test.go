@@ -352,6 +352,7 @@ func TestBusStop_Store(t *testing.T) { // MARKER: Store
 		)
 
 		originalObj.Example = "Modified"
+		time.Sleep(2 * time.Millisecond) // Ensure updated_at advances
 		stored, err := client.Store(ctx, originalObj)
 		if err == nil {
 			assert.Expect(
@@ -3744,6 +3745,7 @@ func TestBusStop_ColumnMappings(t *testing.T) {
 	// HINT: Modify the fields of the loaded object here
 	originalObj.Example = "Modified"
 
+	time.Sleep(2 * time.Millisecond) // Ensure updated_at advances
 	stored, err := client.Store(ctx, originalObj)
 	assert.Expect(
 		err, nil,

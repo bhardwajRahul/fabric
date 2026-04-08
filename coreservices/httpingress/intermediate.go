@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/httpingress/httpingressapi"
 	"github.com/microbus-io/fabric/coreservices/httpingress/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ httpingressapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -233,6 +235,10 @@ Extensions are specified with "*.ext" and are matched against the extension of t
 	)
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -503,7 +509,7 @@ func (svc *Intermediate) SetBlockedPaths(blockedPaths string) (err error) { // M
 	return svc.SetConfig("BlockedPaths", blockedPaths)
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

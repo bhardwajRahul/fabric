@@ -175,27 +175,27 @@ func TestBearerToken_Mock(t *testing.T) {
 		)
 	})
 
-	t.Run("on_changed_private_key_pem", func(t *testing.T) { // MARKER: PrivateKeyPEM
+	t.Run("on_changed_private_key_pem", func(t *testing.T) { // MARKER: PrivateKey
 		assert := testarossa.For(t)
 
-		err := mock.OnChangedPrivateKeyPEM(ctx)
+		err := mock.OnChangedPrivateKey(ctx)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnChangedPrivateKeyPEM(func(ctx context.Context) (err error) {
+		mock.MockOnChangedPrivateKey(func(ctx context.Context) (err error) {
 			return nil
 		})
-		err = mock.OnChangedPrivateKeyPEM(ctx)
+		err = mock.OnChangedPrivateKey(ctx)
 		assert.NoError(err)
 	})
 
-	t.Run("on_changed_alt_private_key_pem", func(t *testing.T) { // MARKER: AltPrivateKeyPEM
+	t.Run("on_changed_alt_private_key_pem", func(t *testing.T) { // MARKER: AltPrivateKey
 		assert := testarossa.For(t)
 
-		err := mock.OnChangedAltPrivateKeyPEM(ctx)
+		err := mock.OnChangedAltPrivateKey(ctx)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnChangedAltPrivateKeyPEM(func(ctx context.Context) (err error) {
+		mock.MockOnChangedAltPrivateKey(func(ctx context.Context) (err error) {
 			return nil
 		})
-		err = mock.OnChangedAltPrivateKeyPEM(ctx)
+		err = mock.OnChangedAltPrivateKey(ctx)
 		assert.NoError(err)
 	})
 }
@@ -216,7 +216,7 @@ func TestBearerToken_Mint(t *testing.T) { // MARKER: Mint
 	// Configure a test key
 	testPEM := generateTestPEM()
 	svc.Init(func(svc *Service) (err error) {
-		return svc.SetPrivateKeyPEM(testPEM)
+		return svc.SetPrivateKey(testPEM)
 	})
 
 	// Run the testing app
@@ -291,6 +291,40 @@ func TestBearerToken_Mint(t *testing.T) { // MARKER: Mint
 		}
 	})
 
+	t.Run("raw_base64_key", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Strip PEM header/footer to get raw base64
+		block, _ := pem.Decode([]byte(testPEM))
+		rawBase64 := base64.StdEncoding.EncodeToString(block.Bytes)
+
+		// Load the raw base64 key
+		err := svc.loadKey(rawBase64, &svc.primary)
+		assert.NoError(err)
+
+		// Mint a token with the raw key
+		claims := map[string]any{"sub": "raw-key-user"}
+		token, err := client.Mint(ctx, claims)
+		if assert.NoError(err) {
+			assert.NotZero(token)
+
+			// Verify the token is valid
+			svc.mu.RLock()
+			pubKey := svc.primary.publicKey
+			svc.mu.RUnlock()
+			parsed, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
+				return pubKey, nil
+			})
+			if assert.NoError(err) {
+				assert.Equal("raw-key-user", parsed.Claims.(jwt.MapClaims)["sub"])
+			}
+		}
+
+		// Restore the original PEM key
+		err = svc.loadKey(testPEM, &svc.primary)
+		assert.NoError(err)
+	})
+
 	t.Run("no_key_configured", func(t *testing.T) {
 		assert := testarossa.For(t)
 
@@ -327,7 +361,7 @@ func TestBearerToken_JWKS(t *testing.T) { // MARKER: JWKS
 	testPEM := generateTestPEM()
 	altPEM := generateTestPEM()
 	svc.Init(func(svc *Service) (err error) {
-		return svc.SetPrivateKeyPEM(testPEM)
+		return svc.SetPrivateKey(testPEM)
 	})
 
 	// Run the testing app
@@ -369,9 +403,9 @@ func TestBearerToken_JWKS(t *testing.T) { // MARKER: JWKS
 		assert := testarossa.For(t)
 
 		// Set alt key
-		err := svc.SetAltPrivateKeyPEM(altPEM)
+		err := svc.SetAltPrivateKey(altPEM)
 		assert.NoError(err)
-		defer svc.SetAltPrivateKeyPEM("")
+		defer svc.SetAltPrivateKey("")
 
 		keys, err := client.JWKS(ctx)
 		if assert.NoError(err) {

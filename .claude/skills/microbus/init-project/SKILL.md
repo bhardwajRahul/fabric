@@ -126,6 +126,8 @@ Create `.vscode/launch.json` relative to the root of the project with the follow
 
 #### Step 8: Prepare Authentication
 
+**IMPORTANT**: Read `.claude/rules/auth.txt` for authentication conventions before proceeding with this step.
+
 Create the `act` directory in the root of the project if one does not exist.
 
 ```shell
@@ -134,7 +136,7 @@ mkdir -p act
 
 Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it.
 
-Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKeyPEM` config of the `bearer.token.core` microservice.
+Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKey` config of the `bearer.token.core` microservice.
 
 ```shell
 openssl genpkey -algorithm Ed25519 -out private.pem
@@ -142,8 +144,5 @@ openssl genpkey -algorithm Ed25519 -out private.pem
 
 ```yaml
 bearer.token.core:
-  PrivateKeyPEM: |
-    -----BEGIN PRIVATE KEY-----
-    MC4CAQAwBQYDK2VwBCIEIL...
-    -----END PRIVATE KEY-----
+  PrivateKey: MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
 ```

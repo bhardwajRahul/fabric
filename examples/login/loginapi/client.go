@@ -21,12 +21,14 @@ import (
 	"encoding/json"
 	"iter"
 	"net/http"
+	"reflect"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/workflow"
 )
 
 var (
@@ -35,6 +37,11 @@ var (
 	_ *http.Request
 	_ *errors.TracedError
 	_ *httpx.BodyReader
+	_ = marshalRequest
+	_ = marshalPublish
+	_ = marshalFunction
+	_ = marshalTask
+	_ workflow.Flow
 )
 
 // Hostname is the default hostname of the microservice.
@@ -59,6 +66,13 @@ var (
 	AdminOnly   = Def{Method: "GET", Route: `/admin-only`}   // MARKER: AdminOnly
 	ManagerOnly = Def{Method: "GET", Route: `/manager-only`} // MARKER: ManagerOnly
 )
+
+// multicastResponse packs the response of a functional multicast.
+type multicastResponse struct {
+	data         any
+	HTTPResponse *http.Response
+	err          error
+}
 
 // Client is a lightweight proxy for making unicast calls to the microservice.
 type Client struct {
@@ -378,4 +392,164 @@ func (_c MulticastClient) ManagerOnly(ctx context.Context, relativeURL string) i
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)
+}
+
+// Executor runs tasks and workflows synchronously, blocking until termination.
+// It is primarily intended for integration tests. Production code should use
+// the foreman Client to create and start flows asynchronously.
+type Executor struct {
+	svc     service.Publisher
+	host    string
+	opts    []pub.Option
+	inFlow  *workflow.Flow
+	outFlow *workflow.Flow
+}
+
+// NewExecutor creates a new executor proxy to the microservice.
+func NewExecutor(caller service.Publisher) Executor {
+	return Executor{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the executor with a different hostname to be applied to requests.
+func (_c Executor) ForHost(host string) Executor {
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow}
+}
+
+// WithOptions returns a copy of the executor with options to be applied to requests.
+func (_c Executor) WithOptions(opts ...pub.Option) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow}
+}
+
+// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
+// The input flow's state is available to the task in addition to the typed input arguments.
+func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow}
+}
+
+// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
+// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
+func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow}
+}
+
+// marshalRequest supports functional endpoints.
+func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return err // No trace
+	}
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.ReadOutputPayload(httpRes, out)
+	return errors.Trace(err)
+}
+
+// marshalPublish supports multicast functional endpoints.
+func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) iter.Seq[*multicastResponse] {
+	if method == "ANY" {
+		method = "POST"
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	query, body, err := httpx.WriteInputPayload(method, in)
+	if err != nil {
+		return func(yield func(*multicastResponse) bool) {
+			yield(&multicastResponse{err: err})
+		}
+	}
+	_queue := svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Query(query),
+		pub.Body(body),
+		pub.Options(opts...),
+	)
+	return func(yield func(*multicastResponse) bool) {
+		for qi := range _queue {
+			httpResp, err := qi.Get()
+			if err == nil {
+				reflect.ValueOf(out).Elem().SetZero()
+				err = httpx.ReadOutputPayload(httpResp, out)
+			}
+			if err != nil {
+				if !yield(&multicastResponse{err: err, HTTPResponse: httpResp}) {
+					return
+				}
+			} else {
+				if !yield(&multicastResponse{data: out, HTTPResponse: httpResp}) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// marshalTask supports task execution via the Executor.
+func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
+	flow := inFlow
+	if flow == nil {
+		flow = workflow.NewFlow()
+	}
+	err = flow.SetState(in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	body, err := json.Marshal(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Body(body),
+		pub.ContentType("application/json"),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	err = json.NewDecoder(httpRes.Body).Decode(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if outFlow != nil {
+		*outFlow = *flow
+	}
+	if out != nil {
+		err = flow.ParseState(out)
+		return errors.Trace(err)
+	}
+	return nil
 }

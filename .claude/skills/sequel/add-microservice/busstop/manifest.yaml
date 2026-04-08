@@ -3,7 +3,7 @@ general:
   hostname: busstop.hostname
   description: BusStop persists bus stops in a SQL database.
   package: github.com/microbus-io/fabric/busstop
-  frameworkVersion: 1.23.0
+  frameworkVersion: 1.26.0
   db: SQL
 
 functions:
@@ -106,27 +106,27 @@ functions:
     signature: CreateREST(httpRequestBody *BusStop) (objKey BusStopKey, httpStatusCode int)
     description: CreateREST creates a new bus stop via REST, returning its key.
     method: POST
-    route: /busstops
+    route: /bus-stops
   StoreREST:
     signature: StoreREST(key BusStopKey, httpRequestBody *BusStop) (httpStatusCode int)
     description: StoreREST updates an existing bus stop via REST.
     method: PUT
-    route: /busstops/{key}
+    route: /bus-stops/{key}
   DeleteREST:
     signature: DeleteREST(key BusStopKey) (httpStatusCode int)
     description: DeleteREST deletes an existing bus stop via REST.
     method: DELETE
-    route: /busstops/{key}
+    route: /bus-stops/{key}
   LoadREST:
     signature: LoadREST(key BusStopKey) (httpResponseBody *BusStop, httpStatusCode int)
     description: LoadREST loads a bus stop by key via REST.
     method: GET
-    route: /busstops/{key}
+    route: /bus-stops/{key}
   ListREST:
     signature: ListREST(q Query) (httpResponseBody []*BusStop, httpStatusCode int)
     description: ListREST lists bus stops matching the query via REST.
     method: GET
-    route: /busstops
+    route: /bus-stops
 
   TryReserve:
     signature: TryReserve(objKey BusStopKey, dur time.Duration) (reserved bool)

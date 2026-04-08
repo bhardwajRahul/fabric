@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
@@ -48,7 +49,7 @@ var (
 
 const (
 	tableName        = "person"
-	sequenceName     = "person@e1dbc265" // Do not change
+	sequenceName     = "person@a2b8aca8" // Do not change
 	bulkBatchSize    = 1000
 	maxParamsInQuery = 2000 // SQL Server is limited to 2100 parameters
 )
@@ -89,11 +90,11 @@ func (svc *Service) mapColumnsOnInsert(ctx context.Context, obj *yellowpagesapi.
 		Wrap a string in sequel.UnsafeSQL to use a SQL statement as value.
 	*/
 	columnMapping = map[string]any{
-		"example":    sequel.Nullify(obj.Example), // Do not remove the example
 		"first_name": obj.FirstName,
 		"last_name":  obj.LastName,
 		"email":      obj.Email,
-		"birthday":   sequel.Nullify(obj.Birthday),
+		"birthday":   sequel.Nullify(obj.Birthday.UTC()),
+		"example":    sequel.Nullify(obj.Example), // Do not remove the example
 	}
 	return columnMapping, nil
 }
@@ -111,11 +112,11 @@ func (svc *Service) mapColumnsOnUpdate(ctx context.Context, obj *yellowpagesapi.
 		Wrap a string in sequel.UnsafeSQL to use a SQL statement as value.
 	*/
 	columnMapping = map[string]any{
-		"example":    sequel.Nullify(obj.Example), // Do not remove the example
 		"first_name": obj.FirstName,
 		"last_name":  obj.LastName,
 		"email":      obj.Email,
-		"birthday":   sequel.Nullify(obj.Birthday),
+		"birthday":   sequel.Nullify(obj.Birthday.UTC()),
+		"example":    sequel.Nullify(obj.Example), // Do not remove the example
 	}
 	return columnMapping, nil
 }
@@ -132,11 +133,11 @@ func (svc *Service) mapColumnsOnSelect(ctx context.Context, obj *yellowpagesapi.
 		Use sequel.Bind to transform and apply the value manually to the object.
 	*/
 	columnMapping = map[string]any{
-		"example":    sequel.Nullable(&obj.Example), // Do not remove the example
 		"first_name": &obj.FirstName,
 		"last_name":  &obj.LastName,
 		"email":      &obj.Email,
 		"birthday":   sequel.Nullable(&obj.Birthday),
+		"example":    sequel.Nullable(&obj.Example), // Do not remove the example
 	}
 	return columnMapping, nil
 }
@@ -153,10 +154,10 @@ func (svc *Service) prepareWhereClauses(ctx context.Context, query yellowpagesap
 				HINT: Add names of textual (VARCHAR, TEXT, etc.) columns that are searchable.
 				Exclude columns that the actor is unauthorized to search on.
 			*/
-			"example", // Do not remove the example
 			"first_name",
 			"last_name",
 			"email",
+			"example", // Do not remove the example
 		}
 		q := strings.TrimSpace(regexp.MustCompile(`\s`).ReplaceAllString(query.Q, " ")) // Compress whitespaces
 		for _, word := range strings.Split(q, " ") {
@@ -172,11 +173,6 @@ func (svc *Service) prepareWhereClauses(ctx context.Context, query yellowpagesap
 		HINT: Add WHERE conditions for each non-zero filtering option of the query.
 		Exclude columns that the actor is unauthorized to filter on.
 	*/
-	query.Example = strings.TrimSpace(query.Example) // Do not remove the example
-	if query.Example != "" {
-		conditions = append(conditions, "example=?")
-		args = append(args, query.Example)
-	}
 	query.FirstName = strings.TrimSpace(query.FirstName)
 	if query.FirstName != "" {
 		conditions = append(conditions, "first_name=?")
@@ -192,6 +188,11 @@ func (svc *Service) prepareWhereClauses(ctx context.Context, query yellowpagesap
 		conditions = append(conditions, "email=?")
 		args = append(args, query.Email)
 	}
+	query.Example = strings.TrimSpace(query.Example) // Do not remove the example
+	if query.Example != "" {
+		conditions = append(conditions, "example=?")
+		args = append(args, query.Example)
+	}
 	return conditions, args, nil
 }
 
@@ -204,12 +205,75 @@ func (svc *Service) tenantOf(ctx context.Context) int {
 }
 
 /*
+Demo serves the web user interface for managing persons.
+*/
+func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Demo
+	ctx := r.Context()
+	err = r.ParseForm()
+	if err != nil {
+		return errors.Trace(err, http.StatusBadRequest)
+	}
+
+	data := struct {
+		Method     string
+		Path       string
+		Body       string
+		StatusCode int
+		Response   string
+	}{
+		Method: r.FormValue("method"),
+		Path:   r.FormValue("path"),
+		Body:   r.FormValue("body"),
+	}
+	if r.Method == "POST" {
+		method := r.FormValue("method")
+		u, err := url.JoinPath("https://"+Hostname, r.FormValue("path"))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		var body []byte
+		contentType := ""
+		if method == "POST" || method == "PUT" {
+			body = []byte(r.FormValue("body"))
+			contentType = "application/json"
+		}
+		res, err := svc.Request(
+			ctx,
+			pub.Method(method),
+			pub.URL(u),
+			pub.Body(body),
+			pub.ContentType(contentType),
+		)
+		if err != nil {
+			data.Response = fmt.Sprintf("%+v", err)
+			data.StatusCode = errors.StatusCode(err)
+		} else {
+			data.StatusCode = res.StatusCode
+			b, err := io.ReadAll(res.Body)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			data.Response = string(b)
+		}
+	}
+	w.Header().Set("Content-Type", "text/html")
+	err = svc.WriteResTemplate(w, "demo.html", data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+/*
 openDatabase opens the database connection and runs schema migrations as needed.
 */
 func (svc *Service) openDatabase(ctx context.Context) (err error) {
 	_ = ctx
 	const driverName = "" // The driver name is inferred from the data source name
 	dataSourceName := svc.SQLDataSourceName()
+	if dataSourceName == "" && svc.Deployment() == connector.LOCAL {
+		dataSourceName = "file:local.sqlite"
+	}
 	if svc.Deployment() == connector.TESTING {
 		svc.db, err = sequel.OpenTesting(driverName, dataSourceName, svc.Plane())
 	} else {
@@ -299,25 +363,8 @@ func (svc *Service) MustRevise(ctx context.Context, obj *yellowpagesapi.Person) 
 Delete deletes the object.
 */
 func (svc *Service) Delete(ctx context.Context, objKey yellowpagesapi.PersonKey) (deleted bool, err error) { // MARKER: Delete
-	if objKey.IsZero() {
-		return false, nil
-	}
-	tenantID := svc.tenantOf(ctx)
-	stmt := "DELETE FROM " + tableName + " WHERE tenant_id=? AND id=?"
-	args := []any{
-		tenantID,
-		objKey,
-	}
-	stmt = svc.db.ConformArgPlaceholders(stmt)
-	res, err := svc.db.ExecContext(ctx, stmt, args...)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	ra, err := res.RowsAffected()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	return ra > 0, nil
+	deletedKeys, err := svc.BulkDelete(ctx, []yellowpagesapi.PersonKey{objKey})
+	return len(deletedKeys) > 0, errors.Trace(err)
 }
 
 /*
@@ -459,38 +506,16 @@ func (svc *Service) List(ctx context.Context, query yellowpagesapi.Query) (objs 
 	// -- OFFSET/LIMIT --
 	countArgsBeforeOffsetLimit := len(args)
 	if (query.Offset > 0 || query.Limit > 0) && query.Offset >= 0 && query.Limit >= 0 {
-		switch svc.db.DriverName() {
-		case "mysql":
-			// LIMIT is required to use OFFSET
-			stmt.WriteString(" LIMIT ?, ?")
-			args = append(args, query.Offset)
-			if query.Limit > 0 {
-				args = append(args, query.Limit)
-			} else {
-				args = append(args, 1<<62) // Infinity
-			}
-		case "mssql":
-			// OFFSET is required to use FETCH NEXT
-			stmt.WriteString(" OFFSET ? ROWS")
-			args = append(args, query.Offset)
-			if query.Limit > 0 {
-				stmt.WriteString(" FETCH NEXT ? ROWS ONLY")
-				args = append(args, query.Limit)
-			}
-		case "pgx":
-			if query.Offset > 0 {
-				stmt.WriteString(" OFFSET ? ROWS")
-				args = append(args, query.Offset)
-			}
-			if query.Limit > 0 {
-				stmt.WriteString(" LIMIT ?")
-				args = append(args, query.Limit)
-			}
+		limit := query.Limit
+		if limit == 0 {
+			limit = 1 << 62 // Infinity
 		}
+		stmt.WriteString(" LIMIT_OFFSET(?, ?)")
+		args = append(args, limit, query.Offset)
 	}
 
 	// Query
-	stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+	stmtStr := stmt.String()
 	f1 := func() (err error) {
 		// Query for the objects
 		rows, err := svc.db.QueryContext(ctx, stmtStr, args...)
@@ -677,8 +702,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 			selectStmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&selectStmt)
 			selectStmt.WriteString(") FOR UPDATE")
-			selectStmtStr := svc.db.ConformArgPlaceholders(selectStmt.String())
-			rows, err := tx.QueryContext(ctx, selectStmtStr, tenantID)
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
 			if err != nil {
 				tx.Rollback()
 				return deletedKeys, errors.Trace(err)
@@ -702,8 +726,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 				deleteStmt.WriteString(" WHERE tenant_id=? AND id IN (")
 				writeIDList(&deleteStmt)
 				deleteStmt.WriteString(")")
-				deleteStmtStr := svc.db.ConformArgPlaceholders(deleteStmt.String())
-				_, err = tx.ExecContext(ctx, deleteStmtStr, tenantID)
+				_, err = tx.ExecContext(ctx, deleteStmt.String(), tenantID)
 				if err != nil {
 					tx.Rollback()
 					return deletedKeys, errors.Trace(err)
@@ -714,7 +737,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 				return deletedKeys, errors.Trace(err)
 			}
 			deletedKeys = append(deletedKeys, foundKeys...)
-		case "pgx":
+		case "pgx", "sqlite":
 			// PostgreSQL supports RETURNING
 			var stmt strings.Builder
 			stmt.WriteString("DELETE FROM ")
@@ -722,8 +745,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(") RETURNING id")
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), tenantID)
 			if err != nil {
 				return deletedKeys, errors.Trace(err)
 			}
@@ -746,8 +768,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(")")
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), tenantID)
 			if err != nil {
 				return deletedKeys, errors.Trace(err)
 			}
@@ -763,6 +784,10 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.Per
 			rows.Close()
 		}
 	}
+	// Fire-and-forget event
+	if len(deletedKeys) > 0 {
+		yellowpagesapi.NewMulticastTrigger(svc).OnPersonDeleted(ctx, deletedKeys)
+	}
 	return deletedKeys, nil
 }
 
@@ -771,7 +796,14 @@ BulkStore updates multiple objects, returning the keys of the stored objects.
 */
 func (svc *Service) BulkStore(ctx context.Context, objs []*yellowpagesapi.Person) (storedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkStore
 	storedKeys, err = svc.bulkUpdate(ctx, objs, false)
-	return storedKeys, errors.Trace(err)
+	if err != nil {
+		return storedKeys, errors.Trace(err)
+	}
+	// Fire-and-forget event
+	if len(storedKeys) > 0 {
+		yellowpagesapi.NewMulticastTrigger(svc).OnPersonStored(ctx, storedKeys)
+	}
+	return storedKeys, nil
 }
 
 /*
@@ -819,7 +851,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*yellowpagesapi.Perso
 	delete(firstMapping, "tenant_id")
 	delete(firstMapping, "revision")
 	delete(firstMapping, "created_at")
-	firstMapping["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+	firstMapping["updated_at"] = sequel.UnsafeSQL("NOW_UTC()")
 	columnsInOrder := slices.Sorted(maps.Keys(firstMapping))
 	paramsPerRow := 0
 	for _, k := range columnsInOrder {
@@ -858,7 +890,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*yellowpagesapi.Perso
 				delete(batchMappings[i], "tenant_id")
 				delete(batchMappings[i], "revision")
 				delete(batchMappings[i], "created_at")
-				batchMappings[i]["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+				batchMappings[i]["updated_at"] = sequel.UnsafeSQL("NOW_UTC()")
 			}
 		}
 
@@ -933,10 +965,10 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*yellowpagesapi.Perso
 			}
 			stmt.WriteString(")")
 		}
-		if svc.db.DriverName() == "pgx" {
+		if svc.db.DriverName() == "pgx" || svc.db.DriverName() == "sqlite" {
 			stmt.WriteString(" RETURNING id")
 		}
-		stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+		stmtStr := stmt.String()
 		switch svc.db.DriverName() {
 		case "mysql":
 			// MySQL doesn't support RETURNING; use a transaction with SELECT FOR UPDATE
@@ -971,8 +1003,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*yellowpagesapi.Perso
 				selectStmt.WriteString(")")
 			}
 			selectStmt.WriteString(" FOR UPDATE")
-			selectStmtStr := svc.db.ConformArgPlaceholders(selectStmt.String())
-			rows, err := tx.QueryContext(ctx, selectStmtStr, tenantID)
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
 			if err != nil {
 				tx.Rollback()
 				return storedKeys, errors.Trace(err)
@@ -1050,10 +1081,12 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*yellowpagesapi.Perso
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	sqlNow := sequel.UnsafeSQL("NOW_UTC()")
 	firstMapping["tenant_id"] = tenantID
 	firstMapping["revision"] = 1
-	firstMapping["created_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
-	firstMapping["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+	firstMapping["created_at"] = sqlNow
+	firstMapping["updated_at"] = sqlNow
+	firstMapping["reserved_before"] = sqlNow
 	columnsInOrder := slices.Sorted(maps.Keys(firstMapping))
 	paramsPerRow := 0
 	for _, k := range columnsInOrder {
@@ -1104,8 +1137,9 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*yellowpagesapi.Perso
 				}
 				mapping["tenant_id"] = tenantID
 				mapping["revision"] = 1
-				mapping["created_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
-				mapping["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+				mapping["created_at"] = sqlNow
+				mapping["updated_at"] = sqlNow
+				mapping["reserved_before"] = sqlNow
 			}
 			if i > 0 {
 				stmt.WriteString(",")
@@ -1130,10 +1164,10 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*yellowpagesapi.Perso
 			stmt.WriteString(")")
 		}
 		switch svc.db.DriverName() {
-		case "pgx":
+		case "pgx", "sqlite":
 			stmt.WriteString(" RETURNING id")
 		}
-		stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+		stmtStr := stmt.String()
 
 		// Execute and retrieve generated IDs
 		switch svc.db.DriverName() {
@@ -1165,6 +1199,10 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*yellowpagesapi.Perso
 			}
 			rows.Close()
 		}
+	}
+	// Fire-and-forget event
+	if len(objKeys) > 0 {
+		yellowpagesapi.NewMulticastTrigger(svc).OnPersonCreated(ctx, objKeys)
 	}
 	return objKeys, nil
 }
@@ -1263,61 +1301,192 @@ func (svc *Service) ListREST(ctx context.Context, q yellowpagesapi.Query) (httpR
 }
 
 /*
-WebUI provides a form for making web requests to the CRUD endpoints.
+TryReserve attempts to reserve a person for the given duration, returning true if successful.
 */
-func (svc *Service) WebUI(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: WebUI
-	ctx := r.Context()
-	err = r.ParseForm()
-	if err != nil {
-		return errors.Trace(err, http.StatusBadRequest)
+func (svc *Service) TryReserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: TryReserve
+	reservedKeys, err := svc.TryBulkReserve(ctx, []yellowpagesapi.PersonKey{objKey}, dur)
+	return len(reservedKeys) > 0, errors.Trace(err)
+}
+
+/*
+TryBulkReserve attempts to reserve persons for the given duration, returning the keys of those successfully reserved.
+Only persons whose reservation has expired (reserved_before < NOW) are reserved.
+*/
+func (svc *Service) TryBulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: TryBulkReserve
+	return svc.bulkReserve(ctx, objKeys, dur, false)
+}
+
+/*
+Reserve unconditionally reserves a person for the given duration, returning true if the person exists.
+*/
+func (svc *Service) Reserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: Reserve
+	reservedKeys, err := svc.BulkReserve(ctx, []yellowpagesapi.PersonKey{objKey}, dur)
+	return len(reservedKeys) > 0, errors.Trace(err)
+}
+
+/*
+BulkReserve unconditionally reserves persons for the given duration, returning the keys of those that exist.
+*/
+func (svc *Service) BulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkReserve
+	return svc.bulkReserve(ctx, objKeys, dur, true)
+}
+
+// bulkReserve is the shared implementation for TryBulkReserve and BulkReserve.
+// When forceful is true, the reservation is set regardless of current state.
+// When forceful is false, only rows where reserved_before <= NOW are reserved.
+func (svc *Service) bulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration, forceful bool) (reservedKeys []yellowpagesapi.PersonKey, err error) {
+	if len(objKeys) == 0 {
+		return nil, nil
+	}
+	if dur < 0 {
+		return nil, errors.New("duration must not be negative", http.StatusBadRequest)
+	}
+	if !forceful && dur == 0 {
+		// TryReserve with duration 0 would only match already-expired reservations
+		// and set them to NOW, which leaves them expired. No-op.
+		return nil, nil
+	}
+	// Sort by ID to optimize disk access
+	sort.Slice(objKeys, func(i, j int) bool {
+		return objKeys[i].ID < objKeys[j].ID
+	})
+	tenantID := svc.tenantOf(ctx)
+	durMillis := dur.Milliseconds()
+	if dur > 0 && durMillis <= 0 {
+		durMillis = 1
 	}
 
-	data := struct {
-		Method     string
-		Path       string
-		Body       string
-		StatusCode int
-		Response   string
-	}{
-		Method: r.FormValue("method"),
-		Path:   r.FormValue("path"),
-		Body:   r.FormValue("body"),
-	}
-	if r.Method == "POST" {
-		method := r.FormValue("method")
-		u, err := url.JoinPath("https://"+Hostname, r.FormValue("path"))
-		if err != nil {
-			return errors.Trace(err)
-		}
-		var body []byte
-		contentType := ""
-		if method == "POST" || method == "PUT" {
-			body = []byte(r.FormValue("body"))
-			contentType = "application/json"
-		}
-		res, err := svc.Request(
-			ctx,
-			pub.Method(method),
-			pub.URL(u),
-			pub.Body(body),
-			pub.ContentType(contentType),
-		)
-		if err != nil {
-			data.Response = fmt.Sprintf("%+v", err)
-			data.StatusCode = errors.StatusCode(err)
+	for len(objKeys) > 0 {
+		var batch []yellowpagesapi.PersonKey
+		if len(objKeys) <= bulkBatchSize {
+			batch = objKeys
+			objKeys = nil
 		} else {
-			data.StatusCode = res.StatusCode
-			b, err := io.ReadAll(res.Body)
-			if err != nil {
-				return errors.Trace(err)
+			batch = objKeys[:bulkBatchSize]
+			objKeys = objKeys[bulkBatchSize:]
+		}
+		writeIDList := func(stmt *strings.Builder) {
+			for i, k := range batch {
+				if i > 0 {
+					stmt.WriteString(",")
+				}
+				stmt.WriteString(strconv.Itoa(k.ID))
 			}
-			data.Response = string(b)
+		}
+
+		switch svc.db.DriverName() {
+		case "mysql":
+			// MySQL doesn't support RETURNING; use a transaction with SELECT FOR UPDATE
+			tx, err := svc.db.BeginTx(ctx, nil)
+			if err != nil {
+				return reservedKeys, errors.Trace(err)
+			}
+			var selectStmt strings.Builder
+			selectStmt.WriteString("SELECT id FROM ")
+			selectStmt.WriteString(tableName)
+			selectStmt.WriteString(" WHERE tenant_id=? AND id IN (")
+			writeIDList(&selectStmt)
+			selectStmt.WriteString(")")
+			if !forceful {
+				selectStmt.WriteString(" AND reserved_before<=NOW_UTC()")
+			}
+			selectStmt.WriteString(" FOR UPDATE")
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
+			if err != nil {
+				tx.Rollback()
+				return reservedKeys, errors.Trace(err)
+			}
+			var foundKeys []yellowpagesapi.PersonKey
+			for rows.Next() {
+				var key yellowpagesapi.PersonKey
+				err = rows.Scan(&key)
+				if err != nil {
+					rows.Close()
+					tx.Rollback()
+					return reservedKeys, errors.Trace(err)
+				}
+				foundKeys = append(foundKeys, key)
+			}
+			rows.Close()
+			if len(foundKeys) > 0 {
+				var updateStmt strings.Builder
+				updateStmt.WriteString("UPDATE ")
+				updateStmt.WriteString(tableName)
+				updateStmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
+				updateStmt.WriteString(" WHERE tenant_id=? AND id IN (")
+				for i, k := range foundKeys {
+					if i > 0 {
+						updateStmt.WriteString(",")
+					}
+					updateStmt.WriteString(strconv.Itoa(k.ID))
+				}
+				updateStmt.WriteString(")")
+				_, err = tx.ExecContext(ctx, updateStmt.String(), durMillis, tenantID)
+				if err != nil {
+					tx.Rollback()
+					return reservedKeys, errors.Trace(err)
+				}
+			}
+			err = tx.Commit()
+			if err != nil {
+				return reservedKeys, errors.Trace(err)
+			}
+			reservedKeys = append(reservedKeys, foundKeys...)
+		case "pgx", "sqlite":
+			// PostgreSQL supports RETURNING
+			var stmt strings.Builder
+			stmt.WriteString("UPDATE ")
+			stmt.WriteString(tableName)
+			stmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
+			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
+			writeIDList(&stmt)
+			stmt.WriteString(")")
+			if !forceful {
+				stmt.WriteString(" AND reserved_before<=NOW_UTC()")
+			}
+			stmt.WriteString(" RETURNING id")
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), durMillis, tenantID)
+			if err != nil {
+				return reservedKeys, errors.Trace(err)
+			}
+			for rows.Next() {
+				var key yellowpagesapi.PersonKey
+				err = rows.Scan(&key)
+				if err != nil {
+					rows.Close()
+					return reservedKeys, errors.Trace(err)
+				}
+				reservedKeys = append(reservedKeys, key)
+			}
+			rows.Close()
+		case "mssql":
+			// SQL Server supports OUTPUT INSERTED
+			var stmt strings.Builder
+			stmt.WriteString("UPDATE ")
+			stmt.WriteString(tableName)
+			stmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
+			stmt.WriteString(" OUTPUT INSERTED.id")
+			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
+			writeIDList(&stmt)
+			stmt.WriteString(")")
+			if !forceful {
+				stmt.WriteString(" AND reserved_before<=NOW_UTC()")
+			}
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), durMillis, tenantID)
+			if err != nil {
+				return reservedKeys, errors.Trace(err)
+			}
+			for rows.Next() {
+				var key yellowpagesapi.PersonKey
+				err = rows.Scan(&key)
+				if err != nil {
+					rows.Close()
+					return reservedKeys, errors.Trace(err)
+				}
+				reservedKeys = append(reservedKeys, key)
+			}
+			rows.Close()
 		}
 	}
-	w.Header().Set("Content-Type", "text/html")
-	err = svc.WriteResTemplate(w, "webui.html", data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return reservedKeys, nil
 }

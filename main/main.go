@@ -27,14 +27,21 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/coreservices/accesstoken"
 	"github.com/microbus-io/fabric/coreservices/bearertoken"
+	"github.com/microbus-io/fabric/coreservices/claudellm"
 	"github.com/microbus-io/fabric/coreservices/configurator"
+	"github.com/microbus-io/fabric/coreservices/foreman"
+	"github.com/microbus-io/fabric/coreservices/geminillm"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/llm"
 	"github.com/microbus-io/fabric/coreservices/metrics"
+	"github.com/microbus-io/fabric/coreservices/openaillm"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
 	"github.com/microbus-io/fabric/examples/browser"
+	"github.com/microbus-io/fabric/examples/chatbox"
 	"github.com/microbus-io/fabric/examples/calculator"
+	"github.com/microbus-io/fabric/examples/creditflow"
 	"github.com/microbus-io/fabric/examples/eventsink"
 	"github.com/microbus-io/fabric/examples/eventsource"
 	"github.com/microbus-io/fabric/examples/hello"
@@ -72,6 +79,11 @@ func main() {
 			})
 			return nil
 		}),
+		foreman.NewService(),
+		llm.NewService(),
+		claudellm.NewService(),
+		openaillm.NewService(),
+		geminillm.NewService(),
 	)
 	app.Add(
 		// Example microservices
@@ -88,7 +100,9 @@ func main() {
 		login.NewService(),
 	)
 	app.Add(
-	// HINT: Add solution microservices here
+		// HINT: Add solution microservices here
+		creditflow.NewService(),
+		chatbox.NewService(),
 	)
 	app.Add(
 		// When everything is ready, begin to accept external requests

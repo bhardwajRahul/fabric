@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package httpx
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -110,66 +111,162 @@ func TestHttpx_DeepObjectRequestPath(t *testing.T) {
 	assert.Equal("", data.E)
 }
 
-func TestHttpx_DeepObjectDecodeOne(t *testing.T) {
+func TestHttpx_DeepObjectArrays(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	data := struct {
-		S string  `json:"s"`
-		I int     `json:"i"`
-		F float64 `json:"f"`
-		B bool    `json:"b"`
-	}{}
+	// Simple string array
+	var simple struct {
+		Tags []string `json:"tags"`
+	}
+	vals := url.Values{
+		"tags[0]": {"alpha"},
+		"tags[1]": {"beta"},
+		"tags[2]": {"gamma"},
+	}
+	err := DecodeDeepObject(vals, &simple)
+	if assert.NoError(err) {
+		assert.Equal(3, len(simple.Tags))
+		assert.Equal("alpha", simple.Tags[0])
+		assert.Equal("beta", simple.Tags[1])
+		assert.Equal("gamma", simple.Tags[2])
+	}
 
-	// Into string
-	err := decodeOne("s", "hello", &data)
+	// Array of objects
+	type Item struct {
+		Name  string `json:"name"`
+		Value int    `json:"value"`
+	}
+	var items struct {
+		Items []Item `json:"items"`
+	}
+	vals = url.Values{
+		"items[0][name]":  {"foo"},
+		"items[0][value]": {"10"},
+		"items[1][name]":  {"bar"},
+		"items[1][value]": {"20"},
+	}
+	err = DecodeDeepObject(vals, &items)
+	if assert.NoError(err) {
+		assert.Equal(2, len(items.Items))
+		assert.Equal("foo", items.Items[0].Name)
+		assert.Equal(10, items.Items[0].Value)
+		assert.Equal("bar", items.Items[1].Name)
+		assert.Equal(20, items.Items[1].Value)
+	}
+
+	// Non-sequential keys are not treated as arrays
+	var nonSeq struct {
+		M map[string]string `json:"m"`
+	}
+	vals = url.Values{
+		"m[0]": {"a"},
+		"m[2]": {"b"},
+	}
+	err = DecodeDeepObject(vals, &nonSeq)
+	if assert.NoError(err) {
+		assert.Equal("a", nonSeq.M["0"])
+		assert.Equal("b", nonSeq.M["2"])
+	}
+
+	// Dot notation arrays
+	var dotArr struct {
+		X []int `json:"x"`
+	}
+	vals = url.Values{
+		"x.0": {"100"},
+		"x.1": {"200"},
+		"x.2": {"300"},
+	}
+	err = DecodeDeepObject(vals, &dotArr)
+	if assert.NoError(err) {
+		assert.Equal(3, len(dotArr.X))
+		assert.Equal(100, dotArr.X[0])
+		assert.Equal(200, dotArr.X[1])
+		assert.Equal(300, dotArr.X[2])
+	}
+}
+
+func TestHttpx_DeepObjectTypeDetection(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	var data struct {
+		S    string  `json:"s"`
+		I    int     `json:"i"`
+		F    float64 `json:"f"`
+		B    bool    `json:"b"`
+		Null *string `json:"null"`
+		E    string  `json:"e"`
+		LI   int     `json:"li"`
+		LF   float32 `json:"lf"`
+	}
+
+	vals := url.Values{
+		"s":    {"hello"},
+		"i":    {"42"},
+		"f":    {"3.14"},
+		"b":    {"true"},
+		"null": {"null"},
+		"e":    {""},
+		"li":   {"10000000"},
+		"lf":   {"8.9e+23"},
+	}
+	err := DecodeDeepObject(vals, &data)
 	if assert.NoError(err) {
 		assert.Equal("hello", data.S)
-	}
-	err = decodeOne("s", `"hello"`, &data)
-	if assert.NoError(err) {
-		assert.Equal("hello", data.S)
-	}
-	err = decodeOne("s", "5", &data)
-	if assert.NoError(err) {
-		assert.Equal("5", data.S)
-	}
-
-	// Into int
-	err = decodeOne("i", "5", &data)
-	if assert.NoError(err) {
-		assert.Equal(5, data.I)
-	}
-	err = decodeOne("i", "1000000", &data)
-	if assert.NoError(err) {
-		assert.Equal(1000000, data.I)
-	}
-	// err = decodeOne("i", "1e+06", &data)
-	// if assert.NoError(err) {
-	// 	assert.Equal(1000000, data.I)
-	// }
-
-	// Into float64
-	err = decodeOne("f", "5", &data)
-	if assert.NoError(err) {
-		assert.Equal(5.0, data.F)
-	}
-	err = decodeOne("f", "5.6", &data)
-	if assert.NoError(err) {
-		assert.Equal(5.6, data.F)
-	}
-	err = decodeOne("f", "1e-3", &data)
-	if assert.NoError(err) {
-		assert.Equal(.001, data.F)
-	}
-
-	// Into bool
-	err = decodeOne("b", "true", &data)
-	if assert.NoError(err) {
+		assert.Equal(42, data.I)
+		assert.Equal(3.14, data.F)
 		assert.Equal(true, data.B)
+		assert.Nil(data.Null)
+		assert.Equal("", data.E)
+		assert.Equal(10000000, data.LI)
+		assert.Equal(float32(8.9e+23), data.LF)
 	}
-	err = decodeOne("b", `"true"`, &data)
+
+	// Number into string field
+	var strNum struct {
+		S string `json:"s"`
+	}
+	err = DecodeDeepObject(url.Values{"s": {"5"}}, &strNum)
 	if assert.NoError(err) {
-		assert.Equal(true, data.B)
+		assert.Equal("5", strNum.S)
+	}
+
+	// Boolean false
+	var boolFalse struct {
+		B bool `json:"b"`
+	}
+	err = DecodeDeepObject(url.Values{"b": {"false"}}, &boolFalse)
+	if assert.NoError(err) {
+		assert.Equal(false, boolFalse.B)
+	}
+}
+
+func TestHttpx_DeepObjectNesting(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// Mixed bracket and dot notation
+	var data struct {
+		X struct {
+			A int `json:"a"`
+			B int `json:"b"`
+			Y struct {
+				C int `json:"c"`
+				D int `json:"d"`
+			} `json:"y"`
+		} `json:"x"`
+		S string `json:"s"`
+	}
+	r, err := http.NewRequest("GET", `/path?x.a=5&x[b]=3&x.y.c=1&x[y][d]=2&s=str`, nil)
+	assert.NoError(err)
+	err = DecodeDeepObject(r.URL.Query(), &data)
+	if assert.NoError(err) {
+		assert.Equal(5, data.X.A)
+		assert.Equal(3, data.X.B)
+		assert.Equal(1, data.X.Y.C)
+		assert.Equal(2, data.X.Y.D)
+		assert.Equal("str", data.S)
 	}
 }

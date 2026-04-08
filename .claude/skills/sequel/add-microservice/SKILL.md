@@ -9,6 +9,8 @@ description: Creates and initializes a new microservice that provides CRUD opera
 
 **IMPORTANT**: Do not remove the `Example` field or code related to it from the code since it is required by various tests.
 
+**IMPORTANT**: Read `.claude/rules/sequel.txt` for SQL CRUD conventions before proceeding.
+
 ## Workflow
 
 Copy this checklist and track your progress:
@@ -90,6 +92,8 @@ Perform these replacements in order:
 10. Replace `_CIPHER_NONCE___________________` with a 32-character random base64 string (characters `A-Z`, `a-z`, `0-9`, `+`, `/`)
 11. Replace `_SEQUENCE_` with an 8-character random hexadecimal string
 
+Run `go fmt` on the microservice directory to reformat the Go source files.
+
 #### Step 5: Add to Main App
 
 Find `main/main.go` relative to the project root. Add the new microservice to the app in the `main` function. Add the appropriate import statement at the top of the file.
@@ -120,7 +124,7 @@ Add the data source name secrets under `all`.
 
 ```yaml
 all:
-  SQLDataSourceName: root:root@tcp(127.0.0.1:3306)/microbus
+  # SQLDataSourceName: root:root@tcp(127.0.0.1:3306)/microbus
   # SQLDataSourceName: postgres://postgres:postgres@127.0.0.1:5432/microbus
   # SQLDataSourceName: sqlserver://sa:Password123@127.0.0.1:1433?database=microbus
 ```

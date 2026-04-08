@@ -17,8 +17,8 @@ limitations under the License.
 package middleware
 
 import (
-	"net/http"
 	_ "embed"
+	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"

@@ -30,8 +30,8 @@ import (
 
 var (
 	cipherEnabled = true
-	cipherKey     = []byte("Ltw2d3WcM1ajWcvcVcVm6nCDjNuJBAtV")
-	cipherNonce   = []byte("dnc6pbY0yvAeXqcgdvaIjaCZA85dPCMk")
+	cipherKey     = []byte("dd3BsEJFmxl7KlYTeFG5lGdyrrSa3iDA")
+	cipherNonce   = []byte("0Fc+suW1xNly77gyfIe/zemsuVUdDcrE")
 	cipherPtr     atomic.Pointer[cipher.AEAD]
 )
 

@@ -22,6 +22,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
 )
@@ -29,16 +30,17 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ bearertokenapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockMint                  func(ctx context.Context, claims any) (token string, err error)                     // MARKER: Mint
-	mockJWKS                  func(ctx context.Context) (keys []bearertokenapi.JWK, err error)                  // MARKER: JWKS
-	mockOnChangedPrivateKeyPEM    func(ctx context.Context) (err error)                                           // MARKER: PrivateKeyPEM
-	mockOnChangedAltPrivateKeyPEM func(ctx context.Context) (err error)                                           // MARKER: AltPrivateKeyPEM
+	mockMint                   func(ctx context.Context, claims any) (token string, err error)  // MARKER: Mint
+	mockJWKS                   func(ctx context.Context) (keys []bearertokenapi.JWK, err error) // MARKER: JWKS
+	mockOnChangedPrivateKey    func(ctx context.Context) (err error)                            // MARKER: PrivateKey
+	mockOnChangedAltPrivateKey func(ctx context.Context) (err error)                            // MARKER: AltPrivateKey
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -94,34 +96,34 @@ func (svc *Mock) JWKS(ctx context.Context) (keys []bearertokenapi.JWK, err error
 	return keys, errors.Trace(err)
 }
 
-// MockOnChangedPrivateKeyPEM sets up a mock handler for OnChangedPrivateKeyPEM.
-func (svc *Mock) MockOnChangedPrivateKeyPEM(handler func(ctx context.Context) (err error)) *Mock { // MARKER: PrivateKeyPEM
-	svc.mockOnChangedPrivateKeyPEM = handler
+// MockOnChangedPrivateKey sets up a mock handler for OnChangedPrivateKey.
+func (svc *Mock) MockOnChangedPrivateKey(handler func(ctx context.Context) (err error)) *Mock { // MARKER: PrivateKey
+	svc.mockOnChangedPrivateKey = handler
 	return svc
 }
 
-// OnChangedPrivateKeyPEM executes the mock handler.
-func (svc *Mock) OnChangedPrivateKeyPEM(ctx context.Context) (err error) { // MARKER: PrivateKeyPEM
-	if svc.mockOnChangedPrivateKeyPEM == nil {
+// OnChangedPrivateKey executes the mock handler.
+func (svc *Mock) OnChangedPrivateKey(ctx context.Context) (err error) { // MARKER: PrivateKey
+	if svc.mockOnChangedPrivateKey == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return
 	}
-	err = svc.mockOnChangedPrivateKeyPEM(ctx)
+	err = svc.mockOnChangedPrivateKey(ctx)
 	return errors.Trace(err)
 }
 
-// MockOnChangedAltPrivateKeyPEM sets up a mock handler for OnChangedAltPrivateKeyPEM.
-func (svc *Mock) MockOnChangedAltPrivateKeyPEM(handler func(ctx context.Context) (err error)) *Mock { // MARKER: AltPrivateKeyPEM
-	svc.mockOnChangedAltPrivateKeyPEM = handler
+// MockOnChangedAltPrivateKey sets up a mock handler for OnChangedAltPrivateKey.
+func (svc *Mock) MockOnChangedAltPrivateKey(handler func(ctx context.Context) (err error)) *Mock { // MARKER: AltPrivateKey
+	svc.mockOnChangedAltPrivateKey = handler
 	return svc
 }
 
-// OnChangedAltPrivateKeyPEM executes the mock handler.
-func (svc *Mock) OnChangedAltPrivateKeyPEM(ctx context.Context) (err error) { // MARKER: AltPrivateKeyPEM
-	if svc.mockOnChangedAltPrivateKeyPEM == nil {
+// OnChangedAltPrivateKey executes the mock handler.
+func (svc *Mock) OnChangedAltPrivateKey(ctx context.Context) (err error) { // MARKER: AltPrivateKey
+	if svc.mockOnChangedAltPrivateKey == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return
 	}
-	err = svc.mockOnChangedAltPrivateKeyPEM(ctx)
+	err = svc.mockOnChangedAltPrivateKey(ctx)
 	return errors.Trace(err)
 }

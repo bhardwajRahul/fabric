@@ -5,13 +5,11 @@ The following open source software (OSS) is used or referenced by the Microbus f
 | Name | License | Copyright |
 |------|---------|-----------|
 | [NATS](https://nats.io) | Apache License 2.0 | Copyright 2012-2022 The NATS Authors |
-| [Go MySQL Driver](https://github.com/go-sql-driver/mysql) | MPL License 2.0 | Copyright 2012 The Go-MySQL-Driver Authors. All rights reserved. |
 | [Prometheus](https://prometheus.io) | Apache License 2.0 | Copyright 2022 The Prometheus Authors |
 | [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-go) | Apache License 2.0 | Copyright The OpenTelemetry Authors |
 | [Grafana](https://grafana.com) | AGPLv3 | Copyright 2014-2021 Grafana Labs |
 | [Logrus](https://github.com/sirupsen/logrus) | MIT License | Copyright (c) 2014 Simon Eskildsen |
 | [Go YAML](https://github.com/yaml/go-yaml) | MIT License<br>Apache License 2.0 | Copyright (c) 2006-2010 Kirill Simonov<br>Copyright (c) 2011-2019 Canonical Ltd |
-| [MariaDB](https://mariadb.com) | GNU General Public License | Copyright (c) 2018, 2022, MariaDB Corporation. |
 | [JSON Schema](https://github.com/invopop/jsonschema) | MIT License | Copyright (C) 2014 Alec Thomas |
 | [Go Guerilla](https://github.com/phires/go-guerrilla) | MIT License | Copyright (c) 2016 GuerrillaMail.com. |
 | [Letters](https://github.com/mnako/letters) | MIT License | Copyright (c) 2019 Michal Nakoneczny |
@@ -33,18 +31,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-```
-
-### Go MySQL Driver
-
-```
-Go MySQL Driver - A MySQL-Driver for Go's database/sql package
-
-Copyright 2012 The Go-MySQL-Driver Authors. All rights reserved.
-
-This Source Code Form is subject to the terms of the Mozilla Public
-License, v. 2.0. If a copy of the MPL was not distributed with this file,
-You can obtain one at http://mozilla.org/MPL/2.0/.
 ```
 
 ### Prometheus
@@ -158,25 +144,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-```
-
-### MariaDB
-
-```
-Copyright (c) 2018, 2022, MariaDB Corporation.
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; version 2 of the License.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 ```
 
 ### JSON Schema

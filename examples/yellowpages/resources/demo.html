@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Yellow Pages REST API</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+        .examples { margin: 16px 0; }
+        .examples a { margin: 4px; padding: 6px 12px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; font-size: 14px; display: inline-block; }
+        .examples a:hover { background: #ddd; }
+        select, input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: monospace; box-sizing: border-box; }
+        input[type="submit"] { padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+        input[type="submit"]:hover { background: #1565c0; }
+        .status { font-weight: bold; margin: 8px 0; }
+        pre { background: white; border-radius: 8px; padding: 16px; border: 1px solid #ddd; overflow-x: auto; font-size: 14px; }
+        .info { color: #666; font-size: 0.9em; margin-top: 16px; }
+    </style>
+    <script>
+        function bodyVisibility() {
+            const method = document.querySelector('[name="method"]').value;
+            let v = "unset";
+            if (method!="POST" && method!="PUT") {
+                v = "none";
+            }
+            document.querySelector('[name="body"]').style.display = v;
+        }
+        window.onload = bodyVisibility;
+    </script>
+</head>
+<body>
+    <h1>Yellow Pages REST API</h1>
+
+    <div class="examples">
+        <a href="/yellowpages.example/demo?method=GET&path=/persons">GET /persons</a>
+        <a href="/yellowpages.example/demo?method=GET&path=/persons?q.Email={email}">GET by email</a>
+        <a href="/yellowpages.example/demo?method=GET&path=/persons/{key}">GET by key</a>
+        <a href="/yellowpages.example/demo?method=POST&path=/persons&body=%7B%22firstName%22:%22%22,%22lastName%22:%22%22,%22email%22:%22%22,%22birthday%22:%22%22%7D">POST</a>
+        <a href="/yellowpages.example/demo?method=PUT&path=/persons/{key}&body=%7B%22firstName%22:%22%22,%22lastName%22:%22%22,%22email%22:%22%22,%22birthday%22:%22%22%7D">PUT</a>
+        <a href="/yellowpages.example/demo?method=DELETE&path=/persons/{key}">DELETE</a>
+    </div>
+
+    <div class="card">
+        <form method="POST">
+            <select name="method" onchange="bodyVisibility()">
+                <option {{ if eq .Method "GET" }}selected{{ end }}>GET</option>
+                <option {{ if eq .Method "POST" }}selected{{ end }}>POST</option>
+                <option {{ if eq .Method "PUT" }}selected{{ end }}>PUT</option>
+                <option {{ if eq .Method "DELETE" }}selected{{ end }}>DELETE</option>
+            </select>
+            <input type="text" name="path" value="{{ .Path }}" size="50" placeholder="/persons/...">
+            <p>
+            <textarea name="body" rows="4" placeholder="{...}">{{ .Body }}</textarea>
+            <p>
+            <input type="submit" value="Submit">
+        </form>
+    </div>
+
+    {{ if .StatusCode }}
+    <div class="status">{{ .StatusCode }}</div>
+    <pre>{{ .Response }}</pre>
+    {{ end }}
+
+    <div class="info">
+        The Yellow Pages example demonstrates a SQL CRUD microservice with REST endpoints for Person records.
+    </div>
+</body>
+</html>

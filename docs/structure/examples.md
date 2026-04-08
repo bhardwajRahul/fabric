@@ -10,5 +10,6 @@ The `examples` package holds several examples that demonstrate how the Microbus 
 - [Browser](../structure/examples-browser.md) is an example of a microservice that uses the [HTTP egress core microservice](../structure/coreservices-httpegress.md)
 - [Login](../structure/examples-login.md) employs authentication and authorization to restrict access to certain endpoints
 - [Yellow Pages](../structure/examples-yellowpages.md) is an example of a SQL CRUD microservice that persists records in a database
+- [Credit Flow](../structure/examples-creditflow.md) demonstrates agentic workflows with fan-out/fan-in, subgraphs, conditional transitions, and other advanced patterns
 
 In case you missed it, the [quick start guide](../howto/quick-start.md) explains how to setup your system to run the examples.

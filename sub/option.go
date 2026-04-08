@@ -61,7 +61,7 @@ func DefaultQueue() Option {
 }
 
 // RequiredClaims requires that the properties of the actor associated with the request satisfy the boolean expression.
-// For example: iss=='my_issuer' && (roles=~'admin' || roles=~'manager') && region=="US".
+// For example: iss=='my_issuer' && (roles.admin || roles.manager) && region=="US".
 // The =~ and !~ operators evaluate the left operand against a regexp.
 // String constants, including regexp patterns, must be quoted using single quotes, double quotes or backticks.
 // A request that doesn't satisfy the constraint is denied with a 403 forbidden error.

@@ -36,7 +36,7 @@ Read the local `AGENTS.md` file in the microservice's directory. It contains mic
 Locate the `Hook` in the API directory of the microservice that is the source of the event. Determine the signature of the outbound event.
 
 ```go
-func OnMyEvent(ctx context.Context, inArg1 string, inArg2 ThirdPartyStruct) (outArg1 map[string]MyStruct, err error)
+func OnMyEvent(ctx context.Context, param1 string, param2 ThirdPartyStruct) (result1 map[string]MyStruct, err error)
 ```
 
 #### Step 3: Determine a Description
@@ -45,7 +45,7 @@ Pull the event description from the `Hook`. Embed this description in followup s
 
 #### Step 4: Determine the Required Claims
 
-Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles=~"manager" && level>2`. Leave empty if the endpoint should be accessible by all.
+Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles.manager && level>2`. Leave empty if the endpoint should be accessible by all.
 
 #### Step 5: Extend the `ToDo` Interface
 
@@ -54,7 +54,7 @@ Extend the `ToDo` interface in `intermediate.go`.
 ```go
 type ToDo interface {
 	// ...
-	OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
+	OnMyEvent(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
 }
 ```
 
@@ -66,7 +66,7 @@ Implement the inbound event sink in `service.go`. Complex types should always re
 /*
 OnMyEvent is triggered when X.
 */
-func (svc *Service) OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
+func (svc *Service) OnMyEvent(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
 	// Implement logic here...
 	return
 }
@@ -74,7 +74,7 @@ func (svc *Service) OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventso
 
 #### Step 7: Bind the Inbound Event Sink to the Microservice
 
-Use the event source's `Hook` to bind the inbound event sink to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
+Use the event source's `Hook` to bind the inbound event sink to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment. If other bindings already exist under this HINT, add the new one after the last existing binding.
 
 - The queue option indicate how requests are distributed among replicas of the microservice
   - `sub.DefaultQueue()`: requests are load balanced among peers and processed by only one. This is the default option and may be omitted
@@ -111,7 +111,7 @@ Add a field to the `Mock` structure definition in `mock.go` to hold a mock handl
 ```go
 type Mock struct {
 	// ...
-	mockOnMyEvent func(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
+	mockOnMyEvent func(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
 }
 ```
 
@@ -119,23 +119,23 @@ Add the stubs to the `Mock`.
 
 ```go
 // MockOnMyEvent sets up a mock handler for OnMyEvent.
-func (svc *Mock) MockOnMyEvent(handler func(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error)) *Mock { // MARKER: OnMyEvent
+func (svc *Mock) MockOnMyEvent(handler func(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error)) *Mock { // MARKER: OnMyEvent
 	svc.mockOnMyEvent = handler
 	return svc
 }
 
 // OnMyEvent executes the mock handler.
-func (svc *Mock) OnMyEvent(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
+func (svc *Mock) OnMyEvent(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
 	if svc.mockOnMyEvent == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return
 	}
-	argOut1, err = svc.mockOnMyEvent(ctx, argIn1, argIn2)
-	return argOut1, errors.Trace(err)
+	result1, err = svc.mockOnMyEvent(ctx, param1, param2)
+	return result1, errors.Trace(err)
 }
 ```
 
-Add a test case in `TestMyService_Mock`.
+Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
 
 - Set values for the example input arguments
 - Set values for the expected output arguments
@@ -144,18 +144,18 @@ Add a test case in `TestMyService_Mock`.
 t.Run("on_my_event", func(t *testing.T) { // MARKER: OnMyEvent
 	assert := testarossa.For(t)
 
-	exampleArgIn1 := ""
-	exampleArgIn2 := eventsourceapi.ThirdPartyStruct{}
-	expectedArgOut1 := map[string]eventsourceapi.MyStruct{}
+	exampleParam1 := ""
+	exampleParam2 := eventsourceapi.ThirdPartyStruct{}
+	expectedResult1 := map[string]eventsourceapi.MyStruct{}
 
-	_, err := mock.OnMyEvent(ctx, exampleArgIn1, exampleArgIn2)
+	_, err := mock.OnMyEvent(ctx, exampleParam1, exampleParam2)
 	assert.Contains(err.Error(), "not implemented")
-	mock.MockOnMyEvent(func(ctx context.Context, argIn1 string, argIn2 eventsourceapi.ThirdPartyStruct) (argOut1 map[string]eventsourceapi.MyStruct, err error) {
-		return expectedArgOut1, nil
+	mock.MockOnMyEvent(func(ctx context.Context, param1 string, param2 eventsourceapi.ThirdPartyStruct) (result1 map[string]eventsourceapi.MyStruct, err error) {
+		return expectedResult1, nil
 	})
-	argOut1, err := mock.OnMyEvent(ctx, exampleArgIn1, exampleArgIn2)
+	result1, err := mock.OnMyEvent(ctx, exampleParam1, exampleParam2)
 	assert.Expect(
-		argOut1, expectedArgOut1,
+		result1, expectedResult1,
 		err, nil,
 	)
 })
@@ -195,11 +195,11 @@ func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
 			assert := testarossa.For(t)
 
 			actor := jwt.MapClaims{}
-			for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, argIn1, argIn2) {
-				argOut1, err := e.Get()
+			for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, param1, param2) {
+				result1, err := e.Get()
 				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
 					assert.Expect(
-						argOut1, expectedArgOut1,
+						result1, expectedResult1,
 						err, nil,
 					)
 				}
@@ -214,25 +214,24 @@ Skip the remainder of this step if instructed to be "quick" or to skip tests.
 Insert test cases at the bottom of the integration test function using the recommended pattern.
 
 - You may omit the `pub.Actor` option if the inbound event does not require claims.
+- Do not remove the `HINT` comments.
 
 ```go
 t.Run("test_case_name", func(t *testing.T) {
 	assert := testarossa.For(t)
 
 	actor := jwt.MapClaims{}
-	for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, argIn1, argIn2) {
-		argOut1, err := e.Get()
+	for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, param1, param2) {
+		result1, err := e.Get()
 		if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
 			assert.Expect(
-				argOut1, expectedArgOut1,
+				result1, expectedResult1,
 				err, nil,
 			)
 		}
 	}
 })
 ```
-
-Do not remove the `HINT` comments.
 
 #### Step 10: Housekeeping
 

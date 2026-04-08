@@ -44,3 +44,20 @@ CREATE TABLE bus_stop (
 	CONSTRAINT bus_stop_idx_id UNIQUE CLUSTERED (tenant_id, id),
 	INDEX bus_stop_idx_created_at (tenant_id, created_at)
 );
+
+-- DRIVER: sqlite
+CREATE TABLE bus_stop (
+	tenant_id INTEGER NOT NULL,
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	revision INTEGER NOT NULL DEFAULT 0,
+	example TEXT,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	reserved_before DATETIME NOT NULL
+);
+-- DRIVER: sqlite
+CREATE UNIQUE INDEX bus_stop_idx_tenant_id ON bus_stop (tenant_id, id);
+-- DRIVER: sqlite
+CREATE UNIQUE INDEX bus_stop_idx_id ON bus_stop (id);
+-- DRIVER: sqlite
+CREATE INDEX bus_stop_idx_created_at ON bus_stop (tenant_id, created_at);

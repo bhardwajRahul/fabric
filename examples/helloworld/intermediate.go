@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/helloworld/helloworldapi"
 	"github.com/microbus-io/fabric/examples/helloworld/resources"
@@ -48,6 +49,7 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
+	_ *workflow.Flow
 	_ helloworldapi.Client
 )
 
@@ -113,6 +115,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
 	_ = marshalFunction
 	return svc
 }
@@ -163,7 +169,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 
@@ -173,7 +179,7 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

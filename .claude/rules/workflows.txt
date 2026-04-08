@@ -1,0 +1,257 @@
+# Agentic Workflows
+
+Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`.
+
+## Task Endpoints
+
+A task endpoint is a functional endpoint that performs a single step of a workflow. Its signature always includes `ctx context.Context` and `flow *workflow.Flow` as the first two parameters, followed by input arguments sourced from the flow's state, and returns output arguments written back to the state plus `err error`.
+
+```go
+import "github.com/microbus-io/fabric/workflow"
+
+func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error) {
+	if creditScore >= 700 {
+		return true, nil
+	}
+	return false, nil
+}
+```
+
+Input arguments are matched by name to fields in the flow's state. Output arguments are written back to the state under their name. An output argument with an `Out` suffix (e.g. `creditScoreOut`) implements a read-modify-write pattern - it appears as both input and output.
+
+**Prefer typed arguments over `flow.Get`/`flow.Set`.** Task inputs and outputs should be expressed as typed function arguments wherever the types are available in the API package. This makes the task's state contract explicit in the signature and lets the marshaler handle serialization. Reserve `flow.Get`/`flow.Set` only for internal types that are not part of the public API (e.g. intermediate state shared between tasks within the same microservice).
+
+```go
+// Typed arguments make the state contract explicit
+func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, toolRounds int) (toolsRequested bool, toolRoundsOut int, err error) {
+    // llmContent and toolRounds are read from state automatically
+    // toolsRequested and toolRoundsOut are written back to state automatically
+}
+```
+
+Tasks are registered on port `:428` by default.
+
+## Workflow Graph Endpoints
+
+A workflow graph endpoint returns a `*workflow.Graph` that defines the structure of a workflow - its tasks, transitions, and merge strategies. The graph is fetched once when a flow is created and stored with it.
+
+```go
+import "github.com/microbus-io/fabric/workflow"
+
+func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) {
+	submitApp := myserviceapi.SubmitApplication.URL()
+	verifyCredit := myserviceapi.VerifyCredit.URL()
+	verifyEmployment := myserviceapi.VerifyEmployment.URL()
+	finalDecision := myserviceapi.FinalDecision.URL()
+
+	graph = workflow.NewGraph(myserviceapi.CreditApproval.URL())
+
+	// Linear transition
+	graph.AddTransition(submitApp, verifyCredit)
+	// Fan-out: parallel branches from submitApp
+	graph.AddTransition(submitApp, verifyEmployment)
+	// Fan-in: both branches converge on finalDecision
+	graph.AddTransition(verifyCredit, finalDecision)
+	graph.AddTransition(verifyEmployment, finalDecision)
+	// Conditional transition
+	graph.AddTransitionWhen(finalDecision, workflow.END, "creditVerified")
+	// Goto transition (taken only when task calls flow.Goto)
+	graph.AddTransitionGoto(finalDecision, submitApp)
+
+	// Reducer for fan-in merge
+	graph.SetReducer("failures", workflow.ReducerAdd)
+	// Per-task time budget
+	graph.SetTimeBudget(verifyCredit, 30*time.Second)
+
+	return graph, nil
+}
+```
+
+Task URLs in the graph are obtained from the generated API package constants (e.g. `myserviceapi.TaskName.URL()`).
+
+## The `workflow` Package
+
+**`workflow.Flow`** is the carrier passed to every task. It provides typed accessors for reading and writing state:
+
+- Read: `GetString`, `GetInt`, `GetFloat`, `GetBool`, `GetDuration`, `GetStrings`, `Has`, `Get` (for complex types), `ParseState` (unmarshal into struct)
+- Write: `SetString`, `SetInt`, `SetFloat`, `SetBool`, `SetDuration`, `SetStrings`, `Set` (for complex types)
+- Struct-based: `Snapshot` captures state before modifications, `SetChanges(source, snap)` records only fields that differ from the snapshot
+
+Control signals on `Flow`:
+
+- `flow.Goto(taskURL)` - override transition routing to jump to a specific task
+- `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true if attempts remain, false if exhausted
+- `flow.RetryNow() bool` - re-execute this task immediately with no limit; shorthand for `Retry(math.MaxInt32, 0, 0, 0)`
+- `flow.Sleep(duration)` - delay the next step by a duration
+- `flow.Interrupt(payload)` - pause the flow for external input (human-in-the-loop)
+- `flow.Subgraph(workflowURL, input)` - dynamically launch a child workflow; the step is parked until the child completes, then re-executed with the child's output merged into state (see [Dynamic Subgraphs](#dynamic-subgraphs))
+
+**`workflow.Graph`** defines workflow structure:
+
+- `NewGraph(name)` - create a new graph
+- `AddTask(taskURL)` - register a task node (first added becomes default entry point)
+- `AddSubgraph(workflowName)` - register a child workflow as a subgraph node
+- `SetEntryPoint(taskURL)` - override the default entry point
+- `AddTransition(from, to)` - unconditional transition
+- `AddTransitionWhen(from, to, when)` - conditional transition based on state expression
+- `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called
+- `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
+- `AddErrorTransition(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
+- `SetReducer(field, reducer)` - set merge strategy for a state field during fan-in
+- `SetTimeBudget(taskURL, duration)` - set execution timeout for a task
+- `DeclareInputs(fields...)` - declare which state fields are passed into this graph; no args = nothing, `"*"` = everything, named = those only
+- `DeclareOutputs(fields...)` - declare which state fields are returned on completion; no args = nothing, `"*"` = everything, named = those only
+- `workflow.END` - pseudo-node indicating workflow termination
+
+**Reducers** control how state fields are merged at fan-in points:
+
+- `workflow.ReducerReplace` - last write wins (default)
+- `workflow.ReducerAppend` - concatenate arrays
+- `workflow.ReducerAdd` - sum numeric values
+- `workflow.ReducerUnion` - merge arrays, deduplicate
+
+## Error Transitions
+
+Error transitions route task failures to an error handler instead of failing the flow. When the source task returns an error, the foreman serializes it as a `*errors.TracedError` (with stack trace, status code, and properties) into the `onErr` state field and dispatches the error handler task. Can be combined with `When` for conditional error routing but not with `ForEach` or `WithGoto`. If the task was in a fan-out, all siblings are cancelled.
+
+The error handler task must include `onErr *errors.TracedError` as an input parameter:
+
+```go
+func (svc *Service) HandleMyError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (result bool, err error) {
+    svc.LogWarn(ctx, "Handling error", "error", onErr)
+    // Remediation logic...
+    return false, nil
+}
+```
+
+If the error handler itself returns an error, the flow fails normally.
+
+## Subgraphs
+
+A subgraph is a child workflow that executes as a single step in the parent workflow. Register it with `graph.AddSubgraph(workflowName)` and use it as a transition target like any task. On entry, the parent's state is filtered through the child graph's `DeclareInputs`. On completion, the child's final state is filtered through its `DeclareOutputs` before merging into the parent step's changes. This prevents field-name collisions and keeps internal scratch fields from leaking across boundaries.
+
+Interrupts propagate up through the subgraph chain to the root flow. Cancellation cascades down from parent to all child subgraph flows. The parent step is parked until the child completes.
+
+## Dynamic Subgraphs
+
+Static subgraphs are registered at graph-definition time with `graph.AddSubgraph(workflowName)`. Dynamic subgraphs are triggered at runtime by a task calling `flow.Subgraph(workflowURL, input)`. Both follow the same execution model - the only difference is when the parent-child association is established.
+
+`flow.Subgraph` follows the same mental model as `flow.Interrupt`:
+
+| | `flow.Interrupt()` | `flow.Subgraph()` |
+|---|---|---|
+| **Signal** | Pause, wait for human input | Pause, wait for child workflow |
+| **Foreman** | Parks step, waits for `Resume` | Parks step, creates and starts child flow |
+| **Interrupts** | This IS the interrupt | Child interrupts propagate up |
+| **On completion** | `Resume` sets step to PENDING | Child output merged, step set to PENDING |
+| **Re-entry** | Task re-runs with resumed data | Task re-runs with child output in state |
+
+**Re-entry detection**: Before signaling the subgraph, the task should set a flag (e.g. via a typed `Out` suffix argument like `toolExecutedOut = true`). On re-entry, the task checks the flag to know the child completed and processes the result.
+
+**Control signal exclusivity**: A task must set at most one control signal (Goto, Retry, Interrupt, or Subgraph). Setting multiple signals fails the step.
+
+```go
+func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bool) (executedOut bool, err error) {
+    if executed {
+        // Re-entry: child workflow completed, its output is in state
+        // Process the result...
+        return true, nil
+    }
+    // First run: launch child workflow
+    flow.Subgraph(otherserviceapi.SomeWorkflow.URL(), map[string]any{
+        "inputField": "value",
+    })
+    return true, nil
+}
+```
+
+## Running Workflows
+
+The Foreman core service orchestrates workflow execution. Use `foremanapi.NewClient(svc)` to interact with it:
+
+```go
+import "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
+
+// Run a workflow synchronously (create + start + await)
+status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState)
+
+// Fine-grained control
+flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState)
+err = foremanapi.NewClient(svc).Start(ctx, flowID)
+status, state, err := foremanapi.NewClient(svc).Await(ctx, flowID)
+
+// Inspect a running flow
+status, state, err := foremanapi.NewClient(svc).Snapshot(ctx, flowID)
+
+// Cancel a flow
+err = foremanapi.NewClient(svc).Cancel(ctx, flowID)
+
+// Resume an interrupted flow with new data
+err = foremanapi.NewClient(svc).Resume(ctx, flowID, resumeData)
+
+// Continue a thread with new input (multi-turn pattern)
+// The threadKey can be any flowKey belonging to the thread; Continue finds the latest completed flow
+newFlowID, err := foremanapi.NewClient(svc).Continue(ctx, threadKey, additionalState)
+err = foremanapi.NewClient(svc).Start(ctx, newFlowID)
+```
+
+For typed workflow invocation in tests, use the generated `Executor` with a `WorkflowRunner`:
+
+```go
+foremanClient := foremanapi.NewClient(tester)
+exec := myworkflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
+result1, result2, status, err := exec.MyWorkflow(ctx, input1, input2)
+```
+
+The `WorkflowRunner` interface is defined in the API package to avoid a `foremanapi` dependency. `foremanapi.Client` satisfies it implicitly.
+
+## Flow Stop Notifications
+
+Use `StartNotify` to receive an event when a flow stops (completed, failed, cancelled, or interrupted):
+
+```go
+// Start with notification
+err = foremanapi.NewClient(svc).StartNotify(ctx, flowID, svc.Hostname())
+
+// Subscribe to notifications
+foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(
+	func(ctx context.Context, flowID string, status string, snapshot map[string]any) error {
+		// Handle flow completion...
+		return nil
+	},
+)
+```
+
+## Debugging Workflows
+
+- `foremanapi.NewClient(svc).BreakBefore(ctx, flowID, taskName, true)` - pause before a task executes
+- `foremanapi.NewClient(svc).History(ctx, flowID)` - step-by-step execution trace with state snapshots and nested subgraph history
+- `foremanapi.NewClient(svc).Fork(ctx, stepKey, stateOverrides)` - create a new flow from any step checkpoint with modified state
+
+## Mocking Workflows
+
+Workflows can be mocked at two levels of fidelity. Both require the **real foreman** in the test app.
+
+**Tier 1: Workflow-level mock (common case)** - Collapses the entire workflow into a single synthetic task. The handler receives the `*workflow.Flow` carrier with access to state and control signals:
+
+```go
+creditflowMock := creditflow.NewMock()
+creditflowMock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, err error) {
+	return true, true, 0, true, nil
+})
+
+app := application.New()
+app.Add(svc, foreman.NewService(), creditflowMock, tester)
+app.RunInTest(t)
+```
+
+Under the hood, `MockCreditApproval` overrides the graph endpoint to return a trivial single-task graph and subscribes a synthetic task handler on the mock. Pass `nil` to clear the mock.
+
+**Tier 2: Individual task mocks (rare case)** - For fine-grained control over specific tasks (interrupt/resume, per-step assertions), mock individual task endpoints while letting the real graph drive execution:
+
+```go
+creditflowMock := creditflow.NewMock()
+creditflowMock.MockVerifyCredit(func(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error) {
+	return true, nil
+})
+```

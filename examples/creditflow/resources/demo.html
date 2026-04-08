@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Credit Approval Workflow Demo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        h3 { color: #333; margin-top: 24px; }
+        .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+        .examples { margin: 16px 0; }
+        .examples a { margin: 4px; padding: 6px 12px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; font-size: 14px; display: inline-block; }
+        .examples a:hover { background: #ddd; }
+        label { display: inline-block; width: 100px; font-weight: 500; margin-bottom: 8px; }
+        input[type="text"], input[type="number"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; width: 300px; }
+        input[type="submit"] { padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 8px; }
+        input[type="submit"]:hover { background: #1565c0; }
+        table { border-collapse: collapse; }
+        .result-table td, .result-table th { padding: 4px 12px 4px 0; }
+        .history-table { width: 100%; }
+        .history-table td, .history-table th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        .history-table th { font-weight: 600; }
+        .error { color: #c62828; }
+        .info { color: #666; font-size: 0.9em; margin-top: 16px; }
+        .mermaid { background: white; border-radius: 8px; padding: 16px; border: 1px solid #ddd; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true, securityLevel:'loose'});</script>
+</head>
+<body>
+    <h1>Credit Approval Workflow</h1>
+
+    <div class="examples">
+        Scenarios:
+        <a href="/creditflow.example/demo?name=Alice&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750">Happy path</a>
+        <a href="/creditflow.example/demo?name=Bob&ssn=987-65-4321&address=456+Oak+Ave&phone=555-987-6543&employers=Globex&score=400">Bad credit</a>
+        <a href="/creditflow.example/demo?name=Diana&ssn=444-55-6666&address=321+Pine+Ln&phone=555-444-3333&employers=Umbrella+Corp&score=560">Borderline</a>
+        <a href="/creditflow.example/demo?name=Eve&ssn=555-66-7777&address=654+Maple+Ct&phone=555-555-5555&employers=Acme+Corp,Globex,Initech&score=750">Multi employer</a>
+        <a href="/creditflow.example/demo?name=Frank&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750&fault=Delay">Timeout</a>
+        <a href="/creditflow.example/demo?name=Kate&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750&fault=Retry">Retry</a>
+    </div>
+
+    <div class="card">
+        <form method="POST">
+            <div><label>Name</label><input type="text" name="name" value="{{ .Name }}"></div>
+            <div><label>SSN</label><input type="text" name="ssn" value="{{ .SSN }}"></div>
+            <div><label>Address</label><input type="text" name="address" value="{{ .Address }}"></div>
+            <div><label>Phone</label><input type="text" name="phone" value="{{ .Phone }}"></div>
+            <div><label>Employers</label><input type="text" name="employers" value="{{ .Employers }}" placeholder="comma-separated"></div>
+            <div><label>Credit Score</label><input type="number" name="score" value="{{ .Score }}"></div>
+            <input type="hidden" name="fault" value="{{ .Fault }}">
+            <div><label></label><input type="submit" value="Run Workflow"></div>
+        </form>
+    </div>
+
+    {{ if .Submitted }}
+    {{ if .Error }}
+    <div class="card error">Error: {{ .Error }}</div>
+    {{ else }}
+    <h3>Result</h3>
+    <div class="card">
+        <table class="result-table">
+            <tr><td>Status</td><td><b>{{ .Status }}</b></td></tr>
+            <tr><td>Approved</td><td>{{ .Approved }}</td></tr>
+            <tr><td>Credit Verified</td><td>{{ .CreditVerified }}</td></tr>
+            <tr><td>Identity Verified</td><td>{{ .IdentityVerified }}</td></tr>
+            <tr><td>Employment Failures</td><td>{{ .EmploymentFailures }}</td></tr>
+        </table>
+    </div>
+
+    {{ if .Steps }}
+    <h3>Execution History</h3>
+    <div class="card">
+        <table class="history-table">
+            <tr><th>Task</th><th>Status</th><th>Changes</th></tr>
+            {{ range .Steps }}<tr>
+                <td><nobr>{{ if .Indent }}&nbsp;&nbsp;&nbsp;&nbsp;{{ end }}{{ .TaskName }}</nobr></td>
+                <td>{{ .Status }}</td>
+                <td><small>{{ .Changes }}</small></td>
+            </tr>{{ end }}
+        </table>
+    </div>
+    {{ end }}
+
+    {{ if .MermaidDiagram }}
+    <h3>Flow Diagram</h3>
+    <pre class="mermaid">
+{{ .MermaidDiagram }}
+    </pre>
+    {{ end }}
+
+    {{ end }}
+    {{ end }}
+
+    <div class="info">
+        The Credit Flow example demonstrates agentic workflows with fan-out, fan-in, subgraphs, conditional transitions, and goto loops.
+    </div>
+</body>
+</html>

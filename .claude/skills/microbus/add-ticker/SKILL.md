@@ -53,7 +53,7 @@ type ToDo interface {
 
 #### Step 4: Bind the Handler to the Microservice
 
-Bind the ticker handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
+Bind the ticker handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment. If other tickers already exist under this HINT, add the new one after the last existing ticker.
 
 ```go
 func NewIntermediate(impl ToDo) *Intermediate {
@@ -97,7 +97,7 @@ func (svc *Mock) MyTicker(ctx context.Context) (err error) { // MARKER: MyTicker
 }
 ```
 
-Add a test case in `TestMyService_Mock`.
+Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
 
 ```go
 t.Run("my_ticker", func(t *testing.T) { // MARKER: MyTicker
@@ -150,6 +150,7 @@ func TestMyService_MyTicker(t *testing.T) { // MARKER: MyTicker
 Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
 Insert test cases at the bottom of the integration test function using the recommended pattern.
+- Do not remove the `HINT` comments.
 
 ```go
 t.Run("test_case_name", func(t *testing.T) {
@@ -159,8 +160,6 @@ t.Run("test_case_name", func(t *testing.T) {
 	assert.NoError(err)
 })
 ```
-
-Do not remove the `HINT` comments.
 
 #### Step 7: Housekeeping
 

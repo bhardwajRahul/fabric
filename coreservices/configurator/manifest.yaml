@@ -17,7 +17,7 @@ general:
   hostname: configurator.core
   description: The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.
   package: github.com/microbus-io/fabric/coreservices/configurator
-  frameworkVersion: 1.23.0
+  frameworkVersion: 1.26.0
 
 downstream:
   - hostname: control.core

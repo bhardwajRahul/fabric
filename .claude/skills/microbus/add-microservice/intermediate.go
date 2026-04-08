@@ -16,6 +16,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/mycompany/myproject/myservice/myserviceapi"
 	"github.com/mycompany/myproject/myservice/resources"
@@ -33,6 +34,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ myserviceapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -95,6 +97,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
 	_ = marshalFunction
 	return svc
 }
@@ -147,7 +153,7 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

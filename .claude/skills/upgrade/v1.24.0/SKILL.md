@@ -27,7 +27,7 @@ Create the `act` directory in the root of the project if one does not exist.
 mkdir -p act
 ```
 
-Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it. The existing `Actor` struct may define different claims from the template — that is expected and the struct should not be changed.
+Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it. The existing `Actor` struct may define different claims from the template - that is expected and the struct should not be changed.
 
 If the function `Of` in `act/actor.go` does not return an error, i.e. its signature is `Of(x any) Actor`, extend it to return an error and correct resulting compilation errors. When fixing callers, return the error if the containing function can return an error; otherwise, discard it with `_`.
 
@@ -80,9 +80,9 @@ import (
 
 #### Step 3: Generate Bearer Token Key
 
-Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKeyPEM` config of the `bearer.token.core` microservice.
+Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKey` config of the `bearer.token.core` microservice.
 
-If the deprecated `tokenissuer.core` had an `AuthTokenTTL` value, copy it to the `TokenTTL` config of `bearer.token.core`. The old `SecretKey` can be discarded — the bearer token service uses a different signing algorithm for which the upgrade generates a new key.
+If the deprecated `tokenissuer.core` had an `AuthTokenTTL` value, copy it to the `TokenTTL` config of `bearer.token.core`. The old `SecretKey` can be discarded - the bearer token service uses a different signing algorithm for which the upgrade generates a new key.
 
 ```shell
 openssl genpkey -algorithm Ed25519 -out private.pem
@@ -91,10 +91,7 @@ openssl genpkey -algorithm Ed25519 -out private.pem
 ```yaml
 bearer.token.core:
   TokenTTL: 720h
-  PrivateKeyPEM: |
-    -----BEGIN PRIVATE KEY-----
-    MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
-    -----END PRIVATE KEY-----
+  PrivateKey: MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
 ```
 
 #### Step 4: Tracing Spans

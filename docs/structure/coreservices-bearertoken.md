@@ -21,7 +21,7 @@ Claims transformers can be registered to enrich the token with additional claims
 
 ```go
 bearertoken.NewService().Init(func(svc *bearertoken.Service) error {
-    err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
+    err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (err error) {
         claims["welcome"] = true
         return nil
     })
@@ -33,7 +33,7 @@ Transformers must be registered during initialization, before the service starts
 
 ### Key Management
 
-Unlike the [access token](../structure/coreservices-accesstoken.md) service which uses ephemeral in-memory keys, the bearer token service uses PEM-configured Ed25519 private keys. Two keys can be active simultaneously — `PrivateKeyPEM` and `AltPrivateKeyPEM` — to enable graceful key rotation. Tokens are always signed with the primary key; the alternative key is only used to continue verifying tokens signed before rotation.
+Unlike the [access token](../structure/coreservices-accesstoken.md) service which uses ephemeral in-memory keys, the bearer token service uses configured Ed25519 private keys (in PEM or raw base64 format). Two keys can be active simultaneously - `PrivateKey` and `AltPrivateKey` - to enable graceful key rotation. Tokens are always signed with the primary key; the alternative key is only used to continue verifying tokens signed before rotation.
 
 In `LOCAL` and `TESTING` deployments, a key is auto-generated if none is configured. In `LAB` and `PROD` deployments, a key must be explicitly configured.
 
@@ -48,5 +48,5 @@ On each incoming request, the [HTTP ingress proxy](../structure/coreservices-htt
 | Property | Default | Description |
 |---|---|---|
 | `AuthTokenTTL` | `720h` | TTL of issued JWTs (minimum 1m) |
-| `PrivateKeyPEM` | | Ed25519 private key in PEM format (secret) |
-| `AltPrivateKeyPEM` | | Alternative Ed25519 private key for rotation (secret) |
+| `PrivateKey` | | Ed25519 private key in PEM or raw base64 format (secret) |
+| `AltPrivateKey` | | Alternative Ed25519 private key for rotation (secret) |

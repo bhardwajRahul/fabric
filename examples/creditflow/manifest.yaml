@@ -1,0 +1,91 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  name: CreditFlow
+  hostname: creditflow.example
+  description: CreditFlow is an example microservice that demonstrates agentic workflow features.
+  package: github.com/microbus-io/fabric/examples/creditflow
+  frameworkVersion: 1.26.0
+  modifiedAt: "2026-04-06T20:30:00Z"
+
+downstream:
+  - hostname: foreman.core
+    package: github.com/microbus-io/fabric/coreservices/foreman
+
+webs:
+  Demo:
+    description: Demo serves the demo page for the credit approval workflow.
+    method: ANY
+    route: /demo
+
+tasks:
+  SubmitCreditApplication:
+    signature: SubmitCreditApplication(applicant Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int)
+    description: SubmitCreditApplication receives a credit application and unpacks the applicant into individual state fields.
+    route: :428/submit-credit-application
+  VerifyCredit:
+    signature: VerifyCredit(creditScore int, faultInjection string) (creditVerified bool)
+    description: VerifyCredit checks the applicant's credit score (fails below 550).
+    route: :428/verify-credit
+  RequestMoreInfo:
+    signature: RequestMoreInfo(reviewAttempts int) (reviewAttemptsOut int)
+    description: RequestMoreInfo requests additional information for the credit review and increments the review attempt counter.
+    route: :428/request-more-info
+  ReviewCredit:
+    signature: ReviewCredit(creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool)
+    description: ReviewCredit is the fan-in point for all verifications. It passes through for good scores (650+), approves borderline scores (580-649), and uses goto to request more info for very borderline scores (550-579).
+    route: :428/review-credit
+  VerifyEmployment:
+    signature: VerifyEmployment(applicantName string, employerName string) (employmentFailures int)
+    description: VerifyEmployment checks the applicant's employment status.
+    route: :428/verify-employment
+  InitIdentityVerification:
+    signature: InitIdentityVerification(applicantName string, ssn string, address string, phone string)
+    description: InitIdentityVerification is the entry point for the identity verification subgraph.
+    route: :428/init-identity-verification
+  VerifySSN:
+    signature: VerifySSN(ssn string, faultInjection string) (ssnVerified bool)
+    description: VerifySSN checks the applicant's SSN.
+    route: :428/verify-ssn
+  VerifyAddress:
+    signature: VerifyAddress(address string) (addressVerified bool)
+    description: VerifyAddress checks the applicant's address.
+    route: :428/verify-address
+  VerifyPhoneNumber:
+    signature: VerifyPhoneNumber(phone string, faultInjection string) (phoneVerified bool)
+    description: VerifyPhoneNumber checks the applicant's phone number.
+    route: :428/verify-phone-number
+  IdentityDecision:
+    signature: IdentityDecision(ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool)
+    description: IdentityDecision determines whether the applicant's identity is verified based on SSN, address, and phone checks.
+    route: :428/identity-decision
+  HandleCreditError:
+    signature: HandleCreditError(onErr *errors.TracedError) (creditVerified bool)
+    description: HandleCreditError handles a credit verification error by setting creditVerified to false.
+    route: :428/handle-credit-error
+  Decision:
+    signature: Decision(creditVerified bool, employmentFailures int, identityVerified bool) (approved bool)
+    description: Decision determines whether to approve the credit application based on verification results.
+    route: :428/decision
+
+workflows:
+  IdentityVerification:
+    signature: IdentityVerification(applicantName string, ssn string, address string, phone string) (identityVerified bool)
+    description: IdentityVerification defines the workflow graph for the identity verification process.
+    route: :428/identity-verification
+  CreditApproval:
+    signature: CreditApproval(applicant Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool)
+    description: CreditApproval defines the workflow graph for the credit approval process.
+    route: :428/credit-approval

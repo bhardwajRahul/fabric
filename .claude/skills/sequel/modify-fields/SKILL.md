@@ -45,7 +45,7 @@ Skip this step if the changes do not necessitate a database schema change. For e
 
 Create a new migration script file in `resources/sql` with an incremental file name. **IMPORTANT**: Do not edit an existing migration file.
 
-Append `ALTER TABLE` statements to change the type, size or constraints of columns, if applicable. For `pgx`, each aspect of the column (type, nullability, default) requires a separate statement — only include the statements relevant to the change. For `mssql`, if the column already has a default constraint from a prior migration, drop it before adding the new one.
+Append `ALTER TABLE` statements to change the type, size or constraints of columns, if applicable. For `pgx`, each aspect of the column (type, nullability, default) requires a separate statement - only include the statements relevant to the change. For `mssql`, if the column already has a default constraint from a prior migration, drop it before adding the new one.
 
 ```sql
 -- DRIVER: mysql

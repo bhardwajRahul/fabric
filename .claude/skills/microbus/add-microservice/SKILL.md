@@ -179,12 +179,12 @@ Ask the user if they'd like you to propose a design for the microservice. If the
 
 Use the context provided by the user and propose a set of features for this microservice for each of the following categories. You may engage the user and ask for additional information if required.
 
-- **Configuration properties** — runtime settings (strings, durations, booleans, etc.) read via the connector
-- **Functional endpoints (RPCs)** — typed request/response functions with input/output structs, marshaling, and client stubs
-- **Web handler endpoints** — raw `http.ResponseWriter`/`http.Request` handlers for serving HTML, files, or custom HTTP responses
-- **Outbound events** — messages this microservice fires for others to consume
-- **Inbound event sinks** — handlers that react to events emitted by other microservices
-- **Tickers** — recurring operations on a schedule
-- **Metrics** — counters, gauges, and histograms for observability
+- **Configuration properties** - runtime settings (strings, durations, booleans, etc.) read via the connector
+- **Functional endpoints (RPCs)** - typed request/response functions with input/output structs, marshaling, and client stubs
+- **Web handler endpoints** - raw `http.ResponseWriter`/`http.Request` handlers for serving HTML, files, or custom HTTP responses
+- **Outbound events** - messages this microservice fires for others to consume
+- **Inbound event sinks** - handlers that react to events emitted by other microservices
+- **Tickers** - recurring operations on a schedule
+- **Metrics** - counters, gauges, and histograms for observability
 
 Save the proposed design to `DESIGN.md`, then show it to the user. Ask the user if they'd like you to implement any of the features. Do not implement without explicit approval from the user.

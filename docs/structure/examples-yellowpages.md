@@ -14,15 +14,17 @@ SQL CRUD microservices are first-class citizens of the Microbus framework. Rathe
 
 The generated microservice includes a comprehensive set of endpoints out of the box:
 
-- **CRUD operations** — `Create`, `Store`, `Delete`, `Load`, `List`, `Lookup` (and their `Must` variants that error instead of returning not-found)
-- **Bulk operations** — `BulkCreate`, `BulkStore`, `BulkRevise`, `BulkLoad`, `BulkDelete`
-- **Query operations** — `List`, `Lookup`, `Count`, `Purge`
-- **Revision control** — `Revise`, `MustRevise`, `BulkRevise` for optimistic concurrency
-- **REST API** — Standard REST endpoints at `/persons` and `/persons/{key}`
+- **CRUD operations** - `Create`, `Store`, `Delete`, `Load`, `List`, `Lookup` (and their `Must` variants that error instead of returning not-found)
+- **Bulk operations** - `BulkCreate`, `BulkStore`, `BulkRevise`, `BulkLoad`, `BulkDelete`
+- **Query operations** - `List`, `Lookup`, `Count`, `Purge`
+- **Revision control** - `Revise`, `MustRevise`, `BulkRevise` for optimistic concurrency
+- **REST API** - Standard REST endpoints at `/persons` and `/persons/{key}`
 
 ### Connecting to the Database
 
-This example requires a MariaDB database instance. If you don't already have one installed, you can add it to Docker using:
+By default, this example uses an in-memory SQLite database, so no external database setup is required. Just run the example and it works out of the box.
+
+To use MariaDB instead, install it via Docker:
 
 ```shell
 docker pull mariadb

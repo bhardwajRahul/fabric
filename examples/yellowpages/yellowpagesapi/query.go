@@ -39,7 +39,7 @@ If not specified, the default sort order is by "id".
 type Query struct {
 	Key  PersonKey   `json:"key,omitzero"`
 	Keys []PersonKey `json:"keys,omitzero"`
-	Q    string       `json:"q,omitzero"`
+	Q    string      `json:"q,omitzero"`
 
 	Select  string `json:"select,omitzero"`
 	OrderBy string `json:"orderBy,omitzero"`
@@ -47,10 +47,10 @@ type Query struct {
 	Offset  int    `json:"offset,omitzero"`
 
 	// HINT: Add additional filtering options here
-	Example   string `json:"example,omitzero"` // Do not remove the example
 	FirstName string `json:"firstName,omitzero"`
 	LastName  string `json:"lastName,omitzero"`
 	Email     string `json:"email,omitzero"`
+	Example   string `json:"example,omitzero"` // Do not remove the example
 }
 
 // Validate validates the filtering options of the query.
@@ -78,10 +78,6 @@ func (q *Query) Validate(ctx context.Context) error {
 	}
 
 	// HINT: Validate filtering options here as required
-	q.Example = strings.TrimSpace(q.Example) // Do not remove the example
-	if len([]rune(q.Example)) > 256 {
-		return errors.New("length of Example must not exceed 256 characters")
-	}
 	q.FirstName = strings.TrimSpace(q.FirstName)
 	if len([]rune(q.FirstName)) > 64 {
 		return errors.New("length of FirstName must not exceed 64 characters")
@@ -93,6 +89,10 @@ func (q *Query) Validate(ctx context.Context) error {
 	q.Email = strings.TrimSpace(q.Email)
 	if len([]rune(q.Email)) > 256 {
 		return errors.New("length of Email must not exceed 256 characters")
+	}
+	q.Example = strings.TrimSpace(q.Example) // Do not remove the example
+	if len([]rune(q.Example)) > 256 {
+		return errors.New("length of Example must not exceed 256 characters")
 	}
 
 	return nil

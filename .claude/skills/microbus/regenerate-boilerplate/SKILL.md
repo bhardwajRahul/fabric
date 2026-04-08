@@ -23,11 +23,13 @@ Regenerating boilerplate:
 - [ ] Step 8: Regenerate web handler endpoints
 - [ ] Step 9: Regenerate outbound events
 - [ ] Step 10: Regenerate inbound event sinks
-- [ ] Step 11: Regenerate tickers
-- [ ] Step 12: Regenerate metrics
-- [ ] Step 13: Verify unchanged files
-- [ ] Step 14: Increment Version const
-- [ ] Step 15: Build, vet and test
+- [ ] Step 11: Regenerate task endpoints
+- [ ] Step 12: Regenerate workflow graph endpoints
+- [ ] Step 13: Regenerate tickers
+- [ ] Step 14: Regenerate metrics
+- [ ] Step 15: Verify unchanged files
+- [ ] Step 16: Increment Version const
+- [ ] Step 17: Build, vet and test
 ```
 
 #### Step 1: Read Local `AGENTS.md` File
@@ -62,7 +64,7 @@ Follow these steps from the `microbus/add-microservice` skill to recreate the bo
 - **Prepare `intermediate.go`**: Use the description from `manifest.yaml`
 - **Prepare `mock.go`**
 
-Do NOT follow the steps that create `service.go`, `service_test.go`, `manifest.yaml`, or the directory structure — these already exist.
+Do NOT follow the steps that create `service.go`, `service_test.go`, `manifest.yaml`, or the directory structure - these already exist.
 
 #### Step 6: Regenerate Configs
 
@@ -121,7 +123,32 @@ For each event listed under `inboundEvents` in `manifest.yaml`, follow the `micr
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
-#### Step 11: Regenerate Tickers
+#### Step 11: Regenerate Task Endpoints
+
+For each task listed under `tasks` in `manifest.yaml`, follow the `microbus/add-task` skill but ONLY these steps:
+
+- **Extend the `ToDo` interface**
+- **Define complex types** (only if the task uses types not already defined)
+- **Extend the API**
+- **Define the marshaler function**
+- **Bind the marshaler function to the microservice**
+- **Extend the mock**
+
+Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
+
+#### Step 12: Regenerate Workflow Graph Endpoints
+
+For each workflow listed under `workflows` in `manifest.yaml`, follow the `microbus/add-workflow` skill but ONLY these steps:
+
+- **Extend the API**
+- **Extend the `ToDo` interface**
+- **Define the marshaler function**
+- **Bind the marshaler function to the microservice**
+- **Extend the mock**
+
+Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
+
+#### Step 13: Regenerate Tickers
 
 For each ticker listed under `tickers` in `manifest.yaml`, follow the `microbus/add-ticker` skill but ONLY these steps:
 
@@ -131,7 +158,7 @@ For each ticker listed under `tickers` in `manifest.yaml`, follow the `microbus/
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
-#### Step 12: Regenerate Metrics
+#### Step 14: Regenerate Metrics
 
 For each metric listed under `metrics` in `manifest.yaml`, follow the `microbus/add-metric` skill but ONLY these steps:
 
@@ -143,14 +170,14 @@ For each metric listed under `metrics` in `manifest.yaml`, follow the `microbus/
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
-#### Step 13: Verify Unchanged Files
+#### Step 15: Verify Unchanged Files
 
 Verify that `service.go`, `service_test.go`, and `manifest.yaml` have not been modified. If any of these files were changed, revert them immediately.
 
-#### Step 14: Increment `Version` Const
+#### Step 16: Increment `Version` Const
 
 In the regenerated `intermediate.go`, find the `Version` const and set its value to the value remembered in Step 3, plus 1. For example, if the old value was `Version = 270`, set it to `Version = 271`.
 
-#### Step 15: Vet and Test
+#### Step 17: Vet and Test
 
 Run `go vet` on the microservice's package to verify it compiles without errors. Then run `go test` on the package to verify all tests pass. Fix any issues before finishing.

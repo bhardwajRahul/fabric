@@ -1,0 +1,89 @@
+# Authentication and Authorization
+
+## Enabling Authentication
+
+The `microbus/init-project` skill sets up the token issuers, authorization middleware, and `act` package automatically. The remaining piece each solution must provide is an **authenticator** - a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
+
+```go
+bearertokenapi.NewClient(svc).Mint(ctx, map[string]any{
+	"sub": "user@example.com",
+	"uid": 12345,
+	"tid": 123,
+})
+```
+
+The authenticator returns the signed JWT to the caller (e.g. via a `Set-Cookie` header or JSON response). From that point, the ingress middleware handles token exchange and claims propagation automatically.
+
+## Bearer Tokens and Access Tokens
+
+Microbus uses a two-token architecture for authentication and authorization.
+
+A **bearer token** is a long-lived JWT issued by an external identity provider (e.g. Auth0, Okta) or by the built-in `bearer.token.core` service. It identifies the actor (user or system) and is presented to the system via the `Authorization: Bearer <token>` header or an `Authorization` cookie.
+
+An **access token** is a short-lived internal JWT minted by the `access.token.core` service. It is signed with ephemeral keys that rotate automatically and expires quickly (default 20 seconds). Access tokens are not meant to be stored or reused - they are created on-the-fly for each request.
+
+## Token Exchange Flow
+
+When the HTTP ingress proxy receives a request with a bearer token, it automatically exchanges it for an access token:
+
+1. The ingress authorization middleware extracts the bearer token from the request
+2. It verifies the bearer token's signature against the issuer's JWKS (JSON Web Key Set)
+3. It calls `access.token.core` to mint a short-lived access token, passing in the verified claims
+4. The access token service applies any registered claims transformers to enrich the claims (e.g. adding roles, tenant ID, or permissions from a user database)
+5. The access token service sets critical claims (`iss`, `idp`, `iat`, `exp`, `jti`) and signs the token
+6. The signed access token is attached to the request and propagated automatically to all downstream microservices via the `Microbus-Actor` header
+
+## Claims Enrichment
+
+Claims transformers allow enriching the access token with additional claims during minting. Register transformers in `main/main.go` when initializing the access token service:
+
+```go
+accesstoken.NewService().Init(func(svc *accesstoken.Service) (err error) {
+	svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (err error) {
+		// Look up the user's roles and tenant from your database and add them to the claims
+		claims["roles"] = []string{"admin", "user"}
+		claims["tid"] = 1234
+		return nil
+	})
+	return nil
+})
+```
+
+## The Actor Pattern
+
+The `Actor` struct in the `act` package is a convenience pattern for representing the claims associated with a request. It is created during project setup and can be extended to fit the needs of the solution. Its properties are organized into four groups: standard claims (`iss`, `sub`, `exp`, `idp`), identifiers (e.g. tenant ID, user ID), security claims (roles, groups, scopes), and user preferences (name, locale, time zone). JSON tag names should follow the [IANA JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml#claims) where a registered claim name exists.
+
+Use `act.Of(ctx)` to extract the actor from the request context:
+
+```go
+func (svc *Service) MyEndpoint(ctx context.Context) error {
+	actor, err := act.Of(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// ...
+	return nil
+}
+```
+
+## Actor Impersonation
+
+To call a downstream microservice with modified claims, mint a new access token with the adjusted claims and attach it via `pub.Token`:
+
+```go
+func (svc *Service) ElevatedAction(ctx context.Context) error {
+	actor, err := act.Of(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	actor.Roles = append(actor.Roles, "admin")
+	elevatedToken, err := accesstokenapi.NewClient(svc).Mint(ctx, actor)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = downstreamapi.NewClient(svc).
+		WithOptions(pub.Token(elevatedToken)).
+		AdminAction(ctx)
+	return errors.Trace(err)
+}
+```

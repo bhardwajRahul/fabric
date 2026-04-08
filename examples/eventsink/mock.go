@@ -22,6 +22,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/eventsink/eventsinkapi"
 )
@@ -29,15 +30,16 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ eventsinkapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockRegistered      func(ctx context.Context) (emails []string, err error)                 // MARKER: Registered
-	mockOnAllowRegister func(ctx context.Context, email string) (allow bool, err error)        // MARKER: OnAllowRegister
-	mockOnRegistered    func(ctx context.Context, email string) (err error)                    // MARKER: OnRegistered
+	mockRegistered      func(ctx context.Context) (emails []string, err error)          // MARKER: Registered
+	mockOnAllowRegister func(ctx context.Context, email string) (allow bool, err error) // MARKER: OnAllowRegister
+	mockOnRegistered    func(ctx context.Context, email string) (err error)             // MARKER: OnRegistered
 }
 
 // NewMock creates a new mockable version of the microservice.

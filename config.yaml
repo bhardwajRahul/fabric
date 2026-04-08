@@ -20,6 +20,13 @@ all:
 my.service:
   Example: value
 
+foreman.core:
+  # RetentionDays: 0
+
+llm.core:
+  # ProviderHostname: claude.llm.core
+  # MaxToolRounds: 10
+
 http.ingress.core:
 #  Ports: 8080
 #  TimeBudget: 20s

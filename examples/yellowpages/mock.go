@@ -19,9 +19,11 @@ package yellowpages
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/yellowpages/yellowpagesapi"
 )
@@ -29,37 +31,42 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ yellowpagesapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockCreate     func(ctx context.Context, obj *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, err error)                                     // MARKER: Create
-	mockStore      func(ctx context.Context, obj *yellowpagesapi.Person) (stored bool, err error)                                                         // MARKER: Store
-	mockMustStore  func(ctx context.Context, obj *yellowpagesapi.Person) (err error)                                                                      // MARKER: MustStore
-	mockRevise     func(ctx context.Context, obj *yellowpagesapi.Person) (revised bool, err error)                                                        // MARKER: Revise
-	mockMustRevise func(ctx context.Context, obj *yellowpagesapi.Person) (err error)                                                                      // MARKER: MustRevise
-	mockDelete     func(ctx context.Context, objKey yellowpagesapi.PersonKey) (deleted bool, err error)                                                   // MARKER: Delete
-	mockMustDelete func(ctx context.Context, objKey yellowpagesapi.PersonKey) (err error)                                                                 // MARKER: MustDelete
-	mockList       func(ctx context.Context, query yellowpagesapi.Query) (objs []*yellowpagesapi.Person, totalCount int, err error)                       // MARKER: List
-	mockLookup     func(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, found bool, err error)                              // MARKER: Lookup
-	mockMustLookup func(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, err error)                                         // MARKER: MustLookup
-	mockLoad       func(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, found bool, err error)                         // MARKER: Load
-	mockMustLoad   func(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, err error)                                     // MARKER: MustLoad
-	mockBulkLoad   func(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (objs []*yellowpagesapi.Person, err error)                               // MARKER: BulkLoad
-	mockBulkDelete func(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (deletedKeys []yellowpagesapi.PersonKey, err error)                      // MARKER: BulkDelete
-	mockBulkCreate func(ctx context.Context, objs []*yellowpagesapi.Person) (objKeys []yellowpagesapi.PersonKey, err error)                               // MARKER: BulkCreate
-	mockBulkStore  func(ctx context.Context, objs []*yellowpagesapi.Person) (storedKeys []yellowpagesapi.PersonKey, err error)                            // MARKER: BulkStore
-	mockBulkRevise func(ctx context.Context, objs []*yellowpagesapi.Person) (revisedKeys []yellowpagesapi.PersonKey, err error)                           // MARKER: BulkRevise
-	mockPurge      func(ctx context.Context, query yellowpagesapi.Query) (deletedKeys []yellowpagesapi.PersonKey, err error)                              // MARKER: Purge
-	mockCount      func(ctx context.Context, query yellowpagesapi.Query) (count int, err error)                                                           // MARKER: Count
-	mockCreateREST func(ctx context.Context, httpRequestBody *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, httpStatusCode int, err error)      // MARKER: CreateREST
-	mockStoreREST  func(ctx context.Context, key yellowpagesapi.PersonKey, httpRequestBody *yellowpagesapi.Person) (httpStatusCode int, err error)        // MARKER: StoreREST
-	mockDeleteREST func(ctx context.Context, key yellowpagesapi.PersonKey) (httpStatusCode int, err error)                                                // MARKER: DeleteREST
-	mockLoadREST   func(ctx context.Context, key yellowpagesapi.PersonKey) (httpResponseBody *yellowpagesapi.Person, httpStatusCode int, err error)       // MARKER: LoadREST
-	mockListREST   func(ctx context.Context, q yellowpagesapi.Query) (httpResponseBody []*yellowpagesapi.Person, httpStatusCode int, err error)           // MARKER: ListREST
-	mockWebUI      func(w http.ResponseWriter, r *http.Request) (err error)                                                                               // MARKER: WebUI
+	mockCreate         func(ctx context.Context, obj *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, err error)                                    // MARKER: Create
+	mockStore          func(ctx context.Context, obj *yellowpagesapi.Person) (stored bool, err error)                                                        // MARKER: Store
+	mockMustStore      func(ctx context.Context, obj *yellowpagesapi.Person) (err error)                                                                     // MARKER: MustStore
+	mockRevise         func(ctx context.Context, obj *yellowpagesapi.Person) (revised bool, err error)                                                       // MARKER: Revise
+	mockMustRevise     func(ctx context.Context, obj *yellowpagesapi.Person) (err error)                                                                     // MARKER: MustRevise
+	mockDelete         func(ctx context.Context, objKey yellowpagesapi.PersonKey) (deleted bool, err error)                                                  // MARKER: Delete
+	mockMustDelete     func(ctx context.Context, objKey yellowpagesapi.PersonKey) (err error)                                                                // MARKER: MustDelete
+	mockList           func(ctx context.Context, query yellowpagesapi.Query) (objs []*yellowpagesapi.Person, totalCount int, err error)                      // MARKER: List
+	mockLookup         func(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, found bool, err error)                             // MARKER: Lookup
+	mockMustLookup     func(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, err error)                                         // MARKER: MustLookup
+	mockLoad           func(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, found bool, err error)                        // MARKER: Load
+	mockMustLoad       func(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, err error)                                    // MARKER: MustLoad
+	mockBulkLoad       func(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (objs []*yellowpagesapi.Person, err error)                              // MARKER: BulkLoad
+	mockBulkDelete     func(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (deletedKeys []yellowpagesapi.PersonKey, err error)                     // MARKER: BulkDelete
+	mockBulkCreate     func(ctx context.Context, objs []*yellowpagesapi.Person) (objKeys []yellowpagesapi.PersonKey, err error)                              // MARKER: BulkCreate
+	mockBulkStore      func(ctx context.Context, objs []*yellowpagesapi.Person) (storedKeys []yellowpagesapi.PersonKey, err error)                           // MARKER: BulkStore
+	mockBulkRevise     func(ctx context.Context, objs []*yellowpagesapi.Person) (revisedKeys []yellowpagesapi.PersonKey, err error)                          // MARKER: BulkRevise
+	mockPurge          func(ctx context.Context, query yellowpagesapi.Query) (deletedKeys []yellowpagesapi.PersonKey, err error)                             // MARKER: Purge
+	mockCount          func(ctx context.Context, query yellowpagesapi.Query) (count int, err error)                                                          // MARKER: Count
+	mockCreateREST     func(ctx context.Context, httpRequestBody *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, httpStatusCode int, err error)    // MARKER: CreateREST
+	mockStoreREST      func(ctx context.Context, key yellowpagesapi.PersonKey, httpRequestBody *yellowpagesapi.Person) (httpStatusCode int, err error)       // MARKER: StoreREST
+	mockDeleteREST     func(ctx context.Context, key yellowpagesapi.PersonKey) (httpStatusCode int, err error)                                               // MARKER: DeleteREST
+	mockLoadREST       func(ctx context.Context, key yellowpagesapi.PersonKey) (httpResponseBody *yellowpagesapi.Person, httpStatusCode int, err error)      // MARKER: LoadREST
+	mockListREST       func(ctx context.Context, q yellowpagesapi.Query) (httpResponseBody []*yellowpagesapi.Person, httpStatusCode int, err error)          // MARKER: ListREST
+	mockTryReserve     func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error)                              // MARKER: TryReserve
+	mockTryBulkReserve func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) // MARKER: TryBulkReserve
+	mockReserve        func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error)                              // MARKER: Reserve
+	mockBulkReserve    func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) // MARKER: BulkReserve
+	mockDemo           func(w http.ResponseWriter, r *http.Request) (err error)                                                                              // MARKER: Demo
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -448,17 +455,81 @@ func (svc *Mock) ListREST(ctx context.Context, q yellowpagesapi.Query) (httpResp
 	return httpResponseBody, httpStatusCode, errors.Trace(err)
 }
 
-// MockWebUI sets up a mock handler for WebUI.
-func (svc *Mock) MockWebUI(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: WebUI
-	svc.mockWebUI = handler
+// MockTryReserve sets up a mock handler for TryReserve.
+func (svc *Mock) MockTryReserve(handler func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error)) *Mock { // MARKER: TryReserve
+	svc.mockTryReserve = handler
 	return svc
 }
 
-// WebUI executes the mock handler.
-func (svc *Mock) WebUI(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: WebUI
-	if svc.mockWebUI == nil {
+// TryReserve executes the mock handler.
+func (svc *Mock) TryReserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: TryReserve
+	if svc.mockTryReserve == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	reserved, err = svc.mockTryReserve(ctx, objKey, dur)
+	return reserved, errors.Trace(err)
+}
+
+// MockTryBulkReserve sets up a mock handler for TryBulkReserve.
+func (svc *Mock) MockTryBulkReserve(handler func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error)) *Mock { // MARKER: TryBulkReserve
+	svc.mockTryBulkReserve = handler
+	return svc
+}
+
+// TryBulkReserve executes the mock handler.
+func (svc *Mock) TryBulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: TryBulkReserve
+	if svc.mockTryBulkReserve == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	reservedKeys, err = svc.mockTryBulkReserve(ctx, objKeys, dur)
+	return reservedKeys, errors.Trace(err)
+}
+
+// MockReserve sets up a mock handler for Reserve.
+func (svc *Mock) MockReserve(handler func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error)) *Mock { // MARKER: Reserve
+	svc.mockReserve = handler
+	return svc
+}
+
+// Reserve executes the mock handler.
+func (svc *Mock) Reserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: Reserve
+	if svc.mockReserve == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	reserved, err = svc.mockReserve(ctx, objKey, dur)
+	return reserved, errors.Trace(err)
+}
+
+// MockBulkReserve sets up a mock handler for BulkReserve.
+func (svc *Mock) MockBulkReserve(handler func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error)) *Mock { // MARKER: BulkReserve
+	svc.mockBulkReserve = handler
+	return svc
+}
+
+// BulkReserve executes the mock handler.
+func (svc *Mock) BulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkReserve
+	if svc.mockBulkReserve == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	reservedKeys, err = svc.mockBulkReserve(ctx, objKeys, dur)
+	return reservedKeys, errors.Trace(err)
+}
+
+// MockDemo sets up a mock handler for Demo.
+func (svc *Mock) MockDemo(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Demo
+	svc.mockDemo = handler
+	return svc
+}
+
+// Demo executes the mock handler.
+func (svc *Mock) Demo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Demo
+	if svc.mockDemo == nil {
 		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	err = svc.mockWebUI(w, r)
+	err = svc.mockDemo(w, r)
 	return errors.Trace(err)
 }

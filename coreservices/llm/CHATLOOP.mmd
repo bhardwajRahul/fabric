@@ -1,0 +1,12 @@
+graph TD
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"chat-loop"}}:::term --> _start
+    _start(( )):::term --> t0["init-chat"]:::task
+    t0 --> t1["call-llm"]:::task
+    t1 --> t2["process-response"]:::task
+    t2 -->|"if !toolsRequested"| _end(( )):::term
+    t2 -->|"for each in pendingToolCalls"| t3["execute-tool"]:::task
+    t3 --> t1

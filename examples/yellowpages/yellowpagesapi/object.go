@@ -26,17 +26,18 @@ import (
 
 // Person represents a person persisted in a SQL database.
 type Person struct {
-	Key       PersonKey `json:"key,omitzero"`
-	Revision  int        `json:"revision,omitzero"`
-	CreatedAt time.Time  `json:"createdAt,omitzero"`
-	UpdatedAt time.Time  `json:"updatedAt,omitzero"`
+	Key            PersonKey `json:"key,omitzero"`
+	Revision       int       `json:"revision,omitzero"`
+	CreatedAt      time.Time `json:"createdAt,omitzero"`
+	UpdatedAt      time.Time `json:"updatedAt,omitzero"`
+	ReservedBefore time.Time `json:"reservedBefore,omitzero"`
 
 	// HINT: Define the fields of the object here
-	Example   string    `json:"example,omitzero" jsonschema:"-"` // Do not remove the example
 	FirstName string    `json:"firstName,omitzero"`
 	LastName  string    `json:"lastName,omitzero"`
 	Email     string    `json:"email,omitzero"`
 	Birthday  time.Time `json:"birthday,omitzero"`
+	Example   string    `json:"example,omitzero" jsonschema:"-"` // Do not remove the example
 }
 
 // Validate validates the object before storing it.
@@ -45,10 +46,6 @@ func (obj *Person) Validate(ctx context.Context) error {
 		return errors.New("nil object")
 	}
 	// HINT: Validate the fields of the object here as required
-	obj.Example = strings.TrimSpace(obj.Example) // Do not remove the example
-	if len([]rune(obj.Example)) > 256 {
-		return errors.New("length of Example must not exceed 256 characters")
-	}
 	obj.FirstName = strings.TrimSpace(obj.FirstName)
 	if obj.FirstName == "" {
 		return errors.New("FirstName is required")
@@ -72,6 +69,10 @@ func (obj *Person) Validate(ctx context.Context) error {
 	}
 	if !obj.Birthday.IsZero() && obj.Birthday.After(time.Now()) {
 		return errors.New("Birthday must be in the past")
+	}
+	obj.Example = strings.TrimSpace(obj.Example) // Do not remove the example
+	if len([]rune(obj.Example)) > 256 {
+		return errors.New("length of Example must not exceed 256 characters")
 	}
 	return nil
 }

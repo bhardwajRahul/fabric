@@ -10,7 +10,7 @@ The external issuer uses PEM-configured private keys that are manually rotated, 
 for graceful rotation.
 
 Key design decisions:
-- Ed25519 private keys are configured via `PrivateKeyPEM` and `AltPrivateKeyPEM` configs (PEM-encoded, secret)
+- Ed25519 private keys are configured via `PrivateKey` and `AltPrivateKey` configs (PEM or raw base64 format, secret)
 - The JWKS endpoint exposes corresponding public keys for external verification
 - Token TTL is configurable (default 720h) for long-lived end-user tokens
 - Two keys can be active simultaneously during rotation: current + alternative

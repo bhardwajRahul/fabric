@@ -18,3 +18,6 @@ hello.example:
 
 directory.example:
   SQL: "root:secret1234@tcp(127.0.0.1:3306)/microbus_examples"
+
+llm.core:
+  ProviderHostname: chatbox.example

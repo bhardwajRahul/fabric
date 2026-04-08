@@ -16,24 +16,24 @@ Microbus is a holistic open source framework for developing, testing, deploying 
 
 ## Key Concepts
 
+### Microservices and Features
+
 A Microbus application comprises a multitude of microservices that communicate over a messaging bus using the HTTP protocol.
 
 A microservice consists of the following features:
-- **Web handler endpoints** — raw `http.ResponseWriter`/`http.Request` handlers for serving HTML, files, or custom HTTP responses
-- **Functional endpoints (RPCs)** — typed request/response functions with input/output structs, marshaling, and client stubs
-- **Outbound events** — messages this microservice fires for others to consume
-- **Inbound event sinks** — handlers that react to events emitted by other microservices
-- **Configuration properties** — runtime settings (strings, durations, booleans, etc.)
-- **Tickers** — recurring operations on a schedule
-- **Metrics** — counters, gauges, and histograms for observability
-
-### Internal vs External URLs
-
-Microbus microservices are reachable from other microservices by means of an internal URL that is only addressable inside the messaging bus. An external client, such as an HTTP browser, must use the HTTP ingress microservice to bridge the gap between real HTTP and the messaging bus. The proxy transforms the external-facing URL to the internal one. For example, the external URL `https://webserver.hostname/myservice.hostname/my/path` is transformed into the internal Microbus URL `https://myservice.hostname/my/path` by using the first part of the path as the internal hostname.
+- **Web handler endpoints** - raw `http.ResponseWriter`/`http.Request` handlers for serving HTML, files, or custom HTTP responses
+- **Functional endpoints (RPCs)** - typed request/response functions with input/output structs, marshaling, and client stubs
+- **Outbound events** - messages this microservice fires for others to consume
+- **Inbound event sinks** - handlers that react to events emitted by other microservices
+- **Configuration properties** - runtime settings (strings, durations, booleans, etc.)
+- **Task endpoints** - typed handlers for agentic workflow steps, receiving and returning state via a `workflow.Flow` carrier
+- **Workflow graphs** - definitions of agentic workflow structure, describing task transitions and conditions
+- **Tickers** - recurring operations on a schedule
+- **Metrics** - counters, gauges, and histograms for observability
 
 ### Subscription Route
 
-The subscription route of an endpoint is resolved relative to the hostname of the microservice to form the internal Microbus URL of the endpoint. In turn, this becomes the path of the external URL. For example, the route `/my/path` of a microservice with hostname `myservice.hostname` is resolved to the internal Microbus URL `https://myservice.hostname/my/path` which is accessible from the external URL `https://webserver.hostname/myservice.hostname/my/path`.
+The subscription route of an endpoint is resolved relative to the hostname of the microservice to form an internal Microbus URL. External clients reach the endpoint through the HTTP ingress proxy, which prepends the microservice hostname to the path. For example, route `/my/path` on `myservice.hostname` is internally `https://myservice.hostname/my/path` and externally `https://webserver.hostname/myservice.hostname/my/path`.
 
 It's recommended to set the route of a subscription to match the name of its handler, in kebab-case, e.g. `/my-handler`.
 
@@ -43,29 +43,26 @@ Set a port by prepending it to the route, e.g. `:123/my-path`. A port alone with
 
 Encase path arguments in curly braces, e.g. `/foo/{foo}/bar/{bar}`. Append a `...` to the name of the last path argument to capture the remainder of the path, e.g. `/my-path/{greedy...}`. Path arguments must span an entire segment of the route. A route such as `/x{bad}x` is not allowed.
 
-Start a route with `//` or `https://` to set an absolute path that is mapped to the root of the HTTP ingress proxy by the Root middleware. For example, the route `//my/path` results in the external URL `https://webserver.hostname/my/path` which omits the hostname of the microservice. The special route `//root` maps to the absolute root `/` of the ingress, i.e. `https://webserver.hostname/`. A good use of these types of routes is for web handlers that produce user-facing HTML pages.
+Start a route with `//` or `https://` to set an absolute path mapped to the root of the ingress proxy (e.g. `//my/path` becomes `https://webserver.hostname/my/path`). The special route `//root` maps to `/`.
 
 ### Ports
 
-Ports provide access isolation. The HTTP ingress proxy can be configured to only forward external requests to specific ports, making endpoints on other ports unreachable from external clients.
+Ports provide access isolation. Use port `:0` to accept requests on any port. Conventional port assignments:
 
-Ports are set by prepending them to the route as described in [Subscription Route](#subscription-route). Use port `:0` to accept requests on any port, e.g. `:0/openapi.json`. If not specified, the default port is `:443`.
-
-Conventional port assignments:
-
-- `:443` — default port for standard endpoints (functions and web handlers)
-- `:444` — internal-only endpoints that should not be accessible from outside the bus
-- `:417` — dedicated port for outbound events, blocking external requests from reaching event endpoints
-- `:888` — internal management and control endpoints
-- `:0` — wildcard, accepts requests on any port (used for cross-cutting concerns like OpenAPI)
+- `:443` - default port for standard endpoints (functions and web handlers)
+- `:444` - internal-only endpoints that should not be accessible from outside the bus
+- `:417` - dedicated port for outbound events, blocking external requests from reaching event endpoints
+- `:428` - dedicated port for task endpoints, blocking external requests from reaching workflow tasks
+- `:888` - internal management and control endpoints
+- `:0` - wildcard, accepts requests on any port (used for cross-cutting concerns like OpenAPI)
 
 ### Magic HTTP Arguments
 
-Functional endpoints use typed Go function signatures for their inputs and outputs. Three special argument names — `httpRequestBody`, `httpResponseBody` and `httpStatusCode` — provide direct control over HTTP request/response semantics from within a functional endpoint.
+Functional endpoints use typed Go function signatures for their inputs and outputs. Three special argument names - `httpRequestBody`, `httpResponseBody` and `httpStatusCode` - provide direct control over HTTP request/response semantics from within a functional endpoint.
 
-- **`httpRequestBody`** — When used as an input argument, the HTTP request body is deserialized directly into this argument rather than being parsed as part of the standard input struct. All other input arguments are sourced from query parameters or path arguments. Can be any JSON-deserializable type: pointer to struct, slice, map, or primitive.
-- **`httpResponseBody`** — When used as an output argument, only this argument is serialized as the HTTP response body. All other output arguments are excluded from the response. Can be any JSON-serializable type: pointer to struct, slice, map, or primitive.
-- **`httpStatusCode`** — When used as an `int` output argument, its value sets the HTTP response status code. If zero or omitted, the default status code `200 OK` is used.
+- **`httpRequestBody`** - Input argument deserialized directly from the HTTP request body. Other inputs come from query/path arguments.
+- **`httpResponseBody`** - Output argument serialized as the sole HTTP response body. Other outputs are excluded.
+- **`httpStatusCode`** - `int` output argument that sets the HTTP status code (defaults to `200`).
 
 These magic arguments are commonly used together to expose a functional endpoint as a REST API:
 
@@ -95,97 +92,13 @@ func (svc *Service) LoadREST(ctx context.Context, key ObjectKey) (httpResponseBo
 
 ### Authentication and Authorization
 
-#### Enabling Authentication
+Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin && iss=~"access.token.core"`). See the manifest sections below for syntax.
 
-The `microbus/init-project` skill sets up the token issuers, authorization middleware, and `act` package automatically. The remaining piece each solution must provide is an **authenticator** — a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
-
-```go
-bearertokenapi.NewClient(svc).Mint(ctx, map[string]any{
-	"sub": "user@example.com",
-	"uid": 12345,
-	"tid": 123,
-})
-```
-
-The authenticator returns the signed JWT to the caller (e.g. via a `Set-Cookie` header or JSON response). From that point, the ingress middleware handles token exchange and claims propagation automatically.
-
-#### Bearer Tokens and Access Tokens
-
-Microbus uses a two-token architecture for authentication and authorization.
-
-A **bearer token** is a long-lived JWT issued by an external identity provider (e.g. Auth0, Okta) or by the built-in `bearer.token.core` service. It identifies the actor (user or system) and is presented to the system via the `Authorization: Bearer <token>` header or an `Authorization` cookie.
-
-An **access token** is a short-lived internal JWT minted by the `access.token.core` service. It is signed with ephemeral keys that rotate automatically and expires quickly (default 20 seconds). Access tokens are not meant to be stored or reused — they are created on-the-fly for each request.
-
-#### Token Exchange Flow
-
-When the HTTP ingress proxy receives a request with a bearer token, it automatically exchanges it for an access token:
-
-1. The ingress authorization middleware extracts the bearer token from the request
-2. It verifies the bearer token's signature against the issuer's JWKS (JSON Web Key Set)
-3. It calls `access.token.core` to mint a short-lived access token, passing in the verified claims
-4. The access token service applies any registered claims transformers to enrich the claims (e.g. adding roles, tenant ID, or permissions from a user database)
-5. The access token service sets critical claims (`iss`, `idp`, `iat`, `exp`, `jti`) and signs the token
-6. The signed access token is attached to the request and propagated automatically to all downstream microservices via the `Microbus-Actor` header
-
-#### Claims Enrichment
-
-Claims transformers allow enriching the access token with additional claims during minting. Register transformers in `main/main.go` when initializing the access token service:
-
-```go
-accesstoken.NewService().Init(func(svc *accesstoken.Service) (err error) {
-	svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
-		// Look up the user's roles and tenant from your database and add them to the claims
-		claims["roles"] = []string{"admin", "user"}
-		claims["tid"] = 1234
-		return nil
-	})
-	return nil
-})
-```
-
-#### The Actor Pattern
-
-The `Actor` struct in the `act` package is a convenience pattern for representing the claims associated with a request. It is created during project setup and can be extended to fit the needs of the solution. Its properties are organized into four groups: standard claims (`iss`, `sub`, `exp`, `idp`), identifiers (e.g. tenant ID, user ID), security claims (roles, groups, scopes), and user preferences (name, locale, time zone). JSON tag names should follow the [IANA JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml#claims) where a registered claim name exists.
-
-Use `act.Of(ctx)` to extract the actor from the request context:
-
-```go
-func (svc *Service) MyEndpoint(ctx context.Context) error {
-	actor, err := act.Of(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// ...
-	return nil
-}
-```
-
-#### Actor Impersonation
-
-To call a downstream microservice with modified claims, mint a new access token with the adjusted claims and attach it via `pub.Token`:
-
-```go
-func (svc *Service) ElevatedAction(ctx context.Context) error {
-	actor, err := act.Of(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	actor.Roles = append(actor.Roles, "admin")
-	elevatedToken, err := accesstokenapi.NewClient(svc).Mint(ctx, actor)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = downstreamapi.NewClient(svc).
-		WithOptions(pub.Token(elevatedToken)).
-		AdminAction(ctx)
-	return errors.Trace(err)
-}
-```
+**IMPORTANT**: If the microservice uses `act.Of(ctx)`, imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
 
 ### Required JWT Claims
 
-Required JWT claims are expressed as a boolean expression over the JWT claims of the access token associated with the request, that must be met for the request to be allowed. The boolean expression supports the following syntax:
+`requiredClaims` is a boolean expression over access token claims. Supported syntax:
 
 - Boolean operators `&&`, `||` and `!`
 - Comparison operators `==` and `!=`
@@ -195,11 +108,23 @@ Required JWT claims are expressed as a boolean expression over the JWT claims of
 - String quotation marks `"` or `'`
 - Dot notation `.` for traversing nested objects. For this purpose, arrays are treated as sets, enabling expressions such as `roles.admin` to check whether the value `"admin"` is present in the claim `"roles": ["admin", "elevated"]`
 
-It is best practice to include a condition on the `iss` claim to ensure that the request carries a properly minted access token rather than an unexchanged bearer token or other credential. When using the default access token service, this can be done with `iss=~"access.token.core"` or `iss=="microbus://access.token.core"`. The original identity provider (the issuer of the bearer token that was exchanged for the access token) is available in the `idp` claim.
+Best practice: include `iss=~"access.token.core"` to ensure requests carry a properly minted access token. The original identity provider is available in the `idp` claim.
+
+### SQL CRUD Microservices
+
+SQL CRUD microservices are Microbus microservices that expose a CRUD API to persist and retrieve objects in and out of a SQL database. They follow a standardized pattern for multi-tenant isolation, schema migration, column mapping, query filtering, and optimistic concurrency control via revisions.
+
+**IMPORTANT**: If the microservice uses SQL (imports `database/sql` or `github.com/microbus-io/sequel`), read `.claude/rules/sequel.txt` before proceeding.
+
+### Agentic Workflows
+
+Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`. Tasks are registered on port `:428` by default.
+
+**IMPORTANT**: If the microservice defines tasks or workflows (has `tasks` or `workflows` in its `manifest.yaml`), read `.claude/rules/workflows.txt` before proceeding.
 
 ### Manifest
 
-Each microservice contains a `manifest.yaml` that concisely catalogs its features. The manifest is documentation of the code, not a definition used to generate it. Reading a microservice's manifest is a much faster way to understand what it does than reading its code. When starting to work on a project, read all `manifest.yaml` files across the project to build a mental map of the system and keep it in mind.
+Each microservice contains a `manifest.yaml` that documents its features. Read all manifests when starting work on a project to build a mental map of the system.
 
 **IMPORTANT**: The manifest describes the code but does not generate it. When changing the code of the microservice, update the manifest to match.
 
@@ -211,7 +136,7 @@ The `general` section of the manifest describes its general properties.
 - The `frameworkVersion` is the version of the `github.com/microbus-io/fabric` package in `go mod` at the time when the microservice was last edited
 - If the microservice depends on either the `github.com/microbus-io/sequel` or the `database/sql` packages, enter `SQL` for the `db` property
 - If the microservice makes outgoing calls to a web API (likely via the HTTP egress proxy), enter the hostname of the web API for `cloud`. If more than one hostname is contacted, enter `various`
-- The `modifiedAt` timestamp records when the manifest was last updated, in RFC 3339 format
+- The `modifiedAt` timestamp records when the manifest was last updated, in RFC 3339 format with the actual current UTC time (not midnight)
 
 ```yaml
 general:
@@ -222,12 +147,12 @@ general:
   frameworkVersion: 1.23.0
   db: SQL
   cloud: api.example.com
-  modifiedAt: "2025-01-15T00:00:00Z"
+  modifiedAt: "2025-01-15T14:30:00Z"
 ```
 
 #### Downstream Dependencies
 
-The `downstream` section of the manifest lists other microservices that this microservice depends on. Microservice X depends on microservice Y when X imports Y's `*api` package to use its `Client` or `MulticastClient`. Usage of Y's `MulticastTrigger` or `Hook` does not constitute a downstream dependency in this context.
+The `downstream` section lists microservices whose `*api` package is imported for `Client` or `MulticastClient` use. `MulticastTrigger` or `Hook` usage does not count.
 
 ```yaml
 downstream:
@@ -253,19 +178,12 @@ webs:
     method: GET
     route: :1234/my-web
     loadBalancing: default
-    requiredClaims: roles=~"manager|director"
+    requiredClaims: roles.manager || roles.director
 ```
 
 #### Functions
 
-The `functions` section of the manifest describes the functional endpoints (RPCs) of the microservice.
-
-- The `method` can be any valid HTTP method, or `ANY` to indicate that the endpoint handles all methods
-- The `loadBalancing` indicates how requests to this endpoint are distributed among peers:
-  - `default` - load-balanced among peers using the hostname as the queue name
-  - `none` - multicast to all peers (no queue)
-  - a custom queue name (e.g. `worker.pool`) - load-balanced among peers that share the same queue name, and multicast across groups with different queue names. Queue names must match `^[a-zA-Z0-9\.]+$`
-- `requiredClaims` is a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied
+The `functions` section of the manifest describes the functional endpoints (RPCs) of the microservice. Fields `method`, `loadBalancing`, and `requiredClaims` follow the same conventions as webs.
 
 ```yaml
 functions:
@@ -293,13 +211,7 @@ outboundEvents:
 
 #### Inbound Events
 
-The `inboundEvents` section of the manifest describes the inbound events that the microservice is listening to.
-
-- The `loadBalancing` indicates how requests to this endpoint are distributed among peers:
-  - `default` - load-balanced among peers using the hostname as the queue name
-  - `none` - multicast to all peers (no queue)
-  - a custom queue name (e.g. `worker.pool`) - load-balanced among peers that share the same queue name, and multicast across groups with different queue names. Queue names must match `^[a-zA-Z0-9\.]+$`
-- `requiredClaims` is a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied
+The `inboundEvents` section of the manifest describes the inbound events that the microservice is listening to. Fields `loadBalancing` and `requiredClaims` follow the same conventions as webs.
 
 ```yaml
 inboundEvents:
@@ -376,92 +288,54 @@ metrics:
     observable: false
 ```
 
+#### Tasks
+
+The `tasks` section of the manifest describes task endpoints used in agentic workflows.
+
+- The `signature` excludes `ctx context.Context`, `flow *workflow.Flow`, and `err error`
+- For output arguments with an `Out` suffix (read-modify-write pattern), include them as-is in the signature
+
+```yaml
+tasks:
+  MyTask:
+    signature: MyTask(inArg1 string, inArg2 float64) (outArg1 bool)
+    description: MyTask does X.
+    route: :428/my-task
+    requiredClaims: roles.manager || roles.director
+```
+
+#### Workflows
+
+The `workflows` section of the manifest describes workflow graph endpoints that define the structure of agentic workflows.
+
+- The `signature` lists the workflow's declared input and output fields. Input fields (before the return parens) are what the workflow expects in its initial state. Output fields (inside the return parens) are what the workflow produces in its final state. Field types are informational - the actual state is untyped JSON.
+
+```yaml
+workflows:
+  MyWorkflow:
+    signature: MyWorkflow(inputField1 string, inputField2 float64) (outputField1 bool)
+    description: MyWorkflow defines the workflow graph for X.
+    route: :428/my-workflow
+```
+
 ### Markers
 
 Each feature of a microservice has corresponding code scattered across multiple files: the handler in `service.go`, the subscription in `intermediate.go`, the client stub in `*api/client.go`, the mock in `mock.go`, and the test in `service_test.go`. To locate all code related to a specific feature, search for `// MARKER: FeatureName` comments within the microservice's directory. For example, to find all code related to the `Hello` feature of the `hello.example` microservice, search for `MARKER: Hello` under its directory.
 
-Markers are scoped to a single microservice — different microservices can define features with the same name, so always search within the specific microservice's directory.
+Markers are scoped to a single microservice - different microservices can define features with the same name, so always search within the specific microservice's directory.
 
 ## Project Structure
 
-```
-├── .claude/                    # Claude Code setup
-│   ├── rules/                  # Instructions for coding agents
-│   └── skills/                 # Claude Code skills
-├── .vscode/
-│   └── launch.json             # VSCode launch file
-├── main/
-│   ├── env.yaml                # Environment variables for main app
-│   └── main.go                 # Main application
-├── microservice/               # Each microservice has its own directory
-│   ├── microserviceapi/        # The public interface of this microservice
-│   |   ├── client.go           # Generated client API
-│   │   └── [type.go]           # Generated definition for each type used in the API
-│   ├── resources/              # Embedded resource files
-│   │   ├── embed.go            # go:embed directive
-│   │   └── [your files]        # Static files, configs, etc.
-│   ├── AGENTS.md               # Local instructions to the coding agent
-│   ├── CLAUDE.md               # Local instructions for Claude
-│   ├── intermediate.go         # Service infrastructure
-│   ├── manifest.yaml           # Manifest of features
-│   ├── mock.go                 # Mock for testing purposes
-│   ├── PROMPTS.md              # Audit trail of prompts
-│   ├── service_test.go         # Integration tests
-│   └── service.go              # Implementation
-├── .gitignore
-├── AGENTS.md                   # Instructions for coding agents
-├── CLAUDE.md                   # Instructions for Claude
-├── config.yaml                 # Configuration properties
-├── config.local.yaml           # git ignored configuration properties
-├── env.yaml                    # Environment variables
-├── env.local.yaml              # git ignored environment variables
-├── go.mod
-└── go.sum
-```
-
-### Configuration File
-
-Configuration property values can be set in a `config.yaml` placed in the working directory of the application, or in an ancestor directory.
-
-```yaml
-# Set configuration properties for microservices with a hostname of my.service or *.my.service
-my.service:
-  ExampleString: my value
-  ExampleDuration: 1h
-
-# Set configuration properties for all microservices
-all:
-  ExampleBoolean: true
-```
-
-Secret configuration property values can be set in `config.local.yaml`, which is git ignored.
-
-### Environment Variables File
-
-The environment variables of the operating system can be overridden by setting their values in an `env.yaml` file placed in the working directory of the application, or in an ancestor directory.
-
-```yaml
-ENVAR_NAME: ENVAR_VALUE
-```
-
-Some common environment variables:
-
-```yaml
-# NATS connection settings
-MICROBUS_NATS: nats://127.0.0.1:4222
-MICROBUS_NATS_USER: my-nats-user
-MICROBUS_NATS_PASSWORD: my-nats-password
-MICROBUS_NATS_TOKEN: my-nats-authentication-token
-
-# The deployment environment: LOCAL, TESTING, LAB, PROD
-MICROBUS_DEPLOYMENT: LOCAL
-
-# OpenTelemetry endpoint
-OTEL_EXPORTER_OTLP_PROTOCOL: grpc
-OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4317
-```
-
-Secret environment variables can be set in `env.local.yaml`, which is git ignored.
+- Each microservice lives in its own directory with a `*api/` subdirectory for its public interface (client stubs, types)
+- The main app is at `main/main.go`
+- `config.yaml` sets configuration properties, scoped by microservice hostname or `all:`. Secrets go in git-ignored `config.local.yaml`
+  ```yaml
+  my.service:
+    MyConfig: value
+  all:
+    SharedConfig: true
+  ```
+- `env.yaml` overrides OS environment variables. Secrets go in git-ignored `env.local.yaml`
 
 ## Common Patterns
 
@@ -471,45 +345,16 @@ Place static resource files in the `resources` directory of the microservice, or
 
 Resource files are accessed in the code using `svc.ReadResFile` or `svc.ResFS`.
 
-```go
-func (svc *Service) LoadSQLFile() error {
-	data, err := svc.ReadResFile("sql/create-table.sql")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// Process the data...
-	return nil
-}
-```
-
-If the file is a text or HTML template, you may use `svc.WriteResTemplate` to read and execute it in a single operation.
-HTML templates must be named with a `.html` extension for variable content to be appropriately escaped.
-`svc.WriteResTemplate` does not support customizing execution with a func map or changing the delimiters.
-If either is required, use the standard library pattern instead.
-
-```go
-func (svc *Service) GreetingPage(w http.ResponseWriter, r *http.Request) (err error) {
-	data := struct {
-		Name string
-	}{
-		Name: "Peter",
-	}
-	err = svc.WriteResTemplate(w, "greeting-template.html", data)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-```
+If the file is a text or HTML template, use `svc.WriteResTemplate(w, "template.html", data)` to read and execute it in a single operation. HTML templates must be named with a `.html` extension for proper escaping. `svc.WriteResTemplate` does not support func maps or custom delimiters - use the standard library pattern if either is required.
 
 ### Calling Downstream Microservices
 
-Use the generated client stub of the downstream microservice for type-safe communication with other microservices. Client stubs are lightweight and can be created on a per-call basis. Four client types are available in each microservice's `*api` package:
+Use the generated client stub for type-safe communication with downstream microservices. Four client types are available in each `*api` package:
 
-- **`NewClient`** — unicast (one-to-one) request/response. Returns a single result, load-balanced among peers.
-- **`NewMulticastClient`** — multicast (one-to-many) request/response. Returns an iterator of zero or more responses from all peers.
-- **`NewMulticastTrigger`** — fires outbound events defined in the microservice's API. Used by the event source to notify subscribers.
-- **`NewHook`** — subscribes to inbound events from another microservice. Used by event sinks to react to events.
+- **`NewClient`** - unicast (one-to-one) request/response. Returns a single result, load-balanced among peers.
+- **`NewMulticastClient`** - multicast (one-to-many) request/response. Returns an iterator of zero or more responses from all peers.
+- **`NewMulticastTrigger`** - fires outbound events defined in the microservice's API. Used by the event source to notify subscribers.
+- **`NewHook`** - subscribes to inbound events from another microservice. Used by event sinks to react to events.
 
 If making a one-to-one request/response call, use the standard client.
 
@@ -581,196 +426,45 @@ func (svc *Service) onOrderCreated(ctx context.Context, order Order) error {
 
 ### Logging
 
-Use the logging functions `svc.LogDebug`, `svc.LogInfo`, `svc.LogWarn` and `svc.LogError` to print to the log.
-Logs may include attributes in the `slog` name=value pair pattern. Use the label `"error"` when logging an `error`.
-
-```go
-func (svc *Service) RunJob(ctx context.Context, jobID string) (err error) {
-	t0 := svc.Now(ctx)
-	svc.LogInfo(ctx, "Starting job", "job", jobID)
-	err = runJob(jobID)
-	if err != nil {
-		svc.LogError(ctx, "Job failed",
-			"job", jobID,
-			"error", err,
-		)
-	} else {
-		svc.LogInfo(ctx, "Job succeeded",
-			"job", jobID,
-			"dur", svc.Now(ctx).Sub(t0),
-		)
-	}
-	return errors.Trace(err)
-}
-```
-
-In most cases there is no need to log errors. Any error returned from an endpoint is automatically logged by Microbus.
+Use `svc.LogDebug`, `svc.LogInfo`, `svc.LogWarn` and `svc.LogError` to print to the log. Logs include attributes in the `slog` name=value pair pattern, e.g. `svc.LogError(ctx, "Job failed", "job", jobID, "error", err)`. Use the label `"error"` when logging an `error`. In most cases there is no need to log errors - any error returned from an endpoint is automatically logged by Microbus.
 
 ### Distributed Tracing
 
-Every call to an endpoint is automatically wrapped with a trace span. The span can be accessed via `svc.Span(ctx)` and extended with attributes or error recordings. The span uses the slog name=value pair pattern for attributes.
+Every call to an endpoint is automatically wrapped with a trace span. The span can be accessed via `svc.Span(ctx)` and extended with `SetAttributes` or `LogInfo` using the slog name=value pair pattern. All downstream service calls automatically participate in the trace.
 
-```go
-func (svc *Service) ProcessOrder(ctx context.Context, orderID string) error {
-	span := svc.Span(ctx)
-	span.SetAttributes("order.id", orderID)
+### Goroutines
 
-	// All downstream service calls automatically participate in the trace
-	user, err := userserviceapi.NewClient(svc).GetUser(ctx, orderID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	span.LogInfo("User retrieved successfully",
-		"user", user.Name,
-	)
-	return nil
-}
-```
-
-### Launching Goroutines
-
-Use `svc.Go` to launch goroutines in the context of a microservice.
-
-```go
-func (svc *Service) RunJobAsync(ctx context.Context) (err error) {
-	svc.Go(ctx, func(ctx context.Context) (err error) {
-		// Implement Go routine here...
-		return err
-	})
-	return nil
-}
-```
-
-### Parallel Execution
-
-Use `svc.Parallel` to launch and wait for the completions of multiple goroutines in the context of a microservice.
-
-```go
-func (svc *Service) Multitask(ctx context.Context) (err error) {
-	err = svc.Parallel(
-		func() (err error) {
-			// Implement job 1 here...
-			return err
-		},
-		func() (err error) {
-			// Implement job 2 here...
-			return err
-		},
-		// etc...
-	)
-	return errors.Trace(err)
-}
-```
+Use `svc.Go(ctx, func)` to launch a goroutine in the context of a microservice. Use `svc.Parallel(func1, func2, ...)` to launch multiple goroutines and wait for all to complete.
 
 ### Making HTTP Web Requests
 
 HTTP requests to the web should use the HTTP egress proxy rather than the standard Go `http.Client`.
 
-#### Step 1: Add the HTTP Egress Proxy to the Main App
-
-Add the HTTP egress proxy to the main app in `main/main.go`, if not already added.
-`main.go` is typically located in the `main` directory of the project, not inside the directory of the microservice.
-
-#### Step 2: Use the Client of the HTTP Egress Proxy
-
-Use the client of the HTTP egress proxy to make the request rather than Go's standard HTTP client.
-The HTTP egress proxy takes care of setting a timeout and recording metrics.
-
 ```go
-import "github.com/microbus-io/fabric/coreservices/httpegress/httpegressapi"
-
 func (svc *Service) FetchListFromWeb(ctx context.Context) (result []string, err error) {
-	req, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := httpegressapi.NewClient(svc).Do(ctx, req)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	// Process response here...
 	return result, nil
 }
 ```
 
-### Extending the Service Struct
-
-You can extend the `Service` struct of the microservice with member variables.
-
-```go
-type Service struct {
-	*Intermediate  // IMPORTANT: Do not remove
-
-	// Add custom fields here...
-	cache map[string]any
-	db    *sql.DB
-}
-```
-
-### Lifecycle Callbacks
-
-Initialize the microservice's resources in the `OnStartup` callback, and clean them up in the `OnShutdown` callback appropriately.
-
-```go
-// OnStartup is called when the microservice is started up.
-func (svc *Service) OnStartup(ctx context.Context) (err error) {
-	// Initialize the microservice here...
-	return nil
-}
-
-// OnShutdown is called when the microservice is shut down.
-func (svc *Service) OnShutdown(ctx context.Context) (err error) {
-	// Clean up resources here...
-	return nil
-}
-```
+Add the HTTP egress proxy to the main app in `main/main.go`, if not already added.
 
 ### Miscellaneous
 
-- **Context Propagation**: Always pass the context through the call chain for proper tracing
 - **Current Time**: Use `svc.Now(ctx)` to get the current time rather than `time.Now()`
-- **Main App**: The main app is typically located at `main/main.go` relative to the root directory of the project
 
 ### Recording Metrics
 
-Use `IncrementMyMetric` function to count occurrences of an operation or event in a counter metric.
-
-```go
-func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
-	svc.IncrementHelloOccurrences(ctx, 1)
-	return "Hello, " + name, nil
-}
-```
-
-Use `RecordMyMetric` function to set the value of a gauge metric. Gauge values can go up or down over time.
-
-```go
-func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
-	concurrent := svc.atomicCounter.Add(1)
-	defer svc.atomicCounter.Add(-1)
-	svc.RecordConcurrentHellos(ctx, concurrent)
-	return "Hello, " + name, nil
-}
-```
-
-Use `RecordMyMetric` function to update the value of a histogram metric.
-
-```go
-func (svc *Service) Hello(ctx context.Context, name string) (result string, err error) {
-	svc.RecordHelloNameLengths(ctx, len(name))
-	return "Hello, " + name, nil
-}
-```
+Use `svc.IncrementMyMetric(ctx, delta)` for counters and `svc.RecordMyMetric(ctx, value)` for gauges and histograms. The method names are generated from the metric name defined in the manifest.
 
 ### Mocking
 
 #### Mocking Microservices
 
-Sometimes using the actual microservice in tests is impossible or undesirable because it depends on a resource that is unavailable in the testing environment. For example, a microservice that makes requests to a third-party web service could be mocked in order to avoid depending on that service for development.
-
-A microservice's `Mock` includes type-safe methods for mocking all its endpoints. Mocks can be added to testing applications in lieu of the real microservices.
+A microservice's `Mock` provides type-safe methods for mocking all its endpoints. Add mocks to testing applications in lieu of real microservices.
 
 ```go
 func TestPayment_ChargeUser(t *testing.T) {
@@ -806,18 +500,9 @@ func TestPayment_ChargeUser(t *testing.T) {
 
 #### Mocking the HTTP Egress Proxy
 
-When testing a microservice that makes outbound HTTP calls via the HTTP egress proxy, mock the proxy to avoid real network requests. Use `httpegress.NewMock()` and `MockMakeRequest` to intercept and simulate external responses.
-
-The mock handler receives the proxied HTTP request inside the body of the handler's `*http.Request`. Use `http.ReadRequest(bufio.NewReader(r.Body))` to extract the original request, then write the simulated response to the `http.ResponseWriter`.
+Mock the HTTP egress proxy with `httpegress.NewMock()` to avoid real network requests. Extract the proxied request with `http.ReadRequest(bufio.NewReader(r.Body))`.
 
 ```go
-import (
-	"bufio"
-	"net/http"
-
-	"github.com/microbus-io/fabric/coreservices/httpegress"
-)
-
 func TestMyService_ExternalAPI(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -854,35 +539,13 @@ func TestMyService_ExternalAPI(t *testing.T) {
 }
 ```
 
-This pattern is especially important for microservices that wrap remote APIs — every such microservice should include tests with a mocked egress proxy to validate request construction and response handling without depending on the external service. Setting up the mock per test case keeps each case self-contained and avoids leaking mock behavior between cases.
-
-Upstream microservices that depend on a remote API wrapper should mock the wrapper microservice itself (using its `NewMock()`), not the HTTP egress proxy. Only the wrapper's own tests should mock the egress proxy directly.
+Only the wrapper's own tests should mock the egress proxy directly. Upstream microservices should mock the wrapper itself using its `NewMock()`.
 
 ### Error Handling
 
 #### Tracing Errors
 
-Use `errors.Trace` to associate the current stack location with the error. Stack traces are preserved across microservice boundaries.
-
-```go
-err := doSomething()
-if err != nil {
-	return errors.Trace(err)
-}
-```
-
-Attach properties to errors using the `slog` name=value pair pattern. These can be used to provide more context about the circumstances of the error or to attach meta-data to it.
-To associate an HTTP status code with the error, add it as an unpaired argument.
-
-```go
-err := doSomething(userID)
-if err != nil {
-	return errors.Trace(err,
-		"userID", userID,
-		http.StatusBadRequest,
-	)
-}
-```
+Use `errors.Trace(err)` to associate the current stack location with the error. Stack traces are preserved across microservice boundaries. Attach properties using the `slog` name=value pair pattern, and HTTP status codes as unpaired arguments: `errors.Trace(err, "userID", userID, http.StatusBadRequest)`.
 
 #### New Errors
 
@@ -895,35 +558,11 @@ if count == 0 {
 }
 ```
 
-`errors.New` supports the `fmt.Error` pattern.
+`errors.New` supports `fmt`-style formatting, `slog` name=value properties, HTTP status codes as unpaired arguments, and error wrapping (unpaired error argument, equivalent to `%w`). All can be combined:
 
 ```go
 file, err := os.Open(fileName)
-if errors.Is(err, os.ErrNotExist) {
-	return errors.New("file not found '%s'", fileName)
-}
-```
-
-Attach properties to errors using the `slog` name=value pair pattern. These can be used to provide more context about the circumstances of the error or to attach meta-data to it.
-To associate an HTTP status code with the error, add it as an unpaired argument.
-To wrap another error, add it as an unpaired argument. Wrapping another error is the equivalent of using `%w` at the end of the format string.
-
-```go
-file, err := os.Open(fileName)
-if errors.Is(err, os.ErrNotExist) {
-	return errors.New("file not found",
-		"fileName", fileName,
-		http.StatusNotFound,
-		err,
-	)
-}
-```
-
-The `fmt.Error` pattern can be combined with attached properties, status codes and wrapper errors.
-
-```go
-file, err := os.Open(fileName)
-if err != nil && !errors.Is(err, os.ErrNotExist) {
+if err != nil {
 	return errors.New("failed to open file '%s'", fileName,
 		"fileName", fileName,
 		http.StatusBadRequest,
@@ -971,7 +610,7 @@ Wrap each remote API (e.g. a third-party web service) in its own microservice. T
 - Generates type-safe client stubs for use by upstream microservices
 - Enables mocking of the remote system in tests
 
-Create a functional endpoint or web handler for each operation of the remote API. Use the HTTP egress proxy for outbound calls.
+Create a functional endpoint or web handler for each operation of the remote API. Use the HTTP egress proxy for making the outbound HTTP requests.
 
 ## Conventions
 
@@ -982,37 +621,54 @@ Create a functional endpoint or web handler for each operation of the remote API
 - camelCase for private functions: `getUserById`, `processOrder`
 - lowercase for hostnames: `userservice.example`
 - kebab-case for URL routes and paths: `/annual-report`
-- UPPER_CASE for constants: `MAX_RETRIES`, `API_VERSION`
 - lowercase for file names: `userservice.go, mytype.go`
 - camelCase for JSON tags: `json:"myProperty,omitzero"`
 
-### Import Structure
+### OpenAPI Parameter Descriptions
+
+Two complementary conventions enrich the OpenAPI spec with per-field descriptions, improving documentation quality and LLM tool-calling accuracy.
+
+#### Godoc `Input:` and `Output:` Sections
+
+When a functional endpoint has non-trivial parameters or results, include structured `Input:` and/or `Output:` sections in its godoc comment. The OpenAPI generator extracts these sections and populates per-field descriptions in the JSON Schema output. The full godoc is also preserved as the endpoint's overall description.
 
 ```go
-import (
-	// 1. Standard library
-	"context"
-	"fmt"
-	"net/http"
+/*
+Forecast returns the weather forecast for a location.
 
-	// 2. Microbus packages
-	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/errors"
+Input:
+  - city: The city name, e.g. "San Francisco"
+  - days: Number of days to forecast, 1-14
 
-	// 3. Third-party packages
-	"golang.org/x/net/html"
-	"gopkg.in/yaml.v3"
-
-	// 4. Local imports
-	"mycompany/myproject/myservice/myserviceapi"
-)
+Output:
+  - forecast: Daily forecast summaries
+  - confidence: Model confidence score, 0.0 to 1.0
+*/
+func (svc *Service) Forecast(ctx context.Context, city string, days int) (forecast []DayForecast, confidence float64, err error)
 ```
+
+These sections are optional. If absent, the endpoint description is still the full godoc and per-field descriptions are simply empty.
+
+#### `jsonschema` Description Tags on Custom Types
+
+When defining custom struct types used in APIs, add short `jsonschema:"description=..."` tags to each field. The `invopop/jsonschema` library reads these tags and emits `description` fields in the generated JSON Schema, which flow through to the OpenAPI spec.
+
+```go
+type DayForecast struct {
+    Date    string  `json:"date,omitzero" jsonschema:"description=Date is the forecast date in ISO 8601 format"`
+    High    float64 `json:"high,omitzero" jsonschema:"description=High is the high temperature in Fahrenheit"`
+    Low     float64 `json:"low,omitzero" jsonschema:"description=Low is the low temperature in Fahrenheit"`
+    Summary string  `json:"summary,omitzero" jsonschema:"description=Summary is a brief weather summary"`
+}
+```
+
+Together, godoc sections cover scalar function arguments while `jsonschema` tags cover fields within complex types.
 
 ## Development Workflow
 
 ### Building a Microservice With Skills
 
-Always use the skills in `.claude/skills/` to build a microservice. Start by scaffolding the microservice with the appropriate skill (e.g. the standard `microbus/add-microservice`, or a specialized skill like `sequel/add-microservice`), then use the appropriate `add-feature` skill for each feature. Each skill must be followed sequentially to completion before starting the next.
+Always use skills in `.claude/skills/` to build microservices. Scaffold with the appropriate skill (e.g. `microbus/add-microservice` or `sequel/add-microservice`), then use `add-feature` skills for each feature.
 
 The available feature skills are:
 
@@ -1024,24 +680,12 @@ The available feature skills are:
 | `microbus/add-function` | Functional endpoint (RPC) |
 | `microbus/add-web` | Web handler endpoint |
 | `microbus/add-inbound-event` | Inbound event sink |
+| `microbus/add-task` | Task endpoint (agentic workflow step) |
+| `microbus/add-workflow` | Workflow graph (agentic workflow definition) |
 | `microbus/add-ticker` | Ticker |
 
-The recommended order is configs, metrics, outbound events, functions, webs, inbound events, then tickers. This order is not mandatory but it follows the natural dependency chain — for example, a function may reference a configuration property or record a metric, so those should exist first.
-
-### Parallel Development
-
-Independent microservices can be developed in parallel.
+The recommended order is configs, metrics, outbound events, functions, webs, inbound events, tasks, workflows, then tickers. This order is not mandatory but it follows the natural dependency chain - for example, a function may reference a configuration property or record a metric, so those should exist first. Workflows reference task endpoints, so tasks should be defined first.
 
 ### Building the Project
 
-To build the project, use `go vet` instead of `go build` to verify compilation without producing a binary. This avoids the "build output already exists and is a directory" error caused by the `main/` directory conflicting with the default output binary name.
-
-```shell
-go vet ./main/...
-```
-
-If a binary is actually needed, specify an explicit output name:
-
-```shell
-go build -o app ./main/...
-```
+Use `go vet ./main/...` to verify compilation (not `go build`, which conflicts with the `main/` directory name). For a binary: `go build -o app ./main/...`.

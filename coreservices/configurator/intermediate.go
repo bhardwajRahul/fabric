@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
 	"github.com/microbus-io/fabric/coreservices/configurator/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ configuratorapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -62,12 +64,12 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Values(ctx context.Context, names []string) (values map[string]string, err error)                   // MARKER: Values
-	Refresh(ctx context.Context) (err error)                                                             // MARKER: Refresh
+	Refresh(ctx context.Context) (err error)                                                            // MARKER: Refresh
 	SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: SyncRepo
-	Values443(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values443
-	Refresh443(ctx context.Context) (err error)                                                          // MARKER: Refresh443
+	Values443(ctx context.Context, names []string) (values map[string]string, err error)                // MARKER: Values443
+	Refresh443(ctx context.Context) (err error)                                                         // MARKER: Refresh443
 	Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)  // MARKER: Sync443
-	PeriodicRefresh(ctx context.Context) (err error)                                                     // MARKER: PeriodicRefresh
+	PeriodicRefresh(ctx context.Context) (err error)                                                    // MARKER: PeriodicRefresh
 }
 
 // NewService creates a new instance of the microservice.
@@ -107,8 +109,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functional endpoints
-	svc.Subscribe(configuratorapi.Values.Method, configuratorapi.Values.Route, svc.doValues)                     // MARKER: Values
-	svc.Subscribe(configuratorapi.Refresh.Method, configuratorapi.Refresh.Route, svc.doRefresh)                  // MARKER: Refresh
+	svc.Subscribe(configuratorapi.Values.Method, configuratorapi.Values.Route, svc.doValues)                      // MARKER: Values
+	svc.Subscribe(configuratorapi.Refresh.Method, configuratorapi.Refresh.Route, svc.doRefresh)                   // MARKER: Refresh
 	svc.Subscribe(configuratorapi.SyncRepo.Method, configuratorapi.SyncRepo.Route, svc.doSyncRepo, sub.NoQueue()) // MARKER: SyncRepo
 	svc.Subscribe(configuratorapi.Values443.Method, configuratorapi.Values443.Route, svc.doValues443)             // MARKER: Values443
 	svc.Subscribe(configuratorapi.Refresh443.Method, configuratorapi.Refresh443.Route, svc.doRefresh443)          // MARKER: Refresh443
@@ -124,6 +126,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add configs here
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -198,7 +204,7 @@ An error is returned if any of the values sent to the microservices fails valida
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 
@@ -279,7 +285,7 @@ func (svc *Intermediate) doPeriodicRefresh(ctx context.Context) (err error) { //
 	return svc.PeriodicRefresh(ctx)
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

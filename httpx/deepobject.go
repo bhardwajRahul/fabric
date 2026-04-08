@@ -88,77 +88,125 @@ func encodeOne(prefix string, obj any, values url.Values) {
 	values.Set(prefix, val)
 }
 
-// DecodeDeepObject decodes an object from a string representation with bracketed nested fields names.
-// For example, color[R]=100&color[G]=200&color[B]=150 .
+// DecodeDeepObject decodes an object from a string representation with bracketed or dot-notation
+// nested field names. For example, color[R]=100&color[G]=200&color[B]=150 or color.R=100&color.G=200.
+// Maps whose keys are sequential integers starting from 0 are decoded as arrays. For example,
+// x[0]=a&x[1]=b&x[2]=c is decoded as {"x":["a","b","c"]}.
+// It builds a single JSON object from all values and unmarshals it in one pass.
 func DecodeDeepObject(values url.Values, obj any) error {
+	tree := make(map[string]any)
 	for k, vv := range values {
-		for _, v := range vv {
-			err := decodeOne(k, v, obj)
-			if err != nil {
-				return errors.Trace(err)
+		// Normalize: convert bracket notation a[b][c] to dot notation a.b.c
+		k = strings.ReplaceAll(k, "]", "")
+		k = strings.ReplaceAll(k, "[", ".")
+		segments := strings.Split(k, ".")
+
+		// Use the last value for each key (matching url.Values.Get semantics)
+		v := vv[len(vv)-1]
+
+		// Walk down the tree, creating nested maps as needed
+		node := tree
+		for i, seg := range segments {
+			if i == len(segments)-1 {
+				// Leaf: detect the value type
+				node[seg] = detectValue(v)
+			} else {
+				// Intermediate: ensure a nested map exists
+				next, ok := node[seg].(map[string]any)
+				if !ok {
+					next = make(map[string]any)
+					node[seg] = next
+				}
+				node = next
 			}
 		}
 	}
-	return nil
-}
-
-func decodeOne(k, v string, data any) error {
-	// Arg names can be hierarchical: a[b][c] or a.b.c
-	// Convert bracket notation to dot notation: a[b][c] -> a.b.c
-	j := strings.ReplaceAll(k, "]", "")
-	j = strings.ReplaceAll(j, "[", ".")
-	countDots := strings.Count(j, ".")
-
-	// Convert to JSON format: a.b.c -> {"a":{"b":{"c":
-	j = `{"` + strings.ReplaceAll(j, ".", `":{"`) + `":`
-	jPre := j
-
-	switch {
-	case v == "":
-		j += `""`
-	case v == "null" || v == "true" || v == "false":
-		j += v
-	case jsonNumberRegexp.MatchString(v):
-		j += v
-	case strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`):
-		v = strings.TrimPrefix(v, `"`)
-		v = strings.TrimSuffix(v, `"`)
-		fallthrough
-	default:
-		quotedValue, err := json.Marshal(v)
+	converted := mapsToSlices(tree)
+	buf, err := json.Marshal(converted)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = json.Unmarshal(buf, obj)
+	if err == nil {
+		return nil
+	}
+	// If unmarshaling fails due to a type mismatch (e.g. JSON number into a Go string field),
+	// retry with all leaf values as strings.
+	if _, ok := err.(*json.UnmarshalTypeError); ok {
+		allStrings := mapsToSlices(leafsToStrings(tree))
+		buf, err = json.Marshal(allStrings)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		j += string(quotedValue)
-	}
-
-	// Close the braces
-	j += strings.Repeat("}", countDots+1)
-
-	// Override values in the data
-	err := json.Unmarshal(utils.UnsafeStringToBytes(j), data)
-	if jErr, ok := err.(*json.UnmarshalTypeError); ok {
-		if strings.HasPrefix(jErr.Value, "string") {
-			j = jPre + v + strings.Repeat("}", countDots+1)
-			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
-		} else {
-			// Trying to parse a number into a wrong type
-			// Try to parse into a string first
-			j = jPre + `"` + v + `"` + strings.Repeat("}", countDots+1)
-			err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
-			if err != nil {
-				// Parsing exponent float into an integer field
-				f64, parseErr := strconv.ParseFloat(v, 64)
-				if parseErr == nil {
-					v = strconv.FormatFloat(f64, 'f', -1, 64)
-					j = jPre + v + strings.Repeat("}", countDots+1)
-					err = json.Unmarshal(utils.UnsafeStringToBytes(j), data)
-				}
-			}
-		}
+		err = json.Unmarshal(buf, obj)
 	}
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// mapsToSlices recursively converts maps whose keys are sequential integers starting from 0
+// into slices. For example, map["0"]="a", map["1"]="b" becomes ["a", "b"].
+func mapsToSlices(v any) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	// Recurse into children first
+	for k, child := range m {
+		m[k] = mapsToSlices(child)
+	}
+	// Check if all keys are sequential integers 0..len-1
+	if len(m) == 0 {
+		return m
+	}
+	for i := range len(m) {
+		if _, ok := m[strconv.Itoa(i)]; !ok {
+			return m
+		}
+	}
+	// Convert to a slice
+	s := make([]any, len(m))
+	for i := range s {
+		s[i] = m[strconv.Itoa(i)]
+	}
+	return s
+}
+
+// leafsToStrings recursively converts all non-map, non-nil leaf values to strings.
+func leafsToStrings(v any) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		if v == nil {
+			return nil
+		}
+		return utils.AnyToString(v)
+	}
+	out := make(map[string]any, len(m))
+	for k, child := range m {
+		out[k] = leafsToStrings(child)
+	}
+	return out
+}
+
+// detectValue infers the Go type of a query parameter value string.
+func detectValue(v string) any {
+	switch {
+	case v == "":
+		return ""
+	case v == "null":
+		return nil
+	case v == "true":
+		return true
+	case v == "false":
+		return false
+	case jsonNumberRegexp.MatchString(v):
+		// Parse as json.Number to preserve precision through marshal/unmarshal
+		var n json.Number
+		n = json.Number(v)
+		return n
+	default:
+		return v
+	}
 }

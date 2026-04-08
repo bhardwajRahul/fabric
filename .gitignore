@@ -9,3 +9,7 @@ nats-server
 /main/main
 /main/__debug_bin*
 .DS_Store
+
+*.db
+*.sqlite
+*.sqlite3

@@ -91,14 +91,14 @@ type Connector struct {
 	plane         string
 	controlSubs   bool
 
-	reqs               utils.SyncMap[string, *transferChan]
-	networkRoundtrip   time.Duration
-	defaultTimeBudget  time.Duration
-	maxTimeBudget      time.Duration
-	maxCallDepth       int
-	maxFragmentSize    int64
-	multicastChanCap   int
-	ackTimeout         time.Duration
+	reqs              utils.SyncMap[string, *transferChan]
+	networkRoundtrip  time.Duration
+	defaultTimeBudget time.Duration
+	maxTimeBudget     time.Duration
+	maxCallDepth      int
+	maxFragmentSize   int64
+	multicastChanCap  int
+	ackTimeout        time.Duration
 
 	requestDefrags  *lru.Cache[string, *httpx.DefragRequest]
 	responseDefrags *lru.Cache[string, *httpx.DefragResponse]

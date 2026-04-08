@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/httpegress/httpegressapi"
 	"github.com/microbus-io/fabric/coreservices/httpegress/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ httpegressapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -112,6 +114,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add inbound event sinks here
 
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
 	_ = marshalFunction
 	return svc
 }
@@ -129,11 +135,11 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 	endpoints := []*openapi.Endpoint{
 		// HINT: Register web handlers and functional endpoints by adding them here
 		{ // MARKER: MakeRequest
-			Type:        "web",
-			Name:        "MakeRequest",
-			Method:      "POST",
-			Route:       httpegressapi.MakeRequest.Route,
-			Summary:     "MakeRequest()",
+			Type:    "web",
+			Name:    "MakeRequest",
+			Method:  "POST",
+			Route:   httpegressapi.MakeRequest.Route,
+			Summary: "MakeRequest()",
 			Description: `MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
 The proxied request is expected to be posted in the body of the request in binary form (RFC7231).`,
 		},
@@ -163,7 +169,7 @@ The proxied request is expected to be posted in the body of the request in binar
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 
@@ -173,7 +179,7 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

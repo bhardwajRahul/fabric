@@ -1,0 +1,58 @@
+general:
+  name: LLM
+  hostname: llm.core
+  description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
+  package: github.com/microbus-io/fabric/coreservices/llm
+  frameworkVersion: 1.26.0
+  modifiedAt: "2026-04-05T10:00:00Z"
+
+configs:
+  ProviderHostname:
+    signature: ProviderHostname() (providerHostname string)
+    description: ProviderHostname is the hostname of the LLM provider microservice that implements the Turn endpoint.
+    default: claude.llm.core
+    secret: false
+    callback: false
+  MaxToolRounds:
+    signature: MaxToolRounds() (maxToolRounds int)
+    description: MaxToolRounds is the maximum number of tool call round-trips per invocation.
+    validation: int [1,50]
+    default: 10
+    secret: false
+    callback: false
+
+functions:
+  Chat:
+    signature: Chat(messages []Message, tools []Tool) (messagesOut []Message)
+    description: Chat sends messages to an LLM with optional tools and returns the response messages.
+    method: POST
+    route: :444/chat
+  Turn:
+    signature: Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)
+    description: Turn executes a single LLM turn by delegating to the configured provider microservice.
+    method: POST
+    route: :444/turn
+
+tasks:
+  InitChat:
+    signature: InitChat(messages []Message, tools []Tool) (maxToolRounds int, toolRounds int)
+    description: InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
+    route: :428/init-chat
+  CallLLM:
+    signature: CallLLM(messages []Message) (llmContent string, pendingToolCalls any)
+    description: CallLLM sends the current messages and tools to the LLM provider.
+    route: :428/call-llm
+  ProcessResponse:
+    signature: ProcessResponse(llmContent string, toolRounds int, maxToolRounds int) (messagesOut []Message, toolsRequested bool, toolRoundsOut int)
+    description: ProcessResponse inspects the LLM response and routes to the next step.
+    route: :428/process-response
+  ExecuteTool:
+    signature: ExecuteTool(toolExecuted bool) (toolExecutedOut bool)
+    description: ExecuteTool executes a single tool call identified by the currentTool forEach variable.
+    route: :428/execute-tool
+
+workflows:
+  ChatLoop:
+    signature: ChatLoop(messages []Message, tools []Tool) (messagesOut []Message)
+    description: ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
+    route: :428/chat-loop

@@ -11,7 +11,7 @@
 
 ## Teach Your Agent to Code Microservices
 
-Your coding agent can already code. Microbus teaches it to master the complex domain of distributed systems — the architecture, the patterns, the operational discipline — and produce enterprise-grade microservices, every time.
+Your coding agent can already code. Microbus teaches it to master the complex domain of distributed systems - the architecture, the patterns, the operational discipline - and produce enterprise-grade microservices, every time.
 
 ### Precise Code. Faster. At Scale.
 
@@ -97,6 +97,22 @@ Six prompts. Under 10 minutes. 819 lines of code at 87% test coverage.
 
 Learn more about how [coding agents](./docs/blocks/coding-agents.md) work within the Microbus framework.
 
+## Agentic Workflows
+
+Microservices often need to collaborate on processes that span multiple steps, branch in parallel, and wait for external input. Microbus includes a built-in workflow engine - the [Foreman](./docs/structure/coreservices-foreman.md) - that orchestrates these [agentic workflows](./docs/blocks/agentic-workflows.md) out of the box.
+
+Define your process as a directed graph of tasks. The Foreman handles execution, parallel fan-out and fan-in, state merging, human-in-the-loop interrupts, and automatic recovery from failures. All state is persisted to a SQL database and the entire system is testable in-memory with `go test`.
+
+> HEY CLAUDE...
+>
+> Add a task VerifyCredit that receives a creditScore int and returns creditVerified bool
+>
+> Add a task VerifyIdentity that receives ssn string and returns identityVerified bool
+>
+> Add a workflow CreditApproval that fans out to VerifyCredit and VerifyIdentity in parallel, then fans in to a Decision task
+
+Learn more about [building agentic workflows](./docs/howto/agentic-workflows.md).
+
 ## Production Ready
 
 Bundle microservices into applications and deploy them to match your scale: as a single binary, a handful of containers, or across availability zones. Microservices communicate via a messaging bus.
@@ -119,7 +135,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 <img src="./docs/blocks/layers-1.drawio.svg">
 <p></p>
 
-**OSS** - A curated selection of proven technologies — [NATS](https://nats.io) for messaging, [OpenTelemetry](https://opentelemetry.io) for observability, [Grafana](https://grafana.com) for visualization — abstracted away by the layers above.
+**OSS** - A curated selection of proven technologies - [NATS](https://nats.io) for messaging, [OpenTelemetry](https://opentelemetry.io) for observability, [Grafana](https://grafana.com) for visualization - abstracted away by the layers above.
 
 **Connector** - The [`Connector`](./docs/structure/connector.md) is the base construct from which all microservices are derived. It provides a consistent API for transport, observability, configuration and lifecycle management.
 
@@ -127,7 +143,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 
 **Microservices** - [Core microservices](./docs/structure/coreservices.md) ship with the framework. Solution microservices implement your business logic. Both are built the same way using the same tools.
 
-**Applications** - Microservices are bundled into [applications](./docs/structure/application.md) according to the desired [topology](./docs/blocks/topology.md) — a single binary, a handful of containers, or across availability zones.
+**Applications** - Microservices are bundled into [applications](./docs/structure/application.md) according to the desired [topology](./docs/blocks/topology.md) - a single binary, a handful of containers, or across availability zones.
 
 ## Features
 
@@ -158,6 +174,7 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Static resources](./docs/blocks/embedded-res.md) | Embedded files via go:embed |
 | [Events](./docs/blocks/events.md) | Decouple services with event-driven patterns |
 | [Tickers](./docs/blocks/tickers.md) | Recurring scheduled jobs |
+| [SQL CRUD microservices](./docs/blocks/sql-crud.md) | Agent-generated database-backed services |
 
 | Runtime | |
 |---|---|
@@ -166,6 +183,8 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 | [Adaptable topology](./docs/blocks/topology.md) | Monolith, multi-container, or hybrid |
 | [OpenAPI](./docs/blocks/openapi.md) | Auto-generated API documentation |
 | [Distributed caching](./docs/blocks/distrib-cache.md) | Shared cache across replicas |
+| [Agentic workflows](./docs/blocks/agentic-workflows.md) | Multi-step processes with branching, parallelism and interrupts |
+| [SQL databases](./docs/blocks/sql.md) | Cross-database support via the Sequel library |
 | [Graceful shutdown](./docs/blocks/graceful-shutdown.md) | Drain pending operations before termination |
 
 ## Documentation
@@ -180,6 +199,8 @@ Your solution is built on top of [5 layers](./docs/blocks/layers.md) of powerful
 - [Configuration](./docs/blocks/configuration.md) - Configure microservices
 - [Integration testing](./docs/blocks/integration-testing.md) - Test multiple microservices together
 - [Enabling authorization](./docs/howto/enabling-auth.md) - Set up JWT-based access control
+- [Agentic workflows](./docs/howto/agentic-workflows.md) - Build multi-step workflows with tasks and the Foreman
+- [LLM integration](./docs/howto/llm-integration.md) - Connect microservices to LLMs with automatic tool calling
 
 ### Reference
 

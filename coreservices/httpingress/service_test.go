@@ -35,11 +35,11 @@ import (
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
-	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/accesstoken"
-	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 	"github.com/microbus-io/fabric/coreservices/bearertoken"
 	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
+	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 )
 
 func TestHttpingress_Incoming(t *testing.T) {

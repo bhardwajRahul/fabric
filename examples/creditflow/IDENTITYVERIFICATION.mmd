@@ -1,0 +1,13 @@
+graph TD
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"identity-verification"}}:::term --> _start
+    _start(( )):::term --> t0["init-identity-verification"]:::task
+    t0 --> t1["verify-ssn"]:::task
+    t0 --> t2["verify-address"]:::task
+    t0 --> t3["verify-phone-number"]:::task
+    t1 --> t4["identity-decision"]:::task
+    t2 --> t4
+    t3 --> t4
+    t4 --> _end(( )):::term

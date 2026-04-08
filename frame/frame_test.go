@@ -32,20 +32,16 @@ import (
 
 // signTestJWT signs the given claims into a JWT using a throwaway Ed25519 key.
 func signTestJWT(t *testing.T, claims map[string]any) string {
-	t.Helper()
+	assert := testarossa.For(t)
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(err)
 	jwtClaims := jwt.MapClaims{}
 	for k, v := range claims {
 		jwtClaims[k] = v
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwtClaims)
 	signed, err := token.SignedString(priv)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(err)
 	return signed
 }
 

@@ -29,9 +29,9 @@ Microservices encapsulate their persistence layer and expose functionality only 
 
 Because direct `JOIN`s across microservice boundaries are not possible, an upstream microservice that needs data from a downstream microservice has three strategies:
 
-- **On-demand querying** — Use the downstream microservice's bulk operations (e.g. `BulkLoad`, `List`) to fetch the needed records on demand. This is simple and always consistent, but adds latency from the extra round-trip.
-- **Caching** — Maintain a cache of downstream objects in memory, e.g. in the upstream microservice's distributed cache. Subscribe to the downstream microservice's outbound events (e.g. `OnObjectStored`, `OnObjectDeleted`) to invalidate stale cache entries or as a trigger to fetch the latest data.
-- **Denormalization** — Add columns to the upstream microservice's own database table that duplicate selected fields from the downstream microservice. Subscribe to the downstream microservice's outbound events to keep the denormalized columns up to date. This enables local `JOIN`s and filtering without cross-service calls, at the cost of eventual consistency and additional storage.
+- **On-demand querying** - Use the downstream microservice's bulk operations (e.g. `BulkLoad`, `List`) to fetch the needed records on demand. This is simple and always consistent, but adds latency from the extra round-trip.
+- **Caching** - Maintain a cache of downstream objects in memory, e.g. in the upstream microservice's distributed cache. Subscribe to the downstream microservice's outbound events (e.g. `OnObjectStored`, `OnObjectDeleted`) to invalidate stale cache entries or as a trigger to fetch the latest data.
+- **Denormalization** - Add columns to the upstream microservice's own database table that duplicate selected fields from the downstream microservice. Subscribe to the downstream microservice's outbound events to keep the denormalized columns up to date. This enables local `JOIN`s and filtering without cross-service calls, at the cost of eventual consistency and additional storage.
 
 | Strategy | Consistency | Latency | Storage |
 |---|---|---|---|
@@ -53,17 +53,20 @@ By default, the key is encrypted when marshaled to JSON and decrypted when unmar
 
 ### Database Compatibility
 
-SQL CRUD microservices must support three database drivers: `mysql` (MySQL), `pgx` (PostgreSQL) and `mssql` (SQL Server). This requirement affects both migration scripts and runtime code.
+SQL CRUD microservices must support four database drivers: `mysql` (MySQL), `pgx` (PostgreSQL), `mssql` (SQL Server) and `sqlite` (SQLite). SQLite is used by default in `LOCAL` and `TESTING` deployments when `SQLDataSourceName` is empty - `LOCAL` uses a `file:local.sqlite` database file, while `TESTING` uses an in-memory database. Production deployments (`LAB`, `PROD`) require an explicit `SQLDataSourceName` pointing to MySQL, PostgreSQL, or SQL Server. This requirement affects both migration scripts and runtime code.
 
 In migration scripts, use the `-- DRIVER: drivername` prefix when SQL syntax differs between databases. Common differences include column type modifiers (`MODIFY COLUMN` vs `ALTER COLUMN`), string types (`VARCHAR` vs `NVARCHAR`), and auto-increment syntax.
 
-In runtime code, use `svc.db.DriverName()` to switch on the driver when SQL behavior diverges. Key areas where the databases differ:
+In runtime code, sequel v1.2.0 provides **virtual functions** that are automatically expanded to the correct SQL syntax for each driver. Use these instead of manual driver switches:
 
-- **Returning affected rows**: PostgreSQL supports `RETURNING id`, SQL Server supports `OUTPUT INSERTED.id`, while MySQL requires a `SELECT ... FOR UPDATE` within a transaction
-- **Date arithmetic**: MySQL uses `DATE_ADD(NOW(), INTERVAL ? SECOND)`, PostgreSQL uses `NOW()+MAKE_INTERVAL(secs => ?)`, SQL Server uses `DATEADD(SECOND, ?, GETUTCDATE())`
-- **Pagination**: MySQL and PostgreSQL use `LIMIT ? OFFSET ?`, SQL Server uses `OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`
-- **Parameter placeholders**: Use `?` placeholders in all queries and call `svc.db.ConformArgPlaceholders` to convert them to the driver-specific format (e.g. `$1, $2` for PostgreSQL)
-- **Current time**: Use `svc.db.NowUTC()` to get a driver-appropriate SQL expression for the current UTC time, rather than hardcoding `NOW()` or `GETUTCDATE()`
+- **Current time**: Use `NOW_UTC()` directly in SQL strings, e.g. `"UPDATE t SET updated_at=NOW_UTC() WHERE id=?"`
+- **Date arithmetic**: Use `DATE_ADD_MILLIS(baseExpr, milliseconds)`, e.g. `"SET expires_at=DATE_ADD_MILLIS(NOW_UTC(), ?)"`  with milliseconds as a `?` parameter
+- **Date difference**: Use `DATE_DIFF_MILLIS(a, b)` to compute `(a - b)` in milliseconds
+- **Pagination**: Use `LIMIT_OFFSET(limit, offset)`, e.g. `"SELECT * FROM t ORDER BY id LIMIT_OFFSET(?, ?)"`. SQL Server requires an `ORDER BY` clause
+- **Parameter placeholders**: Use `?` placeholders in all queries. Sequel automatically converts them to the driver-specific format (e.g. `$1, $2` for PostgreSQL). Do not call `ConformArgPlaceholders` (deprecated)
+- **Column mappings**: Use `sequel.UnsafeSQL("NOW_UTC()")` to set a column value to the database's current time in UTC
+
+The only area that still requires `svc.db.DriverName()` switches is **returning affected rows from INSERT/UPDATE/DELETE**: PostgreSQL supports `RETURNING id`, SQL Server supports `OUTPUT INSERTED.id`, while MySQL requires `LastInsertId()` or a `SELECT ... FOR UPDATE` within a transaction
 
 ### Revisions
 
@@ -71,8 +74,8 @@ SQL CRUD microservices use a `revision` integer column for optimistic concurrenc
 
 Two update strategies are available:
 
-- `Store` / `BulkStore` update unconditionally — the revision is ignored and the update always succeeds (assuming the record exists). Use this when the caller has exclusive access to the record or does not need conflict detection.
-- `Revise` / `BulkRevise` update conditionally — the `WHERE` clause includes `AND revision=?` per row, so the update only succeeds if the record's current revision matches the caller's copy. If another actor modified the record in the meantime, the revision will have advanced and the update is a no-op. Use this when concurrent modifications are possible and the caller must not silently overwrite another actor's changes.
+- `Store` / `BulkStore` update unconditionally - the revision is ignored and the update always succeeds (assuming the record exists). Use this when the caller has exclusive access to the record or does not need conflict detection.
+- `Revise` / `BulkRevise` update conditionally - the `WHERE` clause includes `AND revision=?` per row, so the update only succeeds if the record's current revision matches the caller's copy. If another actor modified the record in the meantime, the revision will have advanced and the update is a no-op. Use this when concurrent modifications are possible and the caller must not silently overwrite another actor's changes.
 
 `MustRevise` is a convenience wrapper around `Revise` that returns a `409 Conflict` error if the revision does not match, rather than a boolean.
 
@@ -94,7 +97,7 @@ To add a migration script, identify the file name with the largest value and cre
 
 Use SQL statements such as `CREATE TABLE` and `ALTER TABLE` to create or alter the schema of the database table. Separate statements with a `;` followed by a new line. Use snake_case for all database identifiers, including column names, index names and table names. Use UPPERCASE for SQL keywords.
 
-It is necessary to enter different SQL statements for each of the supported database driver names when they use a different syntax. The prefix `-- DRIVER: drivername` before a statement indicates to run that statement only on the named database: `mysql` (MySQL), `pgx` (Postgres) or `mssql` (SQL Server).
+It is necessary to enter different SQL statements for each of the supported database driver names when they use a different syntax. The prefix `-- DRIVER: drivername` before a statement indicates to run that statement only on the named database: `mysql` (MySQL), `pgx` (Postgres), `mssql` (SQL Server) or `sqlite` (SQLite).
 
 ```sql
 -- DRIVER: mysql
@@ -116,7 +119,7 @@ Column mappings bridge the divide between database columns and Go object fields.
 - Values typically come from the corresponding field of the input `obj` but can be sourced elsewhere
 - Wrap a value in `sequel.Nullify` if the database column is `NULL`-able
 - Wrap a string in `sequel.UnsafeSQL` to set the value using a SQL statement
-- Use `sequel.UnsafeSQL(db.NowUTC())` to set the value to the database's current time in UTC
+- Use `sequel.UnsafeSQL("NOW_UTC()")` to set the value to the database's current time in UTC
 - When setting a value of `time.Time`, convert it to UTC first
 - Exclude columns that the actor is not allowed to set on creation
 
@@ -125,8 +128,8 @@ columnMapping = map[string]any{
 	"first_name": obj.FirstName,
 	"last_name":  obj.LastName,
 	"time_zone":  sequel.Nullify(obj.TimeZone),
-	"created_at": sequel.UnsafeSQL(db.NowUTC()),
-	"updated_at": sequel.UnsafeSQL(db.NowUTC()),
+	"created_at": sequel.UnsafeSQL("NOW_UTC()"),
+	"updated_at": sequel.UnsafeSQL("NOW_UTC()"),
 }
 ```
 
@@ -135,7 +138,7 @@ columnMapping = map[string]any{
 - Values typically come from the corresponding field of the input `obj` but can be sourced elsewhere
 - Wrap a value in `sequel.Nullify` if the database column is `NULL`-able
 - Wrap a string in `sequel.UnsafeSQL` to set the value using a SQL statement
-- Use `sequel.UnsafeSQL(db.NowUTC())` to set the value to the database's current time in UTC
+- Use `sequel.UnsafeSQL("NOW_UTC()")` to set the value to the database's current time in UTC
 - When setting a value of `time.Time`, convert it to UTC first
 - Exclude columns that the actor is not allowed to modify
 
@@ -144,7 +147,7 @@ columnMapping = map[string]any{
 	"first_name": obj.FirstName,
 	"last_name":  obj.LastName,
 	"time_zone":  sequel.Nullify(obj.TimeZone),
-	"updated_at": sequel.UnsafeSQL(db.NowUTC()),
+	"updated_at": sequel.UnsafeSQL("NOW_UTC()"),
 }
 ```
 
@@ -273,12 +276,12 @@ The route uses the plural form of the object name in kebab-case (e.g. `/bus-stop
 
 SQL CRUD microservices can optionally support reservation of records via a `reserved_before` timestamp column. Reservation is a form of optimistic locking that prevents concurrent actors from processing the same record, without blocking normal CRUD operations (`Create`, `Store`, `Delete`, `Load`, `List`, etc.).
 
-A record is considered reserved when `reserved_before > NOW`. Reservations are time-limited and expire automatically — no explicit release is required, though calling `Reserve` with a duration of `0` effectively releases the reservation by setting `reserved_before` to `NOW`.
+A record is considered reserved when `reserved_before > NOW`. Reservations are time-limited and expire automatically - no explicit release is required, though calling `Reserve` with a duration of `0` effectively releases the reservation by setting `reserved_before` to `NOW`.
 
 Two pairs of endpoints implement this pattern:
 
-- `TryReserve` / `TryBulkReserve` — conditional reservation. Only reserves records whose reservation has expired (`reserved_before < NOW`). Returns which records were successfully reserved. Use this when competing actors should not interfere with each other's work.
-- `Reserve` / `BulkReserve` — forceful reservation. Sets `reserved_before` regardless of current state. Returns which records exist. Use this to forcefully extend or reset a reservation.
+- `TryReserve` / `TryBulkReserve` - conditional reservation. Only reserves records whose reservation has expired (`reserved_before < NOW`). Returns which records were successfully reserved. Use this when competing actors should not interfere with each other's work.
+- `Reserve` / `BulkReserve` - forceful reservation. Sets `reserved_before` regardless of current state. Returns which records exist. Use this to forcefully extend or reset a reservation.
 
 ```go
 // Reserve the record for 5 minutes

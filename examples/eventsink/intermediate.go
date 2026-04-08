@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/eventsink/eventsinkapi"
 	"github.com/microbus-io/fabric/examples/eventsink/resources"
@@ -49,6 +50,7 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
+	_ *workflow.Flow
 	_ eventsinkapi.Client
 )
 
@@ -118,6 +120,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	eventsourceapi.NewHook(svc).OnAllowRegister(svc.OnAllowRegister) // MARKER: OnAllowRegister
 	eventsourceapi.NewHook(svc).OnRegistered(svc.OnRegistered)       // MARKER: OnRegistered
 
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
 	_ = marshalFunction
 	return svc
 }
@@ -170,7 +176,7 @@ func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err 
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
-		// HINT: Call JIT observers to record the metric here
+	// HINT: Call JIT observers to record the metric here
 	)
 }
 
@@ -191,7 +197,7 @@ func (svc *Intermediate) doRegistered(w http.ResponseWriter, r *http.Request) (e
 	return err // No trace
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

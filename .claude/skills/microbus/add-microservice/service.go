@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/microbus-io/errors"
+	"github.com/microbus-io/workflow"
 
 	"github.com/mycompany/myproject/myservice/myserviceapi"
 )
@@ -13,6 +14,7 @@ var (
 	_ context.Context
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ myserviceapi.Client
 )
 

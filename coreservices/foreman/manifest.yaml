@@ -1,0 +1,186 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  name: Foreman
+  hostname: foreman.core
+  description: Foreman orchestrates agentic workflow execution.
+  package: github.com/microbus-io/fabric/coreservices/foreman
+  frameworkVersion: 1.26.0
+  db: SQL
+  modifiedAt: "2026-04-06T20:00:00Z"
+
+functions:
+  Create:
+    signature: Create(workflowName string, initialState any) (flowKey string)
+    description: Create creates a new flow for a workflow without starting it.
+    method: ANY
+    route: :444/create
+  Start:
+    signature: Start(flowKey string)
+    description: Start transitions a created flow to running and enqueues it for execution.
+    method: ANY
+    route: :444/start
+  StartNotify:
+    signature: StartNotify(flowKey string, notifyHostname string)
+    description: StartNotify transitions a created flow to running with status change notifications sent to the given hostname.
+    method: ANY
+    route: :444/start-notify
+  Snapshot:
+    signature: Snapshot(flowKey string) (status string, state map[string]any)
+    description: Snapshot returns the current status and state of a flow.
+    method: GET
+    route: :444/snapshot
+
+  Resume:
+    signature: Resume(flowKey string, resumeData any)
+    description: Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.
+    method: POST
+    route: :444/resume
+  Fork:
+    signature: Fork(stepKey string, stateOverrides any) (newFlowKey string)
+    description: Fork creates a new flow from an existing step's checkpoint.
+    method: POST
+    route: :444/fork
+  Cancel:
+    signature: Cancel(flowKey string)
+    description: Cancel cancels a flow that is not yet in a terminal status.
+    method: POST
+    route: :444/cancel
+  History:
+    signature: History(flowKey string) (steps []FlowStep)
+    description: History returns the step-by-step execution history of a flow.
+    method: GET
+    route: :444/history
+  Retry:
+    signature: Retry(flowKey string)
+    description: Retry re-executes the last failed step of a flow.
+    method: POST
+    route: :444/retry
+  List:
+    signature: List(query Query) (flows []FlowSummary)
+    description: List queries flows by status or workflow name. Results are ordered newest first. Set CursorFlowID in the query to paginate.
+    method: GET
+    route: :444/list
+  CreateTask:
+    signature: CreateTask(taskName string, initialState any) (flowKey string)
+    description: CreateTask creates a flow that executes a single task and then terminates, without starting it.
+    method: POST
+    route: :444/create-task
+  Enqueue:
+    signature: Enqueue(shard int, stepID int)
+    description: Enqueue adds a step to the local work queue for processing.
+    method: POST
+    route: :444/enqueue
+  Await:
+    signature: Await(flowKey string) (status string, state map[string]any)
+    description: Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.
+    method: POST
+    route: :444/wait-for-stop
+  NotifyStatusChange:
+    signature: NotifyStatusChange(flowKey string, status string)
+    description: NotifyStatusChange is an internal multicast signal to wake up Await callers across replicas.
+    method: POST
+    route: :444/notify-status-change
+    loadBalancing: none
+  BreakBefore:
+    signature: BreakBefore(flowKey string, taskName string, enabled bool)
+    description: BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
+    method: POST
+    route: :444/break-before
+  Run:
+    signature: Run(workflowName string, initialState any) (status string, state map[string]any)
+    description: Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.
+    method: POST
+    route: :444/run
+  Continue:
+    signature: Continue(threadKey string, additionalState any) (newFlowKey string)
+    description: Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
+    method: POST
+    route: :444/continue
+
+webs:
+  HistoryMermaid:
+    description: HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.
+    method: GET
+    route: :444/history-mermaid
+
+outboundEvents:
+  OnFlowStopped:
+    signature: OnFlowStopped(flowID string, status string, snapshot map[string]any)
+    description: OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) to receive notifications for flows started with StartNotify.
+    method: POST
+    route: :417/on-flow-terminated
+
+configs:
+  SQLDataSourceName:
+    signature: SQLDataSourceName() (value string)
+    description: SQLDataSourceName is the connection string of the SQL database.
+    secret: true
+  Workers:
+    signature: Workers() (workers int)
+    description: Workers is the number of concurrent workers that process flow steps.
+    validation: int [1,64]
+    default: 4
+  RetentionDays:
+    signature: RetentionDays() (retentionDays int)
+    description: RetentionDays is the number of days to retain terminated flows and their steps. Set to 0 to disable purging.
+    validation: int [0,]
+    default: 0
+  DefaultTimeBudget:
+    signature: DefaultTimeBudget() (budget time.Duration)
+    description: DefaultTimeBudget is the default execution timeout for task steps when the graph does not specify a per-task time budget.
+    validation: dur [1s,15m]
+    default: 2m
+  NumShards:
+    signature: NumShards() (numShards int)
+    description: NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+    validation: int [1,]
+    default: 1
+    callback: true
+
+metrics:
+  FlowsStarted:
+    signature: FlowsStarted(value int, workflowName string)
+    description: FlowsStarted counts the number of flows that have been started.
+    kind: counter
+    otelName: microbus_flows_started_total
+  FlowsTerminated:
+    signature: FlowsTerminated(value int, workflowName string, status string)
+    description: FlowsTerminated counts the number of flows that have reached a terminal status.
+    kind: counter
+    otelName: microbus_flows_terminated_total
+  StepsExecuted:
+    signature: StepsExecuted(value int, task string, status string)
+    description: StepsExecuted counts the number of steps that have been executed.
+    kind: counter
+    otelName: microbus_steps_executed_total
+  QueueDepth:
+    signature: QueueDepth(value int)
+    description: QueueDepth records the number of steps waiting in the local worker queue.
+    kind: gauge
+    otelName: microbus_queue_depth
+    observable: true
+  StepsRecovered:
+    signature: StepsRecovered(value int)
+    description: StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.
+    kind: counter
+    otelName: microbus_steps_recovered_total
+
+tickers:
+  PurgeExpiredFlows:
+    signature: PurgeExpiredFlows()
+    description: PurgeExpiredFlows deletes terminated flows and their steps that have exceeded the retention period.
+    interval: 24h
+    validation: dur (0s,168h]

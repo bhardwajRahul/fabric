@@ -10,6 +10,7 @@ Learn about each of the packages to get familiar with the Microbus codebase.
     - [bearertoken](../structure/coreservices-bearertoken.md) - Long-lived bearer token issuer
     - [configurator](../structure/coreservices-configurator.md) - The configurator core microservice
     - [control](../structure/coreservices-control.md) - Client API for the `:888` control subscriptions
+    - [foreman](../structure/coreservices-foreman.md) - The foreman orchestrates agentic workflow execution
     - [httpegress](../structure/coreservices-httpegress.md) - The HTTP egress proxy core microservice
     - [httpingress](../structure/coreservices-httpingress.md) - The HTTP ingress proxy core microservice
     - [metrics](../structure/coreservices-metrics.md) - The metrics microservice collects metrics from microservices in response to a request from Prometheus
@@ -25,6 +26,7 @@ Learn about each of the packages to get familiar with the Microbus codebase.
     - [helloworld](../structure/examples-helloworld.md) demonstrates the classic minimalist example
     - [login](../structure/examples-login.md) employs authentication and authorization to restrict access to certain endpoints
     - [messaging](../structure/examples-messaging.md) demonstrates load-balanced unicast, multicast and direct addressing messaging
+    - [creditflow](../structure/examples-creditflow.md) demonstrates agentic workflow features with a mock credit approval process
     - [yellowpages](../structure/examples-yellowpages.md) is an example of a SQL CRUD microservice that persists records in a database
 - [frame](../structure/frame.md) - A utility for type-safe manipulation of the HTTP control headers used by the framework
 - [httpx](../structure/httpx.md) - Various HTTP utilities
@@ -37,3 +39,4 @@ Learn about each of the packages to get familiar with the Microbus codebase.
 - [transport](../structure/transport.md) - The communication substrate that microservices use to communicate with each other
 - [trc](../structure/trc.md) - Options for creating tracing spans
 - [utils](../structure/utils.md) - Miscellaneous utility classes and functions
+- [workflow](../structure/workflow.md) - Core types for agentic workflows: Flow, Graph, Transition, Task, and Reducer

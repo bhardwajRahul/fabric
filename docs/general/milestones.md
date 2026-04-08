@@ -383,3 +383,11 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Architectural review agent skill
 - Enable auth during project init
 - Placed upgrade skills in a dedicated subdirectory
+
+[Milestone 46](https://github.com/microbus-io/fabric/tree/milestone/46):
+
+- Agentic workflows
+- Workflow and task features of microservices
+- Foreman core microservice
+- LLM core microservice with Claude, Gemini and OpenAI providers
+- Restructured agent coding rules to compress size

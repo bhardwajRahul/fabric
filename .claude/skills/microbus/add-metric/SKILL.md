@@ -82,7 +82,7 @@ type ToDo interface {
 
 #### Step 7: Describe the Metric
 
-Describe the metric in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment.
+Describe the metric in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment. If other metric descriptions already exist under this HINT, add the new one after the last existing metric description.
 
 - Use snake_case for the metric alias
 - If the metric has a unit such as `seconds` or `mb`, append it to the alias
@@ -117,7 +117,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 #### Step 8: Implement the Recorders
 
-Append the recording methods to `intermediate.go`.
+Append the recording methods at the end of `intermediate.go`.
 
 - Cast `int` values to `float64`
 - Convert `time.Duration` values to seconds using `dur.Seconds()`
@@ -283,6 +283,7 @@ func TestMyService_OnObserveMyMetric(t *testing.T) { // MARKER: MyMetric
 Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
 Insert test cases at the bottom of the integration test function using the recommended pattern.
+- Do not remove the `HINT` comments.
 
 ```go
 t.Run("test_case_name", func(t *testing.T) {
@@ -292,8 +293,6 @@ t.Run("test_case_name", func(t *testing.T) {
 	assert.NoError(err)
 })
 ```
-
-Do not remove the `HINT` comments.
 
 #### Step 13: Housekeeping
 

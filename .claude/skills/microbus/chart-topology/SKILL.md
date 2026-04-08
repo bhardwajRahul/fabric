@@ -23,7 +23,7 @@ Read the `manifest.yaml` of each of the included microservice to get its `name`,
 
 Regenerate `main/topology.mmd`, a Mermaid diagram of all included microservices and the dependencies among them.
 
-**Every** microservice added to the app in `main/main.go` must appear in the diagram — including core services, not just those that appear as downstream dependencies.
+**Every** microservice added to the app in `main/main.go` must appear in the diagram - including core services, not just those that appear as downstream dependencies.
 
 To build the diagram:
 - Generate a `graph TB` diagram

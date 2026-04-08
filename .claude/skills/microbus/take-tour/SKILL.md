@@ -21,10 +21,12 @@ Take the agent-guided tour:
 - [ ] Step 8: Browser
 - [ ] Step 9: Yellow Pages
 - [ ] Step 10: Login
-- [ ] Step 11: Telemetry
-- [ ] Step 12: Stop example app
-- [ ] Step 13: Stop Docker containers
-- [ ] Step 14: What's next
+- [ ] Step 11: Credit Flow
+- [ ] Step 12: Chatbox
+- [ ] Step 13: Telemetry
+- [ ] Step 14: Stop example app
+- [ ] Step 15: Stop Docker containers
+- [ ] Step 16: What's next
 ```
 
 #### Step 1: Download Examples
@@ -58,6 +60,8 @@ app.Add(
 	yellowpages.NewService(),
 	browser.NewService(),
 	login.NewService(),
+	creditflow.NewService(),
+	chatbox.NewService(),
 )
 ```
 
@@ -67,6 +71,8 @@ Add the appropriate imports too, again, replace all references to `github.com/mi
 import (
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
+	"github.com/microbus-io/fabric/examples/chatbox"
+	"github.com/microbus-io/fabric/examples/creditflow"
 	"github.com/microbus-io/fabric/examples/yellowpages"
 	"github.com/microbus-io/fabric/examples/eventsink"
 	"github.com/microbus-io/fabric/examples/eventsource"
@@ -107,7 +113,7 @@ If the answer is yes, do so using the following command.
 docker compose -f setup/microbus.yaml -p microbus up -d
 ```
 
-**CRITICAL**: Stop the Docker containers when the user ends the tour or exists the session.
+**CRITICAL**: Stop the Docker containers when the user ends the tour or exits the session.
 
 ```shell
 docker compose -f setup/microbus.yaml -p microbus down
@@ -130,15 +136,15 @@ The `calculator.example` microservice demonstrates basic functional endpoints (R
 
 Explain the microservice to the user and present the following links for them to experiment with in their browser:
 
-- http://localhost:8080/calculator.example/arithmetic?x=5&op=*&y=8 — computes 5 * 8
-- http://localhost:8080/calculator.example/square?x=5 — computes 5 squared
-- http://localhost:8080/calculator.example/square?x=not-a-number — demonstrates input validation error handling
-- http://localhost:8080/calculator.example/distance?p1.x=0&p1.y=0&p2.x=3&p2.y=4 — calculates distance between two points using a custom Point type
+- http://localhost:8080/calculator.example/arithmetic?x=5&op=*&y=8 - computes 5 * 8
+- http://localhost:8080/calculator.example/square?x=5 - computes 5 squared
+- http://localhost:8080/calculator.example/square?x=not-a-number - demonstrates input validation error handling
+- http://localhost:8080/calculator.example/distance?p1.x=0&p1.y=0&p2.x=3&p2.y=4 - calculates distance between two points using a custom Point type
 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
 #### Step 6: Hello
 
@@ -146,31 +152,31 @@ The `hello.example` microservice demonstrates a variety of framework capabilitie
 
 Explain the microservice to the user and present the following links for them to experiment with in their browser:
 
-- http://localhost:8080/hello.example/echo — echoes back the raw HTTP request in wire format
-- http://localhost:8080/hello.example/ping — multicasts a ping to discover all running microservices
-- http://localhost:8080/hello.example/hello?name=Bella — greets the user using a configurable greeting
-- http://localhost:8080/hello.example/calculator — renders a calculator UI that calls the calculator microservice
-- http://localhost:8080/hello.example/bus.png — serves an embedded static image resource
+- http://localhost:8080/hello.example/echo - echoes back the raw HTTP request in wire format
+- http://localhost:8080/hello.example/ping - multicasts a ping to discover all running microservices
+- http://localhost:8080/hello.example/hello?name=Bella - greets the user using a configurable greeting
+- http://localhost:8080/hello.example/calculator - renders a calculator UI that calls the calculator microservice
+- http://localhost:8080/hello.example/bus.png - serves an embedded static image resource
 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
 #### Step 7: Messaging
 
-The `messaging.example` microservice demonstrates service-to-service communication patterns — unicast (load-balanced), multicast (all peers respond), and direct addressing — as well as the distributed cache for sharing state across instances.
+The `messaging.example` microservice demonstrates service-to-service communication patterns - unicast (load-balanced), multicast (all peers respond), and direct addressing - as well as the distributed cache for sharing state across instances.
 
 Explain the microservice to the user and present the following links for them to experiment with in their browser:
 
-- http://localhost:8080/messaging.example/home — demonstrates unicast, multicast, and direct addressing patterns
-- http://localhost:8080/messaging.example/cache-store?key=foo&value=bar — stores a key-value pair in the distributed cache
-- http://localhost:8080/messaging.example/cache-load?key=foo — retrieves a value from the distributed cache by key
+- http://localhost:8080/messaging.example/home - demonstrates unicast, multicast, and direct addressing patterns
+- http://localhost:8080/messaging.example/cache-store?key=foo&value=bar - stores a key-value pair in the distributed cache
+- http://localhost:8080/messaging.example/cache-load?key=foo - retrieves a value from the distributed cache by key
 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
 #### Step 8: Browser
 
@@ -178,12 +184,12 @@ The `browser.example` microservice demonstrates how to make outbound HTTP reques
 
 Explain the microservice to the user and present the following link for them to experiment with in their browser:
 
-- http://localhost:8080/browser.example/browse?url=example.com — fetches and displays the HTML source of example.com
+- http://localhost:8080/browser.example/browse?url=example.com - fetches and displays the HTML source of example.com
 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
 #### Step 9: Yellow Pages
 
@@ -191,14 +197,14 @@ The `yellowpages.example` microservice demonstrates a SQL CRUD microservice scaf
 
 Explain the microservice to the user and present the following links for them to experiment with in their browser:
 
-- http://localhost:8080/yellowpages.example/web-ui?method=POST&path=/persons&body=%7B%22firstName%22:%22Harry%22,%22lastName%22:%22Potter%22,%22email%22:%22hp@hogwarts.edu%22,%22birthday%22:%221980-07-31T00:00:00Z%22%7D — opens the web UI pre-filled to create a person record (push submit)
-- http://localhost:8080/yellowpages.example/web-ui?method=GET&path=/persons — opens the web UI pre-filled to list all persons (push submit)
-- http://localhost:8080/yellowpages.example/web-ui?method=DELETE&path=/persons/{key} — opens the web UI pre-filled to delete a person by key (replace {key} with the actual key, then push submit)
+- http://localhost:8080/yellowpages.example/demo?method=POST&path=/persons&body=%7B%22firstName%22:%22Harry%22,%22lastName%22:%22Potter%22,%22email%22:%22hp@hogwarts.edu%22,%22birthday%22:%221980-07-31T00:00:00Z%22%7D - opens the web UI pre-filled to create a person record (push submit)
+- http://localhost:8080/yellowpages.example/demo?method=GET&path=/persons - opens the web UI pre-filled to list all persons (push submit)
+- http://localhost:8080/yellowpages.example/demo?method=DELETE&path=/persons/{key} - opens the web UI pre-filled to delete a person by key (replace {key} with the actual key, then push submit)
 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
 #### Step 10: Login
 
@@ -211,9 +217,51 @@ Explain the microservice to the user and present the following link for them to 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 12
+- "End the tour" - Skip to step 14
 
-#### Step 11: Telemetry
+#### Step 11: Credit Flow
+
+The `creditflow.example` microservice demonstrates agentic workflows - multi-step processes orchestrated by the Foreman core service. It implements a credit approval workflow with 11 tasks spanning credit verification, employment verification, and identity verification. The workflow showcases advanced patterns: fan-out/fan-in parallelism, forEach iteration over employers, conditional transitions, goto loops for borderline credit scores, subgraphs for identity verification, reducers for merging parallel results, time budgets, retries, and sleep signals.
+
+Explain the microservice to the user and present the following links for them to experiment with in their browser:
+
+- http://localhost:8080/creditflow.example/demo - the demo page with a form to submit applicant data and run the workflow
+- http://localhost:8080/creditflow.example/demo?name=Alice&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750 - pre-filled happy path (approved)
+- http://localhost:8080/creditflow.example/demo?name=Bob&ssn=987-65-4321&address=456+Oak+Ave&phone=555-987-6543&employers=Globex&score=400 - pre-filled bad credit (rejected)
+- http://localhost:8080/creditflow.example/demo?name=Diana&ssn=444-55-6666&address=321+Pine+Ln&phone=555-444-3333&employers=Umbrella+Corp&score=560 - pre-filled borderline score (demonstrates goto loop)
+- http://localhost:8080/creditflow.example/demo?name=Eve&ssn=555-66-7777&address=654+Maple+Ct&phone=555-555-5555&employers=Acme+Corp,Globex,Initech&score=750 - pre-filled multiple employers (demonstrates forEach fan-out)
+
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 14
+
+#### Step 12: Chatbox
+
+The `chatbox.example` microservice demonstrates the LLM integration capabilities of Microbus. It implements a demo LLM provider that pattern-matches math questions and uses the Calculator microservice as a tool - all without requiring a real LLM API key. The demo showcases the full tool-calling flow: the LLM service resolves tool schemas from OpenAPI, the demo provider requests a tool call, the LLM service executes it against the Calculator, and the result is fed back to produce the final answer.
+
+Before navigating to the demo, configure the LLM service to use the chatbox as its provider:
+
+Add to `config.yaml`:
+```yaml
+llm.core:
+  ProviderHostname: chatbox.example
+```
+
+Restart the example app for the config change to take effect.
+
+Explain the microservice to the user and present the following link for them to experiment with in their browser:
+
+- http://localhost:8080/chatbox.example/demo - the interactive chat demo page
+
+Suggest the user try questions like "What is 6 times 7?", "How much is 100 divided by 4?", or "Calculate 15 plus 28". Also try "Hello!" to see how it handles unrecognized questions.
+
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
+- "End the tour" - Skip to step 14
+
+#### Step 13: Telemetry
 
 Skip this step if the user elected not to install the LGTM stack with Docker.
 
@@ -222,11 +270,11 @@ Explain to the user that they can view the telemetry collected by Grafana at htt
 Present the user with these options:
 - "End the tour" - Proceed to the next step
 
-#### Step 12: Stop Example App
+#### Step 14: Stop Example App
 
 Interrupt or kill the example app that was spun up earlier.
 
-#### Step 13: Stop Docker Containers
+#### Step 15: Stop Docker Containers
 
 Skip this step if the user elected not to install NATS and LGTM with Docker in step 3.
 
@@ -236,7 +284,7 @@ Stop the Docker containers that were started earlier.
 docker compose -f setup/microbus.yaml -p microbus down
 ```
 
-#### Step 14: What's Next
+#### Step 16: What's Next
 
 Tell the user this concludes the tour and suggest to them that they try creating their own microservice by prompting the agent. Offer a few example prompts to get them started:
 

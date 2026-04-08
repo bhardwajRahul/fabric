@@ -22,6 +22,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/accesstoken/accesstokenapi"
 )
@@ -29,16 +30,17 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ accesstokenapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockRotateKey func(ctx context.Context) (err error)                                             // MARKER: RotateKey
-	mockMint      func(ctx context.Context, claims any) (token string, err error) // MARKER: Mint
-	mockLocalKeys func(ctx context.Context) (keys []accesstokenapi.JWK, err error)                  // MARKER: LocalKeys
-	mockJWKS      func(ctx context.Context) (keys []accesstokenapi.JWK, err error)                  // MARKER: JWKS
+	mockRotateKey func(ctx context.Context) (err error)                            // MARKER: RotateKey
+	mockMint      func(ctx context.Context, claims any) (token string, err error)  // MARKER: Mint
+	mockLocalKeys func(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: LocalKeys
+	mockJWKS      func(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: JWKS
 }
 
 // NewMock creates a new mockable version of the microservice.

@@ -22,6 +22,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/messaging/messagingapi"
 )
@@ -29,6 +30,7 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ messagingapi.Client
 )
 

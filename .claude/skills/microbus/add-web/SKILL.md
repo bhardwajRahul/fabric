@@ -49,7 +49,7 @@ Describe the endpoint starting with its name, in Go doc style: `MyWeb does X`. E
 
 #### Step 4: Determine the Required Claims
 
-Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles=~"manager" && level>2`. Leave empty if the endpoint should be accessible by all.
+Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles.manager && level>2`. Leave empty if the endpoint should be accessible by all.
 
 #### Step 5: Extend the `ToDo` Interface
 
@@ -64,7 +64,7 @@ type ToDo interface {
 
 #### Step 6: Extend the Clients
 
-Define the endpoint in the `var` block in `myserviceapi/client.go`, after the corresponding `HINT` comment.
+Define the endpoint in the `var` block at the top of `myserviceapi/client.go`, after the corresponding `HINT` comment.
 
 ```go
 var (
@@ -74,7 +74,7 @@ var (
 )
 ```
 
-Append the following methods to `myserviceapi/client.go`.
+Append the following methods at the end of `myserviceapi/client.go`.
 
 - If the method of the endpoint is anything other than `ANY`, omit the `method` argument and instead hardcode it as the argument of `pub.Method`
 - If the method is `GET`, `HEAD`, `OPTIONS`, or `TRACE` which don't support a body, omit the `body` argument and the `pub.Body` option and remove the lines about body serialization from the doc comment
@@ -146,7 +146,7 @@ func (svc *Service) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { 
 
 #### Step 8: Bind the Handler to the Microservice
 
-Bind the web handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment.
+Bind the web handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment. If other subscriptions already exist under this HINT, add the new one after the last existing subscription.
 
 ```go
 func NewIntermediate(impl ToDo) *Intermediate {
@@ -221,7 +221,7 @@ func (svc *Mock) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { // 
 }
 ```
 
-Add a test case in `TestMyService_Mock`.
+Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
 
 ```go
 t.Run("my_web", func(t *testing.T) { // MARKER: MyWeb
@@ -303,6 +303,7 @@ Skip the remainder of this step if instructed to be "quick" or to skip tests.
 Insert test cases at the bottom of the integration test function using the recommended pattern.
 
 - You may omit the `pub.Actor` option if the functional endpoint does not require claims.
+- Do not remove the `HINT` comments.
 
 ```go
 t.Run("test_case_name", func(t *testing.T) {
@@ -319,8 +320,6 @@ t.Run("test_case_name", func(t *testing.T) {
 	}
 })
 ```
-
-Do not remove the `HINT` comments.
 
 #### Step 12: Housekeeping
 

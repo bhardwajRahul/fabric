@@ -16,6 +16,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/busstop/busstopapi"
 	"github.com/microbus-io/fabric/busstop/resources"
@@ -32,12 +33,13 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
+	_ *workflow.Flow
 	_ busstopapi.Client
 )
 
 const (
 	Hostname = busstopapi.Hostname
-	Version  = 7
+	Version  = 1
 )
 
 // ToDo is implemented by the service or mock.
@@ -45,34 +47,34 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, obj *busstopapi.BusStop) (objKey busstopapi.BusStopKey, err error)                                     // MARKER: Create
-	Store(ctx context.Context, obj *busstopapi.BusStop) (stored bool, err error)                                                       // MARKER: Store
-	MustStore(ctx context.Context, obj *busstopapi.BusStop) (err error)                                                                // MARKER: MustStore
-	Revise(ctx context.Context, obj *busstopapi.BusStop) (revised bool, err error)                                                     // MARKER: Revise
-	MustRevise(ctx context.Context, obj *busstopapi.BusStop) (err error)                                                               // MARKER: MustRevise
-	Delete(ctx context.Context, objKey busstopapi.BusStopKey) (deleted bool, err error)                                                // MARKER: Delete
-	MustDelete(ctx context.Context, objKey busstopapi.BusStopKey) (err error)                                                          // MARKER: MustDelete
-	List(ctx context.Context, query busstopapi.Query) (objs []*busstopapi.BusStop, totalCount int, err error)                          // MARKER: List
-	Lookup(ctx context.Context, query busstopapi.Query) (obj *busstopapi.BusStop, found bool, err error)                               // MARKER: Lookup
-	MustLookup(ctx context.Context, query busstopapi.Query) (obj *busstopapi.BusStop, err error)                                       // MARKER: MustLookup
-	Load(ctx context.Context, objKey busstopapi.BusStopKey) (obj *busstopapi.BusStop, found bool, err error)                           // MARKER: Load
-	MustLoad(ctx context.Context, objKey busstopapi.BusStopKey) (obj *busstopapi.BusStop, err error)                                   // MARKER: MustLoad
-	BulkLoad(ctx context.Context, objKeys []busstopapi.BusStopKey) (objs []*busstopapi.BusStop, err error)                             // MARKER: BulkLoad
-	BulkDelete(ctx context.Context, objKeys []busstopapi.BusStopKey) (deletedKeys []busstopapi.BusStopKey, err error)                  // MARKER: BulkDelete
-	BulkCreate(ctx context.Context, objs []*busstopapi.BusStop) (objKeys []busstopapi.BusStopKey, err error)                           // MARKER: BulkCreate
-	BulkStore(ctx context.Context, objs []*busstopapi.BusStop) (storedKeys []busstopapi.BusStopKey, err error)                         // MARKER: BulkStore
-	BulkRevise(ctx context.Context, objs []*busstopapi.BusStop) (revisedKeys []busstopapi.BusStopKey, err error)                       // MARKER: BulkRevise
-	Purge(ctx context.Context, query busstopapi.Query) (deletedKeys []busstopapi.BusStopKey, err error)                                // MARKER: Purge
-	Count(ctx context.Context, query busstopapi.Query) (count int, err error)                                                          // MARKER: Count
-	CreateREST(ctx context.Context, httpRequestBody *busstopapi.BusStop) (objKey busstopapi.BusStopKey, httpStatusCode int, err error) // MARKER: CreateREST
-	StoreREST(ctx context.Context, key busstopapi.BusStopKey, httpRequestBody *busstopapi.BusStop) (httpStatusCode int, err error)     // MARKER: StoreREST
-	DeleteREST(ctx context.Context, key busstopapi.BusStopKey) (httpStatusCode int, err error)                                         // MARKER: DeleteREST
-	LoadREST(ctx context.Context, key busstopapi.BusStopKey) (httpResponseBody *busstopapi.BusStop, httpStatusCode int, err error)     // MARKER: LoadREST
-	ListREST(ctx context.Context, q busstopapi.Query) (httpResponseBody []*busstopapi.BusStop, httpStatusCode int, err error)          // MARKER: ListREST
-	TryReserve(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error)                              // MARKER: TryReserve
+	Create(ctx context.Context, obj *busstopapi.BusStop) (objKey busstopapi.BusStopKey, err error)                                            // MARKER: Create
+	Store(ctx context.Context, obj *busstopapi.BusStop) (stored bool, err error)                                                              // MARKER: Store
+	MustStore(ctx context.Context, obj *busstopapi.BusStop) (err error)                                                                       // MARKER: MustStore
+	Revise(ctx context.Context, obj *busstopapi.BusStop) (revised bool, err error)                                                            // MARKER: Revise
+	MustRevise(ctx context.Context, obj *busstopapi.BusStop) (err error)                                                                      // MARKER: MustRevise
+	Delete(ctx context.Context, objKey busstopapi.BusStopKey) (deleted bool, err error)                                                       // MARKER: Delete
+	MustDelete(ctx context.Context, objKey busstopapi.BusStopKey) (err error)                                                                 // MARKER: MustDelete
+	List(ctx context.Context, query busstopapi.Query) (objs []*busstopapi.BusStop, totalCount int, err error)                                 // MARKER: List
+	Lookup(ctx context.Context, query busstopapi.Query) (obj *busstopapi.BusStop, found bool, err error)                                      // MARKER: Lookup
+	MustLookup(ctx context.Context, query busstopapi.Query) (obj *busstopapi.BusStop, err error)                                              // MARKER: MustLookup
+	Load(ctx context.Context, objKey busstopapi.BusStopKey) (obj *busstopapi.BusStop, found bool, err error)                                  // MARKER: Load
+	MustLoad(ctx context.Context, objKey busstopapi.BusStopKey) (obj *busstopapi.BusStop, err error)                                          // MARKER: MustLoad
+	BulkLoad(ctx context.Context, objKeys []busstopapi.BusStopKey) (objs []*busstopapi.BusStop, err error)                                    // MARKER: BulkLoad
+	BulkDelete(ctx context.Context, objKeys []busstopapi.BusStopKey) (deletedKeys []busstopapi.BusStopKey, err error)                         // MARKER: BulkDelete
+	BulkCreate(ctx context.Context, objs []*busstopapi.BusStop) (objKeys []busstopapi.BusStopKey, err error)                                  // MARKER: BulkCreate
+	BulkStore(ctx context.Context, objs []*busstopapi.BusStop) (storedKeys []busstopapi.BusStopKey, err error)                                // MARKER: BulkStore
+	BulkRevise(ctx context.Context, objs []*busstopapi.BusStop) (revisedKeys []busstopapi.BusStopKey, err error)                              // MARKER: BulkRevise
+	Purge(ctx context.Context, query busstopapi.Query) (deletedKeys []busstopapi.BusStopKey, err error)                                       // MARKER: Purge
+	Count(ctx context.Context, query busstopapi.Query) (count int, err error)                                                                 // MARKER: Count
+	CreateREST(ctx context.Context, httpRequestBody *busstopapi.BusStop) (objKey busstopapi.BusStopKey, httpStatusCode int, err error)        // MARKER: CreateREST
+	StoreREST(ctx context.Context, key busstopapi.BusStopKey, httpRequestBody *busstopapi.BusStop) (httpStatusCode int, err error)            // MARKER: StoreREST
+	DeleteREST(ctx context.Context, key busstopapi.BusStopKey) (httpStatusCode int, err error)                                                // MARKER: DeleteREST
+	LoadREST(ctx context.Context, key busstopapi.BusStopKey) (httpResponseBody *busstopapi.BusStop, httpStatusCode int, err error)            // MARKER: LoadREST
+	ListREST(ctx context.Context, q busstopapi.Query) (httpResponseBody []*busstopapi.BusStop, httpStatusCode int, err error)                 // MARKER: ListREST
+	TryReserve(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error)                               // MARKER: TryReserve
 	TryBulkReserve(ctx context.Context, objKeys []busstopapi.BusStopKey, dur time.Duration) (reservedKeys []busstopapi.BusStopKey, err error) // MARKER: TryBulkReserve
-	Reserve(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error)                                 // MARKER: Reserve
-	BulkReserve(ctx context.Context, objKeys []busstopapi.BusStopKey, dur time.Duration) (reservedKeys []busstopapi.BusStopKey, err error)   // MARKER: BulkReserve
+	Reserve(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error)                                  // MARKER: Reserve
+	BulkReserve(ctx context.Context, objKeys []busstopapi.BusStopKey, dur time.Duration) (reservedKeys []busstopapi.BusStopKey, err error)    // MARKER: BulkReserve
 }
 
 // NewService creates a new instance of the microservice.
@@ -112,34 +114,34 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(busstopapi.Create.Method, busstopapi.Create.Route, svc.doCreate)            // MARKER: Create
-	svc.Subscribe(busstopapi.Store.Method, busstopapi.Store.Route, svc.doStore)                // MARKER: Store
-	svc.Subscribe(busstopapi.MustStore.Method, busstopapi.MustStore.Route, svc.doMustStore)    // MARKER: MustStore
-	svc.Subscribe(busstopapi.Revise.Method, busstopapi.Revise.Route, svc.doRevise)             // MARKER: Revise
-	svc.Subscribe(busstopapi.MustRevise.Method, busstopapi.MustRevise.Route, svc.doMustRevise) // MARKER: MustRevise
-	svc.Subscribe(busstopapi.Delete.Method, busstopapi.Delete.Route, svc.doDelete)             // MARKER: Delete
-	svc.Subscribe(busstopapi.MustDelete.Method, busstopapi.MustDelete.Route, svc.doMustDelete) // MARKER: MustDelete
-	svc.Subscribe(busstopapi.List.Method, busstopapi.List.Route, svc.doList)                   // MARKER: List
-	svc.Subscribe(busstopapi.Lookup.Method, busstopapi.Lookup.Route, svc.doLookup)             // MARKER: Lookup
-	svc.Subscribe(busstopapi.MustLookup.Method, busstopapi.MustLookup.Route, svc.doMustLookup) // MARKER: MustLookup
-	svc.Subscribe(busstopapi.Load.Method, busstopapi.Load.Route, svc.doLoad)                   // MARKER: Load
-	svc.Subscribe(busstopapi.MustLoad.Method, busstopapi.MustLoad.Route, svc.doMustLoad)       // MARKER: MustLoad
-	svc.Subscribe(busstopapi.BulkLoad.Method, busstopapi.BulkLoad.Route, svc.doBulkLoad)       // MARKER: BulkLoad
-	svc.Subscribe(busstopapi.BulkDelete.Method, busstopapi.BulkDelete.Route, svc.doBulkDelete) // MARKER: BulkDelete
-	svc.Subscribe(busstopapi.BulkCreate.Method, busstopapi.BulkCreate.Route, svc.doBulkCreate) // MARKER: BulkCreate
-	svc.Subscribe(busstopapi.BulkStore.Method, busstopapi.BulkStore.Route, svc.doBulkStore)    // MARKER: BulkStore
-	svc.Subscribe(busstopapi.BulkRevise.Method, busstopapi.BulkRevise.Route, svc.doBulkRevise) // MARKER: BulkRevise
-	svc.Subscribe(busstopapi.Purge.Method, busstopapi.Purge.Route, svc.doPurge)                // MARKER: Purge
-	svc.Subscribe(busstopapi.Count.Method, busstopapi.Count.Route, svc.doCount)                // MARKER: Count
-	svc.Subscribe(busstopapi.CreateREST.Method, busstopapi.CreateREST.Route, svc.doCreateREST) // MARKER: CreateREST
-	svc.Subscribe(busstopapi.StoreREST.Method, busstopapi.StoreREST.Route, svc.doStoreREST)   // MARKER: StoreREST
-	svc.Subscribe(busstopapi.DeleteREST.Method, busstopapi.DeleteREST.Route, svc.doDeleteREST) // MARKER: DeleteREST
-	svc.Subscribe(busstopapi.LoadREST.Method, busstopapi.LoadREST.Route, svc.doLoadREST)       // MARKER: LoadREST
-	svc.Subscribe(busstopapi.ListREST.Method, busstopapi.ListREST.Route, svc.doListREST)                      // MARKER: ListREST
+	svc.Subscribe(busstopapi.Create.Method, busstopapi.Create.Route, svc.doCreate)                         // MARKER: Create
+	svc.Subscribe(busstopapi.Store.Method, busstopapi.Store.Route, svc.doStore)                            // MARKER: Store
+	svc.Subscribe(busstopapi.MustStore.Method, busstopapi.MustStore.Route, svc.doMustStore)                // MARKER: MustStore
+	svc.Subscribe(busstopapi.Revise.Method, busstopapi.Revise.Route, svc.doRevise)                         // MARKER: Revise
+	svc.Subscribe(busstopapi.MustRevise.Method, busstopapi.MustRevise.Route, svc.doMustRevise)             // MARKER: MustRevise
+	svc.Subscribe(busstopapi.Delete.Method, busstopapi.Delete.Route, svc.doDelete)                         // MARKER: Delete
+	svc.Subscribe(busstopapi.MustDelete.Method, busstopapi.MustDelete.Route, svc.doMustDelete)             // MARKER: MustDelete
+	svc.Subscribe(busstopapi.List.Method, busstopapi.List.Route, svc.doList)                               // MARKER: List
+	svc.Subscribe(busstopapi.Lookup.Method, busstopapi.Lookup.Route, svc.doLookup)                         // MARKER: Lookup
+	svc.Subscribe(busstopapi.MustLookup.Method, busstopapi.MustLookup.Route, svc.doMustLookup)             // MARKER: MustLookup
+	svc.Subscribe(busstopapi.Load.Method, busstopapi.Load.Route, svc.doLoad)                               // MARKER: Load
+	svc.Subscribe(busstopapi.MustLoad.Method, busstopapi.MustLoad.Route, svc.doMustLoad)                   // MARKER: MustLoad
+	svc.Subscribe(busstopapi.BulkLoad.Method, busstopapi.BulkLoad.Route, svc.doBulkLoad)                   // MARKER: BulkLoad
+	svc.Subscribe(busstopapi.BulkDelete.Method, busstopapi.BulkDelete.Route, svc.doBulkDelete)             // MARKER: BulkDelete
+	svc.Subscribe(busstopapi.BulkCreate.Method, busstopapi.BulkCreate.Route, svc.doBulkCreate)             // MARKER: BulkCreate
+	svc.Subscribe(busstopapi.BulkStore.Method, busstopapi.BulkStore.Route, svc.doBulkStore)                // MARKER: BulkStore
+	svc.Subscribe(busstopapi.BulkRevise.Method, busstopapi.BulkRevise.Route, svc.doBulkRevise)             // MARKER: BulkRevise
+	svc.Subscribe(busstopapi.Purge.Method, busstopapi.Purge.Route, svc.doPurge)                            // MARKER: Purge
+	svc.Subscribe(busstopapi.Count.Method, busstopapi.Count.Route, svc.doCount)                            // MARKER: Count
+	svc.Subscribe(busstopapi.CreateREST.Method, busstopapi.CreateREST.Route, svc.doCreateREST)             // MARKER: CreateREST
+	svc.Subscribe(busstopapi.StoreREST.Method, busstopapi.StoreREST.Route, svc.doStoreREST)                // MARKER: StoreREST
+	svc.Subscribe(busstopapi.DeleteREST.Method, busstopapi.DeleteREST.Route, svc.doDeleteREST)             // MARKER: DeleteREST
+	svc.Subscribe(busstopapi.LoadREST.Method, busstopapi.LoadREST.Route, svc.doLoadREST)                   // MARKER: LoadREST
+	svc.Subscribe(busstopapi.ListREST.Method, busstopapi.ListREST.Route, svc.doListREST)                   // MARKER: ListREST
 	svc.Subscribe(busstopapi.TryReserve.Method, busstopapi.TryReserve.Route, svc.doTryReserve)             // MARKER: TryReserve
 	svc.Subscribe(busstopapi.TryBulkReserve.Method, busstopapi.TryBulkReserve.Route, svc.doTryBulkReserve) // MARKER: TryBulkReserve
-	svc.Subscribe(busstopapi.Reserve.Method, busstopapi.Reserve.Route, svc.doReserve)                   // MARKER: Reserve
-	svc.Subscribe(busstopapi.BulkReserve.Method, busstopapi.BulkReserve.Route, svc.doBulkReserve)       // MARKER: BulkReserve
+	svc.Subscribe(busstopapi.Reserve.Method, busstopapi.Reserve.Route, svc.doReserve)                      // MARKER: Reserve
+	svc.Subscribe(busstopapi.BulkReserve.Method, busstopapi.BulkReserve.Route, svc.doBulkReserve)          // MARKER: BulkReserve
 
 	// HINT: Add web endpoints here
 
@@ -155,6 +157,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -810,7 +816,7 @@ func (svc *Intermediate) SetSQLDataSourceName(value string) (err error) { // MAR
 	return svc.SetConfig("SQLDataSourceName", value)
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

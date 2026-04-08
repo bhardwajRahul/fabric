@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -84,11 +85,11 @@ func (svc *Service) AddClaimsTransformer(transformer ClaimsTransformer) error {
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	svc.issClaim = "microbus://" + svc.Hostname()
-	err = svc.loadKey(svc.PrivateKeyPEM(), &svc.primary)
+	err = svc.loadKey(svc.PrivateKey(), &svc.primary)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = svc.loadKey(svc.AltPrivateKeyPEM(), &svc.alt)
+	err = svc.loadKey(svc.AltPrivateKey(), &svc.alt)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -116,7 +117,9 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
-// loadKey parses a PEM-encoded Ed25519 private key and stores it in the target.
+// loadKey parses an Ed25519 private key and stores it in the target.
+// The key can be provided in full PEM format or as a raw base64-encoded DER block
+// without the PEM header and footer.
 func (svc *Service) loadKey(pemData string, target **keyEntry) (err error) {
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
@@ -126,19 +129,27 @@ func (svc *Service) loadKey(pemData string, target **keyEntry) (err error) {
 		return nil
 	}
 
+	var derBytes []byte
 	block, _ := pem.Decode([]byte(pemData))
-	if block == nil {
-		return errors.New("failed to decode PEM block")
+	if block != nil {
+		derBytes = block.Bytes
+	} else {
+		// Try to decode as raw base64 DER without PEM decorators
+		trimmed := strings.TrimSpace(pemData)
+		derBytes, err = base64.StdEncoding.DecodeString(trimmed)
+		if err != nil {
+			return errors.New("failed to decode PEM block or base64 key data")
+		}
 	}
 
-	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	key, err := x509.ParsePKCS8PrivateKey(derBytes)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	edKey, ok := key.(ed25519.PrivateKey)
 	if !ok {
-		return errors.New("PEM key is not Ed25519")
+		return errors.New("key is not Ed25519")
 	}
 
 	pubKey := edKey.Public().(ed25519.PublicKey)
@@ -155,14 +166,14 @@ func (svc *Service) loadKey(pemData string, target **keyEntry) (err error) {
 	return nil
 }
 
-// OnChangedPrivateKeyPEM is called when the PrivateKeyPEM config changes.
-func (svc *Service) OnChangedPrivateKeyPEM(ctx context.Context) (err error) { // MARKER: PrivateKeyPEM
-	return errors.Trace(svc.loadKey(svc.PrivateKeyPEM(), &svc.primary))
+// OnChangedPrivateKey is called when the PrivateKey config changes.
+func (svc *Service) OnChangedPrivateKey(ctx context.Context) (err error) { // MARKER: PrivateKey
+	return errors.Trace(svc.loadKey(svc.PrivateKey(), &svc.primary))
 }
 
-// OnChangedAltPrivateKeyPEM is called when the AltPrivateKeyPEM config changes.
-func (svc *Service) OnChangedAltPrivateKeyPEM(ctx context.Context) (err error) { // MARKER: AltPrivateKeyPEM
-	return errors.Trace(svc.loadKey(svc.AltPrivateKeyPEM(), &svc.alt))
+// OnChangedAltPrivateKey is called when the AltPrivateKey config changes.
+func (svc *Service) OnChangedAltPrivateKey(ctx context.Context) (err error) { // MARKER: AltPrivateKey
+	return errors.Trace(svc.loadKey(svc.AltPrivateKey(), &svc.alt))
 }
 
 /*
@@ -198,7 +209,7 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 	}
 	// Set critical claims last so they cannot be overridden by transformers
 	jwtClaims["iss"] = svc.issClaim
-	jwtClaims["iat"] = now.Add(-5 * time.Minute).Unix()                     // 5 minutes in the past
+	jwtClaims["iat"] = now.Add(-5 * time.Minute).Unix()                   // 5 minutes in the past
 	jwtClaims["exp"] = now.Add(svc.AuthTokenTTL() + 5*time.Minute).Unix() // 5 minutes of grace for clock skew
 	jwtClaims["jti"] = utils.RandomIdentifier(24)
 

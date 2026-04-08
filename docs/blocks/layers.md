@@ -46,6 +46,10 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **Access token** - The [access token](../structure/coreservices-accesstoken.md) microservice issues short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation. On each incoming request, the HTTP ingress proxy exchanges the external bearer token for an internal access token, enriching it with additional claims via configurable transformers. The access token's claims serve as the basis for authorization decisions throughout the call stack.
 
+**Foreman** - The [foreman](../structure/coreservices-foreman.md) is the orchestration engine for agentic workflows, managing the lifecycle of flows that progress through a series of task steps. It persists all state in a SQL database.
+
+**LLM** - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Any Microbus endpoint is automatically a tool - the service fetches schemas from OpenAPI at call time and supports Claude, OpenAI and Gemini backends via configuration.
+
 ## Coding Agents
 
 [Coding agents](../blocks/coding-agents.md) are fully empowered in Microbus to produce code rapidly (RAD). Coding agents generate boilerplate code, business logic, tests and documentation.
@@ -56,7 +60,7 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **Global and local `AGENTS.md`** - A global `AGENTS.md` at the project root provides context applicable to the whole project, while a local [`AGENTS.md`](../blocks/agents-md.md) in each microservice's directory captures design choices, tradeoffs, and rationale specific to that microservice. The local file is maintained by the agent as it works, focusing on the *why* behind decisions so that future agents can safely evolve the code.
 
-**Incremental development** - Agents build a microservice one [feature](../blocks/features.md) at a time — an endpoint, a config property, a ticker, a metric. Each prompt results in a focused, incremental change: new code is added without impacting existing code, tests are written or updated, and the manifest is kept in sync. This keeps changes small, reviewable, and easy for the agent to get right.
+**Incremental development** - Agents build a microservice one [feature](../blocks/features.md) at a time - an endpoint, a config property, a ticker, a metric. Each prompt results in a focused, incremental change: new code is added without impacting existing code, tests are written or updated, and the manifest is kept in sync. This keeps changes small, reviewable, and easy for the agent to get right.
 
 **Client stubs** - [Client stubs](../blocks/client-stubs.md) are created for the microservice's public endpoints. These stubs are used by upstream clients to call the microservice in a type-safe fashion. For functional endpoints (RPCs), the stubs take care of marshaling the request arguments into a JSON payload.
 
@@ -67,6 +71,8 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 **Automatic documentation** - As a coding agent works on a microservice, it automatically maintains [documentation](../blocks/auto-doc.md) alongside the code. This includes the `manifest.yaml` that catalogs the microservice's [features](../blocks/features.md), the `PROMPTS.md` audit trail, and the `AGENTS.md` design record. Documentation stays in sync with the implementation because both are produced by the same agent in the same pass.
 
 **Uniform code structure** - A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of the way coding agents work in Microbus. A familiar code structure helps agents get oriented quickly.
+
+**SQL CRUD microservices** - A dedicated skill scaffolds [SQL CRUD microservices](../blocks/sql-crud.md) with cross-database support, schema migrations, multi-tenancy and a REST API.
 
 **New project bootstrapping** - The [bootstrapping of new projects](../blocks/project-bootstrapping.md) is automated.
 
@@ -87,6 +93,8 @@ Microbus uses a messaging bus for the transport layer of service-to-service comm
 **Time budget** - [Time budget](../blocks/time-budget.md) is a depleting timeout that is passed downstream along the call stack. It is the proper way to handle client-to-server timeouts.
 
 **Ack or fail fast** - [Ack or fail fast](../blocks/ack-or-fail.md) is a pattern by which the server responds with an ack to the client before processing the request. The client knows to wait for the response only if an ack is received, and fail quickly if it's not.
+
+**Agentic workflows** - [Agentic workflows](../blocks/agentic-workflows.md) allow microservices to collaborate on multi-step processes with branching, parallelism, interrupts for human-in-the-loop input, and automatic failure recovery. The [Foreman](../structure/coreservices-foreman.md) core service orchestrates execution.
 
 **Dynamic discovery** - A microservice transparently makes itself [discoverable](../blocks/discovery.md) by subscribing to the messaging bus. Once subscribed to a subject it immediately starts receiving messages from the corresponding queue. An external service discovery system is not required.
 
@@ -133,3 +141,5 @@ Microbus uses a messaging bus for the transport layer of service-to-service comm
 **OpenAPI** - [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on Microbus are publicly described with OpenAPI.
 
 **JWT** - [JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
+
+**SQL** - Sequel is a lightweight [SQL](../blocks/sql.md) library that provides cross-database support for MySQL, PostgreSQL, Microsoft SQL Server and SQLite.

@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/coreservices/control/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ controlapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -105,9 +107,9 @@ The microservice itself does nothing and should not be included in applications.
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functions
-	svc.Subscribe(controlapi.Ping.Method, controlapi.Ping.Route, svc.doPing, sub.NoQueue())                   // MARKER: Ping
+	svc.Subscribe(controlapi.Ping.Method, controlapi.Ping.Route, svc.doPing, sub.NoQueue())                            // MARKER: Ping
 	svc.Subscribe(controlapi.ConfigRefresh.Method, controlapi.ConfigRefresh.Route, svc.doConfigRefresh, sub.NoQueue()) // MARKER: ConfigRefresh
-	svc.Subscribe(controlapi.Trace.Method, controlapi.Trace.Route, svc.doTrace, sub.NoQueue())                 // MARKER: Trace
+	svc.Subscribe(controlapi.Trace.Method, controlapi.Trace.Route, svc.doTrace, sub.NoQueue())                         // MARKER: Trace
 
 	// Web endpoints
 	svc.Subscribe(controlapi.Metrics.Method, controlapi.Metrics.Route, svc.Metrics, sub.NoQueue()) // MARKER: Metrics
@@ -119,6 +121,10 @@ The microservice itself does nothing and should not be included in applications.
 	// HINT: Add configs here
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -243,7 +249,7 @@ func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) (err er
 	return err // No trace
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

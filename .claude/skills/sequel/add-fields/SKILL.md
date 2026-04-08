@@ -162,7 +162,20 @@ ALTER TABLE my_noun ADD
 	my_field_time DATETIME2 NULL,
 	my_field_tags VARBINARY(MAX) NULL,
 	parent_table_id BIGINT NOT NULL DEFAULT 0;
+
+-- DRIVER: sqlite
+ALTER TABLE my_noun ADD COLUMN my_field_integer INTEGER NOT NULL DEFAULT 0;
+-- DRIVER: sqlite
+ALTER TABLE my_noun ADD COLUMN my_field_nullable TEXT;
+-- DRIVER: sqlite
+ALTER TABLE my_noun ADD COLUMN my_field_time DATETIME;
+-- DRIVER: sqlite
+ALTER TABLE my_noun ADD COLUMN my_field_tags BLOB;
+-- DRIVER: sqlite
+ALTER TABLE my_noun ADD COLUMN parent_table_id INTEGER NOT NULL DEFAULT 0;
 ```
+
+**IMPORTANT**: SQLite only supports adding one column per `ALTER TABLE` statement. Each column must be a separate statement prefixed with `-- DRIVER: sqlite`.
 
 Append `CREATE INDEX` or `CREATE UNIQUE INDEX` statements to add indices for columns that will be heavily searchable. Always include the `tenant_id` as the first column in a composite index. Name the index by concatenating the name of the table, followed by `idx` and the columns it includes (excluding the `tenant_id` column). For example, `my_noun_idx_my_field_integer` is a composite index of `(tenant_id, my_field_integer)` in the `my_noun` table. If you are not sure what columns are worth indexing, ask the user for guidance.
 
@@ -174,6 +187,9 @@ CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_intege
 CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_integer);
 
 -- DRIVER: mssql
+CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_integer);
+
+-- DRIVER: sqlite
 CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_integer);
 ```
 

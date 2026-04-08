@@ -16,7 +16,7 @@ general:
   hostname: bearer.token.core
   description: BearerToken signs long-lived JWTs with Ed25519 keys for external actor authentication.
   package: github.com/microbus-io/fabric/coreservices/bearertoken
-  frameworkVersion: 1.23.0
+  frameworkVersion: 1.26.0
 
 functions:
   Mint:
@@ -36,13 +36,13 @@ configs:
     description: AuthTokenTTL sets the TTL of the JWT.
     validation: dur [1m,]
     default: 720h
-  PrivateKeyPEM:
-    signature: PrivateKeyPEM() (key string)
-    description: PrivateKeyPEM is the Ed25519 private key in PEM format used to sign JWTs.
+  PrivateKey:
+    signature: PrivateKey() (key string)
+    description: PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
     secret: true
     callback: true
-  AltPrivateKeyPEM:
-    signature: AltPrivateKeyPEM() (key string)
-    description: AltPrivateKeyPEM is an alternative Ed25519 private key in PEM format, used during key rotation.
+  AltPrivateKey:
+    signature: AltPrivateKey() (key string)
+    description: AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.
     secret: true
     callback: true

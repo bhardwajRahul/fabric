@@ -22,7 +22,7 @@ Claims transformers can be registered to enrich the token with dynamic claims be
 
 ```go
 accesstoken.NewService().Init(func(svc *accesstoken.Service) error {
-    err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
+    err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (err error) {
         userID := int(claims["userid"].(float64))
         user, err := usersapi.NewClient(svc).Load(ctx, userID)
         if err != nil {

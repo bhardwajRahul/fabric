@@ -11,16 +11,17 @@ Copy this checklist and track your progress:
 
 ```
 Post-change housekeeping:
-- [ ] Step 1: Update manifest
+- [ ] Step 1: Reconcile the manifest
 - [ ] Step 2: Document the microservice
 - [ ] Step 3: Versioning
-- [ ] Step 4: Update prompts
-- [ ] Step 5: Update topology diagram
+- [ ] Step 4: Log the prompts
+- [ ] Step 5: Visualize workflows
+- [ ] Step 6: Chart the topology
 ```
 
-#### Step 1: Update Manifest
+#### Step 1: Reconcile the Manifest
 
-Update `manifest.yaml` to reflect the changes. Ensure that all sections accurately describe the current state of the microservice's features, including `general`, `functions`, `webs`, `configs`, `tickers`, `metrics`, `outboundEvents`, `inboundEvents`, and `downstream`. Set `modifiedAt` under `general` to the current time in RFC 3339 format.
+Update `manifest.yaml` to reflect the changes. Ensure that all sections accurately describe the current state of the microservice's features, including `general`, `functions`, `webs`, `configs`, `tickers`, `metrics`, `outboundEvents`, `inboundEvents`, `tasks`, `workflows`, and `downstream`. Set `modifiedAt` under `general` to the current time in RFC 3339 format.
 
 #### Step 2: Document the Microservice
 
@@ -32,7 +33,7 @@ Update the microservice's local `AGENTS.md` file to reflect the changes. Capture
 
 Increment the `Version` const in `intermediate.go`.
 
-#### Step 4: Prompt History
+#### Step 4: Log the Prompts
 
 Skip this step if the microservice's directory does not include `PROMPTS.md`.
 
@@ -46,7 +47,29 @@ Append the prompt as follows.
 Prompt comes here...
 ```
 
-#### Step 5: Update Topology Diagram
+#### Step 5: Visualize Workflows
+
+Skip this step if the microservice's `manifest.yaml` does not have a `workflows` section, or if instructed to be "quick" or to skip documentation.
+
+For each workflow defined in the `workflows` section of `manifest.yaml`, generate a Mermaid flowchart and save it to a separate `.mmd` file named after the workflow in ALLCAPS, e.g. `MYWORKFLOW.mmd`.
+
+To generate the Mermaid output, read the graph builder function in `service.go`, reproduce its structure, and call `graph.Mermaid()`. After generating the output, strip the `hostname:428/` prefix from node labels where `hostname` matches this microservice's hostname and the port is `:428`. Do not strip hostnames of other microservices or labels using a different port.
+
+After generating the diagram, apply the following `classDef` styles and assign classes to each node:
+
+```
+classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+```
+
+- `:::task` - regular task nodes
+- `:::sub` - nodes registered as subgraphs via `AddSubgraph`
+- `:::term` - title, start `(( ))`, and end `(( ))` nodes
+
+Add a title node at the top of the graph using the workflow's route name in kebab-case: `_title{{"my-workflow"}}:::term --> _start`. The title connects to the start node.
+
+#### Step 6: Chart the Topology
 
 This step is required if the `downstream` section of `manifest.yaml` or `main/main.go` were changed. Otherwise, skip it.
 

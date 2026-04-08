@@ -17,8 +17,9 @@ general:
   hostname: yellowpages.example
   description: Person persists persons in a SQL database.
   package: github.com/microbus-io/fabric/examples/yellowpages
-  frameworkVersion: 1.23.0
-  persistence: SQL
+  frameworkVersion: 1.26.0
+  db: SQL
+  modifiedAt: "2026-03-22T13:00:00Z"
 
 functions:
   Create:
@@ -142,11 +143,49 @@ functions:
     method: GET
     route: /persons
 
-webs:
-  WebUI:
-    description: WebUI provides a form for making web requests to the CRUD endpoints.
+  TryReserve:
+    signature: TryReserve(objKey PersonKey, dur time.Duration) (reserved bool)
+    description: TryReserve attempts to reserve a person for the given duration, returning true if successful.
     method: ANY
-    route: /web-ui
+    route: /try-reserve
+  TryBulkReserve:
+    signature: TryBulkReserve(objKeys []PersonKey, dur time.Duration) (reservedKeys []PersonKey)
+    description: TryBulkReserve attempts to reserve persons for the given duration, returning the keys of those successfully reserved.
+    method: ANY
+    route: /try-bulk-reserve
+  Reserve:
+    signature: Reserve(objKey PersonKey, dur time.Duration) (reserved bool)
+    description: Reserve unconditionally reserves a person for the given duration, returning true if the person exists.
+    method: ANY
+    route: /reserve
+  BulkReserve:
+    signature: BulkReserve(objKeys []PersonKey, dur time.Duration) (reservedKeys []PersonKey)
+    description: BulkReserve unconditionally reserves persons for the given duration, returning the keys of those that exist.
+    method: ANY
+    route: /bulk-reserve
+
+webs:
+  Demo:
+    description: Demo serves the web user interface for managing persons.
+    method: ANY
+    route: /demo
+
+outboundEvents:
+  OnPersonCreated:
+    signature: OnPersonCreated(objKeys []PersonKey)
+    description: OnPersonCreated is triggered when persons are created.
+    method: POST
+    route: :417/on-person-created
+  OnPersonStored:
+    signature: OnPersonStored(objKeys []PersonKey)
+    description: OnPersonStored is triggered when persons are stored.
+    method: POST
+    route: :417/on-person-stored
+  OnPersonDeleted:
+    signature: OnPersonDeleted(objKeys []PersonKey)
+    description: OnPersonDeleted is triggered when persons are deleted.
+    method: POST
+    route: :417/on-person-deleted
 
 configs:
   SQLDataSourceName:

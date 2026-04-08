@@ -23,6 +23,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
 )
@@ -30,18 +31,19 @@ import (
 var (
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ configuratorapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockValues     func(ctx context.Context, names []string) (values map[string]string, err error)                   // MARKER: Values
-	mockRefresh    func(ctx context.Context) (err error)                                                              // MARKER: Refresh
-	mockSyncRepo   func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)   // MARKER: SyncRepo
-	mockValues443  func(ctx context.Context, names []string) (values map[string]string, err error)                    // MARKER: Values443
-	mockRefresh443 func(ctx context.Context) (err error)                                                              // MARKER: Refresh443
-	mockSync443    func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error)   // MARKER: Sync443
+	mockValues     func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values
+	mockRefresh    func(ctx context.Context) (err error)                                                           // MARKER: Refresh
+	mockSyncRepo   func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: SyncRepo
+	mockValues443  func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values443
+	mockRefresh443 func(ctx context.Context) (err error)                                                           // MARKER: Refresh443
+	mockSync443    func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: Sync443
 }
 
 // NewMock creates a new mockable version of the microservice.

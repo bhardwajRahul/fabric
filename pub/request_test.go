@@ -294,15 +294,11 @@ func TestPub_FillPathArguments(t *testing.T) {
 }
 
 func signTestJWT(t *testing.T, claims jwt.MapClaims) string {
-	t.Helper()
+	assert := testarossa.For(t)
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(err)
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	signed, err := token.SignedString(priv)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(err)
 	return signed
 }

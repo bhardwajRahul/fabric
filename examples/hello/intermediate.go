@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/hello/helloapi"
 	"github.com/microbus-io/fabric/examples/hello/resources"
@@ -48,6 +49,7 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
+	_ *workflow.Flow
 	_ helloapi.Client
 )
 
@@ -110,13 +112,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe(helloapi.Hello.Method, helloapi.Hello.Route, svc.Hello)              // MARKER: Hello
-	svc.Subscribe(helloapi.Echo.Method, helloapi.Echo.Route, svc.Echo)                 // MARKER: Echo
-	svc.Subscribe(helloapi.Ping.Method, helloapi.Ping.Route, svc.Ping)                 // MARKER: Ping
-	svc.Subscribe(helloapi.Calculator.Method, helloapi.Calculator.Route, svc.Calculator) // MARKER: Calculator
-	svc.Subscribe(helloapi.BusPNG.Method, helloapi.BusPNG.Route, svc.BusPNG)            // MARKER: BusPNG
+	svc.Subscribe(helloapi.Hello.Method, helloapi.Hello.Route, svc.Hello)                      // MARKER: Hello
+	svc.Subscribe(helloapi.Echo.Method, helloapi.Echo.Route, svc.Echo)                         // MARKER: Echo
+	svc.Subscribe(helloapi.Ping.Method, helloapi.Ping.Route, svc.Ping)                         // MARKER: Ping
+	svc.Subscribe(helloapi.Calculator.Method, helloapi.Calculator.Route, svc.Calculator)       // MARKER: Calculator
+	svc.Subscribe(helloapi.BusPNG.Method, helloapi.BusPNG.Route, svc.BusPNG)                   // MARKER: BusPNG
 	svc.Subscribe(helloapi.Localization.Method, helloapi.Localization.Route, svc.Localization) // MARKER: Localization
-	svc.Subscribe(helloapi.Root.Method, helloapi.Root.Route, svc.Root)                 // MARKER: Root
+	svc.Subscribe(helloapi.Root.Method, helloapi.Root.Route, svc.Root)                         // MARKER: Root
 
 	// HINT: Add metrics here
 
@@ -137,6 +139,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -246,7 +252,7 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 	return nil
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

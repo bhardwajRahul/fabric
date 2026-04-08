@@ -161,6 +161,9 @@ func (svc *Service) openDatabase(ctx context.Context) (err error) {
 	_ = ctx
 	const driverName = "" // The driver name is inferred from the data source name
 	dataSourceName := svc.SQLDataSourceName()
+	if dataSourceName == "" && svc.Deployment() == connector.LOCAL {
+		dataSourceName = "file:local.sqlite"
+	}
 	if svc.Deployment() == connector.TESTING {
 		svc.db, err = sequel.OpenTesting(driverName, dataSourceName, svc.Plane())
 	} else {
@@ -393,38 +396,16 @@ func (svc *Service) List(ctx context.Context, query busstopapi.Query) (objs []*b
 	// -- OFFSET/LIMIT --
 	countArgsBeforeOffsetLimit := len(args)
 	if (query.Offset > 0 || query.Limit > 0) && query.Offset >= 0 && query.Limit >= 0 {
-		switch svc.db.DriverName() {
-		case "mysql":
-			// LIMIT is required to use OFFSET
-			stmt.WriteString(" LIMIT ?, ?")
-			args = append(args, query.Offset)
-			if query.Limit > 0 {
-				args = append(args, query.Limit)
-			} else {
-				args = append(args, 1<<62) // Infinity
-			}
-		case "mssql":
-			// OFFSET is required to use FETCH NEXT
-			stmt.WriteString(" OFFSET ? ROWS")
-			args = append(args, query.Offset)
-			if query.Limit > 0 {
-				stmt.WriteString(" FETCH NEXT ? ROWS ONLY")
-				args = append(args, query.Limit)
-			}
-		case "pgx":
-			if query.Offset > 0 {
-				stmt.WriteString(" OFFSET ? ROWS")
-				args = append(args, query.Offset)
-			}
-			if query.Limit > 0 {
-				stmt.WriteString(" LIMIT ?")
-				args = append(args, query.Limit)
-			}
+		limit := query.Limit
+		if limit == 0 {
+			limit = 1 << 62 // Infinity
 		}
+		stmt.WriteString(" LIMIT_OFFSET(?, ?)")
+		args = append(args, limit, query.Offset)
 	}
 
 	// Query
-	stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+	stmtStr := stmt.String()
 	f1 := func() (err error) {
 		// Query for the objects
 		rows, err := svc.db.QueryContext(ctx, stmtStr, args...)
@@ -611,8 +592,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []busstopapi.BusStop
 			selectStmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&selectStmt)
 			selectStmt.WriteString(") FOR UPDATE")
-			selectStmtStr := svc.db.ConformArgPlaceholders(selectStmt.String())
-			rows, err := tx.QueryContext(ctx, selectStmtStr, tenantID)
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
 			if err != nil {
 				tx.Rollback()
 				return deletedKeys, errors.Trace(err)
@@ -636,8 +616,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []busstopapi.BusStop
 				deleteStmt.WriteString(" WHERE tenant_id=? AND id IN (")
 				writeIDList(&deleteStmt)
 				deleteStmt.WriteString(")")
-				deleteStmtStr := svc.db.ConformArgPlaceholders(deleteStmt.String())
-				_, err = tx.ExecContext(ctx, deleteStmtStr, tenantID)
+				_, err = tx.ExecContext(ctx, deleteStmt.String(), tenantID)
 				if err != nil {
 					tx.Rollback()
 					return deletedKeys, errors.Trace(err)
@@ -648,7 +627,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []busstopapi.BusStop
 				return deletedKeys, errors.Trace(err)
 			}
 			deletedKeys = append(deletedKeys, foundKeys...)
-		case "pgx":
+		case "pgx", "sqlite":
 			// PostgreSQL supports RETURNING
 			var stmt strings.Builder
 			stmt.WriteString("DELETE FROM ")
@@ -656,8 +635,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []busstopapi.BusStop
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(") RETURNING id")
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), tenantID)
 			if err != nil {
 				return deletedKeys, errors.Trace(err)
 			}
@@ -680,8 +658,7 @@ func (svc *Service) BulkDelete(ctx context.Context, objKeys []busstopapi.BusStop
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(")")
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), tenantID)
 			if err != nil {
 				return deletedKeys, errors.Trace(err)
 			}
@@ -764,7 +741,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*busstopapi.BusStop, 
 	delete(firstMapping, "tenant_id")
 	delete(firstMapping, "revision")
 	delete(firstMapping, "created_at")
-	firstMapping["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+	firstMapping["updated_at"] = sequel.UnsafeSQL("NOW_UTC()")
 	columnsInOrder := slices.Sorted(maps.Keys(firstMapping))
 	paramsPerRow := 0
 	for _, k := range columnsInOrder {
@@ -803,7 +780,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*busstopapi.BusStop, 
 				delete(batchMappings[i], "tenant_id")
 				delete(batchMappings[i], "revision")
 				delete(batchMappings[i], "created_at")
-				batchMappings[i]["updated_at"] = sequel.UnsafeSQL(svc.db.NowUTC())
+				batchMappings[i]["updated_at"] = sequel.UnsafeSQL("NOW_UTC()")
 			}
 		}
 
@@ -878,10 +855,10 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*busstopapi.BusStop, 
 			}
 			stmt.WriteString(")")
 		}
-		if svc.db.DriverName() == "pgx" {
+		if svc.db.DriverName() == "pgx" || svc.db.DriverName() == "sqlite" {
 			stmt.WriteString(" RETURNING id")
 		}
-		stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+		stmtStr := stmt.String()
 		switch svc.db.DriverName() {
 		case "mysql":
 			// MySQL doesn't support RETURNING; use a transaction with SELECT FOR UPDATE
@@ -916,8 +893,7 @@ func (svc *Service) bulkUpdate(ctx context.Context, objs []*busstopapi.BusStop, 
 				selectStmt.WriteString(")")
 			}
 			selectStmt.WriteString(" FOR UPDATE")
-			selectStmtStr := svc.db.ConformArgPlaceholders(selectStmt.String())
-			rows, err := tx.QueryContext(ctx, selectStmtStr, tenantID)
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
 			if err != nil {
 				tx.Rollback()
 				return storedKeys, errors.Trace(err)
@@ -995,7 +971,7 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*busstopapi.BusStop) 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sqlNow := sequel.UnsafeSQL(svc.db.NowUTC())
+	sqlNow := sequel.UnsafeSQL("NOW_UTC()")
 	firstMapping["tenant_id"] = tenantID
 	firstMapping["revision"] = 1
 	firstMapping["created_at"] = sqlNow
@@ -1078,10 +1054,10 @@ func (svc *Service) BulkCreate(ctx context.Context, objs []*busstopapi.BusStop) 
 			stmt.WriteString(")")
 		}
 		switch svc.db.DriverName() {
-		case "pgx":
+		case "pgx", "sqlite":
 			stmt.WriteString(" RETURNING id")
 		}
-		stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
+		stmtStr := stmt.String()
 
 		// Execute and retrieve generated IDs
 		switch svc.db.DriverName() {
@@ -1265,9 +1241,9 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 		return objKeys[i].ID < objKeys[j].ID
 	})
 	tenantID := svc.tenantOf(ctx)
-	durSeconds := int(dur.Seconds())
-	if dur > 0 && durSeconds <= 0 {
-		durSeconds = 1
+	durMillis := dur.Milliseconds()
+	if dur > 0 && durMillis <= 0 {
+		durMillis = 1
 	}
 
 	for len(objKeys) > 0 {
@@ -1288,18 +1264,6 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 			}
 		}
 
-		// Build driver-specific date addition expression
-		now := svc.db.NowUTC()
-		var dateAddExpr string
-		switch svc.db.DriverName() {
-		case "mysql":
-			dateAddExpr = "DATE_ADD(" + now + ", INTERVAL ? SECOND)"
-		case "pgx":
-			dateAddExpr = now + " + MAKE_INTERVAL(secs => ?)"
-		case "mssql":
-			dateAddExpr = "DATEADD(SECOND, ?, " + now + ")"
-		}
-
 		switch svc.db.DriverName() {
 		case "mysql":
 			// MySQL doesn't support RETURNING; use a transaction with SELECT FOR UPDATE
@@ -1314,12 +1278,10 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 			writeIDList(&selectStmt)
 			selectStmt.WriteString(")")
 			if !forceful {
-				selectStmt.WriteString(" AND reserved_before<=")
-				selectStmt.WriteString(now)
+				selectStmt.WriteString(" AND reserved_before<=NOW_UTC()")
 			}
 			selectStmt.WriteString(" FOR UPDATE")
-			selectStmtStr := svc.db.ConformArgPlaceholders(selectStmt.String())
-			rows, err := tx.QueryContext(ctx, selectStmtStr, tenantID)
+			rows, err := tx.QueryContext(ctx, selectStmt.String(), tenantID)
 			if err != nil {
 				tx.Rollback()
 				return reservedKeys, errors.Trace(err)
@@ -1340,8 +1302,7 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 				var updateStmt strings.Builder
 				updateStmt.WriteString("UPDATE ")
 				updateStmt.WriteString(tableName)
-				updateStmt.WriteString(" SET reserved_before=")
-				updateStmt.WriteString(dateAddExpr)
+				updateStmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
 				updateStmt.WriteString(" WHERE tenant_id=? AND id IN (")
 				for i, k := range foundKeys {
 					if i > 0 {
@@ -1350,8 +1311,7 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 					updateStmt.WriteString(strconv.Itoa(k.ID))
 				}
 				updateStmt.WriteString(")")
-				updateStmtStr := svc.db.ConformArgPlaceholders(updateStmt.String())
-				_, err = tx.ExecContext(ctx, updateStmtStr, durSeconds, tenantID)
+				_, err = tx.ExecContext(ctx, updateStmt.String(), durMillis, tenantID)
 				if err != nil {
 					tx.Rollback()
 					return reservedKeys, errors.Trace(err)
@@ -1362,23 +1322,20 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 				return reservedKeys, errors.Trace(err)
 			}
 			reservedKeys = append(reservedKeys, foundKeys...)
-		case "pgx":
+		case "pgx", "sqlite":
 			// PostgreSQL supports RETURNING
 			var stmt strings.Builder
 			stmt.WriteString("UPDATE ")
 			stmt.WriteString(tableName)
-			stmt.WriteString(" SET reserved_before=")
-			stmt.WriteString(dateAddExpr)
+			stmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(")")
 			if !forceful {
-				stmt.WriteString(" AND reserved_before<=")
-				stmt.WriteString(now)
+				stmt.WriteString(" AND reserved_before<=NOW_UTC()")
 			}
 			stmt.WriteString(" RETURNING id")
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, durSeconds, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), durMillis, tenantID)
 			if err != nil {
 				return reservedKeys, errors.Trace(err)
 			}
@@ -1397,18 +1354,15 @@ func (svc *Service) bulkReserve(ctx context.Context, objKeys []busstopapi.BusSto
 			var stmt strings.Builder
 			stmt.WriteString("UPDATE ")
 			stmt.WriteString(tableName)
-			stmt.WriteString(" SET reserved_before=")
-			stmt.WriteString(dateAddExpr)
+			stmt.WriteString(" SET reserved_before=DATE_ADD_MILLIS(NOW_UTC(), ?)")
 			stmt.WriteString(" OUTPUT INSERTED.id")
 			stmt.WriteString(" WHERE tenant_id=? AND id IN (")
 			writeIDList(&stmt)
 			stmt.WriteString(")")
 			if !forceful {
-				stmt.WriteString(" AND reserved_before<=")
-				stmt.WriteString(now)
+				stmt.WriteString(" AND reserved_before<=NOW_UTC()")
 			}
-			stmtStr := svc.db.ConformArgPlaceholders(stmt.String())
-			rows, err := svc.db.QueryContext(ctx, stmtStr, durSeconds, tenantID)
+			rows, err := svc.db.QueryContext(ctx, stmt.String(), durMillis, tenantID)
 			if err != nil {
 				return reservedKeys, errors.Trace(err)
 			}

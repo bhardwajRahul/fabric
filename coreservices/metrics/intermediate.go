@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 	"github.com/microbus-io/fabric/coreservices/metrics/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ metricsapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -118,6 +120,10 @@ This key is required except in local development and tests.`),
 	)
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc

@@ -8,10 +8,10 @@ The `Actor` struct is a convenience pattern for representing the claims associat
 
 The properties of the `Actor` are organized into four groups:
 
-- **Standard claims** — Claims defined by the JWT specification, such as `iss` (issuer), `sub` (subject), and `exp` (expiration). The `idp` claim is set by the access token service to record the original identity provider.
-- **Identifiers** — Application-specific identifiers that uniquely identify the actor, such as user ID and tenant ID. These are typically constant for the life of the actor.
-- **Security claims** — Claims used as the basis for authorization, such as roles, groups, or scopes. These are typically assigned by an administrator and can change over the life of the actor.
-- **User preferences** — Claims under the control of the actor, such as time zone, locale, or name.
+- **Standard claims** - Claims defined by the JWT specification, such as `iss` (issuer), `sub` (subject), and `exp` (expiration). The `idp` claim is set by the access token service to record the original identity provider.
+- **Identifiers** - Application-specific identifiers that uniquely identify the actor, such as user ID and tenant ID. These are typically constant for the life of the actor.
+- **Security claims** - Claims used as the basis for authorization, such as roles, groups, or scopes. These are typically assigned by an administrator and can change over the life of the actor.
+- **User preferences** - Claims under the control of the actor, such as time zone, locale, or name.
 
 JSON tag names should follow the [IANA JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml#claims) where a registered claim name exists (e.g. `sub`, `iss`, `zoneinfo`, `given_name`, `locale`).
 
@@ -31,7 +31,7 @@ app.Add(
 )
 ```
 
-The bearer token microservice signs JWTs using Ed25519 private keys configured via `PrivateKeyPEM`. In `LOCAL` and `TESTING` deployments, a key is auto-generated if none is configured. In `LAB` and `PROD` deployments, a key must be generated and configured in `config.local.yaml`.
+The bearer token microservice signs JWTs using Ed25519 private keys configured via `PrivateKey`. In `LOCAL` and `TESTING` deployments, a key is auto-generated if none is configured. In `LAB` and `PROD` deployments, a key must be generated and configured in `config.local.yaml`.
 
 ```shell
 openssl genpkey -algorithm Ed25519 -out private.pem
@@ -39,17 +39,14 @@ openssl genpkey -algorithm Ed25519 -out private.pem
 
 ```yaml
 bearer.token.core:
-  PrivateKeyPEM: |
-    -----BEGIN PRIVATE KEY-----
-    MC4CAQAwBQYDK2VwBCIEIL...
-    -----END PRIVATE KEY-----
+  PrivateKey: MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
 ```
 
 The access token microservice uses ephemeral in-memory keys that are auto-generated and rotated automatically. No configuration is required.
 
 ### Authenticator
 
-An authenticator is a microservice that validates credentials, issues a bearer token JWT, and returns it to the user. Microbus does not include a standard authenticator — each solution creates its own to match its authentication requirements.
+An authenticator is a microservice that validates credentials, issues a bearer token JWT, and returns it to the user. Microbus does not include a standard authenticator - each solution creates its own to match its authentication requirements.
 
 The `Mint` endpoint of the bearer token service generates a token from a set of claims. Any claims set in the bearer token are exposed to the end user and cannot be changed without issuing another token. For this reason, it is recommended to include only static claims such as identifiers in the bearer token, and to use a [claims transformer](#claims-transformer) on the access token service to enrich it with sensitive or dynamic claims.
 
@@ -66,12 +63,12 @@ The [login example](../structure/examples-login.md) microservice demonstrates an
 
 ### Claims Transformer
 
-A claims transformer is a callback that enriches the access token with dynamic claims during minting — such as security claims or user preferences loaded from a database. The keys of the claims should match the JSON tag names of the `Actor`.
+A claims transformer is a callback that enriches the access token with dynamic claims during minting - such as security claims or user preferences loaded from a database. The keys of the claims should match the JSON tag names of the `Actor`.
 
 ```go
 app.Add(
 	accesstoken.NewService().Init(func(svc *accesstoken.Service) error {
-		err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
+		err := svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) (err error) {
 			userID := int(claims["uid"].(float64))
 			tenantID := int(claims["tid"].(float64))
 			user, err := usersapi.NewClient(svc).Load(ctx, tenantID, userID)

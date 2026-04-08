@@ -76,7 +76,7 @@ type ToDo interface {
 
 #### Step 5: Define the Config
 
-Define the configuration property in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment.
+Define the configuration property in `NewIntermediate` in `intermediate.go`, after the corresponding `HINT` comment. If other config definitions already exist under this HINT, add the new one after the last existing config definition.
 
 - Include `cfg.Description`, `cfg.DefaultValue`, `cfg.Validation`, and `cfg.Secret` as appropriate
 - Omit options that are empty or false
@@ -98,7 +98,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 #### Step 6: Implement the Getter and Setter
 
-Append the getter and setter methods to `intermediate.go`.
+Append the getter and setter methods at the end of `intermediate.go`.
 
 - Set an appropriate comment describing the config property
 - The getter converts the string value to the appropriate type
@@ -275,7 +275,7 @@ func (svc *Mock) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER:
 }
 ```
 
-Add a test case in `TestMyService_Mock`.
+Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
 
 ```go
 t.Run("on_changed_my_config", func(t *testing.T) { // MARKER: MyConfig
@@ -331,6 +331,8 @@ Skip the remainder of this step if instructed to be "quick" or to skip tests.
 
 Insert test cases at the bottom of the integration test function using the recommended pattern.
 
+- Do not remove the `HINT` comments.
+
 ```go
 t.Run("test_case_name", func(t *testing.T) {
 	assert := testarossa.For(t)
@@ -339,8 +341,6 @@ t.Run("test_case_name", func(t *testing.T) {
 	assert.NoError(err)
 })
 ```
-
-Do not remove the `HINT` comments.
 
 #### Step 12: Add to Config File
 

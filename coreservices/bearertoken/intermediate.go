@@ -32,6 +32,7 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
 	"github.com/microbus-io/fabric/coreservices/bearertoken/resources"
@@ -49,6 +50,7 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ bearertokenapi.Client
+	_ *workflow.Flow
 )
 
 const (
@@ -61,9 +63,9 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	OnChangedPrivateKeyPEM(ctx context.Context) (err error)     // MARKER: PrivateKeyPEM
-	OnChangedAltPrivateKeyPEM(ctx context.Context) (err error)  // MARKER: AltPrivateKeyPEM
-	Mint(ctx context.Context, claims any) (token string, err error) // MARKER: Mint
+	OnChangedPrivateKey(ctx context.Context) (err error)             // MARKER: PrivateKey
+	OnChangedAltPrivateKey(ctx context.Context) (err error)          // MARKER: AltPrivateKey
+	Mint(ctx context.Context, claims any) (token string, err error)  // MARKER: Mint
 	JWKS(ctx context.Context) (keys []bearertokenapi.JWK, err error) // MARKER: JWKS
 }
 
@@ -120,18 +122,22 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.DefaultValue("720h"),
 		cfg.Validation("dur [1m,]"),
 	)
-	svc.DefineConfig( // MARKER: PrivateKeyPEM
-		"PrivateKeyPEM",
-		cfg.Description(`PrivateKeyPEM is the Ed25519 private key in PEM format used to sign JWTs.`),
+	svc.DefineConfig( // MARKER: PrivateKey
+		"PrivateKey",
+		cfg.Description(`PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.`),
 		cfg.Secret(),
 	)
-	svc.DefineConfig( // MARKER: AltPrivateKeyPEM
-		"AltPrivateKeyPEM",
-		cfg.Description(`AltPrivateKeyPEM is an alternative Ed25519 private key in PEM format, used during key rotation.`),
+	svc.DefineConfig( // MARKER: AltPrivateKey
+		"AltPrivateKey",
+		cfg.Description(`AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.`),
 		cfg.Secret(),
 	)
 
 	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
 
 	_ = marshalFunction
 	return svc
@@ -202,14 +208,14 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
-	if changed("PrivateKeyPEM") { // MARKER: PrivateKeyPEM
-		err = svc.OnChangedPrivateKeyPEM(ctx)
+	if changed("PrivateKey") { // MARKER: PrivateKey
+		err = svc.OnChangedPrivateKey(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-	if changed("AltPrivateKeyPEM") { // MARKER: AltPrivateKeyPEM
-		err = svc.OnChangedAltPrivateKeyPEM(ctx)
+	if changed("AltPrivateKey") { // MARKER: AltPrivateKey
+		err = svc.OnChangedAltPrivateKey(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -234,31 +240,31 @@ func (svc *Intermediate) SetAuthTokenTTL(value time.Duration) (err error) { // M
 }
 
 /*
-PrivateKeyPEM is the Ed25519 private key in PEM format used to sign JWTs.
+PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
 */
-func (svc *Intermediate) PrivateKeyPEM() (value string) { // MARKER: PrivateKeyPEM
-	return svc.Config("PrivateKeyPEM")
+func (svc *Intermediate) PrivateKey() (value string) { // MARKER: PrivateKey
+	return svc.Config("PrivateKey")
 }
 
 /*
-SetPrivateKeyPEM sets the value of the configuration property.
+SetPrivateKey sets the value of the configuration property.
 */
-func (svc *Intermediate) SetPrivateKeyPEM(value string) (err error) { // MARKER: PrivateKeyPEM
-	return svc.SetConfig("PrivateKeyPEM", value)
+func (svc *Intermediate) SetPrivateKey(value string) (err error) { // MARKER: PrivateKey
+	return svc.SetConfig("PrivateKey", value)
 }
 
 /*
-AltPrivateKeyPEM is an alternative Ed25519 private key in PEM format, used during key rotation.
+AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.
 */
-func (svc *Intermediate) AltPrivateKeyPEM() (value string) { // MARKER: AltPrivateKeyPEM
-	return svc.Config("AltPrivateKeyPEM")
+func (svc *Intermediate) AltPrivateKey() (value string) { // MARKER: AltPrivateKey
+	return svc.Config("AltPrivateKey")
 }
 
 /*
-SetAltPrivateKeyPEM sets the value of the configuration property.
+SetAltPrivateKey sets the value of the configuration property.
 */
-func (svc *Intermediate) SetAltPrivateKeyPEM(value string) (err error) { // MARKER: AltPrivateKeyPEM
-	return svc.SetConfig("AltPrivateKeyPEM", value)
+func (svc *Intermediate) SetAltPrivateKey(value string) (err error) { // MARKER: AltPrivateKey
+	return svc.SetConfig("AltPrivateKey", value)
 }
 
 // doMint handles marshaling for Mint.
@@ -283,7 +289,7 @@ func (svc *Intermediate) doJWKS(w http.ResponseWriter, r *http.Request) (err err
 	return err // No trace
 }
 
-// marshalFunction handled marshaling for functional endpoints.
+// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {

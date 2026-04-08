@@ -6,6 +6,7 @@ CREATE TABLE person (
 	example VARCHAR(256) NULL,
 	created_at DATETIME(3) NOT NULL,
 	updated_at DATETIME(3) NOT NULL,
+	reserved_before DATETIME(3) NOT NULL,
 
 	CONSTRAINT person_pk PRIMARY KEY (tenant_id, id),
 	UNIQUE INDEX person_idx_id (id),
@@ -20,6 +21,7 @@ CREATE TABLE person (
 	example VARCHAR(256) NULL,
 	created_at TIMESTAMP(3) NOT NULL,
 	updated_at TIMESTAMP(3) NOT NULL,
+	reserved_before TIMESTAMP(3) NOT NULL,
 
 	CONSTRAINT person_pk PRIMARY KEY (tenant_id, id)
 );
@@ -36,8 +38,26 @@ CREATE TABLE person (
 	example NVARCHAR(256) NULL,
 	created_at DATETIME2(3) NOT NULL,
 	updated_at DATETIME2(3) NOT NULL,
+	reserved_before DATETIME2(3) NOT NULL,
 
 	CONSTRAINT person_pk PRIMARY KEY NONCLUSTERED (id),
 	CONSTRAINT person_idx_id UNIQUE CLUSTERED (tenant_id, id),
 	INDEX person_idx_created_at (tenant_id, created_at)
 );
+
+-- DRIVER: sqlite
+CREATE TABLE person (
+	tenant_id INTEGER NOT NULL,
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	revision INTEGER NOT NULL DEFAULT 0,
+	example TEXT,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	reserved_before DATETIME NOT NULL
+);
+-- DRIVER: sqlite
+CREATE UNIQUE INDEX person_idx_tenant_id ON person (tenant_id, id);
+-- DRIVER: sqlite
+CREATE UNIQUE INDEX person_idx_id ON person (id);
+-- DRIVER: sqlite
+CREATE INDEX person_idx_created_at ON person (tenant_id, created_at);
