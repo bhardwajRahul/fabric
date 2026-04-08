@@ -1980,16 +1980,18 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 	var breakpointsJSON string
 	err = svc.Parallel(
 		func() error {
-			return db.QueryRowContext(ctx,
+			err := db.QueryRowContext(ctx,
 				"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt FROM microbus_steps WHERE step_id=?",
 				stepID,
 			).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt)
+			return errors.Trace(err)
 		},
 		func() error {
-			return db.QueryRowContext(ctx,
+			err := db.QueryRowContext(ctx,
 				"SELECT flow_token, status, workflow_name, graph, actor_claims, trace_parent, notify_hostname, breakpoints FROM microbus_flows WHERE flow_id=?",
 				flowID,
 			).Scan(&flowToken, &flowStatus, &workflowName, &graphJSON, &actorClaimsJSON, &traceParent, &notifyHostname, &breakpointsJSON)
+			return errors.Trace(err)
 		},
 	)
 	if err != nil {
@@ -2157,17 +2159,19 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 		var activeSubgraphCount, completedSubgraphCount int
 		err = svc.Parallel(
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND status IN (?, ?, ?)",
 					flowID, stepDepth,
 					foremanapi.StatusCreated, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
 				).Scan(&activeSubgraphCount)
+				return errors.Trace(err)
 			},
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND status=?",
 					flowID, stepDepth, foremanapi.StatusCompleted,
 				).Scan(&completedSubgraphCount)
+				return errors.Trace(err)
 			},
 		)
 		if err != nil {
@@ -2555,18 +2559,20 @@ postExecution:
 		var failedSiblings int
 		err = svc.Parallel(
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND step_depth=? AND step_id!=? AND status IN (?, ?, ?)",
 					flowID, stepDepth, stepID,
 					foremanapi.StatusPending, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
 				).Scan(&unfinishedSiblings)
+				return errors.Trace(err)
 			},
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status IN (?, ?)",
 					flowID, stepDepth,
 					foremanapi.StatusFailed, foremanapi.StatusCancelled,
 				).Scan(&failedSiblings)
+				return errors.Trace(err)
 			},
 		)
 		if err != nil {
@@ -2863,26 +2869,35 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 	var subgraphGraphJSON string
 	err = svc.Parallel(
 		func() error {
-			return db.QueryRowContext(ctx,
+			err := db.QueryRowContext(ctx,
 				"SELECT step_id, changes FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status=?",
 				surgraphFlowID, surgraphStepDepth, foremanapi.StatusRunning,
 			).Scan(&surgraphStepID, &surgraphStepChangesJSON)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil // Another worker already handled this surgraph step
+			}
+			return errors.Trace(err)
 		},
 		func() error {
-			return db.QueryRowContext(ctx,
+			err := db.QueryRowContext(ctx,
 				"SELECT graph FROM microbus_flows WHERE flow_id=?",
 				surgraphFlowID,
 			).Scan(&surgraphGraphJSON)
+			return errors.Trace(err)
 		},
 		func() error {
-			return db.QueryRowContext(ctx,
+			err := db.QueryRowContext(ctx,
 				"SELECT graph FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND workflow_name=? AND status=?",
 				surgraphFlowID, surgraphStepDepth, subgraphWorkflowName, foremanapi.StatusCompleted,
 			).Scan(&subgraphGraphJSON)
+			return errors.Trace(err)
 		},
 	)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if surgraphStepID == 0 {
+		return nil // Another worker already advanced the surgraph step
 	}
 	var surgraphGraph workflow.Graph
 	if err = json.Unmarshal([]byte(surgraphGraphJSON), &surgraphGraph); err != nil {
@@ -3035,16 +3050,18 @@ func (svc *Service) surgraphChain(ctx context.Context, shardNum int, flowID int,
 		var surgraphStepID int
 		err = svc.Parallel(
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT flow_token FROM microbus_flows WHERE flow_id=?",
 					surgraphFlowID,
 				).Scan(&surgraphFlowToken)
+				return errors.Trace(err)
 			},
 			func() error {
-				return db.QueryRowContext(ctx,
+				err := db.QueryRowContext(ctx,
 					"SELECT step_id FROM microbus_steps WHERE flow_id=? AND step_depth=? AND task_name=?",
 					surgraphFlowID, surgraphStepDepth, workflowName,
 				).Scan(&surgraphStepID)
+				return errors.Trace(err)
 			},
 		)
 		if err != nil {
