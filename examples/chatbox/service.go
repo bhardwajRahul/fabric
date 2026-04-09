@@ -75,7 +75,7 @@ var opMap = map[string]string{
 Turn executes a single LLM turn using the chatbox demo provider.
 It pattern-matches math questions and generates tool calls to the calculator.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
 	if len(messages) == 0 {
 		return &llmapi.TurnCompletion{Content: "I'm the Chatbox demo. Ask me a math question!"}, nil
 	}
@@ -106,7 +106,7 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 			}
 
 			// Check if we have a calculator tool available
-			var calcTool *llmapi.ToolDef
+			var calcTool *llmapi.Tool
 			for i := range tools {
 				if strings.Contains(strings.ToLower(tools[i].Name), "arithmetic") ||
 					strings.Contains(strings.ToLower(tools[i].Name), "calculator") {
@@ -176,7 +176,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 
 	// Call the LLM service's Chat endpoint with the calculator as a tool
 	messages := []llmapi.Message{{Role: "user", Content: userMessage}}
-	tools := []llmapi.Tool{{URL: calculatorapi.Arithmetic.URL()}}
+	tools := []string{calculatorapi.Arithmetic.URL()}
 	result, err := llmapi.NewClient(svc).Chat(r.Context(), messages, tools)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

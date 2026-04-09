@@ -1,6 +1,6 @@
 ---
-name: Removing a Feature of a Microservice
-description: Removes a configuration property, functional endpoint, event source, event sink, web handler endpoint, ticker or metric, from a microservice. Use when explicitly asked by the user to remove a feature of a microservice.
+name: remove-feature
+description: TRIGGER when user asks to remove, delete, or drop an endpoint, config, metric, ticker, or event from a microservice. Safely removes code from service.go, intermediate.go, client.go, mock.go, service_test.go, and manifest.yaml.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
@@ -20,12 +20,20 @@ Removing a feature of a microservice:
 
 Scan the files in the directory of the microservice and its subdirectories for `MARKER: FeatureName` to locate the code related to the feature.
 
-A marker comment following `{` or `(` suggests that the entire code block should be removed.
+A marker comment on a line that opens a `{` or `(` group suggests that the entire block - including everything up to the matching closing brace or paren - should be removed.
 
 ```go
 if example { // MARKER: FeatureName
 	// ...
 }
+```
+
+```go
+svc.Subscribe( // MARKER: FeatureName
+	"FeatureName", svc.doFeatureName,
+	sub.At(..., ...)
+	...
+)
 ```
 
 Otherwise, the marker suggests that a single line should be removed.
@@ -34,10 +42,14 @@ Otherwise, the marker suggests that a single line should be removed.
 var example // MARKER: FeatureName
 ```
 
+```go
+FeatureName = Def{Method: "ANY", Route: "/feature-name"} // MARKER: FeatureName
+```
+
 #### Step 2: Remove Unused Custom Types
 
 If the deleted feature was using non-primitive custom types defined in `myserviceapi` directory, and those types are no longer used elsewhere by the microservice, remove their definition.
 
 #### Step 3: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = configuratorapi.Hostname
-	Version  = 253
+	Version  = 254
 )
 
 // ToDo is implemented by the service or mock.
@@ -103,25 +100,56 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
-	// Functional endpoints
-	svc.Subscribe(configuratorapi.Values.Method, configuratorapi.Values.Route, svc.doValues)                      // MARKER: Values
-	svc.Subscribe(configuratorapi.Refresh.Method, configuratorapi.Refresh.Route, svc.doRefresh)                   // MARKER: Refresh
-	svc.Subscribe(configuratorapi.SyncRepo.Method, configuratorapi.SyncRepo.Route, svc.doSyncRepo, sub.NoQueue()) // MARKER: SyncRepo
-	svc.Subscribe(configuratorapi.Values443.Method, configuratorapi.Values443.Route, svc.doValues443)             // MARKER: Values443
-	svc.Subscribe(configuratorapi.Refresh443.Method, configuratorapi.Refresh443.Route, svc.doRefresh443)          // MARKER: Refresh443
-	svc.Subscribe(configuratorapi.Sync443.Method, configuratorapi.Sync443.Route, svc.doSync443)                   // MARKER: Sync443
+	// HINT: Add functional endpoints here
+	svc.Subscribe( // MARKER: Values
+		"Values", svc.doValues,
+		sub.At(configuratorapi.Values.Method, configuratorapi.Values.Route),
+		sub.Description(`Values returns the values associated with the specified config property names for the caller microservice.`),
+		sub.Function(configuratorapi.ValuesIn{}, configuratorapi.ValuesOut{}),
+	)
+	svc.Subscribe( // MARKER: Refresh
+		"Refresh", svc.doRefresh,
+		sub.At(configuratorapi.Refresh.Method, configuratorapi.Refresh.Route),
+		sub.Description(`Refresh tells all microservices to contact the configurator and refresh their configs.
+An error is returned if any of the values sent to the microservices fails validation.`),
+		sub.Function(configuratorapi.RefreshIn{}, configuratorapi.RefreshOut{}),
+	)
+	svc.Subscribe( // MARKER: SyncRepo
+		"SyncRepo", svc.doSyncRepo,
+		sub.At(configuratorapi.SyncRepo.Method, configuratorapi.SyncRepo.Route),
+		sub.Description(`SyncRepo is used to synchronize values among replica peers of the configurator.`),
+		sub.Function(configuratorapi.SyncRepoIn{}, configuratorapi.SyncRepoOut{}),
+		sub.NoQueue(),
+	)
+	svc.Subscribe( // MARKER: Values443
+		"Values443", svc.doValues443,
+		sub.At(configuratorapi.Values443.Method, configuratorapi.Values443.Route),
+		sub.Description(`Deprecated.`),
+		sub.Function(configuratorapi.Values443In{}, configuratorapi.Values443Out{}),
+	)
+	svc.Subscribe( // MARKER: Refresh443
+		"Refresh443", svc.doRefresh443,
+		sub.At(configuratorapi.Refresh443.Method, configuratorapi.Refresh443.Route),
+		sub.Description(`Deprecated.`),
+		sub.Function(configuratorapi.Refresh443In{}, configuratorapi.Refresh443Out{}),
+	)
+	svc.Subscribe( // MARKER: Sync443
+		"Sync443", svc.doSync443,
+		sub.At(configuratorapi.Sync443.Method, configuratorapi.Sync443.Route),
+		sub.Description(`Deprecated.`),
+		sub.Function(configuratorapi.Sync443In{}, configuratorapi.Sync443Out{}),
+	)
 
 	// HINT: Add web endpoints here
 
 	// HINT: Add metrics here
 
-	// Tickers
-	svc.StartTicker("PeriodicRefresh", 20*time.Minute, svc.doPeriodicRefresh) // MARKER: PeriodicRefresh
+	// HINT: Add tickers here
+	svc.StartTicker("PeriodicRefresh", 20*time.Minute, svc.PeriodicRefresh) // MARKER: PeriodicRefresh
 
 	// HINT: Add configs here
 
@@ -133,72 +161,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Values
-			Type:        "function",
-			Name:        "Values",
-			Method:      configuratorapi.Values.Method,
-			Route:       configuratorapi.Values.Route,
-			Summary:     "Values(names []string) (values map[string]string)",
-			Description: `Values returns the values associated with the specified config property names for the caller microservice.`,
-			InputArgs:   configuratorapi.ValuesIn{},
-			OutputArgs:  configuratorapi.ValuesOut{},
-		},
-		{ // MARKER: Refresh
-			Type:    "function",
-			Name:    "Refresh",
-			Method:  configuratorapi.Refresh.Method,
-			Route:   configuratorapi.Refresh.Route,
-			Summary: "Refresh()",
-			Description: `Refresh tells all microservices to contact the configurator and refresh their configs.
-An error is returned if any of the values sent to the microservices fails validation.`,
-			InputArgs:  configuratorapi.RefreshIn{},
-			OutputArgs: configuratorapi.RefreshOut{},
-		},
-		{ // MARKER: SyncRepo
-			Type:        "function",
-			Name:        "SyncRepo",
-			Method:      configuratorapi.SyncRepo.Method,
-			Route:       configuratorapi.SyncRepo.Route,
-			Summary:     "SyncRepo(timestamp time.Time, values map[string]map[string]string)",
-			Description: `SyncRepo is used to synchronize values among replica peers of the configurator.`,
-			InputArgs:   configuratorapi.SyncRepoIn{},
-			OutputArgs:  configuratorapi.SyncRepoOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.
@@ -278,11 +240,6 @@ func (svc *Intermediate) doSync443(w http.ResponseWriter, r *http.Request) (err 
 		return err
 	})
 	return err // No trace
-}
-
-// doPeriodicRefresh handles the PeriodicRefresh ticker.
-func (svc *Intermediate) doPeriodicRefresh(ctx context.Context) (err error) { // MARKER: PeriodicRefresh
-	return svc.PeriodicRefresh(ctx)
 }
 
 // marshalFunction handles marshaling for functional endpoints.

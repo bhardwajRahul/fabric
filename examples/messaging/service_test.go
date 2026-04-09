@@ -42,47 +42,6 @@ var (
 	_ messagingapi.Client
 )
 
-func TestMessaging_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	ports := []string{
-		// HINT: Include all ports of functional or web endpoints
-		"443",
-	}
-	for _, port := range ports {
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(messagingapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-				}
-			}
-		})
-	}
-}
-
 func TestMessaging_Mock(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

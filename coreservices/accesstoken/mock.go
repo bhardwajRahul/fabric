@@ -18,10 +18,13 @@ package accesstoken
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/accesstoken/accesstokenapi"
@@ -29,7 +32,10 @@ import (
 
 var (
 	_ http.Request
+	_ json.Encoder
 	_ errors.TracedError
+	_ httpx.BodyReader
+	_ = utils.RandomIdentifier
 	_ *workflow.Flow
 	_ accesstokenapi.Client
 )
@@ -39,8 +45,8 @@ type Mock struct {
 	*Intermediate
 	mockRotateKey func(ctx context.Context) (err error)                            // MARKER: RotateKey
 	mockMint      func(ctx context.Context, claims any) (token string, err error)  // MARKER: Mint
-	mockLocalKeys func(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: LocalKeys
 	mockJWKS      func(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: JWKS
+	mockLocalKeys func(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: LocalKeys
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -95,22 +101,6 @@ func (svc *Mock) Mint(ctx context.Context, claims any) (token string, err error)
 	return token, errors.Trace(err)
 }
 
-// MockLocalKeys sets up a mock handler for LocalKeys.
-func (svc *Mock) MockLocalKeys(handler func(ctx context.Context) (keys []accesstokenapi.JWK, err error)) *Mock { // MARKER: LocalKeys
-	svc.mockLocalKeys = handler
-	return svc
-}
-
-// LocalKeys executes the mock handler.
-func (svc *Mock) LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, err error) { // MARKER: LocalKeys
-	if svc.mockLocalKeys == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	keys, err = svc.mockLocalKeys(ctx)
-	return keys, errors.Trace(err)
-}
-
 // MockJWKS sets up a mock handler for JWKS.
 func (svc *Mock) MockJWKS(handler func(ctx context.Context) (keys []accesstokenapi.JWK, err error)) *Mock { // MARKER: JWKS
 	svc.mockJWKS = handler
@@ -124,5 +114,21 @@ func (svc *Mock) JWKS(ctx context.Context) (keys []accesstokenapi.JWK, err error
 		return
 	}
 	keys, err = svc.mockJWKS(ctx)
+	return keys, errors.Trace(err)
+}
+
+// MockLocalKeys sets up a mock handler for LocalKeys.
+func (svc *Mock) MockLocalKeys(handler func(ctx context.Context) (keys []accesstokenapi.JWK, err error)) *Mock { // MARKER: LocalKeys
+	svc.mockLocalKeys = handler
+	return svc
+}
+
+// LocalKeys executes the mock handler.
+func (svc *Mock) LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, err error) { // MARKER: LocalKeys
+	if svc.mockLocalKeys == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	keys, err = svc.mockLocalKeys(ctx)
 	return keys, errors.Trace(err)
 }

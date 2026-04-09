@@ -17,10 +17,12 @@ limitations under the License.
 package connector
 
 import (
+	"net/http"
 	"regexp"
 	"testing"
 
 	"github.com/microbus-io/fabric/env"
+	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
@@ -179,4 +181,99 @@ func TestConnector_Version(t *testing.T) {
 	defer con.Shutdown(ctx)
 	err = con.SetVersion(123)
 	assert.Error(err)
+}
+
+func TestConnector_ExternalizeURL(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	con := NewConnector()
+	con.hostname = "my.service"
+
+	// With full X-Forwarded headers (proto + host + prefix)
+	h := http.Header{}
+	h.Set("X-Forwarded-Proto", "https")
+	h.Set("X-Forwarded-Host", "www.example.com")
+	h.Set("X-Forwarded-Prefix", "/app")
+	ctx := frame.ContextWithFrameOf(t.Context(), h)
+
+	// URL with scheme - remove scheme and prepend with base URL
+	assert.Equal(
+		"https://www.example.com/app/other.service/endpoint",
+		con.ExternalizeURL(ctx, "https://other.service/endpoint"),
+	)
+	assert.Equal(
+		"https://www.example.com/app/other.service/endpoint",
+		con.ExternalizeURL(ctx, "http://other.service/endpoint"),
+	)
+
+	// URL starting with // - prepend with base URL
+	assert.Equal(
+		"https://www.example.com/app/other.service/path",
+		con.ExternalizeURL(ctx, "//other.service/path"),
+	)
+
+	// URL starting with / - prepend with base URL and hostname
+	assert.Equal(
+		"https://www.example.com/app/my.service/some/resource",
+		con.ExternalizeURL(ctx, "/some/resource"),
+	)
+
+	// Other URL - return as-is
+	assert.Equal(
+		"relative/path",
+		con.ExternalizeURL(ctx, "relative/path"),
+	)
+	assert.Equal(
+		"",
+		con.ExternalizeURL(ctx, ""),
+	)
+
+	// Without X-Forwarded headers - base URL is empty, xf becomes "/"
+	ctx2 := frame.ContextWithFrameOf(t.Context(), http.Header{})
+	assert.Equal(
+		"/other.service/endpoint",
+		con.ExternalizeURL(ctx2, "https://other.service/endpoint"),
+	)
+	assert.Equal(
+		"/my.service/some/resource",
+		con.ExternalizeURL(ctx2, "/some/resource"),
+	)
+
+	// Without prefix
+	h2 := http.Header{}
+	h2.Set("X-Forwarded-Proto", "http")
+	h2.Set("X-Forwarded-Host", "proxy.local")
+	ctx3 := frame.ContextWithFrameOf(t.Context(), h2)
+	assert.Equal(
+		"http://proxy.local/service.host/api",
+		con.ExternalizeURL(ctx3, "https://service.host/api"),
+	)
+	assert.Equal(
+		"http://proxy.local/my.service/api",
+		con.ExternalizeURL(ctx3, "/api"),
+	)
+
+	// Host only, no proto
+	h3 := http.Header{}
+	h3.Set("X-Forwarded-Host", "proxy.local")
+	h3.Set("X-Forwarded-Prefix", "/base")
+	ctx4 := frame.ContextWithFrameOf(t.Context(), h3)
+	assert.Equal(
+		"//proxy.local/base/service.host/api",
+		con.ExternalizeURL(ctx4, "https://service.host/api"),
+	)
+
+	// Prefix only, no host or proto
+	h4 := http.Header{}
+	h4.Set("X-Forwarded-Prefix", "/base")
+	ctx5 := frame.ContextWithFrameOf(t.Context(), h4)
+	assert.Equal(
+		"/base/service.host/api",
+		con.ExternalizeURL(ctx5, "https://service.host/api"),
+	)
+	assert.Equal(
+		"/base/my.service/api",
+		con.ExternalizeURL(ctx5, "/api"),
+	)
 }

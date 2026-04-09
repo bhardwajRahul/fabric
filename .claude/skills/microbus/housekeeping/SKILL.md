@@ -1,6 +1,6 @@
 ---
-name: Housekeeping After a Change
-description: Post-change housekeeping steps to perform after modifying a microservice. Includes updating the manifest, documentation, versioning, and prompt tracking. Use after completing a change to a microservice, unless the relevant skill already includes these steps.
+name: housekeeping
+description: Run after completing any change to a microservice. Updates manifest.yaml, documentation, version, and topology diagram. Skip if the skill you just followed already includes housekeeping as a final step.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
@@ -73,4 +73,4 @@ Add a title node at the top of the graph using the workflow's route name in keba
 
 This step is required if the `downstream` section of `manifest.yaml` or `main/main.go` were changed. Otherwise, skip it.
 
-Follow the `microbus/chart-topology` skill.
+Follow the `chart-topology` skill.

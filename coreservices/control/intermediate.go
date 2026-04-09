@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = controlapi.Hostname
-	Version  = 235
+	Version  = 237
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,10 +60,11 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Ping(ctx context.Context) (pong int, err error)             // MARKER: Ping
-	ConfigRefresh(ctx context.Context) (err error)              // MARKER: ConfigRefresh
-	Trace(ctx context.Context, id string) (err error)           // MARKER: Trace
-	Metrics(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Metrics
+	Ping(ctx context.Context) (pong int, err error)                                                     // MARKER: Ping
+	ConfigRefresh(ctx context.Context) (err error)                                                      // MARKER: ConfigRefresh
+	Trace(ctx context.Context, id string) (err error)                                                   // MARKER: Trace
+	Metrics(w http.ResponseWriter, r *http.Request) (err error)                                         // MARKER: Metrics
+	OpenAPI(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) // MARKER: OpenAPI
 }
 
 // NewService creates a new instance of the microservice.
@@ -101,18 +99,47 @@ func NewIntermediate(impl ToDo) *Intermediate {
 The microservice itself does nothing and should not be included in applications.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// Functions
-	svc.Subscribe(controlapi.Ping.Method, controlapi.Ping.Route, svc.doPing, sub.NoQueue())                            // MARKER: Ping
-	svc.Subscribe(controlapi.ConfigRefresh.Method, controlapi.ConfigRefresh.Route, svc.doConfigRefresh, sub.NoQueue()) // MARKER: ConfigRefresh
-	svc.Subscribe(controlapi.Trace.Method, controlapi.Trace.Route, svc.doTrace, sub.NoQueue())                         // MARKER: Trace
+	svc.Subscribe( // MARKER: Ping
+		"Ping", svc.doPing,
+		sub.At(controlapi.Ping.Method, controlapi.Ping.Route),
+		sub.Description(`Ping responds to the message with a pong.`),
+		sub.Function(controlapi.PingIn{}, controlapi.PingOut{}),
+		sub.NoQueue(),
+	)
+	svc.Subscribe( // MARKER: ConfigRefresh
+		"ConfigRefresh", svc.doConfigRefresh,
+		sub.At(controlapi.ConfigRefresh.Method, controlapi.ConfigRefresh.Route),
+		sub.Description(`ConfigRefresh pulls the latest config values from the configurator microservice.`),
+		sub.Function(controlapi.ConfigRefreshIn{}, controlapi.ConfigRefreshOut{}),
+		sub.NoQueue(),
+	)
+	svc.Subscribe( // MARKER: Trace
+		"Trace", svc.doTrace,
+		sub.At(controlapi.Trace.Method, controlapi.Trace.Route),
+		sub.Description(`Trace forces exporting the indicated tracing span.`),
+		sub.Function(controlapi.TraceIn{}, controlapi.TraceOut{}),
+		sub.NoQueue(),
+	)
+	svc.Subscribe( // MARKER: OpenAPI
+		"OpenAPI", svc.doOpenAPI,
+		sub.At(controlapi.OpenAPI.Method, controlapi.OpenAPI.Route),
+		sub.Description(`OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their ingress boundary.`),
+		sub.Function(controlapi.OpenAPIIn{}, controlapi.OpenAPIOut{}),
+	)
 
 	// Web endpoints
-	svc.Subscribe(controlapi.Metrics.Method, controlapi.Metrics.Route, svc.Metrics, sub.NoQueue()) // MARKER: Metrics
+	svc.Subscribe( // MARKER: Metrics
+		"Metrics", svc.Metrics,
+		sub.At(controlapi.Metrics.Method, controlapi.Metrics.Route),
+		sub.Description(`Metrics returns the Prometheus metrics collected by the microservice.`),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	// HINT: Add metrics here
 
@@ -128,79 +155,6 @@ The microservice itself does nothing and should not be included in applications.
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Ping
-			Type:        "function",
-			Name:        "Ping",
-			Method:      controlapi.Ping.Method,
-			Route:       controlapi.Ping.Route,
-			Summary:     "Ping() (pong int)",
-			Description: `Ping responds with a pong.`,
-			InputArgs:   controlapi.PingIn{},
-			OutputArgs:  controlapi.PingOut{},
-		},
-		{ // MARKER: ConfigRefresh
-			Type:        "function",
-			Name:        "ConfigRefresh",
-			Method:      controlapi.ConfigRefresh.Method,
-			Route:       controlapi.ConfigRefresh.Route,
-			Summary:     "ConfigRefresh()",
-			Description: `ConfigRefresh pulls the latest config values.`,
-			InputArgs:   controlapi.ConfigRefreshIn{},
-			OutputArgs:  controlapi.ConfigRefreshOut{},
-		},
-		{ // MARKER: Trace
-			Type:        "function",
-			Name:        "Trace",
-			Method:      controlapi.Trace.Method,
-			Route:       controlapi.Trace.Route,
-			Summary:     "Trace(id string)",
-			Description: `Trace forces exporting a tracing span.`,
-			InputArgs:   controlapi.TraceIn{},
-			OutputArgs:  controlapi.TraceOut{},
-		},
-		{ // MARKER: Metrics
-			Type:        "web",
-			Name:        "Metrics",
-			Method:      controlapi.Metrics.Method,
-			Route:       controlapi.Metrics.Route,
-			Summary:     "Metrics()",
-			Description: `Metrics returns Prometheus metrics.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.
@@ -244,6 +198,17 @@ func (svc *Intermediate) doTrace(w http.ResponseWriter, r *http.Request) (err er
 	var out controlapi.TraceOut
 	err = marshalFunction(w, r, controlapi.Trace.Route, &in, &out, func(_ any, _ any) error {
 		err = svc.Trace(r.Context(), in.ID)
+		return err
+	})
+	return err // No trace
+}
+
+// doOpenAPI handles marshaling for the OpenAPI function.
+func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: OpenAPI
+	var in controlapi.OpenAPIIn
+	var out controlapi.OpenAPIOut
+	err = marshalFunction(w, r, controlapi.OpenAPI.Route, &in, &out, func(_ any, _ any) error {
+		out.HTTPResponseBody, out.HTTPStatusCode, err = svc.OpenAPI(r.Context())
 		return err
 	})
 	return err // No trace

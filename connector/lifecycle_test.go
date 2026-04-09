@@ -26,6 +26,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
@@ -202,9 +203,13 @@ func TestConnector_InitError(t *testing.T) {
 	assert.Error(err)
 
 	con = New("init.error.connector")
-	_, err = con.Subscribe("GET", ":BAD/path", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	})
+	err = con.Subscribe("BadPath",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", ":BAD/path"),
+		sub.Web(),
+	)
 	assert.Error(err)
 	err = con.Startup(ctx)
 	assert.Error(err)
@@ -250,10 +255,14 @@ func TestConnector_Restart(t *testing.T) {
 		shutdownCalled.Add(1)
 		return nil
 	})
-	con.Subscribe("GET", "/endpoint", func(w http.ResponseWriter, r *http.Request) error {
-		endpointCalled.Add(1)
-		return nil
-	})
+	con.Subscribe("Endpoint",
+		func(w http.ResponseWriter, r *http.Request) error {
+			endpointCalled.Add(1)
+			return nil
+		},
+		sub.At("GET", "/endpoint"),
+		sub.Web(),
+	)
 	con.StartTicker("tick", time.Millisecond*500, func(ctx context.Context) error {
 		tickerCalled.Add(1)
 		return nil
@@ -263,10 +272,15 @@ func TestConnector_Restart(t *testing.T) {
 	assert.Equal("default", con.configs["config"].Value)
 
 	// Startup
-	unsub, _ := configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte(`{"values":{"config":"overridden"}}`))
-		return nil
-	})
+	configurator.Subscribe("ValuesOverride",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte(`{"values":{"config":"overridden"}}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
+	unsub := func() error { return configurator.Unsubscribe("ValuesOverride") }
 
 	err = con.Startup(ctx)
 	assert.NoError(err)
@@ -293,10 +307,14 @@ func TestConnector_Restart(t *testing.T) {
 
 	// Restart
 	unsub()
-	configurator.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte(`{}`))
-		return nil
-	})
+	configurator.Subscribe("ValuesEmpty",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte(`{}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err = con.Startup(ctx)
 	assert.NoError(err)

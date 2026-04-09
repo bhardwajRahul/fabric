@@ -31,6 +31,7 @@ import (
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
@@ -46,47 +47,6 @@ var (
 	_ testarossa.TestingT
 	_ metricsapi.Client
 )
-
-func TestMetrics_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	ports := []string{
-		// HINT: Include all ports of functional or web endpoints
-		"443",
-	}
-	for _, port := range ports {
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(metricsapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-				}
-			}
-		})
-	}
-}
 
 func TestMetrics_Mock(t *testing.T) {
 	t.Parallel()
@@ -147,11 +107,15 @@ func TestMetrics_Collect(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		return nil
 	})
-	con1.Subscribe("GET", "/ten", func(w http.ResponseWriter, r *http.Request) error {
-		time.Sleep(100 * time.Millisecond)
-		w.Write([]byte("1234567890"))
-		return nil
-	})
+	con1.Subscribe("Ten",
+		func(w http.ResponseWriter, r *http.Request) error {
+			time.Sleep(100 * time.Millisecond)
+			w.Write([]byte("1234567890"))
+			return nil
+		},
+		sub.At("GET", "/ten"),
+		sub.Web(),
+	)
 	con2 := connector.New("two.collect")
 
 	// Initialize the testers

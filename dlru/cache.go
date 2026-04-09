@@ -67,8 +67,6 @@ type Cache struct {
 	svc        Service
 	hits       int64
 	misses     int64
-	unsub1     func() (err error)
-	unsub2     func() (err error)
 }
 
 // Service is an interface abstraction of a microservice used by the distributed cache.
@@ -93,7 +91,6 @@ func NewCache(ctx context.Context, svc Service, path string) (*Cache, error) {
 	}
 	err := c.start(ctx)
 	if err != nil {
-		c.stop(ctx)
 		return nil, errors.Trace(err)
 	}
 	return c, nil
@@ -146,29 +143,50 @@ func (c *Cache) MaxMemory() int {
 	return c.localCache.MaxWeight()
 }
 
-// start subscribed to handle cache events from peers.
-func (c *Cache) start(ctx context.Context) (err error) {
-	c.unsub1, err = c.svc.Subscribe("ANY", c.basePath+"/all", c.handleAll, sub.NoQueue())
-	if err != nil {
+// start registers the cache event handlers with the connector. Registration happens once per
+// connector instance (gated upstream by [Connector.distribCache] in the lifecycle code). The
+// subscriptions are tagged with [sub.Infra] so they bracket the user lifecycle: activated
+// before OnStartup runs and deactivated after OnShutdown returns. They also persist in the
+// connector's subscription map across Shutdown→Startup cycles - the connector's normal
+// activate/deactivate flow handles transport state. There is no symmetric stop here: cleanup
+// flows through the connector's infra deactivation pass.
+func (c *Cache) start(ctx context.Context) error {
+	if err := c.svc.Subscribe(c.subscriptionName("All"), c.handleAll,
+		sub.At("ANY", c.basePath+"/all"),
+		sub.Description("Distributed cache broadcast handler."),
+		sub.Web(),
+		sub.NoQueue(),
+		sub.Infra(),
+	); err != nil {
 		return errors.Trace(err)
 	}
-	c.unsub2, err = c.svc.Subscribe("ANY", c.basePath+"/rescue", c.handleRescue, sub.DefaultQueue())
-	if err != nil {
-		c.unsub1()
+	if err := c.svc.Subscribe(c.subscriptionName("Rescue"), c.handleRescue,
+		sub.At("ANY", c.basePath+"/rescue"),
+		sub.Description("Distributed cache rescue-load handler."),
+		sub.Web(),
+		sub.DefaultQueue(),
+		sub.Infra(),
+	); err != nil {
+		_ = c.svc.Unsubscribe(c.subscriptionName("All"))
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-// start unsubscribes from handling cache events from peers.
-func (c *Cache) stop(ctx context.Context) error {
-	if c.unsub1 != nil {
-		c.unsub1()
+// subscriptionName produces a per-cache, Go-style listen name (e.g. "DcacheAll", "DcacheRescue").
+// The cache's basePath is unique per [NewCache] call within a connector, but typical use is
+// one cache per connector keyed off the canonical ":888/dcache" path.
+func (c *Cache) subscriptionName(suffix string) string {
+	// Last path segment, capitalized. e.g. ":888/dcache" → "Dcache" → "DcacheAll".
+	last := c.basePath
+	if i := strings.LastIndex(last, "/"); i >= 0 {
+		last = last[i+1:]
 	}
-	if c.unsub2 != nil {
-		c.unsub2()
+	if last == "" {
+		last = "Cache"
 	}
-	return nil
+	last = strings.ToUpper(last[:1]) + last[1:]
+	return last + suffix
 }
 
 // handleAll handles a broadcast when the primary connects with its peers.
@@ -364,12 +382,11 @@ func (c *Cache) handleRescue(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// Close closes and clears the cache.
+// Close offloads any locally-cached entries to peers and clears the local cache. The
+// underlying subscriptions are owned by the connector and remain in its subscription map
+// across Shutdown→Startup cycles; transport-level cleanup happens via the connector's
+// infra deactivation pass.
 func (c *Cache) Close(ctx context.Context) error {
-	err := c.stop(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	c.offload(ctx)
 	c.localCache.Clear()
 	return nil

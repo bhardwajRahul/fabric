@@ -28,6 +28,7 @@ import (
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+
 	"github.com/microbus-io/fabric/examples/chatbox/chatboxapi"
 )
 
@@ -41,11 +42,11 @@ var (
 	_ chatboxapi.Client
 )
 
-// Mock is a mockable version of the microservice.
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTurn func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
-	mockDemo func(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: Demo
+	mockTurn func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
+	mockDemo func(w http.ResponseWriter, r *http.Request) (err error)                                                                 // MARKER: Demo
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -70,13 +71,13 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 }
 
 // MockTurn sets up a mock handler for Turn.
-func (svc *Mock) MockTurn(handler func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error)) *Mock { // MARKER: Turn
+func (svc *Mock) MockTurn(handler func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error)) *Mock { // MARKER: Turn
 	svc.mockTurn = handler
 	return svc
 }
 
 // Turn executes the mock handler.
-func (svc *Mock) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Mock) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
 	if svc.mockTurn == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return

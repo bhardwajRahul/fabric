@@ -37,10 +37,11 @@ var (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockPing          func(ctx context.Context) (pong int, err error)          // MARKER: Ping
-	mockConfigRefresh func(ctx context.Context) (err error)                    // MARKER: ConfigRefresh
-	mockTrace         func(ctx context.Context, id string) (err error)         // MARKER: Trace
-	mockMetrics       func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Metrics
+	mockPing          func(ctx context.Context) (pong int, err error)                                                  // MARKER: Ping
+	mockConfigRefresh func(ctx context.Context) (err error)                                                            // MARKER: ConfigRefresh
+	mockTrace         func(ctx context.Context, id string) (err error)                                                 // MARKER: Trace
+	mockMetrics       func(w http.ResponseWriter, r *http.Request) (err error)                                         // MARKER: Metrics
+	mockOpenAPI       func(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) // MARKER: OpenAPI
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -125,4 +126,20 @@ func (svc *Mock) Metrics(w http.ResponseWriter, r *http.Request) (err error) { /
 	}
 	err = svc.mockMetrics(w, r)
 	return errors.Trace(err)
+}
+
+// MockOpenAPI sets up a mock handler for OpenAPI.
+func (svc *Mock) MockOpenAPI(handler func(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error)) *Mock { // MARKER: OpenAPI
+	svc.mockOpenAPI = handler
+	return svc
+}
+
+// OpenAPI executes the mock handler.
+func (svc *Mock) OpenAPI(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) { // MARKER: OpenAPI
+	if svc.mockOpenAPI == nil {
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
+	}
+	httpResponseBody, httpStatusCode, err = svc.mockOpenAPI(ctx)
+	return httpResponseBody, httpStatusCode, errors.Trace(err)
 }

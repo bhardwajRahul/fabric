@@ -17,7 +17,7 @@ general:
   hostname: gemini.llm.core
   description: The Gemini LLM provider microservice implements the Turn endpoint for the Google Gemini API.
   package: github.com/microbus-io/fabric/coreservices/geminillm
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
   cloud: generativelanguage.googleapis.com
   modifiedAt: "2026-04-05T10:00:00Z"
 
@@ -47,7 +47,7 @@ configs:
 
 functions:
   Turn:
-    signature: Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)
+    signature: Turn(messages []Message, tools []Tool) (completion *TurnCompletion)
     description: Turn executes a single LLM turn using the Gemini provider.
     method: POST
     route: :444/turn

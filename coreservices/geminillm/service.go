@@ -63,7 +63,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
 	// Convert messages
 	contents := make([]geminiContent, 0, len(messages))
 	for _, msg := range messages {

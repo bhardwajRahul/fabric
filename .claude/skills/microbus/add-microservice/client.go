@@ -29,24 +29,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "myservice.myproject.mycompany"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-// HINT: Insert endpoint definitions here
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any

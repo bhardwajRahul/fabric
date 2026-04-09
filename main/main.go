@@ -27,6 +27,7 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/coreservices/accesstoken"
 	"github.com/microbus-io/fabric/coreservices/bearertoken"
+	"github.com/microbus-io/fabric/coreservices/chatgptllm"
 	"github.com/microbus-io/fabric/coreservices/claudellm"
 	"github.com/microbus-io/fabric/coreservices/configurator"
 	"github.com/microbus-io/fabric/coreservices/foreman"
@@ -35,9 +36,10 @@ import (
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/llm"
+	"github.com/microbus-io/fabric/coreservices/mcpportal"
 	"github.com/microbus-io/fabric/coreservices/metrics"
-	"github.com/microbus-io/fabric/coreservices/openaillm"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
+	// "github.com/microbus-io/fabric/coreservices/shell"
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
 	"github.com/microbus-io/fabric/examples/chatbox"
@@ -64,6 +66,7 @@ func main() {
 		// Core microservices
 		httpegress.NewService(),
 		openapiportal.NewService(),
+		mcpportal.NewService(),
 		metrics.NewService(),
 		bearertoken.NewService().Init(func(svc *bearertoken.Service) (err error) {
 			svc.AddClaimsTransformer(func(ctx context.Context, claims jwt.MapClaims) error {
@@ -80,9 +83,10 @@ func main() {
 			return nil
 		}),
 		foreman.NewService(),
+		// shell.NewService(),
 		llm.NewService(),
 		claudellm.NewService(),
-		openaillm.NewService(),
+		chatgptllm.NewService(),
 		geminillm.NewService(),
 	)
 	app.Add(

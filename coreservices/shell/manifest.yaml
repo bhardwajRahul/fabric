@@ -1,0 +1,33 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+# 	http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  name: Shell
+  hostname: shell.core
+  description: Shell enables running shell commands on a host.
+  package: github.com/microbus-io/fabric/coreservices/shell
+  frameworkVersion: 1.27.0
+  modifiedAt: "2026-04-29T12:00:00Z"
+functions:
+  Execute:
+    signature: Execute(cmd string, workDir string, stdin string, envars map[string]string) (exitCode int, stdout string, stderr string)
+    description: Execute runs a shell command on the host and returns the exit code, standard output, and standard error.
+    method: POST
+    route: :444/execute
+configs:
+  MaxOutputBytes:
+    signature: MaxOutputBytes() (maxOutputBytes int)
+    description: MaxOutputBytes caps the number of bytes retained from each of stdout and stderr. When a stream exceeds this cap, the head and tail are kept and the middle is elided with a marker.
+    validation: int [1024,]
+    default: 262144

@@ -1,6 +1,6 @@
 ---
-name: Adding a Ticker
-description: Creates or modify a ticker of a microservice. Use when explicitly asked by the user to create or modify a ticker or a recurring operation for a microservice.
+name: add-ticker
+description: TRIGGER when user asks to add a recurring job, periodic task, scheduled operation, or ticker. Affects intermediate.go, mock.go, manifest.yaml. Do NOT manually wire up tickers.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -163,4 +163,4 @@ t.Run("test_case_name", func(t *testing.T) {
 
 #### Step 7: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

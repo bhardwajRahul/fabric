@@ -21,175 +21,260 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/invopop/jsonschema"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/pub"
 
+	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 )
 
-// resolveTools fetches OpenAPI schemas for the given tools and converts them to tool definitions.
-func (svc *Service) resolveTools(ctx context.Context, tools []llmapi.Tool) ([]llmapi.ToolDef, error) {
-	defs := make([]llmapi.ToolDef, 0, len(tools))
-	for _, tool := range tools {
-		def, err := svc.resolveToolFromOpenAPI(ctx, tool)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		defs = append(defs, def)
+// fetchTools resolves a list of Microbus endpoint URLs into the LLM tool definitions consumed
+// by the chat loop. URLs are grouped by host:port; each distinct host's OpenAPI document is
+// fetched once via the control microservice and scanned for the operation matching each URL.
+func (svc *Service) fetchTools(ctx context.Context, toolURLs []string) ([]llmapi.Tool, error) {
+	if len(toolURLs) == 0 {
+		return nil, nil
 	}
-	return defs, nil
+
+	type urlInfo struct {
+		raw      string
+		hostPort string
+		docKey   string
+	}
+	infos := make([]urlInfo, 0, len(toolURLs))
+	hostOrder := make([]string, 0)
+	seenHost := map[string]bool{}
+	for _, raw := range toolURLs {
+		hostPort, docKey, err := canonicalizeToolURL(raw)
+		if err != nil {
+			return nil, errors.Trace(err, "url", raw)
+		}
+		infos = append(infos, urlInfo{raw: raw, hostPort: hostPort, docKey: docKey})
+		if !seenHost[hostPort] {
+			seenHost[hostPort] = true
+			hostOrder = append(hostOrder, hostPort)
+		}
+	}
+
+	docs := make(map[string]*openapi.Document, len(hostOrder))
+	var docsMu sync.Mutex
+	jobs := make([]func() error, 0, len(hostOrder))
+	for _, hp := range hostOrder {
+		hp := hp
+		jobs = append(jobs, func() error {
+			doc, err := svc.fetchOpenAPIDoc(ctx, hp)
+			if err != nil {
+				return errors.Trace(err, "host", hp)
+			}
+			docsMu.Lock()
+			docs[hp] = doc
+			docsMu.Unlock()
+			return nil
+		})
+	}
+	if err := svc.Parallel(jobs...); err != nil {
+		return nil, err // No trace
+	}
+
+	tools := make([]llmapi.Tool, 0, len(infos))
+	usedNames := map[string]bool{}
+	for _, info := range infos {
+		doc := docs[info.hostPort]
+		ops, ok := doc.Paths[info.docKey]
+		if !ok {
+			return nil, errors.New("no openapi entry for tool URL", "url", info.raw)
+		}
+		for method, op := range ops {
+			tool, err := operationToTool(info.raw, method, op, doc)
+			if err != nil {
+				return nil, errors.Trace(err, "url", info.raw)
+			}
+			name := tool.Name
+			for i := 2; usedNames[name]; i++ {
+				name = tool.Name + "_" + strconv.Itoa(i)
+			}
+			usedNames[name] = true
+			tool.Name = name
+			tools = append(tools, tool)
+		}
+	}
+	return tools, nil
 }
 
-// resolveToolFromOpenAPI fetches the OpenAPI spec for a tool's endpoint and extracts the tool definition.
-func (svc *Service) resolveToolFromOpenAPI(ctx context.Context, tool llmapi.Tool) (llmapi.ToolDef, error) {
-	toolURL := tool.URL
-	if !strings.Contains(toolURL, "://") {
-		toolURL = "https://" + toolURL
-	}
-
-	// The OpenAPI spec is at the same host:port with the path replaced by /openapi.json
-	var openAPIURL string
-	doubleSlash := strings.Index(toolURL, "://")
-	pathSlash := strings.Index(toolURL[doubleSlash+3:], "/")
-	if pathSlash > 0 {
-		openAPIURL = toolURL[:doubleSlash+3+pathSlash] + "/openapi.json"
-	} else {
-		openAPIURL = toolURL + "/openapi.json"
-	}
-
-	resp, err := svc.Request(
-		ctx,
-		pub.GET(openAPIURL),
-	)
+// fetchOpenAPIDoc retrieves the OpenAPI document for a specific host via the connector's
+// built-in /openapi.json handler, which lives on :888 regardless of the port a tool listens
+// on. The returned doc covers endpoints across all ports (filtered by the caller's claims);
+// the per-tool path lookup keys remain port-qualified, so the call site can match on the
+// tool's actual host:port.
+func (svc *Service) fetchOpenAPIDoc(ctx context.Context, hostPort string) (*openapi.Document, error) {
+	host, _, _ := strings.Cut(hostPort, ":")
+	doc, status, err := controlapi.NewClient(svc).ForHost(host).OpenAPI(ctx)
 	if err != nil {
-		return llmapi.ToolDef{}, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	if resp == nil || resp.Body == nil {
-		return llmapi.ToolDef{}, errors.New("nil response from OpenAPI endpoint: %s", openAPIURL)
+	if status != 0 && status != http.StatusOK {
+		return nil, errors.New("openapi fetch failed", "status", status)
 	}
-	defer resp.Body.Close()
+	if doc == nil {
+		return nil, errors.New("empty openapi document")
+	}
+	return doc, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return llmapi.ToolDef{}, errors.New("OpenAPI endpoint returned %d: %s", resp.StatusCode, openAPIURL)
+// canonicalizeToolURL parses a tool URL and returns the host:port (port defaulting to 443) and
+// the canonical OpenAPI path key (e.g. "/calculator.example:443/arithmetic").
+func canonicalizeToolURL(raw string) (hostPort, docKey string, err error) {
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
 	}
-
-	body, err := io.ReadAll(resp.Body)
+	u, err := url.Parse(raw)
 	if err != nil {
-		return llmapi.ToolDef{}, errors.Trace(err)
+		return "", "", errors.Trace(err)
 	}
-
-	// Parse the OpenAPI spec
-	var doc openapi.Doc
-	err = json.Unmarshal(body, &doc)
-	if err != nil {
-		return llmapi.ToolDef{}, errors.Trace(err)
+	if u.Hostname() == "" {
+		return "", "", errors.New("missing hostname in tool URL")
 	}
-
-	// Find the matching path and operation
-	fullPath := toolURL[doubleSlash+2:]
-	var op *openapi.Operation
-	var httpMethod string
-	for specPath, methods := range doc.Paths {
-		if specPath == fullPath {
-			for method, operation := range methods {
-				httpMethod = strings.ToUpper(method)
-				op = operation
-				break
-			}
-			break
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "http" {
+			port = "80"
+		} else {
+			port = "443"
 		}
 	}
-	if op == nil {
-		return llmapi.ToolDef{}, errors.New("endpoint not found in OpenAPI spec: %s", tool.URL)
+	hostPort = u.Hostname() + ":" + port
+	path := u.Path
+	if path == "" {
+		path = "/"
 	}
+	docKey = "/" + hostPort + path
+	return hostPort, docKey, nil
+}
 
-	// Build the tool name from the summary or path
-	name := op.Summary
-	if idx := strings.Index(name, "("); idx > 0 {
-		name = name[:idx]
+// operationToTool converts an OpenAPI operation into an LLM-callable tool.
+func operationToTool(toolURL, method string, op *openapi.Operation, doc *openapi.Document) (llmapi.Tool, error) {
+	switch op.XFeatureType {
+	case openapi.FeatureFunction, openapi.FeatureWeb, openapi.FeatureWorkflow:
+	default:
+		return llmapi.Tool{}, errors.New("unsupported feature type", "type", op.XFeatureType)
+	}
+	name := op.XName
+	if name == "" {
+		name = firstWord(op.Summary)
 	}
 	if name == "" {
-		name = strings.ReplaceAll(strings.TrimPrefix(fullPath, "/"), "/", "_")
+		name = firstWord(op.Description)
 	}
-
-	// Build the input schema
-	var inputSchema json.RawMessage
-	if op.RequestBody != nil && op.RequestBody.Content != nil {
-		// POST-style: use the request body schema
-		if jsonContent, ok := op.RequestBody.Content["application/json"]; ok && jsonContent.Schema != nil {
-			schema := jsonContent.Schema
-			// Follow $ref if present
-			if schema.Ref != "" && doc.Components != nil {
-				parts := strings.Split(schema.Ref, "/")
-				refName := parts[len(parts)-1]
-				if resolved, ok := doc.Components.Schemas[refName]; ok {
-					schema = resolved
-				}
-			}
-			inputSchema, _ = json.Marshal(schema)
-		}
-	} else if len(op.Parameters) > 0 {
-		// GET-style: build a schema from query parameters
-		inputSchema = buildSchemaFromParams(op.Parameters)
+	schema, err := operationInputSchema(op, doc)
+	if err != nil {
+		return llmapi.Tool{}, errors.Trace(err)
 	}
-	if inputSchema == nil {
-		inputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
-	}
-
-	description := op.Description
-	if tool.Description != "" {
-		description = tool.Description
-	}
-
-	return llmapi.ToolDef{
+	return llmapi.Tool{
 		Name:        name,
-		Description: description,
-		InputSchema: inputSchema,
-		URL:         tool.URL,
-		Method:      httpMethod,
-		FeatureType: op.XFeatureType,
+		Description: op.Description,
+		InputSchema: schema,
+		URL:         toolURL,
+		Method:      strings.ToUpper(method),
+		Type:        op.XFeatureType,
 	}, nil
 }
 
-// buildSchemaFromParams constructs a JSON Schema from OpenAPI query parameters.
-func buildSchemaFromParams(params []*openapi.Parameter) json.RawMessage {
-	properties := map[string]json.RawMessage{}
-	required := []string{}
-	for _, p := range params {
-		if p.In == "query" || p.In == "path" {
-			schemaJSON, _ := json.Marshal(p.Schema)
-			if p.Description != "" {
-				// Merge description into the schema
-				var s map[string]any
-				if json.Unmarshal(schemaJSON, &s) == nil {
-					s["description"] = p.Description
-					schemaJSON, _ = json.Marshal(s)
-				}
+// operationInputSchema builds the JSON Schema describing an operation's input. For operations
+// with a request body, the body schema is returned (resolving any $ref). Otherwise an object
+// schema is synthesized from the operation's parameters.
+func operationInputSchema(op *openapi.Operation, doc *openapi.Document) (json.RawMessage, error) {
+	if op.RequestBody != nil {
+		media := op.RequestBody.Content["application/json"]
+		if media != nil && media.Schema != nil {
+			schema := resolveSchemaRef(media.Schema, doc)
+			data, err := json.Marshal(schema)
+			if err != nil {
+				return nil, errors.Trace(err)
 			}
-			properties[p.Name] = schemaJSON
-			if p.Required {
-				required = append(required, p.Name)
-			}
+			return data, nil
 		}
 	}
-	result := map[string]any{
-		"type":       "object",
-		"properties": properties,
+	props := jsonschema.NewProperties()
+	required := []string{}
+	for _, p := range op.Parameters {
+		if p == nil || p.Name == "" {
+			continue
+		}
+		propSchema := resolveSchemaRef(p.Schema, doc)
+		if propSchema == nil {
+			propSchema = &jsonschema.Schema{Type: "string"}
+		}
+		if p.Description != "" && propSchema.Description == "" {
+			propSchema.Description = p.Description
+		}
+		props.Set(p.Name, propSchema)
+		if p.Required {
+			required = append(required, p.Name)
+		}
 	}
-	if len(required) > 0 {
-		result["required"] = required
+	schema := &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           props,
+		Required:             required,
+		AdditionalProperties: nil,
 	}
-	data, _ := json.Marshal(result)
-	return data
+	data, err := json.Marshal(schema)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return data, nil
+}
+
+// resolveSchemaRef resolves a "#/components/schemas/Foo" $ref against the document's components,
+// returning the referenced schema if found or the original schema otherwise.
+func resolveSchemaRef(schema *jsonschema.Schema, doc *openapi.Document) *jsonschema.Schema {
+	if schema == nil || schema.Ref == "" || doc == nil || doc.Components == nil {
+		return schema
+	}
+	const prefix = "#/components/schemas/"
+	if !strings.HasPrefix(schema.Ref, prefix) {
+		return schema
+	}
+	if resolved, ok := doc.Components.Schemas[schema.Ref[len(prefix):]]; ok && resolved != nil {
+		return resolved
+	}
+	return schema
+}
+
+// firstWord extracts the leading identifier-like token (letters, digits, underscore) from s,
+// skipping any leading non-identifier characters. Returns "" if no such token exists.
+func firstWord(s string) string {
+	start := -1
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		isIdent := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+		if start < 0 {
+			if isIdent {
+				start = i
+			}
+			continue
+		}
+		if !isIdent {
+			return s[start:i]
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	return s[start:]
 }
 
 // executeTool invokes a Microbus endpoint over the bus with the given arguments and returns the JSON result.
-func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools []llmapi.ToolDef) (json.RawMessage, error) {
+func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools []llmapi.Tool) (json.RawMessage, error) {
 	// Find the tool definition to get the URL and method
-	var def llmapi.ToolDef
+	var def llmapi.Tool
 	for _, t := range tools {
 		if t.Name == tc.Name {
 			def = t
@@ -206,7 +291,7 @@ func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools [
 		toolURL = "https://" + toolURL
 	}
 
-	// Use the method from OpenAPI, default to POST
+	// Use the method from the tool definition, default to POST
 	method := def.Method
 	if method == "" || method == "ANY" {
 		method = "POST"

@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = creditflowapi.Hostname
-	Version  = 5
+	Version  = 6
 )
 
 // ToDo is implemented by the service or mock.
@@ -111,7 +108,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`CreditFlow is an example microservice that demonstrates agentic workflow features.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
@@ -119,7 +115,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// HINT: Add web endpoints here
-	svc.Subscribe(creditflowapi.Demo.Method, creditflowapi.Demo.Route, svc.Demo) // MARKER: Demo
+	svc.Subscribe( // MARKER: Demo
+		"Demo", svc.Demo,
+		sub.At(creditflowapi.Demo.Method, creditflowapi.Demo.Route),
+		sub.Description(`Demo serves the demo page for the credit approval workflow.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -130,88 +131,95 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add inbound event sinks here
 
 	// HINT: Add task endpoints here
-	svc.Subscribe(creditflowapi.SubmitCreditApplication.Method, creditflowapi.SubmitCreditApplication.Route, svc.doSubmitCreditApplication)    // MARKER: SubmitCreditApplication
-	svc.Subscribe(creditflowapi.VerifyCredit.Method, creditflowapi.VerifyCredit.Route, svc.doVerifyCredit)                                     // MARKER: VerifyCredit
-	svc.Subscribe(creditflowapi.VerifyEmployment.Method, creditflowapi.VerifyEmployment.Route, svc.doVerifyEmployment)                         // MARKER: VerifyEmployment
-	svc.Subscribe(creditflowapi.InitIdentityVerification.Method, creditflowapi.InitIdentityVerification.Route, svc.doInitIdentityVerification) // MARKER: InitIdentityVerification
-	svc.Subscribe(creditflowapi.VerifySSN.Method, creditflowapi.VerifySSN.Route, svc.doVerifySSN)                                              // MARKER: VerifySSN
-	svc.Subscribe(creditflowapi.VerifyAddress.Method, creditflowapi.VerifyAddress.Route, svc.doVerifyAddress)                                  // MARKER: VerifyAddress
-	svc.Subscribe(creditflowapi.VerifyPhoneNumber.Method, creditflowapi.VerifyPhoneNumber.Route, svc.doVerifyPhoneNumber)                      // MARKER: VerifyPhoneNumber
-	svc.Subscribe(creditflowapi.IdentityDecision.Method, creditflowapi.IdentityDecision.Route, svc.doIdentityDecision)                         // MARKER: IdentityDecision
-	svc.Subscribe(creditflowapi.RequestMoreInfo.Method, creditflowapi.RequestMoreInfo.Route, svc.doRequestMoreInfo)                            // MARKER: RequestMoreInfo
-	svc.Subscribe(creditflowapi.ReviewCredit.Method, creditflowapi.ReviewCredit.Route, svc.doReviewCredit)                                     // MARKER: ReviewCredit
-	svc.Subscribe(creditflowapi.HandleCreditError.Method, creditflowapi.HandleCreditError.Route, svc.doHandleCreditError)                      // MARKER: HandleCreditError
-	svc.Subscribe(creditflowapi.Decision.Method, creditflowapi.Decision.Route, svc.doDecision)                                                 // MARKER: Decision
+	svc.Subscribe( // MARKER: SubmitCreditApplication
+		"SubmitCreditApplication", svc.doSubmitCreditApplication,
+		sub.At(creditflowapi.SubmitCreditApplication.Method, creditflowapi.SubmitCreditApplication.Route),
+		sub.Description(`SubmitCreditApplication receives a credit application and sets up the workflow state.`),
+		sub.Task(creditflowapi.SubmitCreditApplicationIn{}, creditflowapi.SubmitCreditApplicationOut{}),
+	)
+	svc.Subscribe( // MARKER: VerifyCredit
+		"VerifyCredit", svc.doVerifyCredit,
+		sub.At(creditflowapi.VerifyCredit.Method, creditflowapi.VerifyCredit.Route),
+		sub.Description(`VerifyCredit checks the applicant's credit score.`),
+		sub.Task(creditflowapi.VerifyCreditIn{}, creditflowapi.VerifyCreditOut{}),
+	)
+	svc.Subscribe( // MARKER: VerifyEmployment
+		"VerifyEmployment", svc.doVerifyEmployment,
+		sub.At(creditflowapi.VerifyEmployment.Method, creditflowapi.VerifyEmployment.Route),
+		sub.Description(`VerifyEmployment checks the applicant's employment status.`),
+		sub.Task(creditflowapi.VerifyEmploymentIn{}, creditflowapi.VerifyEmploymentOut{}),
+	)
+	svc.Subscribe( // MARKER: InitIdentityVerification
+		"InitIdentityVerification", svc.doInitIdentityVerification,
+		sub.At(creditflowapi.InitIdentityVerification.Method, creditflowapi.InitIdentityVerification.Route),
+		sub.Description(`InitIdentityVerification is the entry point for the identity verification subgraph.`),
+		sub.Task(creditflowapi.InitIdentityVerificationIn{}, creditflowapi.InitIdentityVerificationOut{}),
+	)
+	svc.Subscribe( // MARKER: VerifySSN
+		"VerifySSN", svc.doVerifySSN,
+		sub.At(creditflowapi.VerifySSN.Method, creditflowapi.VerifySSN.Route),
+		sub.Description(`VerifySSN checks the applicant's SSN.`),
+		sub.Task(creditflowapi.VerifySSNIn{}, creditflowapi.VerifySSNOut{}),
+	)
+	svc.Subscribe( // MARKER: VerifyAddress
+		"VerifyAddress", svc.doVerifyAddress,
+		sub.At(creditflowapi.VerifyAddress.Method, creditflowapi.VerifyAddress.Route),
+		sub.Description(`VerifyAddress checks the applicant's address.`),
+		sub.Task(creditflowapi.VerifyAddressIn{}, creditflowapi.VerifyAddressOut{}),
+	)
+	svc.Subscribe( // MARKER: VerifyPhoneNumber
+		"VerifyPhoneNumber", svc.doVerifyPhoneNumber,
+		sub.At(creditflowapi.VerifyPhoneNumber.Method, creditflowapi.VerifyPhoneNumber.Route),
+		sub.Description(`VerifyPhoneNumber checks the applicant's phone number.`),
+		sub.Task(creditflowapi.VerifyPhoneNumberIn{}, creditflowapi.VerifyPhoneNumberOut{}),
+	)
+	svc.Subscribe( // MARKER: IdentityDecision
+		"IdentityDecision", svc.doIdentityDecision,
+		sub.At(creditflowapi.IdentityDecision.Method, creditflowapi.IdentityDecision.Route),
+		sub.Description(`IdentityDecision determines whether the applicant's identity is verified based on SSN, address, and phone checks.`),
+		sub.Task(creditflowapi.IdentityDecisionIn{}, creditflowapi.IdentityDecisionOut{}),
+	)
+	svc.Subscribe( // MARKER: RequestMoreInfo
+		"RequestMoreInfo", svc.doRequestMoreInfo,
+		sub.At(creditflowapi.RequestMoreInfo.Method, creditflowapi.RequestMoreInfo.Route),
+		sub.Description(`RequestMoreInfo requests additional information for the credit review and increments the review attempt counter.`),
+		sub.Task(creditflowapi.RequestMoreInfoIn{}, creditflowapi.RequestMoreInfoOut{}),
+	)
+	svc.Subscribe( // MARKER: ReviewCredit
+		"ReviewCredit", svc.doReviewCredit,
+		sub.At(creditflowapi.ReviewCredit.Method, creditflowapi.ReviewCredit.Route),
+		sub.Description(`ReviewCredit performs a manual review of borderline credit scores.`),
+		sub.Task(creditflowapi.ReviewCreditIn{}, creditflowapi.ReviewCreditOut{}),
+	)
+	svc.Subscribe( // MARKER: HandleCreditError
+		"HandleCreditError", svc.doHandleCreditError,
+		sub.At(creditflowapi.HandleCreditError.Method, creditflowapi.HandleCreditError.Route),
+		sub.Description(`HandleCreditError handles a credit verification error by setting creditVerified to false.`),
+		sub.Task(creditflowapi.HandleCreditErrorIn{}, creditflowapi.HandleCreditErrorOut{}),
+	)
+	svc.Subscribe( // MARKER: Decision
+		"Decision", svc.doDecision,
+		sub.At(creditflowapi.Decision.Method, creditflowapi.Decision.Route),
+		sub.Description(`Decision determines whether to approve the credit application based on verification results.`),
+		sub.Task(creditflowapi.DecisionIn{}, creditflowapi.DecisionOut{}),
+	)
 
 	// HINT: Add graph endpoints here
-	svc.Subscribe(creditflowapi.IdentityVerification.Method, creditflowapi.IdentityVerification.Route, svc.doIdentityVerification) // MARKER: IdentityVerification
-	svc.Subscribe(creditflowapi.CreditApproval.Method, creditflowapi.CreditApproval.Route, svc.doCreditApproval)                   // MARKER: CreditApproval
+	svc.Subscribe( // MARKER: IdentityVerification
+		"IdentityVerification", svc.doIdentityVerification,
+		sub.At(creditflowapi.IdentityVerification.Method, creditflowapi.IdentityVerification.Route),
+		sub.Description(`IdentityVerification defines the workflow graph for the identity verification process.`),
+		sub.Workflow(creditflowapi.IdentityVerificationIn{}, creditflowapi.IdentityVerificationOut{}),
+	)
+	svc.Subscribe( // MARKER: CreditApproval
+		"CreditApproval", svc.doCreditApproval,
+		sub.At(creditflowapi.CreditApproval.Method, creditflowapi.CreditApproval.Route),
+		sub.Description(`CreditApproval defines the workflow graph for the full credit approval process.`),
+		sub.Workflow(creditflowapi.CreditApprovalIn{}, creditflowapi.CreditApprovalOut{}),
+	)
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Demo
-			Type:        "web",
-			Name:        "Demo",
-			Method:      creditflowapi.Demo.Method,
-			Route:       creditflowapi.Demo.Route,
-			Summary:     "Demo()",
-			Description: `Demo serves the demo page for the credit approval workflow.`,
-		},
-		{ // MARKER: IdentityVerification
-			Type:        "workflow",
-			Name:        "IdentityVerification",
-			Method:      "POST",
-			Route:       creditflowapi.IdentityVerification.Route,
-			Summary:     "IdentityVerification(applicantName string, ssn string, address string, phone string) (identityVerified bool)",
-			Description: `IdentityVerification defines the workflow graph for the identity verification process.`,
-			InputArgs:   creditflowapi.IdentityVerificationIn{},
-			OutputArgs:  creditflowapi.IdentityVerificationOut{},
-		},
-		{ // MARKER: CreditApproval
-			Type:        "workflow",
-			Name:        "CreditApproval",
-			Method:      "POST",
-			Route:       creditflowapi.CreditApproval.Route,
-			Summary:     "CreditApproval(applicant Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool)",
-			Description: `CreditApproval defines the workflow graph for the full credit approval process.`,
-			InputArgs:   creditflowapi.CreditApprovalIn{},
-			OutputArgs:  creditflowapi.CreditApprovalOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

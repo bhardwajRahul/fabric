@@ -1,6 +1,6 @@
 ---
-name: Modifying a Feature of a Microservice
-description: Modifies an existing functional endpoint, web handler endpoint, event source, event sink, task endpoint, workflow graph, configuration property, ticker or metric of a microservice. Use when explicitly asked by the user to modify a feature of a microservice.
+name: modify-feature
+description: TRIGGER when user asks to change the signature, route, method, arguments, or return type of an existing endpoint, config, metric, or ticker. Coordinates changes across service.go, intermediate.go, client.go, mock.go, and manifest.yaml.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
@@ -32,15 +32,15 @@ Determine the feature's name and type by reading the microservice's `manifest.ya
 
 | Manifest section | Feature type | Corresponding skill |
 |---|---|---|
-| `functions` | Functional endpoint | `microbus/add-function` |
-| `webs` | Web handler | `microbus/add-web` |
-| `configs` | Configuration property | `microbus/add-config` |
-| `tickers` | Ticker | `microbus/add-ticker` |
-| `metrics` | Metric | `microbus/add-metric` |
-| `outboundEvents` | Outbound event | `microbus/add-outbound-event` |
-| `inboundEvents` | Inbound event | `microbus/add-inbound-event` |
-| `tasks` | Task endpoint | `microbus/add-task` |
-| `workflows` | Workflow graph | `microbus/add-workflow` |
+| `functions` | Functional endpoint | `add-function` |
+| `webs` | Web handler | `add-web` |
+| `configs` | Configuration property | `add-config` |
+| `tickers` | Ticker | `add-ticker` |
+| `metrics` | Metric | `add-metric` |
+| `outboundEvents` | Outbound event | `add-outbound-event` |
+| `inboundEvents` | Inbound event | `add-inbound-event` |
+| `tasks` | Task endpoint | `add-task` |
+| `workflows` | Workflow graph | `add-workflow` |
 
 #### Step 3: Consult the Corresponding "Add" Skill
 
@@ -68,20 +68,22 @@ Edit each affected location, using the "add" skill's templates as the reference 
 For **implementation-only** changes, edit the handler in `service.go` and update tests in `service_test.go` if the expected behavior changes.
 
 For **property changes**, edit the relevant subset of marked locations. Common examples:
-- Route change: update the route const in `myserviceapi/client.go`, the `Subscribe` call in `intermediate.go`, and `manifest.yaml`
-- Method change: update the `Subscribe` call in `intermediate.go`, the `_method` value in client methods in `myserviceapi/client.go`, the OpenAPI registration in `intermediate.go`, and `manifest.yaml`
-- Required claims change: update the `Subscribe` call in `intermediate.go`, the OpenAPI registration in `intermediate.go`, and `manifest.yaml`
+- Route change: update the `Route` field of the `Def{...}` literal in `myserviceapi/endpoints.go` and the route in `manifest.yaml`. The `svc.Subscribe(...)` call in `intermediate.go` reads the route via `myserviceapi.Foo.Route` and needs no edit
+- Method change: update the `Method` field of the `Def{...}` literal in `myserviceapi/endpoints.go` and the method in `manifest.yaml`. The `svc.Subscribe(...)` call reads it via `myserviceapi.Foo.Method`
+- Description change: update the godoc on the handler in `service.go`, the `sub.Description(...)` argument inside the `svc.Subscribe("FeatureName", ...)` block in `intermediate.go`, the godoc on the Client/MulticastClient methods in `myserviceapi/client.go`, and the `description` in `manifest.yaml`
+- Required claims change: add or update the `sub.RequiredClaims(...)` option inside the `svc.Subscribe("FeatureName", ...)` block in `intermediate.go`, and update the `requiredClaims` field in `manifest.yaml`
 
 For **signature changes**, update every marked location. All of the following must be updated to reflect the new signature:
-- `intermediate.go` - `ToDo` interface method, marshaler function, OpenAPI registration (Summary, InputArgs, OutputArgs)
-- `myserviceapi/client.go` - In/Out/Response structs and their methods, Client method, MulticastClient method
+- `intermediate.go` - `ToDo` interface method, marshaler function, the `sub.Function/Web/Task/Workflow(In{}, Out{})` argument in the `svc.Subscribe` block (it carries the input/output struct types used for OpenAPI schema reflection)
+- `myserviceapi/endpoints.go` - In/Out structs (the `Def{...}` literal itself only carries Method/Route and is unchanged unless they too change)
+- `myserviceapi/client.go` - Response struct, Client method, MulticastClient method (and Hook for outbound events / Executor for tasks/workflows)
 - `myserviceapi/*.go` - Add definitions for new complex types; remove definitions for types no longer used
 - `service.go` - Handler function signature
 - `mock.go` - Mock field type, MockX setter signature, X executor signature, mock test case
 - `service_test.go` - Test cases that call the function with the old signature
 
-For **renames**, update every marked location with the new feature name. This includes all identifiers derived from the feature name (e.g., `MyFunction` becomes `NewName`, `doMyFunction` becomes `doNewName`, `MockMyFunction` becomes `MockNewName`, `MyFunctionIn` becomes `NewNameIn`, `RouteOfMyFunction` becomes `RouteOfNewName`, etc.) and all `MARKER` comments. In `service_test.go`, also rename the test function (e.g., `TestMyService_MyFunction` becomes `TestMyService_NewName`) and the mock subtest name.
+For **renames**, update every marked location with the new feature name. This includes all identifiers derived from the feature name (e.g., `MyFunction` becomes `NewName`, `doMyFunction` becomes `doNewName`, `MockMyFunction` becomes `MockNewName`, `MyFunctionIn` becomes `NewNameIn`, etc.), the first argument to `svc.Subscribe("MyFunction", ...)` in `intermediate.go`, and all `MARKER` comments. In `service_test.go`, also rename the test function (e.g., `TestMyService_MyFunction` becomes `TestMyService_NewName`) and the mock subtest name.
 
 #### Step 7: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

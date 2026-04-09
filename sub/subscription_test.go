@@ -17,12 +17,15 @@ limitations under the License.
 package sub
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/microbus-io/testarossa"
 )
 
-func TestSub_NewSub(t *testing.T) {
+var noopHandler HTTPHandler = func(w http.ResponseWriter, r *http.Request) error { return nil }
+
+func TestSub_NewSubscription(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
@@ -33,7 +36,8 @@ func TestSub_NewSub(t *testing.T) {
 		expectedRoute string
 	}
 	testCases := []testCase{
-		{"", "www.example.com", "443", ""},
+		// An empty Route is filled in with the per-feature default (:443/<kebab-name> for Web)
+		// by NewSubscription, so we don't test it here - see Route option godoc for default behavior.
 		{"/", "www.example.com", "443", "/"},
 		{":555", "www.example.com", "555", ""},
 		{":555/", "www.example.com", "555", "/"},
@@ -49,7 +53,7 @@ func TestSub_NewSub(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		s, err := NewSub("GET", "www.example.com", tc.spec, nil)
+		s, err := NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(tc.spec), Web())
 		assert.NoError(err)
 		assert.Equal(tc.expectedHost, s.Host)
 		assert.Equal(tc.expectedPort, s.Port)
@@ -66,7 +70,7 @@ func TestSub_InvalidPort(t *testing.T) {
 		":-5/path",
 	}
 	for _, s := range badSpecs {
-		_, err := NewSub("GET", "www.example.com", s, nil)
+		_, err := NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(s), Web())
 		assert.Error(err)
 	}
 }
@@ -80,11 +84,10 @@ func TestSub_Method(t *testing.T) {
 		"A B",
 		"ABC123",
 		"!",
-		"",
 		"*",
 	}
 	for _, s := range badSpecs {
-		_, err := NewSub(s, "www.example.com", "/", nil)
+		_, err := NewSubscription("Test", "www.example.com", noopHandler, Method(s), Route("/"), Web())
 		assert.Error(err)
 	}
 
@@ -95,9 +98,9 @@ func TestSub_Method(t *testing.T) {
 		"ANY", "ANY",
 	}
 	for i := 0; i < len(okSpecs); i += 2 {
-		sub, err := NewSub(okSpecs[i], "www.example.com", "/", nil)
+		s, err := NewSubscription("Test", "www.example.com", noopHandler, Method(okSpecs[i]), Route("/"), Web())
 		if assert.NoError(err) {
-			assert.Equal(okSpecs[i+1], sub.Method)
+			assert.Equal(okSpecs[i+1], s.Method)
 		}
 	}
 }
@@ -106,7 +109,7 @@ func TestSub_Apply(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	s, err := NewSub("GET", "www.example.com", "/path", nil)
+	s, err := NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route("/path"), Web())
 	assert.NoError(err)
 	assert.Equal("www.example.com", s.Queue)
 	assert.Equal("GET", s.Method)
@@ -130,15 +133,15 @@ func TestSub_Canonical(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	s, err := NewSub("GET", "www.example.com", ":567/path", nil)
+	s, err := NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path"), Web())
 	assert.NoError(err)
 	assert.Equal("www.example.com:567/path", s.Canonical())
 
-	s, err = NewSub("GET", "www.example.com", "/path", nil)
+	s, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route("/path"), Web())
 	assert.NoError(err)
 	assert.Equal("www.example.com:443/path", s.Canonical()) // default port 443
 
-	s, err = NewSub("GET", "www.example.com", "http://zzz.example.com/path", nil) // http
+	s, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route("http://zzz.example.com/path"), Web()) // http
 	assert.NoError(err)
 	assert.Equal("zzz.example.com:80/path", s.Canonical()) // default port 80 for http
 }
@@ -147,39 +150,39 @@ func TestSub_PathArguments(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	_, err := NewSub("GET", "www.example.com", ":567/path/{named}/{suffix...}", nil)
+	_, err := NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{named}/{suffix...}"), Web())
 	assert.NoError(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{}/{...}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{}/{...}"), Web())
 	assert.NoError(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{}"), Web())
 	assert.NoError(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{...}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{...}"), Web())
 	assert.NoError(err)
 
-	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/x{x}x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{x}x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{x}x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/x{x}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/x{x}"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/x{...}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/x{...}"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/}/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/}/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/x}/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/x}/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{x/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{x/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/}{/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/}{/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{{}/x", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{{}/x"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{%!@}"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{%!@...}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{%!@...}"), Web())
 	assert.Error(err)
-	_, err = NewSub("GET", "www.example.com", ":567/path/{...}/{}", nil)
+	_, err = NewSubscription("Test", "www.example.com", noopHandler, Method("GET"), Route(":567/path/{...}/{}"), Web())
 	assert.Error(err)
 }

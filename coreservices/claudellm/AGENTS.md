@@ -6,4 +6,4 @@
 
 This microservice implements the `Turn` endpoint for the Claude (Anthropic) LLM provider. It translates between the Microbus LLM message format and the Claude Messages API format, handling system messages, tool_use/tool_result content blocks, and error parsing.
 
-Types (`Message`, `ToolDef`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
+Types (`Message`, `Tool`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.

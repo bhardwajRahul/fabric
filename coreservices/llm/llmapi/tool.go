@@ -16,8 +16,29 @@ limitations under the License.
 
 package llmapi
 
-// Tool identifies a Microbus endpoint to expose as an LLM tool.
+import "encoding/json"
+
+// Tool is a Microbus endpoint resolved into the shape an LLM consumes as a callable tool. It is
+// produced internally by the LLM service from the OpenAPI documents of each requested host;
+// callers of [Client.Chat] supply endpoint URLs, not Tool values.
 type Tool struct {
-	URL         string `json:"url,omitzero" jsonschema:"description=URL is the Microbus endpoint URL to expose as a tool"`
-	Description string `json:"description,omitzero" jsonschema:"description=Description overrides the endpoint's OpenAPI description"`
+	Name        string          `json:"name,omitzero" jsonschema:"description=Name is the tool name presented to the LLM"`
+	Description string          `json:"description,omitzero" jsonschema:"description=Description is the natural-language description shown to the LLM"`
+	InputSchema json.RawMessage `json:"inputSchema,omitzero" jsonschema:"description=InputSchema is the JSON Schema for the tool's input parameters"`
+	URL         string          `json:"url,omitzero" jsonschema:"description=URL is the Microbus endpoint URL invoked when the LLM calls this tool"`
+	Method      string          `json:"method,omitzero" jsonschema:"description=Method is the HTTP method used to invoke the endpoint"`
+	Type        string          `json:"type,omitzero" jsonschema:"description=Type is the endpoint kind (function/web/workflow). Workflow tools are dispatched as dynamic subgraphs"`
+}
+
+// ToolCall represents an LLM's request to invoke a tool.
+type ToolCall struct {
+	ID        string          `json:"id,omitzero" jsonschema:"description=ID is a unique identifier for this tool call"`
+	Name      string          `json:"name,omitzero" jsonschema:"description=Name is the tool name the LLM wants to invoke"`
+	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema:"description=Arguments is the JSON-encoded arguments for the tool call"`
+}
+
+// TurnCompletion is the response from a single LLM turn.
+type TurnCompletion struct {
+	Content   string     `json:"content,omitzero" jsonschema:"description=Content is the text content of the response"`
+	ToolCalls []ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls requested by the LLM"`
 }

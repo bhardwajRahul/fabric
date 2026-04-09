@@ -44,25 +44,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "browser.example"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Browse = Def{Method: "ANY", Route: `/browse`} // MARKER: Browse
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any
@@ -227,6 +208,23 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 	}
 }
 
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 /*
 Browse shows a simple address bar and the source code of a URL.
 
@@ -267,23 +265,6 @@ func (_c MulticastClient) Browse(ctx context.Context, method string, relativeURL
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-}
-
-// marshalFunction handles marshaling for functional endpoints.
-func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
-	err := httpx.ReadInputPayload(r, route, in)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = execute(in, out)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, out)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.

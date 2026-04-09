@@ -31,6 +31,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/dlru"
+	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/lru"
 	"github.com/microbus-io/fabric/service"
@@ -322,4 +323,29 @@ func (c *Connector) Locality() string {
 // The cache is subject to race conditions in rare situations.
 func (c *Connector) DistribCache() *dlru.Cache {
 	return c.distribCache
+}
+
+/*
+ExternalizeURL converts an internal Microbus URL to an external one using the X-Forwarded-* headers from the context's frame.
+The internal Microbus URL is assumed relative to the hostname of this connector.
+Relative URLs are returned as is.
+
+Examples:
+  - https://my.host/my/path -> https://localhost:8080/my.host/my/path
+  - //other.host:123/other/path -> https://localhost:8080/other.host:123/other/path
+  - /my/path -> https://localhost:8080/my.host/my/path
+  - ../my-other/path -> ../my-other/path
+*/
+func (c *Connector) ExternalizeURL(ctx context.Context, internalURL string) string {
+	xf := frame.Of(ctx).XForwardedBaseURL() + "/"
+	if i := strings.Index(internalURL, "://"); i >= 0 {
+		return xf + internalURL[i+3:]
+	}
+	if strings.HasPrefix(internalURL, "//") {
+		return xf + internalURL[2:]
+	}
+	if strings.HasPrefix(internalURL, "/") {
+		return xf + c.hostname + internalURL
+	}
+	return internalURL
 }

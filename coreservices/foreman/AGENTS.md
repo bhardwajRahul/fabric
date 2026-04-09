@@ -52,7 +52,7 @@ Create ──► created ──► Start ──► running ──► completed
 
 **Start** - Transitions a `created` flow to `running`. Atomically updates all `created` steps to `pending` and the flow to `running` within a transaction, then enqueues the current step for execution. Does not set up notifications.
 
-**StartNotify** - Like `Start`, but also stores a `notify_hostname` on the flow. When the flow stops (completed, failed, cancelled, or interrupted), the foreman fires an `OnFlowStopped(flowID, status, snapshot)` event targeted at that hostname. The subscriber must use `foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(handler)` to receive these events.
+**StartNotify** - Like `Start`, but also stores a `notify_hostname` on the flow. When the flow stops (completed, failed, cancelled, or interrupted), the foreman fires an `OnFlowStopped(flowKey, status, snapshot)` event targeted at that hostname. The subscriber must use `foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(handler)` to receive these events.
 
 **Snapshot** - Returns the current state, status, task name, and step number of a flow. During fan-out (`step_id=0`), it queries the microbus_steps table directly to find the active steps.
 
@@ -66,7 +66,7 @@ Create ──► created ──► Start ──► running ──► completed
 
 **History** - Returns the step-by-step execution history as a slice of `FlowStep` records. Each `FlowStep` includes the step's key, depth, task name, state, changes, status, error, and timestamp. Steps that executed a subgraph have `Subgraph=true` and their `SubHistory` field contains the nested execution history of the subgraph flow. For forked flows, reconstructs the full lineage by walking `forked_flow_id` up to the root and querying steps across all ancestor flows with bounded `step_depth` ranges.
 
-**List** - Queries flows by status, workflow name, or thread key. Supports cursor-based pagination via `cursorFlowID` (newest first). Defaults to 100 results. Returns `ThreadKey` in each `FlowSummary`. When filtering by `ThreadKey`, only flows in that thread are returned (scoped to the thread's shard).
+**List** - Queries flows by status, workflow name, or thread key. Supports cursor-based pagination via `cursorFlowKey` (newest first). Defaults to 100 results. Returns `ThreadKey` in each `FlowSummary`. When filtering by `ThreadKey`, only flows in that thread are returned (scoped to the thread's shard).
 
 **BreakBefore** - Sets or clears a breakpoint that pauses execution before the named task runs. Breakpoints are stored in a `breakpoints` JSON column on the flow row as a `map[string]string` keyed by task name. During `processStep`, if the current task name matches a breakpoint and the step's `breakpoint_hit` flag is false, the foreman interrupts the flow (using the same interrupt propagation as `flow.Interrupt()`) and sets `breakpoint_hit=1` on the step. The flag prevents the breakpoint from re-triggering when the flow is resumed. Breakpoints are inherited by subgraph flows and forked flows.
 
@@ -76,7 +76,7 @@ Create ──► created ──► Start ──► running ──► completed
 
 ### Flow Stop Notifications
 
-When a flow is started via `StartNotify(flowID, notifyHostname)`, the foreman stores the hostname and fires `OnFlowStopped(flowID, status, snapshot)` events targeted at that hostname when the flow stops - i.e. reaches a terminal status (`completed`, `failed`, `cancelled`) or is `interrupted`. This matches the statuses that `Await` returns on.
+When a flow is started via `StartNotify(flowKey, notifyHostname)`, the foreman stores the hostname and fires `OnFlowStopped(flowKey, status, snapshot)` events targeted at that hostname when the flow stops - i.e. reaches a terminal status (`completed`, `failed`, `cancelled`) or is `interrupted`. This matches the statuses that `Await` returns on.
 
 For terminal statuses, the snapshot contains the flow's `final_state`. For `interrupted`, the snapshot is nil - the caller should use `Snapshot()` to read the current state including the interrupt payload.
 

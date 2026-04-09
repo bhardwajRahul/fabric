@@ -24,4 +24,4 @@ To use the chatbox as the provider, set `ProviderHostname: chatbox.example` on t
 
 ### Types
 
-All types (`Message`, `ToolDef`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to maintain a uniform interface with the real provider microservices.
+All types (`Message`, `Tool`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to maintain a uniform interface with the real provider microservices.

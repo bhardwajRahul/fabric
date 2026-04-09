@@ -18,8 +18,6 @@ package configurator
 
 import (
 	"context"
-	"io"
-	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -28,7 +26,6 @@ import (
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/utils"
@@ -46,47 +43,6 @@ var (
 	_ testarossa.Asserter
 	_ configuratorapi.Client
 )
-
-func TestConfigurator_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	ports := []string{
-		"444",
-		"888",
-	}
-	for _, port := range ports {
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(configuratorapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-				}
-			}
-		})
-	}
-}
 
 func TestConfigurator_Mock(t *testing.T) {
 	t.Parallel()

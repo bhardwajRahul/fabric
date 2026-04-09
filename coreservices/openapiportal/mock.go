@@ -37,7 +37,8 @@ var (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockList func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: List
+	mockDocument func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Document
+	mockExplorer func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Explorer
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -61,17 +62,33 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
-// MockList sets up a mock handler for List.
-func (svc *Mock) MockList(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: List
-	svc.mockList = handler
+// MockDocument sets up a mock handler for Document.
+func (svc *Mock) MockDocument(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Document
+	svc.mockDocument = handler
 	return svc
 }
 
-// List executes the mock handler.
-func (svc *Mock) List(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: List
-	if svc.mockList == nil {
+// Document executes the mock handler.
+func (svc *Mock) Document(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Document
+	if svc.mockDocument == nil {
 		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	err = svc.mockList(w, r)
+	err = svc.mockDocument(w, r)
 	return errors.Trace(err)
 }
+
+// MockExplorer sets up a mock handler for Explorer.
+func (svc *Mock) MockExplorer(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Explorer
+	svc.mockExplorer = handler
+	return svc
+}
+
+// Explorer executes the mock handler.
+func (svc *Mock) Explorer(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Explorer
+	if svc.mockExplorer == nil {
+		return errors.New("mock not implemented", http.StatusNotImplemented)
+	}
+	err = svc.mockExplorer(w, r)
+	return errors.Trace(err)
+}
+

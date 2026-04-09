@@ -1,15 +1,37 @@
 # Package `coreservices/control`
 
-The `control.core` microservice provides no function and in fact will not start. It is the clients in `controlapi` that are the essence of this package. These clients, and in particular the `controlapi.MulticastClient`, provide a programmatic interface to the [control subscriptions](../tech/control-subs.md) that all microservices support.
+The `control.core` microservice doesn't run - it's a code-generation artifact. Its role is to publish a typed client (`controlapi`) that other services use to invoke the control-plane endpoints every Microbus connector serves automatically.
 
-For example, to ping and discover all microservices:
+## Control-plane endpoints
+
+Every connector exposes a small set of built-in endpoints used for operations and introspection:
+
+| Endpoint | Purpose |
+|---|---|
+| `Ping` | Discovery and health check |
+| `ConfigRefresh` | Pull the latest configuration values from the configurator |
+| `Trace` | Force-export a tracing span |
+| `Metrics` | Prometheus metrics scrape |
+| `OnNewSubs` | Notification of new subscriptions on the bus |
+| `OpenAPI` | The microservice's OpenAPI 3.1 document |
+
+These run on the [control plane port](../tech/ports.md) and are reachable from anywhere on the bus, but typically not from the outside.
+
+## Typed client
+
+`controlapi` exposes a client whose methods mirror the endpoints above. To target a specific microservice, use `ForHost`:
 
 ```go
-ch := controlapi.NewMulticastClient(svc).ForHost("all").Ping(ctx)
-for r := range ch {
-	fromHost := frame.Of(r.HTTPResponse).FromHost()
-	fromID := frame.Of(r.HTTPResponse).FromID()
+doc, _, err := controlapi.NewClient(svc).ForHost("calculator.example").OpenAPI(ctx)
+```
+
+To address every microservice at once, target the special `all` hostname through the multicast client:
+
+```go
+for r := range controlapi.NewMulticastClient(svc).ForHost("all").Ping(ctx) {
+    fromHost := frame.Of(r.HTTPResponse).FromHost()
+    fromID := frame.Of(r.HTTPResponse).FromID()
 }
 ```
 
-Overriding the host of the client via `ForHost` is required because the default host `control.core` does not exist. In the preceding example, the special hostname `all` is used to address all microservices.
+`ForHost` is required because the default host (`control.core`) doesn't exist as a runnable service.

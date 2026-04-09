@@ -1,6 +1,6 @@
 ---
-name: Adding a Metric
-description: Creates or modify a metric of a microservice. Use when explicitly asked by the user to create or modify a custom metric for a microservice, or when it makes sense to measure a certain operation taken by the microservice.
+name: add-metric
+description: TRIGGER when user asks to add or modify a metric, counter, gauge, or histogram, or to track/measure an operation. Affects intermediate.go, manifest.yaml. Do NOT manually define metrics - this skill wires up recorders and OpenTelemetry names.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -296,4 +296,4 @@ t.Run("test_case_name", func(t *testing.T) {
 
 #### Step 13: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

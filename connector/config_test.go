@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
@@ -38,11 +39,15 @@ func TestConnector_SetConfig(t *testing.T) {
 	mockCfg := New("configurator.core")
 	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("{}"))
-		return nil
-	})
+	mockCfg.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("{}"))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
@@ -96,11 +101,15 @@ func TestConnector_FetchConfig(t *testing.T) {
 	mockCfg.SetPlane(plane)
 	fooValue := "baz"
 	intValue := "$$$"
-	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"values":{"foo":"` + fooValue + `","int":"` + intValue + `"}}`))
-		return nil
-	})
+	mockCfg.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"values":{"foo":"` + fooValue + `","int":"` + intValue + `"}}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
@@ -154,11 +163,15 @@ func TestConnector_NoFetchInTestingApp(t *testing.T) {
 	// Mock a config service
 	mockCfg := New("configurator.core")
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"values":{"foo":"baz"}}`))
-		return nil
-	})
+	mockCfg.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"values":{"foo":"baz"}}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
@@ -227,11 +240,15 @@ func TestConnector_CaseSensitiveConfig(t *testing.T) {
 	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
 	mockCfg.SetPlane(plane)
 	configValue := "bar"
-	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"values":{"foo-config_":"` + configValue + `"}}`))
-		return nil
-	})
+	mockCfg.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"values":{"foo-config_":"` + configValue + `"}}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err := mockCfg.Startup(ctx)
 	assert.NoError(err)
@@ -287,11 +304,15 @@ func TestConnector_ReadFromFile(t *testing.T) {
 	mockCfg := New("configurator.core")
 	mockCfg.SetDeployment(LAB) // Configs are disabled in TESTING
 	mockCfg.SetPlane(plane)
-	mockCfg.Subscribe("POST", ":888/values", func(w http.ResponseWriter, r *http.Request) error {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"values":{"Provider":"Configurator"}}`))
-		return nil
-	})
+	mockCfg.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"values":{"Provider":"Configurator"}}`))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
 
 	err := mockCfg.Startup(ctx)
 	assert.NoError(err)

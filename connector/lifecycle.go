@@ -232,6 +232,14 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 		}
 	}
 
+	// Activate infra subscriptions so framework-internal handlers (e.g. the distributed
+	// cache) are reachable from inside the user's OnStartup callback.
+	err = c.activateInfraSubs()
+	if err != nil {
+		err = errors.Trace(err)
+		return err
+	}
+
 	// Call the callback function
 	c.onStartupCalled = true
 	if c.onStartup != nil {
@@ -288,8 +296,9 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		lastErr = errors.Trace(err)
 	}
 
-	// Deactivate subscriptions
-	err = c.deactivateSubs()
+	// Deactivate user (non-infra) subscriptions. Infra subscriptions stay active so user
+	// OnShutdown code can still use framework-internal handlers (e.g. the distributed cache).
+	err = c.deactivateNonInfraSubs()
 	if err != nil {
 		lastErr = errors.Trace(err)
 	}
@@ -336,7 +345,17 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		}
 	}
 
-	// Close the distributed cache
+	// Deactivate infra subscriptions now that OnShutdown has completed. This stops the
+	// connector's own dlru handlers from receiving requests, so the upcoming offload
+	// distributes entries to peers only - not back into this connector's own cache.
+	err = c.deactivateInfraSubs()
+	if err != nil {
+		lastErr = errors.Trace(err)
+	}
+
+	// Close the distributed cache (offload local entries to peers, clear local cache).
+	// Local infra subs are down; peers still have their own dlru subs active and receive
+	// rescue requests normally.
 	if c.distribCache != nil {
 		err = c.distribCache.Close(ctx)
 		if err != nil {

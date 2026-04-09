@@ -326,8 +326,17 @@ Markers are scoped to a single microservice - different microservices can define
 
 ## Project Structure
 
-- Each microservice lives in its own directory with a `*api/` subdirectory for its public interface (client stubs, types)
+- Each microservice lives in its own directory with a `*api/` subdirectory for its public interface (client stubs, types, and endpoint declarations)
 - The main app is at `main/main.go`
+
+### API Package Layout
+
+Each `*api/` directory splits its contents across two files:
+
+- **`endpoints.go`** - the public contract: `Hostname` constant, the `Def{Method, Route}` struct type plus a `URL()` helper, In/Out struct types, and a package-level `var (...)` block of `Def` literals (one per feature, e.g. `MyEndpoint = Def{Method: "POST", Route: "/my-endpoint"}`).
+- **`client.go`** - the proxy stubs: `Client`, `MulticastClient`, `MulticastTrigger`, `Hook`, `Executor`, and per-feature methods with `Response` wrappers for multicast.
+
+Endpoint declarations and In/Out structs belong in `endpoints.go`, never `client.go`. The OpenAPI document is *not* maintained here - it's built at runtime by the connector (`connector/control.go`) from the live subscription map, scoped to `Function`/`Web`/`Workflow` features and filtered by the caller's actor claims.
 - `config.yaml` sets configuration properties, scoped by microservice hostname or `all:`. Secrets go in git-ignored `config.local.yaml`
   ```yaml
   my.service:
@@ -602,6 +611,14 @@ func (svc *Service) LoadObject(ctx context.Context, category int, name string) (
 }
 ```
 
+### Exposing Endpoints as LLM Tools
+
+To let an LLM invoke endpoints from other microservices, pass a `[]string` of canonical endpoint URLs (one per `Def`, e.g. `calculatorapi.Arithmetic.URL()`) as the third argument of `llmapi.NewClient(svc).Chat(ctx, messages, tools)`. Endpoints from multiple services can be combined. The LLM service fetches each host's OpenAPI document, finds the matching operation, and converts it into a callable tool. See the godoc on `llmapi.Client.Chat` for a full example.
+
+Only `FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints are exposed; tasks and outbound events are filtered out at the OpenAPI document level (in `connector/control.go`) so they never reach the tool builder. When two endpoints share the same name, the first keeps the bare name and subsequent ones get `_2`, `_3`, ... suffixes.
+
+The `llm.core` service orchestrates the tool-calling loop and dispatches workflow tools as dynamic subgraphs. Do not `ForHost` the client to a provider (`claudellm`, `chatgptllm`, `geminillm`) directly - that bypasses the loop.
+
 ### Connecting to Remote APIs
 
 Wrap each remote API (e.g. a third-party web service) in its own microservice. This:
@@ -668,21 +685,21 @@ Together, godoc sections cover scalar function arguments while `jsonschema` tags
 
 ### Building a Microservice With Skills
 
-Always use skills in `.claude/skills/` to build microservices. Scaffold with the appropriate skill (e.g. `microbus/add-microservice` or `sequel/add-microservice`), then use `add-feature` skills for each feature.
+Always use skills in `.claude/skills/` to build microservices. Scaffold with the appropriate skill (e.g. `add-microservice` or `add-sql-microservice`), then use `add-feature` skills for each feature.
 
 The available feature skills are:
 
 | Skill | Feature |
 |---|---|
-| `microbus/add-config` | Configuration property |
-| `microbus/add-metric` | Metric |
-| `microbus/add-outbound-event` | Outbound event |
-| `microbus/add-function` | Functional endpoint (RPC) |
-| `microbus/add-web` | Web handler endpoint |
-| `microbus/add-inbound-event` | Inbound event sink |
-| `microbus/add-task` | Task endpoint (agentic workflow step) |
-| `microbus/add-workflow` | Workflow graph (agentic workflow definition) |
-| `microbus/add-ticker` | Ticker |
+| `add-config` | Configuration property |
+| `add-metric` | Metric |
+| `add-outbound-event` | Outbound event |
+| `add-function` | Functional endpoint (RPC) |
+| `add-web` | Web handler endpoint |
+| `add-inbound-event` | Inbound event sink |
+| `add-task` | Task endpoint (agentic workflow step) |
+| `add-workflow` | Workflow graph (agentic workflow definition) |
+| `add-ticker` | Ticker |
 
 The recommended order is configs, metrics, outbound events, functions, webs, inbound events, tasks, workflows, then tickers. This order is not mandatory but it follows the natural dependency chain - for example, a function may reference a configuration property or record a metric, so those should exist first. Workflows reference task endpoints, so tasks should be defined first.
 

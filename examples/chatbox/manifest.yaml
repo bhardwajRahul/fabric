@@ -17,12 +17,12 @@ general:
   hostname: chatbox.example
   description: Chatbox is a demo LLM provider that pattern-matches user messages to demonstrate the tool-calling flow.
   package: github.com/microbus-io/fabric/examples/chatbox
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
   modifiedAt: "2026-04-05T10:00:00Z"
 
 functions:
   Turn:
-    signature: Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)
+    signature: Turn(messages []Message, tools []Tool) (completion *TurnCompletion)
     description: Turn executes a single LLM turn using the chatbox demo provider.
     method: POST
     route: :444/turn

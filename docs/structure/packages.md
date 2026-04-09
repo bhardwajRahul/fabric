@@ -13,14 +13,17 @@ Learn about each of the packages to get familiar with the Microbus codebase.
     - [foreman](../structure/coreservices-foreman.md) - The foreman orchestrates agentic workflow execution
     - [httpegress](../structure/coreservices-httpegress.md) - The HTTP egress proxy core microservice
     - [httpingress](../structure/coreservices-httpingress.md) - The HTTP ingress proxy core microservice
+    - [mcpportal](../structure/coreservices-mcpportal.md) - The MCP portal exposes the bus's tools to LLM clients via the Model Context Protocol
     - [metrics](../structure/coreservices-metrics.md) - The metrics microservice collects metrics from microservices in response to a request from Prometheus
     - [openapiportal](../structure/coreservices-openapiportal.md) - The OpenAPI portal microservice produces a portal page that lists all microservices with open endpoints
+    - [shell](../structure/coreservices-shell.md) - Runs shell commands on the host
     - [smtpingress](../structure/coreservices-smtpingress.md) - The SMTP ingress microservice listens for incoming emails and fires appropriate events
 - [dlru](../structure/dlru.md) - A distributed LRU cache that is shared among all peers of a microservice
 - [env](../structure/env.md) - Manages the loading of environment variables, with the option of overriding values for testing
 - [examples](../structure/examples.md) - Demo microservices
     - [browser](../structure/examples-browser.md) is an example of a microservice that uses the [HTTP egress core microservice](../structure/coreservices-httpegress.md)
     - [calculator](../structure/examples-calculator.md) demonstrates functional handlers
+    - [chatbox](../structure/examples-chatbox.md) demonstrates LLM tool calling with a mock provider
     - [eventsink and eventsource](../structure/examples-events.md) shows how events can be used to reverse the dependency between two microservices
     - [hello](../structure/examples-hello.md) demonstrates the key capabilities of the framework
     - [helloworld](../structure/examples-helloworld.md) demonstrates the classic minimalist example

@@ -307,31 +307,31 @@ type demoResult struct {
 }
 
 // runWorkflow creates, starts, awaits, and fetches the history of a credit approval workflow.
-func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Client, initialState creditflowapi.CreditApprovalIn) (flowID string, result demoResult, err error) {
-	flowID, err = foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), initialState)
+func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Client, initialState creditflowapi.CreditApprovalIn) (flowKey string, result demoResult, err error) {
+	flowKey, err = foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), initialState)
 	if err != nil {
 		return "", result, errors.Trace(err)
 	}
-	err = foremanClient.Start(ctx, flowID)
+	err = foremanClient.Start(ctx, flowKey)
 	if err != nil {
-		return flowID, result, errors.Trace(err)
+		return flowKey, result, errors.Trace(err)
 	}
-	result.status, err = foremanClient.AwaitAndParse(ctx, flowID, &result.out)
+	result.status, err = foremanClient.AwaitAndParse(ctx, flowKey, &result.out)
 	if err != nil {
-		return flowID, result, errors.Trace(err)
+		return flowKey, result, errors.Trace(err)
 	}
 
 	// Fetch history and Mermaid diagram in parallel
 	svc.Parallel(
 		func() error {
-			steps, err := foremanClient.History(ctx, flowID)
+			steps, err := foremanClient.History(ctx, flowKey)
 			if err == nil {
 				result.steps = flattenSteps(steps, false)
 			}
 			return nil
 		},
 		func() error {
-			res, err := foremanClient.HistoryMermaid(ctx, "?flowKey="+flowID+"&format=raw")
+			res, err := foremanClient.HistoryMermaid(ctx, "?flowKey="+flowKey+"&format=raw")
 			if err == nil {
 				defer res.Body.Close()
 				b, _ := io.ReadAll(res.Body)
@@ -340,7 +340,7 @@ func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Cl
 			return nil
 		},
 	)
-	return flowID, result, nil
+	return flowKey, result, nil
 }
 
 /*

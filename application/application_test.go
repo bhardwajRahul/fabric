@@ -28,6 +28,7 @@ import (
 	"github.com/microbus-io/fabric/coreservices/configurator"
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 )
@@ -104,10 +105,14 @@ func TestApplication_NoConflict(t *testing.T) {
 	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
 	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
 	alpha := connector.New("no.conflict.application")
-	alpha.Subscribe("GET", "id", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("alpha"))
-		return nil
-	})
+	alpha.Subscribe("ID",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("alpha"))
+			return nil
+		},
+		sub.At("GET", "id"),
+		sub.Web(),
+	)
 	appAlpha := New()
 	appAlpha.Add(alpha)
 	env.Pop("MICROBUS_PLANE")
@@ -117,10 +122,14 @@ func TestApplication_NoConflict(t *testing.T) {
 	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
 	env.Push("MICROBUS_DEPLOYMENT", connector.TESTING)
 	beta := connector.New("no.conflict.application")
-	beta.Subscribe("GET", "id", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("beta"))
-		return nil
-	})
+	beta.Subscribe("ID",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("beta"))
+			return nil
+		},
+		sub.At("GET", "id"),
+		sub.Web(),
+	)
 	appBeta := New()
 	appBeta.Add(beta)
 	env.Pop("MICROBUS_PLANE")
@@ -181,9 +190,13 @@ func TestApplication_DependencyStart(t *testing.T) {
 
 	// Beta takes half a second to start
 	beta := connector.New("beta.dependency.start.application")
-	beta.Subscribe("GET", "/ok", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	})
+	beta.Subscribe("Ok",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "/ok"),
+		sub.Web(),
+	)
 	beta.SetOnStartup(func(ctx context.Context) error {
 		time.Sleep(time.Millisecond * 500)
 		return nil

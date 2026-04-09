@@ -94,6 +94,9 @@ func TestUtils_LooksLikeJWT(t *testing.T) {
 	assert.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{})))
 	assert.True(LooksLikeJWT(newSignedToken(jwt.MapClaims{"claim": "something"})))
 	assert.True(LooksLikeJWT(newSignedToken(nil)))
+	// Unsigned tokens (alg=none header is 35 chars; signature section is empty)
+	assert.True(LooksLikeJWT("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.e30."))
+	assert.True(LooksLikeJWT("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ0ZXN0In0."))
 
 	// Bad characters
 	assert.False(LooksLikeJWT("eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.e$$.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"))

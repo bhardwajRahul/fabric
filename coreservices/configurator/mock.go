@@ -18,11 +18,14 @@ package configurator
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
@@ -30,7 +33,10 @@ import (
 
 var (
 	_ http.Request
+	_ json.Encoder
 	_ errors.TracedError
+	_ httpx.BodyReader
+	_ = utils.RandomIdentifier
 	_ *workflow.Flow
 	_ configuratorapi.Client
 )
@@ -38,12 +44,13 @@ var (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockValues     func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values
-	mockRefresh    func(ctx context.Context) (err error)                                                           // MARKER: Refresh
-	mockSyncRepo   func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: SyncRepo
-	mockValues443  func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values443
-	mockRefresh443 func(ctx context.Context) (err error)                                                           // MARKER: Refresh443
-	mockSync443    func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: Sync443
+	mockValues          func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values
+	mockRefresh         func(ctx context.Context) (err error)                                                           // MARKER: Refresh
+	mockSyncRepo        func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: SyncRepo
+	mockValues443       func(ctx context.Context, names []string) (values map[string]string, err error)                 // MARKER: Values443
+	mockRefresh443      func(ctx context.Context) (err error)                                                           // MARKER: Refresh443
+	mockSync443         func(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) // MARKER: Sync443
+	mockPeriodicRefresh func(ctx context.Context) (err error)                                                           // MARKER: PeriodicRefresh
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -92,10 +99,10 @@ func (svc *Mock) MockRefresh(handler func(ctx context.Context) (err error)) *Moc
 // Refresh executes the mock handler.
 func (svc *Mock) Refresh(ctx context.Context) (err error) { // MARKER: Refresh
 	if svc.mockRefresh == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	return errors.Trace(svc.mockRefresh(ctx))
+	err = svc.mockRefresh(ctx)
+	return errors.Trace(err)
 }
 
 // MockSyncRepo sets up a mock handler for SyncRepo.
@@ -107,10 +114,10 @@ func (svc *Mock) MockSyncRepo(handler func(ctx context.Context, timestamp time.T
 // SyncRepo executes the mock handler.
 func (svc *Mock) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: SyncRepo
 	if svc.mockSyncRepo == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	return errors.Trace(svc.mockSyncRepo(ctx, timestamp, values))
+	err = svc.mockSyncRepo(ctx, timestamp, values)
+	return errors.Trace(err)
 }
 
 // MockValues443 sets up a mock handler for Values443.
@@ -138,10 +145,10 @@ func (svc *Mock) MockRefresh443(handler func(ctx context.Context) (err error)) *
 // Refresh443 executes the mock handler.
 func (svc *Mock) Refresh443(ctx context.Context) (err error) { // MARKER: Refresh443
 	if svc.mockRefresh443 == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	return errors.Trace(svc.mockRefresh443(ctx))
+	err = svc.mockRefresh443(ctx)
+	return errors.Trace(err)
 }
 
 // MockSync443 sets up a mock handler for Sync443.
@@ -153,13 +160,23 @@ func (svc *Mock) MockSync443(handler func(ctx context.Context, timestamp time.Ti
 // Sync443 executes the mock handler.
 func (svc *Mock) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: Sync443
 	if svc.mockSync443 == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+		return errors.New("mock not implemented", http.StatusNotImplemented)
 	}
-	return errors.Trace(svc.mockSync443(ctx, timestamp, values))
+	err = svc.mockSync443(ctx, timestamp, values)
+	return errors.Trace(err)
 }
 
-// PeriodicRefresh is a no op in the mock.
-func (svc *Mock) PeriodicRefresh(ctx context.Context) (err error) {
-	return nil
+// MockPeriodicRefresh sets up a mock handler for PeriodicRefresh.
+func (svc *Mock) MockPeriodicRefresh(handler func(ctx context.Context) (err error)) *Mock { // MARKER: PeriodicRefresh
+	svc.mockPeriodicRefresh = handler
+	return svc
+}
+
+// PeriodicRefresh executes the mock handler.
+func (svc *Mock) PeriodicRefresh(ctx context.Context) (err error) { // MARKER: PeriodicRefresh
+	if svc.mockPeriodicRefresh == nil {
+		return errors.New("mock not implemented", http.StatusNotImplemented)
+	}
+	err = svc.mockPeriodicRefresh(ctx)
+	return errors.Trace(err)
 }

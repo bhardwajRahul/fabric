@@ -1,25 +1,27 @@
 # Package `coreservices/llm`
 
-The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. It allows callers to send a prompt along with a list of Microbus endpoint URLs as "tools". The service handles schema discovery from OpenAPI, LLM communication, and tool execution over the bus.
+The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Callers pass a conversation and a list of endpoint URLs they want to expose as tools. The service drives the tool-calling loop, dispatches tool calls over the bus, and returns the completed conversation.
 
 Key capabilities:
 
-- **Provider-agnostic** - supports Claude, OpenAI, and Gemini backends via configuration
-- **Automatic tool schema discovery** - fetches endpoint schemas from OpenAPI at call time to build tool definitions in the provider's native format
-- **Tool execution over the bus** - invokes Microbus endpoints directly when the LLM requests a tool call, with security context propagated naturally
-- **Multi-turn workflow** - the built-in `ChatLoop` workflow orchestrates conversations that exceed a single request's time budget, with support for human-in-the-loop via `flow.Interrupt()`
+- **Provider-agnostic** - delegates to a provider microservice (`claudellm`, `chatgptllm`, or `geminillm`) selected by the `ProviderHostname` config. Swapping providers requires no code changes.
+- **OpenAPI-derived tool schemas** - callers identify tools by their canonical Microbus URL. At chat time the LLM service fetches each host's `:888/openapi.json` document in parallel (the connector's built-in handler) and reflects the matching operation's request-body schema into a JSON Schema for the LLM. Authorization flows through automatically: the OpenAPI handler filters by the caller's actor claims, so the LLM only sees tools the actor is authorized to invoke.
+- **Tool execution over the bus** - invokes Microbus endpoints directly when the LLM requests a tool call, with security context propagated through the request frame.
+- **Multi-turn workflow** - the built-in `ChatLoop` workflow orchestrates conversations that exceed a single request's time budget, with durability, human-in-the-loop support via `flow.Interrupt()`, and natural continuation via `foremanapi.Continue`.
 
 ## Chat
 
-The `Chat` functional endpoint sends messages to an LLM with optional tools and returns the updated conversation. It handles the tool-calling loop internally, up to a configurable number of rounds:
+The `Chat` functional endpoint sends messages to an LLM with optional tools and returns the updated conversation. It handles the tool-calling loop internally, up to `MaxToolRounds` rounds:
 
 ```go
 messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-tools := []llmapi.Tool{{URL: "https://calculator.example/arithmetic"}}
-messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools, 0)
+tools := []string{calculatorapi.Arithmetic.URL()}
+messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools)
 ```
 
-The output `messagesOut` contains the full conversation including new messages produced by the LLM. Passing `0` for `maxToolRounds` uses the configured default.
+Each entry in `tools` is the URL of a downstream microservice's endpoint. Only `function`, `web`, and `workflow` endpoints can be exposed as tools - tasks and outbound events are silently skipped by the connector's OpenAPI handler. When two endpoints share the same operation name, the first keeps the bare name and subsequent ones get `_2`, `_3`, ... suffixes in argument order.
+
+The output `messagesOut` contains the full conversation including new messages produced by the LLM.
 
 ## ChatLoop Workflow
 
@@ -44,19 +46,38 @@ newFlowID, _ := foremanapi.NewClient(svc).Continue(ctx, flowID, map[string]any{
 
 ## Configuration
 
+The `llm.core` service holds only orchestration settings. Provider-specific settings (`BaseURL`, `APIKey`, `Model`) live on the provider microservice.
+
+### `llm.core`
+
 | Config | Type | Default | Description |
 |--------|------|---------|-------------|
-| `Provider` | string | `claude` | LLM provider: `claude`, `gemini`, or `openai` |
-| `BaseURL` | url | `https://api.anthropic.com` | Base URL of the LLM API |
-| `APIKey` | secret | | API key for the LLM provider |
-| `Model` | string | `claude-haiku-4-5` | Model identifier |
-| `MaxToolRounds` | int | `10` | Maximum tool call round-trips per invocation |
+| `ProviderHostname` | string | `claude.llm.core` | Hostname of the provider microservice that implements the `Turn` endpoint. Set to `chatgpt.llm.core` or `gemini.llm.core` to switch providers. |
+| `MaxToolRounds` | int | `10` | Maximum tool call round-trips per `Chat` invocation. |
 
-The `APIKey` is a secret configuration property and should be set in `config.local.yaml`:
+### Provider service (`claudellm`, `chatgptllm`, `geminillm`)
+
+| Config | Type | Default (Claude) | Description |
+|--------|------|---------|-------------|
+| `BaseURL` | url | `https://api.anthropic.com` | Base URL of the provider's API. |
+| `APIKey` | secret | | API key for the provider. |
+| `Model` | string | `claude-haiku-4-5` | Model identifier. |
+
+The `APIKey` is a secret and should be set in `config.local.yaml`, scoped by the provider's hostname:
+
+```yaml
+claude.llm.core:
+  APIKey: sk-ant-your-key-here
+```
+
+To point `llm.core` at a different provider:
 
 ```yaml
 llm.core:
-  APIKey: sk-ant-your-key-here
+  ProviderHostname: chatgpt.llm.core
+
+chatgpt.llm.core:
+  Model: gpt-4
 ```
 
 ## Mocking
@@ -65,7 +86,7 @@ To mock the LLM microservice in tests:
 
 ```go
 llmMock := llm.NewMock()
-llmMock.MockChat(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool, maxToolRounds int) (messagesOut []llmapi.Message, err error) {
+llmMock.MockChat(func(ctx context.Context, messages []llmapi.Message, tools []string) (messagesOut []llmapi.Message, err error) {
     return []llmapi.Message{{Role: "assistant", Content: "Mocked response"}}, nil
 })
 ```

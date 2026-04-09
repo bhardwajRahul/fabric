@@ -10,10 +10,11 @@ The minted token includes several critical claims that are set automatically and
 
 | Claim | Description |
 |---|---|
-| `iss` | Set to `microbus://bearer.token.core`, identifying the bearer token service as the issuer |
+| `iss` | Set to `https://bearer.token.core`, identifying the bearer token service as the issuer |
 | `iat` | Issued-at timestamp, backdated 5 minutes to account for clock skew |
 | `exp` | Expiration timestamp, with 5 minutes of grace for clock skew |
 | `jti` | A unique token identifier for replay protection |
+| `microbus` | An indicator that the token issuer is an internal Microbus service |
 
 ### Claims Transformation
 

@@ -112,7 +112,7 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) { 
 			http.Redirect(w, r, src, http.StatusTemporaryRedirect)
 		} else {
 			// Redirect to Welcome page by default
-			http.Redirect(w, r, "/"+Hostname+"/welcome", http.StatusTemporaryRedirect)
+			http.Redirect(w, r, svc.ExternalizeURL(ctx, loginapi.Welcome.URL()), http.StatusTemporaryRedirect)
 		}
 		return nil
 	}
@@ -142,6 +142,7 @@ func (svc *Service) Login(w http.ResponseWriter, r *http.Request) (err error) { 
 Logout renders a page that logs out the user.
 */
 func (svc *Service) Logout(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Logout
+	ctx := r.Context()
 	// Clear the cookie
 	cookie := &http.Cookie{
 		Name:     authTokenCookieName,
@@ -154,7 +155,7 @@ func (svc *Service) Logout(w http.ResponseWriter, r *http.Request) (err error) {
 	w.Header().Add("Set-Cookie", cookie.String())
 
 	// Redirect to Login page
-	http.Redirect(w, r, "/"+Hostname+"/login", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, svc.ExternalizeURL(ctx, loginapi.Login.URL()), http.StatusTemporaryRedirect)
 	return nil
 }
 

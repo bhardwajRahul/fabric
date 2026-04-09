@@ -200,7 +200,7 @@ For typed workflow invocation in tests, use the generated `Executor` with a `Wor
 ```go
 foremanClient := foremanapi.NewClient(tester)
 exec := myworkflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
-result1, result2, status, err := exec.MyWorkflow(ctx, input1, input2)
+output1, status, err := exec.MyWorkflow(ctx, input1, input2)
 ```
 
 The `WorkflowRunner` interface is defined in the API package to avoid a `foremanapi` dependency. `foremanapi.Client` satisfies it implicitly.

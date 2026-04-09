@@ -39,53 +39,6 @@ var (
 	_ myserviceapi.Client
 )
 
-func TestMyService_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(myserviceapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
-
 func TestMyService_Mock(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

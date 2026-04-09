@@ -174,7 +174,8 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 	}
 	// Set critical claims last so they cannot be overridden by transformers
 	jwtClaims["idp"] = idp
-	jwtClaims["iss"] = "microbus://" + accesstokenapi.Hostname
+	jwtClaims["iss"] = "https://" + accesstokenapi.Hostname
+	jwtClaims["microbus"] = "1"
 	jwtClaims["iat"] = now.Add(-5 * time.Second).Unix() // 5 seconds in the past to account for clock skew
 	jwtClaims["exp"] = exp.Add(5 * time.Second).Unix()  // 5 seconds of grace for clock skew
 	jwtClaims["jti"] = utils.RandomIdentifier(16)

@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/microbus-io/fabric/env"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/trc"
 	"github.com/microbus-io/testarossa"
 )
@@ -44,24 +45,28 @@ func TestConnector_TraceRequestAttributes(t *testing.T) {
 
 	var span trc.Span
 	beta := New("beta.test.request.attributes.connector")
-	beta.Subscribe("GET", "handle", func(w http.ResponseWriter, r *http.Request) error {
-		span = beta.Span(r.Context())
+	beta.Subscribe("Handle",
+		func(w http.ResponseWriter, r *http.Request) error {
+			span = beta.Span(r.Context())
 
-		// The request attributes should not be added until and unless there's an error
-		attributes := spanAttributes(span)
-		assert.Zero(len(attributes["http.method"]))
-		assert.Zero(len(attributes["url.scheme"]))
-		assert.Zero(len(attributes["server.address"]))
-		assert.Zero(len(attributes["server.port"]))
-		assert.Zero(len(attributes["url.path"]))
+			// The request attributes should not be added until and unless there's an error
+			attributes := spanAttributes(span)
+			assert.Zero(len(attributes["http.method"]))
+			assert.Zero(len(attributes["url.scheme"]))
+			assert.Zero(len(attributes["server.address"]))
+			assert.Zero(len(attributes["server.port"]))
+			assert.Zero(len(attributes["url.path"]))
 
-		assert.Equal(0, spanStatus(span))
+			assert.Equal(0, spanStatus(span))
 
-		if r.URL.Query().Get("err") != "" {
-			return errors.New("oops")
-		}
-		return nil
-	})
+			if r.URL.Query().Get("err") != "" {
+				return errors.New("oops")
+			}
+			return nil
+		},
+		sub.At("GET", "handle"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)

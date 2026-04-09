@@ -10,6 +10,7 @@ The `coreservices` package is a collection of microservices that implement commo
 - The [HTTP egress proxy](../structure/coreservices-httpegress.md) relays HTTP requests to non-Microbus URLs
 - The [HTTP ingress proxy](../structure/coreservices-httpingress.md) bridges the gap between HTTP clients and the microservices running on Microbus
 - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations
+- The [MCP portal](../structure/coreservices-mcpportal.md) microservice exposes the bus's tools to LLM clients via the Model Context Protocol
 - The [metrics](../structure/coreservices-metrics.md) microservice aggregates metrics from all microservices in response to a request from Prometheus
 - The [OpenAPI portal](../structure/coreservices-openapiportal.md) microservice renders a catalog of the OpenAPI endpoints of all microservices.
 - The [SMTP ingress](../structure/coreservices-smtpingress.md) microservice transforms incoming emails to actionable events

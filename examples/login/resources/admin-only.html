@@ -18,14 +18,16 @@ limitations under the License.
     <head>
         <title>Admin Only</title>
         <style>
-            * {
-                font-family: "helvetica neue", helvetica, sans-serif;
-                font-size: 14pt;
-            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; color: #333; }
+            h1 { color: #333; }
+            .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+            a { color: #1976d2; text-decoration: none; }
+            a:hover { text-decoration: underline; }
         </style>
     </head>
     <body>
         <h1>For Admin Eyes Only</h1>
-        If you can see this page, you're an admin.
+        <div class="card">If you can see this page, you're an admin.</div>
+        <a href="welcome">&larr; Back</a>
     </body>
 </html>

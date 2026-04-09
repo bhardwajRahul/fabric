@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = accesstokenapi.Hostname
-	Version  = 2
+	Version  = 3
 )
 
 // ToDo is implemented by the service or mock.
@@ -65,8 +62,8 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	RotateKey(ctx context.Context) (err error)                            // MARKER: RotateKey
 	Mint(ctx context.Context, claims any) (token string, err error)       // MARKER: Mint
-	LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: LocalKeys
 	JWKS(ctx context.Context) (keys []accesstokenapi.JWK, err error)      // MARKER: JWKS
+	LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, err error) // MARKER: LocalKeys
 }
 
 // NewService creates a new instance of the microservice.
@@ -100,15 +97,31 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`AccessToken generates short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(accesstokenapi.Mint.Method, accesstokenapi.Mint.Route, svc.doMint)                               // MARKER: Mint
-	svc.Subscribe(accesstokenapi.LocalKeys.Method, accesstokenapi.LocalKeys.Route, svc.doLocalKeys, sub.NoQueue()) // MARKER: LocalKeys
-	svc.Subscribe(accesstokenapi.JWKS.Method, accesstokenapi.JWKS.Route, svc.doJWKS)                               // MARKER: JWKS
+	svc.Subscribe( // MARKER: Mint
+		"Mint", svc.doMint,
+		sub.At(accesstokenapi.Mint.Method, accesstokenapi.Mint.Route),
+		sub.Description(`Mint signs a JWT with the given claims. The token's lifetime is derived from the request's time budget,
+falling back to DefaultTokenLifetime if no budget is set, and capped at MaxTokenLifetime.`),
+		sub.Function(accesstokenapi.MintIn{}, accesstokenapi.MintOut{}),
+	)
+	svc.Subscribe( // MARKER: JWKS
+		"JWKS", svc.doJWKS,
+		sub.At(accesstokenapi.JWKS.Method, accesstokenapi.JWKS.Route),
+		sub.Description(`JWKS aggregates public keys from all replicas and returns them in JWKS format.`),
+		sub.Function(accesstokenapi.JWKSIn{}, accesstokenapi.JWKSOut{}),
+	)
+	svc.Subscribe( // MARKER: LocalKeys
+		"LocalKeys", svc.doLocalKeys,
+		sub.At(accesstokenapi.LocalKeys.Method, accesstokenapi.LocalKeys.Route),
+		sub.Description(`LocalKeys returns this replica's current and previous public keys in JWKS format.`),
+		sub.Function(accesstokenapi.LocalKeysIn{}, accesstokenapi.LocalKeysOut{}),
+		sub.NoQueue(),
+	)
 
 	// HINT: Add web endpoints here
 
@@ -145,71 +158,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: JWKS
-			Type:        "function",
-			Name:        "JWKS",
-			Method:      accesstokenapi.JWKS.Method,
-			Route:       accesstokenapi.JWKS.Route,
-			Summary:     "JWKS() (keys []JWK)",
-			Description: `JWKS aggregates public keys from all replicas and returns them in JWKS format.`,
-			InputArgs:   accesstokenapi.JWKSIn{},
-			OutputArgs:  accesstokenapi.JWKSOut{},
-		},
-		{ // MARKER: LocalKeys
-			Type:        "function",
-			Name:        "LocalKeys",
-			Method:      accesstokenapi.LocalKeys.Method,
-			Route:       accesstokenapi.LocalKeys.Route,
-			Summary:     "LocalKeys() (keys []JWK)",
-			Description: `LocalKeys returns this replica's current and previous public keys in JWKS format.`,
-			InputArgs:   accesstokenapi.LocalKeysIn{},
-			OutputArgs:  accesstokenapi.LocalKeysOut{},
-		},
-		{ // MARKER: Mint
-			Type:        "function",
-			Name:        "Mint",
-			Method:      accesstokenapi.Mint.Method,
-			Route:       accesstokenapi.Mint.Route,
-			Summary:     "Mint(claims MapClaims) (token string)",
-			Description: `Mint signs a JWT with the given claims. The token's lifetime is derived from the request's time budget, falling back to DefaultTokenLifetime if no budget is set, and capped at MaxTokenLifetime.`,
-			InputArgs:   accesstokenapi.MintIn{},
-			OutputArgs:  accesstokenapi.MintOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.
@@ -273,6 +221,17 @@ func (svc *Intermediate) SetMaxTokenLifetime(value time.Duration) (err error) { 
 	return svc.SetConfig("MaxTokenLifetime", value.String())
 }
 
+// doMint handles marshaling for Mint.
+func (svc *Intermediate) doMint(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Mint
+	var in accesstokenapi.MintIn
+	var out accesstokenapi.MintOut
+	err = marshalFunction(w, r, accesstokenapi.Mint.Route, &in, &out, func(_ any, _ any) error {
+		out.Token, err = svc.Mint(r.Context(), in.Claims)
+		return err
+	})
+	return err // No trace
+}
+
 // doJWKS handles marshaling for JWKS.
 func (svc *Intermediate) doJWKS(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: JWKS
 	var in accesstokenapi.JWKSIn
@@ -290,17 +249,6 @@ func (svc *Intermediate) doLocalKeys(w http.ResponseWriter, r *http.Request) (er
 	var out accesstokenapi.LocalKeysOut
 	err = marshalFunction(w, r, accesstokenapi.LocalKeys.Route, &in, &out, func(_ any, _ any) error {
 		out.Keys, err = svc.LocalKeys(r.Context())
-		return err
-	})
-	return err // No trace
-}
-
-// doMint handles marshaling for Mint.
-func (svc *Intermediate) doMint(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Mint
-	var in accesstokenapi.MintIn
-	var out accesstokenapi.MintOut
-	err = marshalFunction(w, r, accesstokenapi.Mint.Route, &in, &out, func(_ any, _ any) error {
-		out.Token, err = svc.Mint(r.Context(), in.Claims)
 		return err
 	})
 	return err // No trace

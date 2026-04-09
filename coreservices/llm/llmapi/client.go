@@ -45,46 +45,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "llm.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Chat = &Def{Method: "POST", Route: `:444/chat`} // MARKER: Chat
-	Turn = &Def{Method: "POST", Route: `:444/turn`} // MARKER: Turn
-
-	// Task endpoints
-	InitChat        = &Def{Method: "POST", Route: `:428/init-chat`}        // MARKER: InitChat
-	CallLLM         = &Def{Method: "POST", Route: `:428/call-llm`}         // MARKER: CallLLM
-	ProcessResponse = &Def{Method: "POST", Route: `:428/process-response`} // MARKER: ProcessResponse
-	ExecuteTool     = &Def{Method: "POST", Route: `:428/execute-tool`}     // MARKER: ExecuteTool
-
-	// Workflow endpoint
-	ChatLoop = &Def{Method: "GET", Route: `:428/chat-loop`} // MARKER: ChatLoop
-)
-
-// ChatIn are the input arguments of Chat.
-type ChatIn struct { // MARKER: Chat
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
-}
-
-// ChatOut are the output arguments of Chat.
-type ChatOut struct { // MARKER: Chat
-	MessagesOut []Message `json:"messagesOut,omitzero"`
-}
-
 // ChatResponse packs the response of Chat.
 type ChatResponse multicastResponse // MARKER: Chat
 
@@ -97,14 +57,19 @@ func (_res *ChatResponse) Get() (messagesOut []Message, err error) { // MARKER: 
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
+Each tool is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
+"https://calculator.example/arithmetic"). The LLM service fetches the OpenAPI document of
+each distinct host:port to resolve the endpoint into a callable tool. Only
+`FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints can be exposed.
+
 Input:
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is a list of Microbus endpoint URLs to expose as LLM tools
+  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
 */
-func (_c MulticastClient) Chat(ctx context.Context, messages []Message, tools []Tool) iter.Seq[*ChatResponse] { // MARKER: Chat
+func (_c MulticastClient) Chat(ctx context.Context, messages []Message, tools []string) iter.Seq[*ChatResponse] { // MARKER: Chat
 	_in := ChatIn{Messages: messages, Tools: tools}
 	_out := ChatOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
@@ -122,30 +87,34 @@ func (_c MulticastClient) Chat(ctx context.Context, messages []Message, tools []
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
+Each tool is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
+"https://calculator.example/arithmetic"). The LLM service fetches the OpenAPI document of
+each distinct host:port to resolve the endpoint into a callable tool. Only
+`FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints can be exposed.
+
+Example:
+
+	messages := []llmapi.Message{
+		{Role: "user", Content: "What is 17 * 23, and what's the weather in Paris?"},
+	}
+	tools := []string{
+		calculatorapi.Arithmetic.URL(),
+		dataapi.Fetch.URL(),
+	}
+	messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools)
+
 Input:
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is a list of Microbus endpoint URLs to expose as LLM tools
-  - maxToolRounds: maxToolRounds is the maximum number of tool call round-trips (0 uses the configured default)
+  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
 */
-func (_c Client) Chat(ctx context.Context, messages []Message, tools []Tool) (messagesOut []Message, err error) { // MARKER: Chat
+func (_c Client) Chat(ctx context.Context, messages []Message, tools []string) (messagesOut []Message, err error) { // MARKER: Chat
 	_in := ChatIn{Messages: messages, Tools: tools}
 	_out := ChatOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
 	return _out.MessagesOut, err // No trace
-}
-
-// TurnIn are the input arguments of Turn.
-type TurnIn struct { // MARKER: Turn
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []ToolDef `json:"tools,omitzero"`
-}
-
-// TurnOut are the output arguments of Turn.
-type TurnOut struct { // MARKER: Turn
-	Completion *TurnCompletion `json:"completion,omitzero"`
 }
 
 // TurnResponse packs the response of Turn.
@@ -168,7 +137,7 @@ Input:
 Output:
   - completion: completion is the LLM's response including text and tool calls
 */
-func (_c MulticastClient) Turn(ctx context.Context, messages []Message, tools []ToolDef) iter.Seq[*TurnResponse] { // MARKER: Turn
+func (_c MulticastClient) Turn(ctx context.Context, messages []Message, tools []Tool) iter.Seq[*TurnResponse] { // MARKER: Turn
 	_in := TurnIn{Messages: messages, Tools: tools}
 	_out := TurnOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
@@ -194,7 +163,7 @@ Input:
 Output:
   - completion: completion is the LLM's response including text and tool calls
 */
-func (_c Client) Turn(ctx context.Context, messages []Message, tools []ToolDef) (completion *TurnCompletion, err error) { // MARKER: Turn
+func (_c Client) Turn(ctx context.Context, messages []Message, tools []Tool) (completion *TurnCompletion, err error) { // MARKER: Turn
 	_in := TurnIn{Messages: messages, Tools: tools}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
@@ -491,70 +460,6 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL str
 	}
 	return status, nil
 }
-
-// --- Task payload structs ---
-
-// InitChatIn are the input arguments of InitChat.
-type InitChatIn struct { // MARKER: InitChat
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
-}
-
-// InitChatOut are the output arguments of InitChat.
-type InitChatOut struct { // MARKER: InitChat
-	MaxToolRounds int `json:"maxToolRounds,omitzero"`
-	ToolRounds    int `json:"toolRounds,omitzero"`
-}
-
-// CallLLMIn are the input arguments of CallLLM.
-type CallLLMIn struct { // MARKER: CallLLM
-	Messages []Message `json:"messages,omitzero"`
-}
-
-// CallLLMOut are the output arguments of CallLLM.
-type CallLLMOut struct { // MARKER: CallLLM
-	LLMContent       string `json:"llmContent,omitzero"`
-	PendingToolCalls any    `json:"pendingToolCalls,omitzero"`
-}
-
-// ProcessResponseIn are the input arguments of ProcessResponse.
-type ProcessResponseIn struct { // MARKER: ProcessResponse
-	LLMContent    string `json:"llmContent,omitzero"`
-	ToolRounds    int    `json:"toolRounds,omitzero"`
-	MaxToolRounds int    `json:"maxToolRounds,omitzero"`
-}
-
-// ProcessResponseOut are the output arguments of ProcessResponse.
-type ProcessResponseOut struct { // MARKER: ProcessResponse
-	MessagesOut    []Message `json:"messages,omitzero"`
-	ToolsRequested bool      `json:"toolsRequested,omitzero"`
-	ToolRoundsOut  int       `json:"toolRounds,omitzero"`
-}
-
-// ExecuteToolIn are the input arguments of ExecuteTool.
-type ExecuteToolIn struct { // MARKER: ExecuteTool
-	ToolExecuted bool `json:"toolExecuted,omitzero"`
-}
-
-// ExecuteToolOut are the output arguments of ExecuteTool.
-type ExecuteToolOut struct { // MARKER: ExecuteTool
-	ToolExecutedOut bool `json:"toolExecuted,omitzero"`
-}
-
-// --- Workflow payload structs ---
-
-// ChatLoopIn are the input arguments of ChatLoop.
-type ChatLoopIn struct { // MARKER: ChatLoop
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
-}
-
-// ChatLoopOut are the output arguments of ChatLoop.
-type ChatLoopOut struct { // MARKER: ChatLoop
-	MessagesOut []Message `json:"messages,omitzero"`
-}
-
-// --- Task executor methods ---
 
 /*
 InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.

@@ -17,7 +17,8 @@ general:
   hostname: control.core
   description: This microservice is created for the sake of generating the client API for the :888 control subscriptions. The microservice itself does nothing and should not be included in applications.
   package: github.com/microbus-io/fabric/coreservices/control
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
+  modifiedAt: "2026-04-28T22:00:00Z"
 
 functions:
   Ping:
@@ -38,6 +39,12 @@ functions:
     method: ANY
     route: :888/trace
     loadBalancing: none
+  OpenAPI:
+    signature: OpenAPI() (httpResponseBody *Document, httpStatusCode int)
+    description: OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their ingress boundary.
+    method: GET
+    route: :888/openapi.json
+    loadBalancing: default
 
 webs:
   Metrics:

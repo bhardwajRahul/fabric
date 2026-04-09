@@ -1743,7 +1743,7 @@ func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // 
 
 /*
 List queries flows by status or workflow name. Results are ordered by flow ID descending (newest first).
-Set CursorFlowID in the query to the last result's flow ID to paginate. Limit defaults to 100 if not set.
+Set CursorFlowKey in the query to the last result's flow key to paginate. Limit defaults to 100 if not set.
 */
 func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error) { // MARKER: List
 	limit := query.Limit
@@ -1752,8 +1752,8 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 	}
 
 	var cursorNum int
-	if query.CursorFlowID != "" {
-		_, cursorNum, _, err = parseFlowKey(query.CursorFlowID)
+	if query.CursorFlowKey != "" {
+		_, cursorNum, _, err = parseFlowKey(query.CursorFlowKey)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1835,7 +1835,7 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 				if err != nil {
 					return errors.Trace(err)
 				}
-				summary.FlowID = fmt.Sprintf("%d-%d-%s", shardIdx, flowID, strings.TrimSpace(flowToken))
+				summary.FlowKey = fmt.Sprintf("%d-%d-%s", shardIdx, flowID, strings.TrimSpace(flowToken))
 				summary.ThreadKey = fmt.Sprintf("%d-%d-%s", shardIdx, threadID, strings.TrimSpace(threadToken))
 				summary.Status = strings.TrimSpace(summary.Status)
 				summary.TaskName = taskName.String
@@ -1862,7 +1862,7 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 
 	// Sort by flow ID descending across shards and apply the limit
 	sort.Slice(flows, func(i, j int) bool {
-		return flows[i].FlowID > flows[j].FlowID
+		return flows[i].FlowKey > flows[j].FlowKey
 	})
 	if len(flows) > limit {
 		flows = flows[:limit]

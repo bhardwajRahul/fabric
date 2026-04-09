@@ -1,6 +1,6 @@
 ---
-name: Adding a Workflow Graph
-description: Creates or modifies a workflow graph endpoint that defines the structure of a workflow. Use when explicitly asked by the user to create or modify a workflow or graph of a microservice.
+name: add-workflow
+description: TRIGGER when user asks to define a workflow graph, orchestrate tasks, or create a multi-step agentic workflow. Defines task transitions and conditions. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -19,12 +19,12 @@ Creating or modifying a workflow graph:
 - [ ] Step 2: Determine signature
 - [ ] Step 3: Determine the route
 - [ ] Step 4: Determine a description
-- [ ] Step 5: Extend the API
-- [ ] Step 6: Extend the ToDo interface
-- [ ] Step 7: Implement the logic
-- [ ] Step 8: Define the marshaler function
-- [ ] Step 9: Bind the marshaler function to the microservice
-- [ ] Step 10: Expose the workflow via OpenAPI
+- [ ] Step 5: Define the endpoint and payload structs
+- [ ] Step 6: Extend the executor
+- [ ] Step 7: Extend the ToDo interface
+- [ ] Step 8: Implement the logic
+- [ ] Step 9: Define the marshaler function
+- [ ] Step 10: Bind the marshaler function to the microservice
 - [ ] Step 11: Extend the mock
 - [ ] Step 12: Test the workflow
 - [ ] Step 13: Housekeeping
@@ -56,20 +56,9 @@ The route of the workflow graph endpoint is resolved relative to the hostname of
 
 Describe the workflow starting with its name, in Go doc style: `MyWorkflow does X`. Embed this description in followup steps wherever you see `MyWorkflow does X`.
 
-#### Step 5: Extend the API
+#### Step 5: Define the Endpoint and Payload Structs
 
-Define the endpoint in the `var` block at the top of `myserviceapi/client.go`, after the `// HINT: Insert endpoint definitions here` comment. Workflows use `GET` method.
-
-```go
-var (
-	// HINT: Insert endpoint definitions here
-	// ...
-	MyWorkflow = Def{Method: "GET", Route: ":428/my-workflow"} // MARKER: MyWorkflow
-)
-```
-
-Append the workflow's payload structs at the end of `myserviceapi/client.go`.
-Use PascalCase for the field names and camelCase for the `json` tag names.
+Append the workflow's payload structs at the end of `myserviceapi/endpoints.go`. Use PascalCase for the field names and camelCase for the `json` tag names.
 
 `MyWorkflowIn` holds the input arguments of the workflow.
 
@@ -91,7 +80,19 @@ type MyWorkflowOut struct { // MARKER: MyWorkflow
 }
 ```
 
-Append the following Executor method after the last existing Executor method. This method delegates to `marshalWorkflow` which calls the `WorkflowRunner` to create, start, and await the workflow.
+Append the endpoint definition to the `var` block in `myserviceapi/endpoints.go`, after the `// HINT: Insert endpoint definitions here` comment. Workflows always use the `GET` method on the dedicated `:428` port. The `Def` struct carries only the `Method` and `Route`; the endpoint name, description, input/output schemas, and required claims are wired up via `svc.Subscribe` in `intermediate.go` (Step 10).
+
+```go
+var (
+	// HINT: Insert endpoint definitions here
+	// ...
+	MyWorkflow = Def{Method: "GET", Route: ":428/my-workflow"} // MARKER: MyWorkflow
+)
+```
+
+#### Step 6: Extend the Executor
+
+Append the following Executor method at the end of `myserviceapi/client.go`, after the last existing Executor method. This method delegates to `marshalWorkflow` which calls the `WorkflowRunner` to create, start, and await the workflow.
 
 ```go
 /*
@@ -110,7 +111,7 @@ func (_c Executor) MyWorkflow(ctx context.Context, inputField1 string, inputFiel
 }
 ```
 
-#### Step 6: Extend the `ToDo` Interface
+#### Step 7: Extend the `ToDo` Interface
 
 Extend the `ToDo` interface in `intermediate.go`. All workflow graph functions have the fixed signature `MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error)`.
 
@@ -121,9 +122,9 @@ type ToDo interface {
 }
 ```
 
-#### Step 7: Implement the Logic
+#### Step 8: Implement the Logic
 
-Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `Def.URL()` method.
+Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
 
 Define short variable names for task URLs at the top of the function to keep the graph definition legible.
 
@@ -147,7 +148,7 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 }
 ```
 
-#### Step 8: Define the Marshaler Function
+#### Step 9: Define the Marshaler Function
 
 Append a web handler at the end of `intermediate.go` to perform the marshaling.
 
@@ -173,7 +174,7 @@ func (svc *Intermediate) doMyWorkflow(w http.ResponseWriter, r *http.Request) (e
 }
 ```
 
-#### Step 9: Bind the Marshaler Function to the Microservice
+#### Step 10: Bind the Marshaler Function to the Microservice
 
 Bind the `doMyWorkflow` marshaler function to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the `// HINT: Add graph endpoints here` comment. If other subscriptions already exist under this HINT, add the new one after the last existing subscription.
 
@@ -182,51 +183,20 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
 
 	// HINT: Add graph endpoints here
-	svc.Subscribe(myserviceapi.MyWorkflow.Method, myserviceapi.MyWorkflow.Route, svc.doMyWorkflow) // MARKER: MyWorkflow
+	svc.Subscribe( // MARKER: MyWorkflow
+"MyWorkflow", svc.doMyWorkflow,
+		sub.At(myserviceapi.MyWorkflow.Method, myserviceapi.MyWorkflow.Route),
+sub.Description(`MyWorkflow does X.`),
+		sub.Workflow(myserviceapi.MyWorkflowIn{}, myserviceapi.MyWorkflowOut{}),
+	)
 
 	// ...
 }
 ```
 
-#### Step 10: Expose the Workflow via OpenAPI
+The first argument to `svc.Subscribe` is the workflow name (must be a Go identifier starting with an uppercase letter). The `sub.Description` carries the godoc text from Step 4. `sub.Workflow(In{}, Out{})` declares the feature type and the input/output struct types - these flow through to the connector's built-in OpenAPI document so the workflow can be exposed as an LLM tool.
 
-Register the workflow in `doOpenAPI` in `intermediate.go`, after the corresponding `HINT` comment.
-
-- For a workflow, the `Type` field should be set to `workflow`
-- Use `POST` as the method in the OpenAPI registration since workflows are invoked with input state
-- Set the simplified signature of the workflow in the `Summary` field, excluding `ctx context.Context`, `err error`, and `status string`
-- Set the `RequiredClaims` boolean expression, if relevant. Otherwise, omit the field or leave it empty
-
-```go
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	// ...
-	endpoints := []*openapi.Endpoint{
-		// ...
-		{ // MARKER: MyWorkflow
-			Type:           "workflow",
-			Name:           "MyWorkflow",
-			Method:         "POST",
-			Route:          myserviceapi.MyWorkflow.Route,
-			Summary:        "MyWorkflow(inputField1 string, inputField2 float64) (outputField1 bool, outputField2 int)",
-			Description:    `MyWorkflow does X.`,
-			RequiredClaims: ``,
-			InputArgs:      myserviceapi.MyWorkflowIn{},
-			OutputArgs:     myserviceapi.MyWorkflowOut{},
-		},
-	}
-	// ...
-}
-```
-
-Add the route of the workflow to the `routes` slice in `TestMyService_OpenAPI` in `service_test.go`.
-
-```go
-routes := []string{
-	// HINT: Insert routes of functional and web endpoints here
-	// ...
-	myserviceapi.MyWorkflow.Route, // MARKER: MyWorkflow
-}
-```
+Add `sub.RequiredClaims(requiredClaims)` to `svc.Subscribe` to define the authorization requirements of the workflow endpoint. Omit to allow all requests.
 
 #### Step 11: Extend the Mock
 
@@ -394,4 +364,4 @@ t.Run("test_case_name", func(t *testing.T) {
 
 #### Step 13: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

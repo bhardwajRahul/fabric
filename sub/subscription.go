@@ -34,9 +34,20 @@ var methodValidator = regexp.MustCompile(`^[A-Z]+$`)
 // HTTPHandler extends the standard http.Handler to also return an error.
 type HTTPHandler func(w http.ResponseWriter, r *http.Request) (err error)
 
+// Type values identify the kind of a Microbus endpoint behind a subscription.
+const (
+	TypeFunction     = "function"
+	TypeWeb          = "web"
+	TypeInboundEvent = "inboundevent"
+	TypeTask         = "task"
+	TypeWorkflow     = "workflow"
+)
+
 // Subscription handles incoming requests.
 // Although technically public, it is used internally and should not be constructed by microservices directly.
 type Subscription struct {
+	Name           string
+	Description    string
 	Host           string
 	Port           string
 	Method         string
@@ -46,86 +57,109 @@ type Subscription struct {
 	Subs           []*transport.Subscription
 	specPath       string
 	RequiredClaims string
+	Type           string
+	Inputs         any
+	Outputs        any
+	Infra          bool
 }
 
 /*
-NewSub creates a new subscription.
-If the route does not include a hostname, it is resolved relative to the microservice's default hostname.
-If a port is not specified, 443 is used by default. Port 0 is used to designate any port.
-The subscription can be set to a single standard HTTP method such as "GET", "POST", etc. or to "ANY" in order to accept any method.
-Path arguments are designated by curly braces.
+NewSubscription creates a new subscription registered by name. The name must be a legal Go-style
+upper-case identifier (e.g. "MyEndpoint2"). Exactly one feature option ([Function], [Web],
+[InboundEvent], [Task], [Graph]) must be supplied. Defaults filled in after options are applied:
 
-Examples of valid paths:
-
-	(empty)
-	/
-	/path
-	:1080
-	:1080/
-	:1080/path
-	:0/any/port
-	/path/with/slash
-	path/with/no/slash
-	/section/{section}/page/{page...}
-	https://www.example.com/path
-	https://www.example.com:1080/path
-	//www.example.com:1080/path
+  - Method defaults to "ANY".
+  - Route defaults to ":<port>/<kebab-name>" with the port determined by the feature type
+    (443 for function/web, 417 for inbound events, 428 for tasks/graphs).
+  - Queue defaults to defaultHost.
 */
-func NewSub(method string, defaultHost string, route string, handler HTTPHandler, options ...Option) (*Subscription, error) {
-	joined := httpx.JoinHostAndPath(defaultHost, route)
+func NewSubscription(name string, defaultHost string, handler HTTPHandler, options ...Option) (*Subscription, error) {
+	if !utils.IsUpperCaseIdentifier(name) {
+		return nil, errors.New("invalid subscription name '%s', must be an upper-case identifier", name)
+	}
+	if handler == nil {
+		return nil, errors.New("nil handler for subscription '%s'", name)
+	}
+	s := &Subscription{
+		Name:    name,
+		Handler: handler,
+		Host:    defaultHost,
+		Queue:   defaultHost,
+	}
+	if err := s.Apply(options...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if s.Type == "" {
+		return nil, errors.New("subscription '%s' missing a type option", name)
+	}
+	if s.Method == "" {
+		s.Method = "ANY"
+	} else {
+		s.Method = strings.ToUpper(s.Method)
+	}
+	if !methodValidator.MatchString(s.Method) {
+		return nil, errors.New("invalid method '%s'", s.Method)
+	}
+	if s.specPath == "" {
+		s.specPath = ":" + defaultPortForType(s.Type) + "/" + utils.ToKebabCase(name)
+	}
+	joined := httpx.JoinHostAndPath(defaultHost, s.specPath)
 	u, err := httpx.ParseURL(joined)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	_, err = strconv.Atoi(u.Port())
-	if err != nil {
+	if _, err := strconv.Atoi(u.Port()); err != nil {
 		return nil, errors.Trace(err)
 	}
-	method = strings.ToUpper(method)
-	if !methodValidator.MatchString(method) {
-		return nil, errors.New("invalid method '%s'", method)
+	if err := validatePathArgs(u.Path); err != nil {
+		return nil, errors.Trace(err)
 	}
-	parts := strings.Split(u.Path, "/")
+	s.Host = u.Hostname()
+	s.Port = u.Port()
+	s.Route = u.Path
+	return s, nil
+}
+
+func defaultPortForType(t string) string {
+	switch t {
+	case TypeInboundEvent:
+		return "417"
+	case TypeTask, TypeWorkflow:
+		return "428"
+	default:
+		return "443"
+	}
+}
+
+func validatePathArgs(path string) error {
+	parts := strings.Split(path, "/")
 	for i := range parts {
 		open := strings.Index(parts[i], "{")
 		if open > 0 {
-			return nil, errors.New("path argument '%s' must span entire section", parts[i])
+			return errors.New("path argument '%s' must span entire section", parts[i])
 		}
 		close := strings.LastIndex(parts[i], "}")
 		if open == -1 && close == -1 {
 			continue
 		}
 		if close <= open || open == -1 {
-			return nil, errors.New("malformed path argument '%s'", parts[i])
+			return errors.New("malformed path argument '%s'", parts[i])
 		}
 		if close < len(parts[i])-1 {
-			return nil, errors.New("path argument '%s' must span entire section", parts[i])
+			return errors.New("path argument '%s' must span entire section", parts[i])
 		}
 		name := parts[i]
 		name = strings.TrimPrefix(name, "{")
 		name = strings.TrimSuffix(name, "}")
 		if strings.HasSuffix(name, "...") && i != len(parts)-1 {
-			return nil, errors.New("greedy path argument '%s' must end path", parts[i])
+			return errors.New("greedy path argument '%s' must end path", parts[i])
 		}
 		name = strings.TrimSuffix(name, "...")
 		if name != "" && !utils.IsLowerCaseIdentifier(name) {
-			return nil, errors.New("name of path argument '%s' must be an identifier", parts[i])
+			return errors.New("name of path argument '%s' must be an identifier", parts[i])
 		}
 	}
-	sub := &Subscription{
-		Host:     u.Hostname(),
-		Port:     u.Port(),
-		Method:   method,
-		Route:    u.Path,
-		Queue:    defaultHost,
-		Handler:  handler,
-		specPath: route,
-	}
-	err = sub.Apply(options...)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return sub, nil
+	return nil
 }
 
 // Apply the provided options to the subscription.

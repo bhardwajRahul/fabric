@@ -44,27 +44,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "calculator.example"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Arithmetic = Def{Method: "GET", Route: ":443/arithmetic"} // MARKER: Arithmetic
-	Square     = Def{Method: "GET", Route: ":443/square"}     // MARKER: Square
-	Distance   = Def{Method: "ANY", Route: ":443/distance"}   // MARKER: Distance
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any
@@ -229,21 +208,6 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 	}
 }
 
-// ArithmeticIn are the input arguments of Arithmetic.
-type ArithmeticIn struct { // MARKER: Arithmetic
-	X  int    `json:"x,omitzero"`
-	Op string `json:"op,omitzero"`
-	Y  int    `json:"y,omitzero"`
-}
-
-// ArithmeticOut are the output arguments of Arithmetic.
-type ArithmeticOut struct { // MARKER: Arithmetic
-	XEcho  int    `json:"xEcho,omitzero"`
-	OpEcho string `json:"opEcho,omitzero"`
-	YEcho  int    `json:"yEcho,omitzero"`
-	Result int    `json:"result,omitzero"`
-}
-
 // ArithmeticResponse packs the response of Arithmetic.
 type ArithmeticResponse multicastResponse // MARKER: Arithmetic
 
@@ -281,17 +245,6 @@ func (_c Client) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho
 	return _out.XEcho, _out.OpEcho, _out.YEcho, _out.Result, err // No trace
 }
 
-// SquareIn are the input arguments of Square.
-type SquareIn struct { // MARKER: Square
-	X int `json:"x,omitzero"`
-}
-
-// SquareOut are the output arguments of Square.
-type SquareOut struct { // MARKER: Square
-	XEcho  int `json:"xEcho,omitzero"`
-	Result int `json:"result,omitzero"`
-}
-
 // SquareResponse packs the response of Square.
 type SquareResponse multicastResponse // MARKER: Square
 
@@ -327,17 +280,6 @@ func (_c Client) Square(ctx context.Context, x int) (xEcho int, result int, err 
 	_out := SquareOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Square.Method, Square.Route, &_in, &_out)
 	return _out.XEcho, _out.Result, err // No trace
-}
-
-// DistanceIn are the input arguments of Distance.
-type DistanceIn struct { // MARKER: Distance
-	P1 Point `json:"p1,omitzero"`
-	P2 Point `json:"p2,omitzero"`
-}
-
-// DistanceOut are the output arguments of Distance.
-type DistanceOut struct { // MARKER: Distance
-	D float64 `json:"d,omitzero"`
 }
 
 // DistanceResponse packs the response of Distance.

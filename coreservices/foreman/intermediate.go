@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -50,12 +47,12 @@ var (
 	_ sub.Option
 	_ utils.SyncMap[string, string]
 	_ foremanapi.Client
-	_ workflow.Flow
+	_ *workflow.Flow
 )
 
 const (
 	Hostname = foremanapi.Hostname
-	Version  = 8
+	Version  = 9
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,28 +60,27 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, workflowName string, initialState any) (flowID string, err error) // MARKER: Create
-	Start(ctx context.Context, flowID string) (err error)                                         // MARKER: Start
-	StartNotify(ctx context.Context, flowID string, notifyHostname string) (err error)            // MARKER: StartNotify
-	Snapshot(ctx context.Context, flowID string) (status string, state map[string]any, err error) // MARKER: Snapshot
-
-	Resume(ctx context.Context, flowID string, resumeData any) (err error)                                           // MARKER: Resume
+	Create(ctx context.Context, workflowName string, initialState any) (flowKey string, err error)                   // MARKER: Create
+	Start(ctx context.Context, flowKey string) (err error)                                                           // MARKER: Start
+	StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error)                              // MARKER: StartNotify
+	Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                   // MARKER: Snapshot
+	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                          // MARKER: Resume
 	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                     // MARKER: Fork
-	Cancel(ctx context.Context, flowID string) (err error)                                                           // MARKER: Cancel
-	History(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error)                             // MARKER: History
-	Retry(ctx context.Context, flowID string) (err error)                                                            // MARKER: Retry
+	Cancel(ctx context.Context, flowKey string) (err error)                                                          // MARKER: Cancel
+	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                            // MARKER: History
+	Retry(ctx context.Context, flowKey string) (err error)                                                           // MARKER: Retry
 	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                    // MARKER: List
-	CreateTask(ctx context.Context, taskName string, initialState any) (flowID string, err error)                    // MARKER: CreateTask
+	CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                   // MARKER: CreateTask
 	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                  // MARKER: Enqueue
-	Await(ctx context.Context, flowID string) (status string, state map[string]any, err error)                       // MARKER: Await
-	NotifyStatusChange(ctx context.Context, flowID string, status string) (err error)                                // MARKER: NotifyStatusChange
-	PurgeExpiredFlows(ctx context.Context) (err error)                                                               // MARKER: PurgeExpiredFlows
-	BreakBefore(ctx context.Context, flowID string, taskName string, enabled bool) (err error)                       // MARKER: BreakBefore
+	Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                      // MARKER: Await
+	NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error)                               // MARKER: NotifyStatusChange
+	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                      // MARKER: BreakBefore
 	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error) // MARKER: Run
 	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)              // MARKER: Continue
+	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                               // MARKER: HistoryMermaid
+	PurgeExpiredFlows(ctx context.Context) (err error)                                                               // MARKER: PurgeExpiredFlows
 	OnChangedNumShards(ctx context.Context) (err error)                                                              // MARKER: NumShards
 	OnObserveQueueDepth(ctx context.Context) (err error)                                                             // MARKER: QueueDepth
-	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                               // MARKER: HistoryMermaid
 }
 
 // NewService creates a new instance of the microservice.
@@ -118,33 +114,122 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`Foreman orchestrates agentic workflow execution.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(foremanapi.Create.Method, foremanapi.Create.Route, svc.doCreate)                // MARKER: Create
-	svc.Subscribe(foremanapi.Start.Method, foremanapi.Start.Route, svc.doStart)                   // MARKER: Start
-	svc.Subscribe(foremanapi.StartNotify.Method, foremanapi.StartNotify.Route, svc.doStartNotify) // MARKER: StartNotify
-	svc.Subscribe(foremanapi.Snapshot.Method, foremanapi.Snapshot.Route, svc.doSnapshot)          // MARKER: Snapshot
-
-	svc.Subscribe(foremanapi.Resume.Method, foremanapi.Resume.Route, svc.doResume)                                                    // MARKER: Resume
-	svc.Subscribe(foremanapi.Fork.Method, foremanapi.Fork.Route, svc.doFork)                                                          // MARKER: Fork
-	svc.Subscribe(foremanapi.Cancel.Method, foremanapi.Cancel.Route, svc.doCancel)                                                    // MARKER: Cancel
-	svc.Subscribe(foremanapi.History.Method, foremanapi.History.Route, svc.doHistory)                                                 // MARKER: History
-	svc.Subscribe(foremanapi.Retry.Method, foremanapi.Retry.Route, svc.doRetry)                                                       // MARKER: Retry
-	svc.Subscribe(foremanapi.List.Method, foremanapi.List.Route, svc.doList)                                                          // MARKER: List
-	svc.Subscribe(foremanapi.CreateTask.Method, foremanapi.CreateTask.Route, svc.doCreateTask)                                        // MARKER: CreateTask
-	svc.Subscribe(foremanapi.Enqueue.Method, foremanapi.Enqueue.Route, svc.doEnqueue)                                                 // MARKER: Enqueue
-	svc.Subscribe(foremanapi.Await.Method, foremanapi.Await.Route, svc.doAwait)                                                       // MARKER: Await
-	svc.Subscribe(foremanapi.NotifyStatusChange.Method, foremanapi.NotifyStatusChange.Route, svc.doNotifyStatusChange, sub.NoQueue()) // MARKER: NotifyStatusChange
-	svc.Subscribe(foremanapi.BreakBefore.Method, foremanapi.BreakBefore.Route, svc.doBreakBefore)                                     // MARKER: BreakBefore
-	svc.Subscribe(foremanapi.Run.Method, foremanapi.Run.Route, svc.doRun)                                                             // MARKER: Run
-	svc.Subscribe(foremanapi.Continue.Method, foremanapi.Continue.Route, svc.doContinue)                                              // MARKER: Continue
+	svc.Subscribe( // MARKER: Create
+		"Create", svc.doCreate,
+		sub.At(foremanapi.Create.Method, foremanapi.Create.Route),
+		sub.Description(`Create creates a new flow for a workflow without starting it.`),
+		sub.Function(foremanapi.CreateIn{}, foremanapi.CreateOut{}),
+	)
+	svc.Subscribe( // MARKER: Start
+		"Start", svc.doStart,
+		sub.At(foremanapi.Start.Method, foremanapi.Start.Route),
+		sub.Description(`Start transitions a created flow to running and enqueues it for execution.`),
+		sub.Function(foremanapi.StartIn{}, foremanapi.StartOut{}),
+	)
+	svc.Subscribe( // MARKER: StartNotify
+		"StartNotify", svc.doStartNotify,
+		sub.At(foremanapi.StartNotify.Method, foremanapi.StartNotify.Route),
+		sub.Description(`StartNotify transitions a created flow to running with status change notifications sent to the given hostname.`),
+		sub.Function(foremanapi.StartNotifyIn{}, foremanapi.StartNotifyOut{}),
+	)
+	svc.Subscribe( // MARKER: Snapshot
+		"Snapshot", svc.doSnapshot,
+		sub.At(foremanapi.Snapshot.Method, foremanapi.Snapshot.Route),
+		sub.Description(`Snapshot returns the current status and state of a flow.`),
+		sub.Function(foremanapi.SnapshotIn{}, foremanapi.SnapshotOut{}),
+	)
+	svc.Subscribe( // MARKER: Resume
+		"Resume", svc.doResume,
+		sub.At(foremanapi.Resume.Method, foremanapi.Resume.Route),
+		sub.Description(`Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.`),
+		sub.Function(foremanapi.ResumeIn{}, foremanapi.ResumeOut{}),
+	)
+	svc.Subscribe( // MARKER: Fork
+		"Fork", svc.doFork,
+		sub.At(foremanapi.Fork.Method, foremanapi.Fork.Route),
+		sub.Description(`Fork creates a new flow from an existing step's checkpoint.`),
+		sub.Function(foremanapi.ForkIn{}, foremanapi.ForkOut{}),
+	)
+	svc.Subscribe( // MARKER: Cancel
+		"Cancel", svc.doCancel,
+		sub.At(foremanapi.Cancel.Method, foremanapi.Cancel.Route),
+		sub.Description(`Cancel cancels a flow that is not yet in a terminal status.`),
+		sub.Function(foremanapi.CancelIn{}, foremanapi.CancelOut{}),
+	)
+	svc.Subscribe( // MARKER: History
+		"History", svc.doHistory,
+		sub.At(foremanapi.History.Method, foremanapi.History.Route),
+		sub.Description(`History returns the step-by-step execution history of a flow.`),
+		sub.Function(foremanapi.HistoryIn{}, foremanapi.HistoryOut{}),
+	)
+	svc.Subscribe( // MARKER: Retry
+		"Retry", svc.doRetry,
+		sub.At(foremanapi.Retry.Method, foremanapi.Retry.Route),
+		sub.Description(`Retry re-executes the last failed step of a flow.`),
+		sub.Function(foremanapi.RetryIn{}, foremanapi.RetryOut{}),
+	)
+	svc.Subscribe( // MARKER: List
+		"List", svc.doList,
+		sub.At(foremanapi.List.Method, foremanapi.List.Route),
+		sub.Description(`List queries flows by status or workflow name. Results are ordered newest first. Set CursorFlowKey in the query to paginate.`),
+		sub.Function(foremanapi.ListIn{}, foremanapi.ListOut{}),
+	)
+	svc.Subscribe( // MARKER: CreateTask
+		"CreateTask", svc.doCreateTask,
+		sub.At(foremanapi.CreateTask.Method, foremanapi.CreateTask.Route),
+		sub.Description(`CreateTask creates a flow that executes a single task and then terminates, without starting it.`),
+		sub.Function(foremanapi.CreateTaskIn{}, foremanapi.CreateTaskOut{}),
+	)
+	svc.Subscribe( // MARKER: Enqueue
+		"Enqueue", svc.doEnqueue,
+		sub.At(foremanapi.Enqueue.Method, foremanapi.Enqueue.Route),
+		sub.Description(`Enqueue adds a step to the local work queue for processing.`),
+		sub.Function(foremanapi.EnqueueIn{}, foremanapi.EnqueueOut{}),
+	)
+	svc.Subscribe( // MARKER: Await
+		"Await", svc.doAwait,
+		sub.At(foremanapi.Await.Method, foremanapi.Await.Route),
+		sub.Description(`Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.`),
+		sub.Function(foremanapi.AwaitIn{}, foremanapi.AwaitOut{}),
+	)
+	svc.Subscribe( // MARKER: NotifyStatusChange
+		"NotifyStatusChange", svc.doNotifyStatusChange,
+		sub.At(foremanapi.NotifyStatusChange.Method, foremanapi.NotifyStatusChange.Route),
+		sub.Description(`NotifyStatusChange is an internal multicast signal to wake up Await callers across replicas.`),
+		sub.Function(foremanapi.NotifyStatusChangeIn{}, foremanapi.NotifyStatusChangeOut{}),
+		sub.NoQueue(),
+	)
+	svc.Subscribe( // MARKER: BreakBefore
+		"BreakBefore", svc.doBreakBefore,
+		sub.At(foremanapi.BreakBefore.Method, foremanapi.BreakBefore.Route),
+		sub.Description(`BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.`),
+		sub.Function(foremanapi.BreakBeforeIn{}, foremanapi.BreakBeforeOut{}),
+	)
+	svc.Subscribe( // MARKER: Run
+		"Run", svc.doRun,
+		sub.At(foremanapi.Run.Method, foremanapi.Run.Route),
+		sub.Description(`Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.`),
+		sub.Function(foremanapi.RunIn{}, foremanapi.RunOut{}),
+	)
+	svc.Subscribe( // MARKER: Continue
+		"Continue", svc.doContinue,
+		sub.At(foremanapi.Continue.Method, foremanapi.Continue.Route),
+		sub.Description(`Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.`),
+		sub.Function(foremanapi.ContinueIn{}, foremanapi.ContinueOut{}),
+	)
 
 	// HINT: Add web endpoints here
-	svc.Subscribe(foremanapi.HistoryMermaid.Method, foremanapi.HistoryMermaid.Route, svc.HistoryMermaid) // MARKER: HistoryMermaid
+	svc.Subscribe( // MARKER: HistoryMermaid
+		"HistoryMermaid", svc.HistoryMermaid,
+		sub.At(foremanapi.HistoryMermaid.Method, foremanapi.HistoryMermaid.Route),
+		sub.Description(`HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 	svc.DescribeCounter("microbus_flows_started_total", "FlowsStarted counts the number of flows that have been started.")                               // MARKER: FlowsStarted
@@ -156,7 +241,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add tickers here
 	svc.StartTicker("PurgeExpiredFlows", 24*time.Hour, svc.PurgeExpiredFlows) // MARKER: PurgeExpiredFlows
 
-	// Configs
+	// HINT: Add configs here
 	svc.DefineConfig( // MARKER: SQLDataSourceName
 		"SQLDataSourceName",
 		cfg.Description(`SQLDataSourceName is the connection string of the SQL database.`),
@@ -197,219 +282,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	return svc
 }
 
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Create
-			Type:        "function",
-			Name:        "Create",
-			Method:      foremanapi.Create.Method,
-			Route:       foremanapi.Create.Route,
-			Summary:     "Create(workflowName string, initialState any) (flowID string)",
-			Description: `Create creates a new flow for a workflow without starting it.`,
-			InputArgs:   foremanapi.CreateIn{},
-			OutputArgs:  foremanapi.CreateOut{},
-		},
-		{ // MARKER: Start
-			Type:        "function",
-			Name:        "Start",
-			Method:      foremanapi.Start.Method,
-			Route:       foremanapi.Start.Route,
-			Summary:     "Start(flowID string)",
-			Description: `Start transitions a created flow to running and enqueues it for execution.`,
-			InputArgs:   foremanapi.StartIn{},
-			OutputArgs:  foremanapi.StartOut{},
-		},
-		{ // MARKER: StartNotify
-			Type:        "function",
-			Name:        "StartNotify",
-			Method:      foremanapi.StartNotify.Method,
-			Route:       foremanapi.StartNotify.Route,
-			Summary:     "StartNotify(flowID string, notifyHostname string)",
-			Description: `StartNotify transitions a created flow to running with status change notifications sent to the given hostname.`,
-			InputArgs:   foremanapi.StartNotifyIn{},
-			OutputArgs:  foremanapi.StartNotifyOut{},
-		},
-		{ // MARKER: Snapshot
-			Type:        "function",
-			Name:        "Snapshot",
-			Method:      foremanapi.Snapshot.Method,
-			Route:       foremanapi.Snapshot.Route,
-			Summary:     "Snapshot(flowID string) (status string, state map[string]any)",
-			Description: `Snapshot returns the current status and state of a flow.`,
-			InputArgs:   foremanapi.SnapshotIn{},
-			OutputArgs:  foremanapi.SnapshotOut{},
-		},
-		{ // MARKER: Resume
-			Type:        "function",
-			Name:        "Resume",
-			Method:      foremanapi.Resume.Method,
-			Route:       foremanapi.Resume.Route,
-			Summary:     "Resume(flowID string, resumeData any)",
-			Description: `Resume resumes an interrupted flow by merging resumeData into the current step's changes and re-enqueuing it for execution.`,
-			InputArgs:   foremanapi.ResumeIn{},
-			OutputArgs:  foremanapi.ResumeOut{},
-		},
-		{ // MARKER: Fork
-			Type:        "function",
-			Name:        "Fork",
-			Method:      foremanapi.Fork.Method,
-			Route:       foremanapi.Fork.Route,
-			Summary:     "Fork(stepKey string, stateOverrides any) (newFlowKey string)",
-			Description: `Fork creates a new flow from an existing step's checkpoint.`,
-			InputArgs:   foremanapi.ForkIn{},
-			OutputArgs:  foremanapi.ForkOut{},
-		},
-		{ // MARKER: Cancel
-			Type:        "function",
-			Name:        "Cancel",
-			Method:      foremanapi.Cancel.Method,
-			Route:       foremanapi.Cancel.Route,
-			Summary:     "Cancel(flowID string)",
-			Description: `Cancel cancels a flow that is not yet in a terminal status.`,
-			InputArgs:   foremanapi.CancelIn{},
-			OutputArgs:  foremanapi.CancelOut{},
-		},
-		{ // MARKER: History
-			Type:        "function",
-			Name:        "History",
-			Method:      foremanapi.History.Method,
-			Route:       foremanapi.History.Route,
-			Summary:     "History(flowID string) (steps []FlowStep)",
-			Description: `History returns the step-by-step execution history of a flow.`,
-			InputArgs:   foremanapi.HistoryIn{},
-			OutputArgs:  foremanapi.HistoryOut{},
-		},
-		{ // MARKER: Retry
-			Type:        "function",
-			Name:        "Retry",
-			Method:      foremanapi.Retry.Method,
-			Route:       foremanapi.Retry.Route,
-			Summary:     "Retry(flowID string)",
-			Description: `Retry re-executes the last failed step of a flow.`,
-			InputArgs:   foremanapi.RetryIn{},
-			OutputArgs:  foremanapi.RetryOut{},
-		},
-		{ // MARKER: List
-			Type:        "function",
-			Name:        "List",
-			Method:      foremanapi.List.Method,
-			Route:       foremanapi.List.Route,
-			Summary:     "List(query Query) (flows []FlowSummary)",
-			Description: `List queries flows by status or workflow name.`,
-			InputArgs:   foremanapi.ListIn{},
-			OutputArgs:  foremanapi.ListOut{},
-		},
-		{ // MARKER: CreateTask
-			Type:        "function",
-			Name:        "CreateTask",
-			Method:      foremanapi.CreateTask.Method,
-			Route:       foremanapi.CreateTask.Route,
-			Summary:     "CreateTask(taskName string, initialState any) (flowID string)",
-			Description: `CreateTask creates a flow that executes a single task and then terminates, without starting it.`,
-			InputArgs:   foremanapi.CreateTaskIn{},
-			OutputArgs:  foremanapi.CreateTaskOut{},
-		},
-		{ // MARKER: Enqueue
-			Type:        "function",
-			Name:        "Enqueue",
-			Method:      foremanapi.Enqueue.Method,
-			Route:       foremanapi.Enqueue.Route,
-			Summary:     "Enqueue(shard int, stepID int)",
-			Description: `Enqueue adds a step to the local work queue for processing.`,
-			InputArgs:   foremanapi.EnqueueIn{},
-			OutputArgs:  foremanapi.EnqueueOut{},
-		},
-		{ // MARKER: BreakBefore
-			Type:        "function",
-			Name:        "BreakBefore",
-			Method:      foremanapi.BreakBefore.Method,
-			Route:       foremanapi.BreakBefore.Route,
-			Summary:     "BreakBefore(flowID string, taskName string, enabled bool)",
-			Description: `BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.`,
-			InputArgs:   foremanapi.BreakBeforeIn{},
-			OutputArgs:  foremanapi.BreakBeforeOut{},
-		},
-		{ // MARKER: Await
-			Type:        "function",
-			Name:        "Await",
-			Method:      foremanapi.Await.Method,
-			Route:       foremanapi.Await.Route,
-			Summary:     "Await(flowID string) (status string, state map[string]any)",
-			Description: `Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.`,
-			InputArgs:   foremanapi.AwaitIn{},
-			OutputArgs:  foremanapi.AwaitOut{},
-		},
-		{ // MARKER: NotifyStatusChange
-			Type:        "function",
-			Name:        "NotifyStatusChange",
-			Method:      foremanapi.NotifyStatusChange.Method,
-			Route:       foremanapi.NotifyStatusChange.Route,
-			Summary:     "NotifyStatusChange(flowID string, status string)",
-			Description: `NotifyStatusChange is an internal multicast signal to wake up Await callers across replicas.`,
-			InputArgs:   foremanapi.NotifyStatusChangeIn{},
-			OutputArgs:  foremanapi.NotifyStatusChangeOut{},
-		},
-		{ // MARKER: Run
-			Type:        "function",
-			Name:        "Run",
-			Method:      foremanapi.Run.Method,
-			Route:       foremanapi.Run.Route,
-			Summary:     "Run(workflowName string, initialState any) (status string, state map[string]any)",
-			Description: `Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.`,
-			InputArgs:   foremanapi.RunIn{},
-			OutputArgs:  foremanapi.RunOut{},
-		},
-		{ // MARKER: Continue
-			Type:        "function",
-			Name:        "Continue",
-			Method:      foremanapi.Continue.Method,
-			Route:       foremanapi.Continue.Route,
-			Summary:     "Continue(flowKey string, additionalState any) (newFlowKey string)",
-			Description: `Continue creates a new flow from a completed flow's final state, merged with additional state.`,
-			InputArgs:   foremanapi.ContinueIn{},
-			OutputArgs:  foremanapi.ContinueOut{},
-		},
-		{ // MARKER: HistoryMermaid
-			Type:        "web",
-			Name:        "HistoryMermaid",
-			Method:      foremanapi.HistoryMermaid.Method,
-			Route:       foremanapi.HistoryMermaid.Route,
-			Summary:     "HistoryMermaid()",
-			Description: `HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
-}
-
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
@@ -421,10 +293,27 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
 	// HINT: Call named callbacks here
-	if changed("NumShards") {
+	if changed("NumShards") { // MARKER: NumShards
 		if err := svc.OnChangedNumShards(ctx); err != nil {
 			return errors.Trace(err)
 		}
+	}
+	return nil
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -434,7 +323,7 @@ func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) (err e
 	var in foremanapi.CreateIn
 	var out foremanapi.CreateOut
 	err = marshalFunction(w, r, foremanapi.Create.Route, &in, &out, func(_ any, _ any) error {
-		out.FlowID, err = svc.Create(r.Context(), in.WorkflowName, in.InitialState)
+		out.FlowKey, err = svc.Create(r.Context(), in.WorkflowName, in.InitialState)
 		return err
 	})
 	return err // No trace
@@ -445,7 +334,7 @@ func (svc *Intermediate) doStart(w http.ResponseWriter, r *http.Request) (err er
 	var in foremanapi.StartIn
 	var out foremanapi.StartOut
 	err = marshalFunction(w, r, foremanapi.Start.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Start(r.Context(), in.FlowID)
+		err = svc.Start(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -456,7 +345,7 @@ func (svc *Intermediate) doStartNotify(w http.ResponseWriter, r *http.Request) (
 	var in foremanapi.StartNotifyIn
 	var out foremanapi.StartNotifyOut
 	err = marshalFunction(w, r, foremanapi.StartNotify.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.StartNotify(r.Context(), in.FlowID, in.NotifyHostname)
+		err = svc.StartNotify(r.Context(), in.FlowKey, in.NotifyHostname)
 		return err
 	})
 	return err // No trace
@@ -467,7 +356,7 @@ func (svc *Intermediate) doSnapshot(w http.ResponseWriter, r *http.Request) (err
 	var in foremanapi.SnapshotIn
 	var out foremanapi.SnapshotOut
 	err = marshalFunction(w, r, foremanapi.Snapshot.Route, &in, &out, func(_ any, _ any) error {
-		out.Status, out.State, err = svc.Snapshot(r.Context(), in.FlowID)
+		out.Status, out.State, err = svc.Snapshot(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -478,7 +367,7 @@ func (svc *Intermediate) doResume(w http.ResponseWriter, r *http.Request) (err e
 	var in foremanapi.ResumeIn
 	var out foremanapi.ResumeOut
 	err = marshalFunction(w, r, foremanapi.Resume.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Resume(r.Context(), in.FlowID, in.ResumeData)
+		err = svc.Resume(r.Context(), in.FlowKey, in.ResumeData)
 		return err
 	})
 	return err // No trace
@@ -500,7 +389,7 @@ func (svc *Intermediate) doCancel(w http.ResponseWriter, r *http.Request) (err e
 	var in foremanapi.CancelIn
 	var out foremanapi.CancelOut
 	err = marshalFunction(w, r, foremanapi.Cancel.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Cancel(r.Context(), in.FlowID)
+		err = svc.Cancel(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -511,7 +400,7 @@ func (svc *Intermediate) doHistory(w http.ResponseWriter, r *http.Request) (err 
 	var in foremanapi.HistoryIn
 	var out foremanapi.HistoryOut
 	err = marshalFunction(w, r, foremanapi.History.Route, &in, &out, func(_ any, _ any) error {
-		out.Steps, err = svc.History(r.Context(), in.FlowID)
+		out.Steps, err = svc.History(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -522,7 +411,7 @@ func (svc *Intermediate) doRetry(w http.ResponseWriter, r *http.Request) (err er
 	var in foremanapi.RetryIn
 	var out foremanapi.RetryOut
 	err = marshalFunction(w, r, foremanapi.Retry.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Retry(r.Context(), in.FlowID)
+		err = svc.Retry(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -539,13 +428,13 @@ func (svc *Intermediate) doList(w http.ResponseWriter, r *http.Request) (err err
 	return err // No trace
 }
 
-// doCreateTask handles marshaling for CreateTask.
+// doCreateTask handles marshaling for the CreateTask function.
 func (svc *Intermediate) doCreateTask(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CreateTask
 	var in foremanapi.CreateTaskIn
 	var out foremanapi.CreateTaskOut
 	err = marshalFunction(w, r, foremanapi.CreateTask.Route, &in, &out, func(_ any, _ any) error {
-		out.FlowID, err = svc.CreateTask(r.Context(), in.TaskName, in.InitialState)
-		return err // No trace
+		out.FlowKey, err = svc.CreateTask(r.Context(), in.TaskName, in.InitialState)
+		return err
 	})
 	return err // No trace
 }
@@ -566,7 +455,7 @@ func (svc *Intermediate) doAwait(w http.ResponseWriter, r *http.Request) (err er
 	var in foremanapi.AwaitIn
 	var out foremanapi.AwaitOut
 	err = marshalFunction(w, r, foremanapi.Await.Route, &in, &out, func(_ any, _ any) error {
-		out.Status, out.State, err = svc.Await(r.Context(), in.FlowID)
+		out.Status, out.State, err = svc.Await(r.Context(), in.FlowKey)
 		return err
 	})
 	return err // No trace
@@ -577,96 +466,29 @@ func (svc *Intermediate) doNotifyStatusChange(w http.ResponseWriter, r *http.Req
 	var in foremanapi.NotifyStatusChangeIn
 	var out foremanapi.NotifyStatusChangeOut
 	err = marshalFunction(w, r, foremanapi.NotifyStatusChange.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.NotifyStatusChange(r.Context(), in.FlowID, in.Status)
+		err = svc.NotifyStatusChange(r.Context(), in.FlowKey, in.Status)
 		return err
 	})
 	return err // No trace
 }
 
-/*
-SQLDataSourceName is the connection string of the SQL database.
-*/
-func (svc *Intermediate) SQLDataSourceName() string { // MARKER: SQLDataSourceName
-	return svc.Config("SQLDataSourceName")
-}
-
-/*
-SetSQLDataSourceName sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetSQLDataSourceName(value string) (err error) { // MARKER: SQLDataSourceName
-	return svc.SetConfig("SQLDataSourceName", value)
-}
-
-/*
-Workers is the number of concurrent workers that process flow steps.
-*/
-func (svc *Intermediate) Workers() int { // MARKER: Workers
-	_val := svc.Config("Workers")
-	_i, _ := strconv.ParseInt(_val, 10, 64)
-	return int(_i)
-}
-
-/*
-SetWorkers sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetWorkers(workers int) (err error) { // MARKER: Workers
-	return svc.SetConfig("Workers", strconv.Itoa(workers))
-}
-
-/*
-RetentionDays is the number of days to retain terminated flows and their steps. Set to 0 to disable purging.
-*/
-func (svc *Intermediate) RetentionDays() int { // MARKER: RetentionDays
-	_val := svc.Config("RetentionDays")
-	_i, _ := strconv.ParseInt(_val, 10, 64)
-	return int(_i)
-}
-
-/*
-SetRetentionDays sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetRetentionDays(retentionDays int) (err error) { // MARKER: RetentionDays
-	return svc.SetConfig("RetentionDays", strconv.Itoa(retentionDays))
-}
-
-/*
-DefaultTimeBudget is the default execution timeout for task steps when the graph does not specify a per-task time budget.
-*/
-func (svc *Intermediate) DefaultTimeBudget() time.Duration { // MARKER: DefaultTimeBudget
-	_val := svc.Config("DefaultTimeBudget")
-	_dur, _ := time.ParseDuration(_val)
-	return _dur
-}
-
-/*
-SetDefaultTimeBudget sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetDefaultTimeBudget(budget time.Duration) (err error) { // MARKER: DefaultTimeBudget
-	return svc.SetConfig("DefaultTimeBudget", budget.String())
-}
-
-/*
-NumShards is the number of database shards.
-*/
-func (svc *Intermediate) NumShards() int { // MARKER: NumShards
-	_val := svc.Config("NumShards")
-	_i, _ := strconv.ParseInt(_val, 10, 64)
-	return int(_i)
-}
-
-/*
-SetNumShards sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetNumShards(numShards int) (err error) { // MARKER: NumShards
-	return svc.SetConfig("NumShards", strconv.Itoa(numShards))
-}
-
-// doBreakBefore handles marshaling for BreakBefore.
+// doBreakBefore handles marshaling for the BreakBefore function.
 func (svc *Intermediate) doBreakBefore(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: BreakBefore
 	var in foremanapi.BreakBeforeIn
 	var out foremanapi.BreakBeforeOut
 	err = marshalFunction(w, r, foremanapi.BreakBefore.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.BreakBefore(r.Context(), in.FlowID, in.TaskName, in.Enabled)
+		err = svc.BreakBefore(r.Context(), in.FlowKey, in.TaskName, in.Enabled)
+		return err
+	})
+	return err // No trace
+}
+
+// doRun handles marshaling for the Run function.
+func (svc *Intermediate) doRun(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Run
+	var in foremanapi.RunIn
+	var out foremanapi.RunOut
+	err = marshalFunction(w, r, foremanapi.Run.Route, &in, &out, func(_ any, _ any) error {
+		out.Status, out.State, err = svc.Run(r.Context(), in.WorkflowName, in.InitialState)
 		return err
 	})
 	return err // No trace
@@ -683,15 +505,82 @@ func (svc *Intermediate) doContinue(w http.ResponseWriter, r *http.Request) (err
 	return err // No trace
 }
 
-// doRun handles marshaling for Run.
-func (svc *Intermediate) doRun(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Run
-	var in foremanapi.RunIn
-	var out foremanapi.RunOut
-	err = marshalFunction(w, r, foremanapi.Run.Route, &in, &out, func(_ any, _ any) error {
-		out.Status, out.State, err = svc.Run(r.Context(), in.WorkflowName, in.InitialState)
-		return err
-	})
-	return err // No trace
+/*
+SQLDataSourceName is the connection string of the SQL database.
+*/
+func (svc *Intermediate) SQLDataSourceName() (value string) { // MARKER: SQLDataSourceName
+	return svc.Config("SQLDataSourceName")
+}
+
+/*
+SetSQLDataSourceName sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetSQLDataSourceName(value string) (err error) { // MARKER: SQLDataSourceName
+	return svc.SetConfig("SQLDataSourceName", value)
+}
+
+/*
+Workers is the number of concurrent workers that process flow steps.
+*/
+func (svc *Intermediate) Workers() (workers int) { // MARKER: Workers
+	_val := svc.Config("Workers")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetWorkers sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetWorkers(workers int) (err error) { // MARKER: Workers
+	return svc.SetConfig("Workers", strconv.Itoa(workers))
+}
+
+/*
+RetentionDays is the number of days to retain terminated flows and their steps. Set to 0 to disable purging.
+*/
+func (svc *Intermediate) RetentionDays() (retentionDays int) { // MARKER: RetentionDays
+	_val := svc.Config("RetentionDays")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetRetentionDays sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetRetentionDays(retentionDays int) (err error) { // MARKER: RetentionDays
+	return svc.SetConfig("RetentionDays", strconv.Itoa(retentionDays))
+}
+
+/*
+DefaultTimeBudget is the default execution timeout for task steps when the graph does not specify a per-task time budget.
+*/
+func (svc *Intermediate) DefaultTimeBudget() (budget time.Duration) { // MARKER: DefaultTimeBudget
+	_val := svc.Config("DefaultTimeBudget")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+/*
+SetDefaultTimeBudget sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetDefaultTimeBudget(budget time.Duration) (err error) { // MARKER: DefaultTimeBudget
+	return svc.SetConfig("DefaultTimeBudget", budget.String())
+}
+
+/*
+NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+*/
+func (svc *Intermediate) NumShards() (numShards int) { // MARKER: NumShards
+	_val := svc.Config("NumShards")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetNumShards sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetNumShards(numShards int) (err error) { // MARKER: NumShards
+	return svc.SetConfig("NumShards", strconv.Itoa(numShards))
 }
 
 /*
@@ -735,21 +624,4 @@ IncrementStepsRecovered counts the number of steps recovered by pollPendingSteps
 */
 func (svc *Intermediate) IncrementStepsRecovered(ctx context.Context, value int) (err error) { // MARKER: StepsRecovered
 	return svc.IncrementCounter(ctx, "microbus_steps_recovered_total", float64(value))
-}
-
-// marshalFunction handles marshaling for functional endpoints.
-func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
-	err := httpx.ReadInputPayload(r, route, in)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = execute(in, out)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, out)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
 }

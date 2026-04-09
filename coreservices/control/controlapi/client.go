@@ -44,29 +44,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "control.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Ping          = Def{Method: "ANY", Route: `:888/ping`}           // MARKER: Ping
-	ConfigRefresh = Def{Method: "ANY", Route: `:888/config-refresh`} // MARKER: ConfigRefresh
-	Trace         = Def{Method: "ANY", Route: `:888/trace`}          // MARKER: Trace
-	Metrics       = Def{Method: "ANY", Route: `:888/metrics`}        // MARKER: Metrics
-	OnNewSubs     = Def{Method: "POST", Route: `:888/on-new-subs`}   // MARKER: OnNewSubs
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any
@@ -248,17 +225,6 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// --- Ping ---
-
-// PingIn are the input arguments of Ping.
-type PingIn struct { // MARKER: Ping
-}
-
-// PingOut are the output arguments of Ping.
-type PingOut struct { // MARKER: Ping
-	Pong int `json:"pong,omitzero"`
-}
-
 // PingResponse packs the response of Ping.
 type PingResponse multicastResponse // MARKER: Ping
 
@@ -294,16 +260,6 @@ func (_c Client) Ping(ctx context.Context) (pong int, err error) { // MARKER: Pi
 	_out := PingOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Ping.Method, Ping.Route, &_in, &_out)
 	return _out.Pong, err // No trace
-}
-
-// --- ConfigRefresh ---
-
-// ConfigRefreshIn are the input arguments of ConfigRefresh.
-type ConfigRefreshIn struct { // MARKER: ConfigRefresh
-}
-
-// ConfigRefreshOut are the output arguments of ConfigRefresh.
-type ConfigRefreshOut struct { // MARKER: ConfigRefresh
 }
 
 // ConfigRefreshResponse packs the response of ConfigRefresh.
@@ -342,17 +298,6 @@ func (_c Client) ConfigRefresh(ctx context.Context) (err error) { // MARKER: Con
 	return err // No trace
 }
 
-// --- Trace ---
-
-// TraceIn are the input arguments of Trace.
-type TraceIn struct { // MARKER: Trace
-	ID string `json:"id,omitzero"`
-}
-
-// TraceOut are the output arguments of Trace.
-type TraceOut struct { // MARKER: Trace
-}
-
 // TraceResponse packs the response of Trace.
 type TraceResponse multicastResponse // MARKER: Trace
 
@@ -389,7 +334,42 @@ func (_c Client) Trace(ctx context.Context, id string) (err error) { // MARKER: 
 	return err // No trace
 }
 
-// --- Metrics (web endpoint) ---
+// OpenAPIResponse packs the response of OpenAPI.
+type OpenAPIResponse multicastResponse // MARKER: OpenAPI
+
+// Get unpacks the return arguments of OpenAPI.
+func (_res *OpenAPIResponse) Get() (httpResponseBody *Document, httpStatusCode int, err error) { // MARKER: OpenAPI
+	_d := _res.data.(*OpenAPIOut)
+	return _d.HTTPResponseBody, _d.HTTPStatusCode, _res.err
+}
+
+/*
+OpenAPI returns the OpenAPI 3.1 document of the microservice.
+*/
+func (_c MulticastClient) OpenAPI(ctx context.Context) iter.Seq[*OpenAPIResponse] { // MARKER: OpenAPI
+	_in := OpenAPIIn{}
+	_out := OpenAPIOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OpenAPI.Method, OpenAPI.Route, &_in, &_out)
+	return func(yield func(*OpenAPIResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OpenAPIResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+OpenAPI returns the OpenAPI 3.1 document of the microservice.
+*/
+func (_c Client) OpenAPI(ctx context.Context) (httpResponseBody *Document, httpStatusCode int, err error) { // MARKER: OpenAPI
+	_in := OpenAPIIn{}
+	_out := OpenAPIOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, OpenAPI.Method, OpenAPI.Route, &_in, &_out)
+	return _out.HTTPResponseBody, _out.HTTPStatusCode, err // No trace
+}
 
 /*
 Metrics returns Prometheus metrics.
@@ -400,6 +380,9 @@ If it is of type url.Values, it is serialized as form data. All other types are 
 */
 func (_c Client) Metrics(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Metrics
 	if method == "" {
+		method = Metrics.Method
+	}
+	if method == "ANY" {
 		method = "POST"
 	}
 	return _c.svc.Request(
@@ -421,6 +404,9 @@ If it is of type url.Values, it is serialized as form data. All other types are 
 */
 func (_c MulticastClient) Metrics(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Metrics
 	if method == "" {
+		method = Metrics.Method
+	}
+	if method == "ANY" {
 		method = "POST"
 	}
 	return _c.svc.Publish(
@@ -431,16 +417,6 @@ func (_c MulticastClient) Metrics(ctx context.Context, method string, relativeUR
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
-}
-
-// --- OnNewSubs (outbound event) ---
-
-// OnNewSubsIn are the input arguments of OnNewSubs.
-type OnNewSubsIn struct { // MARKER: OnNewSubs
-}
-
-// OnNewSubsOut are the output arguments of OnNewSubs.
-type OnNewSubsOut struct { // MARKER: OnNewSubs
 }
 
 // OnNewSubsResponse packs the response of OnNewSubs.
@@ -482,9 +458,16 @@ func (c Hook) OnNewSubs(handler func(ctx context.Context) (err error)) (unsub fu
 		})
 		return err // No trace
 	}
+	const name = "OnNewSubs"
 	path := httpx.JoinHostAndPath(c.host, OnNewSubs.Route)
-	unsub, err = c.svc.Subscribe(OnNewSubs.Method, path, doOnNewSubs, c.opts...)
-	return unsub, errors.Trace(err)
+	subOpts := append([]sub.Option{
+		sub.At(OnNewSubs.Method, path),
+		sub.InboundEvent(OnNewSubsIn{}, OnNewSubsOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnNewSubs, subOpts...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.

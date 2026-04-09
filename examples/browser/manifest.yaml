@@ -17,7 +17,7 @@ general:
   hostname: browser.example
   description: The browser microservice implements a simple web browser that utilizes the egress proxy.
   package: github.com/microbus-io/fabric/examples/browser
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
 
 downstream:
   - hostname: http.egress.core

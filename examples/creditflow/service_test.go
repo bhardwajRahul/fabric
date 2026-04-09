@@ -20,7 +20,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"regexp"
 	"testing"
 	"time"
 
@@ -56,56 +55,6 @@ var (
 	_ testarossa.Asserter
 	_ creditflowapi.Client
 )
-
-func TestCreditFlow_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		creditflowapi.Demo.Route,                 // MARKER: Demo
-		creditflowapi.IdentityVerification.Route, // MARKER: IdentityVerification
-		creditflowapi.CreditApproval.Route,       // MARKER: CreditApproval
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(creditflowapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
 
 func TestCreditFlow_Mock(t *testing.T) {
 	t.Parallel()
@@ -875,7 +824,6 @@ func TestCreditFlow_Decision(t *testing.T) { // MARKER: Decision
 }
 
 func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
-	t.Parallel()
 	ctx := t.Context()
 	_ = ctx
 
@@ -1060,7 +1008,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		foremanClient := foremanapi.NewClient(tester)
 
 		// Create the flow
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: creditflowapi.Applicant{
 				ApplicantName: "Frank",
 				SSN:           "123-45-6789",
@@ -1073,15 +1021,15 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Set a breakpoint on the ReviewCredit task (runs after fan-in, before Decision)
-		err = foremanClient.BreakBefore(ctx, flowID, creditflowapi.ReviewCredit.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.ReviewCredit.URL(), true)
 		assert.NoError(err)
 
 		// Start the flow
-		err = foremanClient.Start(ctx, flowID)
+		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		// Wait for the flow to hit the breakpoint (interrupted status)
-		status, state, err := foremanClient.Await(ctx, flowID)
+		status, state, err := foremanClient.Await(ctx, flowKey)
 		assert.Expect(
 			err, nil,
 			status, foremanapi.StatusInterrupted,
@@ -1089,11 +1037,11 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		)
 
 		// Resume the flow past the breakpoint
-		err = foremanClient.Resume(ctx, flowID, nil)
+		err = foremanClient.Resume(ctx, flowKey, nil)
 		assert.NoError(err)
 
 		// Wait for completion
-		status, state, err = foremanClient.Await(ctx, flowID)
+		status, state, err = foremanClient.Await(ctx, flowKey)
 		assert.Expect(
 			err, nil,
 			status, foremanapi.StatusCompleted,
@@ -1109,7 +1057,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		// Create the parent flow and set a breakpoint on IdentityDecision
 		// (a task inside the identity-verification subgraph).
 		// Breakpoints are copied from parent to child on subgraph creation.
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: creditflowapi.Applicant{
 				ApplicantName: "Grace",
 				SSN:           "123-45-6789",
@@ -1120,25 +1068,25 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			},
 		})
 		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowID, creditflowapi.IdentityDecision.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.IdentityDecision.URL(), true)
 		assert.NoError(err)
 
 		// Start the parent flow
-		err = foremanClient.Start(ctx, flowID)
+		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		// The subgraph breakpoint propagates up - the parent flow becomes interrupted
-		status, _, err := foremanClient.Await(ctx, flowID)
+		status, _, err := foremanClient.Await(ctx, flowKey)
 		if !assert.Expect(err, nil, status, foremanapi.StatusInterrupted) {
 			return
 		}
 
 		// Cancel the parent flow - cancellation cascades to the subgraph
-		err = foremanClient.Cancel(ctx, flowID)
+		err = foremanClient.Cancel(ctx, flowKey)
 		assert.NoError(err)
 
 		// Verify the parent is cancelled
-		parentStatus, _, err := foremanClient.Await(ctx, flowID)
+		parentStatus, _, err := foremanClient.Await(ctx, flowKey)
 		assert.Expect(
 			err, nil,
 			parentStatus, foremanapi.StatusCancelled,
@@ -1151,7 +1099,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		foremanClient := foremanapi.NewClient(tester)
 
 		// Create the parent flow with MissingSSN fault injection - VerifySSN will interrupt to request it
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: creditflowapi.Applicant{
 				ApplicantName: "Ivy",
 				SSN:           "123-45-6789",
@@ -1165,11 +1113,11 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Start the flow
-		err = foremanClient.Start(ctx, flowID)
+		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		// VerifySSN interrupts because of MissingSSN fault injection - propagates up to the parent
-		status, state, err := foremanClient.Await(ctx, flowID)
+		status, state, err := foremanClient.Await(ctx, flowKey)
 		if !assert.Expect(err, nil, status, foremanapi.StatusInterrupted) {
 			return
 		}
@@ -1177,11 +1125,11 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.Expect(state["request"], "ssn")
 
 		// Resume with the SSN provided and clear the fault injection
-		err = foremanClient.Resume(ctx, flowID, map[string]any{"ssn": "123-45-6789", "faultInjection": ""})
+		err = foremanClient.Resume(ctx, flowKey, map[string]any{"ssn": "123-45-6789", "faultInjection": ""})
 		assert.NoError(err)
 
 		// Wait for completion
-		status, state, err = foremanClient.Await(ctx, flowID)
+		status, state, err = foremanClient.Await(ctx, flowKey)
 		assert.Expect(
 			err, nil,
 			status, foremanapi.StatusCompleted,
@@ -1345,30 +1293,30 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 
 	// Subscribe to OnFlowStopped targeted at the tester's hostname
 	type notification struct {
-		flowID   string
+		flowKey  string
 		status   string
 		snapshot map[string]any
 	}
 	notifyCh := make(chan notification, 10)
 	assert := testarossa.For(t)
 	unsub, err := foremanapi.NewHook(tester).ForHost(tester.Hostname()).OnFlowStopped(
-		func(ctx context.Context, flowID string, status string, snapshot map[string]any) (err error) {
-			notifyCh <- notification{flowID: flowID, status: status, snapshot: snapshot}
+		func(ctx context.Context, flowKey string, status string, snapshot map[string]any) (err error) {
+			notifyCh <- notification{flowKey: flowKey, status: status, snapshot: snapshot}
 			return nil
 		},
 	)
 	assert.NoError(err)
 	defer unsub()
 
-	waitForNotification := func(assert *testarossa.Asserter, flowID string, expectedStatus string) notification {
+	waitForNotification := func(assert *testarossa.Asserter, flowKey string, expectedStatus string) notification {
 		for {
 			select {
 			case n := <-notifyCh:
-				if n.flowID == flowID && n.status == expectedStatus {
+				if n.flowKey == flowKey && n.status == expectedStatus {
 					return n
 				}
 			case <-time.After(10 * time.Second):
-				assert.True(false, "timeout waiting for %s notification on flow %s", expectedStatus, flowID)
+				assert.True(false, "timeout waiting for %s notification on flow %s", expectedStatus, flowKey)
 				return notification{}
 			}
 		}
@@ -1386,14 +1334,14 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
 		})
 		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowID, tester.Hostname())
+		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowID, foremanapi.StatusCompleted)
+		n := waitForNotification(assert, flowKey, foremanapi.StatusCompleted)
 		assert.Expect(n.status, foremanapi.StatusCompleted)
 		assert.NotNil(n.snapshot)
 	})
@@ -1402,15 +1350,15 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// MissingSSN fault causes VerifySSN to interrupt the flow
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant:      goodApplicant,
 			FaultInjection: "MissingSSN",
 		})
 		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowID, tester.Hostname())
+		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowID, foremanapi.StatusInterrupted)
+		n := waitForNotification(assert, flowKey, foremanapi.StatusInterrupted)
 		assert.Expect(n.status, foremanapi.StatusInterrupted)
 	})
 
@@ -1418,24 +1366,24 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Use a breakpoint to pause the flow, then cancel it
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
 		})
 		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowID, creditflowapi.ReviewCredit.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.ReviewCredit.URL(), true)
 		assert.NoError(err)
 
-		err = foremanClient.StartNotify(ctx, flowID, tester.Hostname())
+		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
 
 		// Wait for breakpoint interrupt notification
-		waitForNotification(assert, flowID, foremanapi.StatusInterrupted)
+		waitForNotification(assert, flowKey, foremanapi.StatusInterrupted)
 
 		// Cancel the flow
-		err = foremanClient.Cancel(ctx, flowID)
+		err = foremanClient.Cancel(ctx, flowKey)
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowID, foremanapi.StatusCancelled)
+		n := waitForNotification(assert, flowKey, foremanapi.StatusCancelled)
 		assert.Expect(n.status, foremanapi.StatusCancelled)
 		assert.NotNil(n.snapshot)
 	})
@@ -1444,15 +1392,15 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Delay fault causes VerifyPhoneNumber to exceed its time budget, failing the flow
-		flowID, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
+		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant:      goodApplicant,
 			FaultInjection: "Delay",
 		})
 		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowID, tester.Hostname())
+		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowID, foremanapi.StatusFailed)
+		n := waitForNotification(assert, flowKey, foremanapi.StatusFailed)
 		assert.Expect(n.status, foremanapi.StatusFailed)
 		assert.NotNil(n.snapshot)
 	})

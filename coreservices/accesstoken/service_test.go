@@ -20,7 +20,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"regexp"
 	"testing"
 	"time"
 
@@ -29,7 +28,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
@@ -51,56 +49,6 @@ var (
 	_ testarossa.Asserter
 	_ accesstokenapi.Client
 )
-
-func TestAccessToken_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		accesstokenapi.Mint.Route,      // MARKER: Mint
-		accesstokenapi.LocalKeys.Route, // MARKER: LocalKeys
-		accesstokenapi.JWKS.Route,      // MARKER: JWKS
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(accesstokenapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
 
 func TestAccessToken_Mock(t *testing.T) {
 	t.Parallel()
@@ -334,7 +282,8 @@ func TestAccessToken_Mint(t *testing.T) { // MARKER: Mint
 				mapClaims := parsed.Claims.(jwt.MapClaims)
 				assert.Expect(mapClaims["sub"], "user123")
 				assert.Expect(mapClaims["tenant"], "acme")
-				assert.Expect(mapClaims["iss"], "microbus://"+accesstokenapi.Hostname)
+				assert.Expect(mapClaims["iss"], "https://"+accesstokenapi.Hostname)
+				assert.Expect(mapClaims["microbus"], "1")
 				assert.NotZero(mapClaims["jti"])
 				assert.NotZero(mapClaims["iat"])
 				assert.NotZero(mapClaims["exp"])

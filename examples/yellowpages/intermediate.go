@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -49,13 +46,13 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
-	_ *workflow.Flow
 	_ yellowpagesapi.Client
+	_ *workflow.Flow
 )
 
 const (
 	Hostname = yellowpagesapi.Hostname
-	Version  = 10
+	Version  = 11
 )
 
 // ToDo is implemented by the service or mock.
@@ -125,43 +122,189 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`Person persists persons in a SQL database.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(yellowpagesapi.Create.Method, yellowpagesapi.Create.Route, svc.doCreate)                         // MARKER: Create
-	svc.Subscribe(yellowpagesapi.Store.Method, yellowpagesapi.Store.Route, svc.doStore)                            // MARKER: Store
-	svc.Subscribe(yellowpagesapi.MustStore.Method, yellowpagesapi.MustStore.Route, svc.doMustStore)                // MARKER: MustStore
-	svc.Subscribe(yellowpagesapi.Revise.Method, yellowpagesapi.Revise.Route, svc.doRevise)                         // MARKER: Revise
-	svc.Subscribe(yellowpagesapi.MustRevise.Method, yellowpagesapi.MustRevise.Route, svc.doMustRevise)             // MARKER: MustRevise
-	svc.Subscribe(yellowpagesapi.Delete.Method, yellowpagesapi.Delete.Route, svc.doDelete)                         // MARKER: Delete
-	svc.Subscribe(yellowpagesapi.MustDelete.Method, yellowpagesapi.MustDelete.Route, svc.doMustDelete)             // MARKER: MustDelete
-	svc.Subscribe(yellowpagesapi.List.Method, yellowpagesapi.List.Route, svc.doList)                               // MARKER: List
-	svc.Subscribe(yellowpagesapi.Lookup.Method, yellowpagesapi.Lookup.Route, svc.doLookup)                         // MARKER: Lookup
-	svc.Subscribe(yellowpagesapi.MustLookup.Method, yellowpagesapi.MustLookup.Route, svc.doMustLookup)             // MARKER: MustLookup
-	svc.Subscribe(yellowpagesapi.Load.Method, yellowpagesapi.Load.Route, svc.doLoad)                               // MARKER: Load
-	svc.Subscribe(yellowpagesapi.MustLoad.Method, yellowpagesapi.MustLoad.Route, svc.doMustLoad)                   // MARKER: MustLoad
-	svc.Subscribe(yellowpagesapi.BulkLoad.Method, yellowpagesapi.BulkLoad.Route, svc.doBulkLoad)                   // MARKER: BulkLoad
-	svc.Subscribe(yellowpagesapi.BulkDelete.Method, yellowpagesapi.BulkDelete.Route, svc.doBulkDelete)             // MARKER: BulkDelete
-	svc.Subscribe(yellowpagesapi.BulkCreate.Method, yellowpagesapi.BulkCreate.Route, svc.doBulkCreate)             // MARKER: BulkCreate
-	svc.Subscribe(yellowpagesapi.BulkStore.Method, yellowpagesapi.BulkStore.Route, svc.doBulkStore)                // MARKER: BulkStore
-	svc.Subscribe(yellowpagesapi.BulkRevise.Method, yellowpagesapi.BulkRevise.Route, svc.doBulkRevise)             // MARKER: BulkRevise
-	svc.Subscribe(yellowpagesapi.Purge.Method, yellowpagesapi.Purge.Route, svc.doPurge)                            // MARKER: Purge
-	svc.Subscribe(yellowpagesapi.Count.Method, yellowpagesapi.Count.Route, svc.doCount)                            // MARKER: Count
-	svc.Subscribe(yellowpagesapi.CreateREST.Method, yellowpagesapi.CreateREST.Route, svc.doCreateREST)             // MARKER: CreateREST
-	svc.Subscribe(yellowpagesapi.StoreREST.Method, yellowpagesapi.StoreREST.Route, svc.doStoreREST)                // MARKER: StoreREST
-	svc.Subscribe(yellowpagesapi.DeleteREST.Method, yellowpagesapi.DeleteREST.Route, svc.doDeleteREST)             // MARKER: DeleteREST
-	svc.Subscribe(yellowpagesapi.LoadREST.Method, yellowpagesapi.LoadREST.Route, svc.doLoadREST)                   // MARKER: LoadREST
-	svc.Subscribe(yellowpagesapi.ListREST.Method, yellowpagesapi.ListREST.Route, svc.doListREST)                   // MARKER: ListREST
-	svc.Subscribe(yellowpagesapi.TryReserve.Method, yellowpagesapi.TryReserve.Route, svc.doTryReserve)             // MARKER: TryReserve
-	svc.Subscribe(yellowpagesapi.TryBulkReserve.Method, yellowpagesapi.TryBulkReserve.Route, svc.doTryBulkReserve) // MARKER: TryBulkReserve
-	svc.Subscribe(yellowpagesapi.Reserve.Method, yellowpagesapi.Reserve.Route, svc.doReserve)                      // MARKER: Reserve
-	svc.Subscribe(yellowpagesapi.BulkReserve.Method, yellowpagesapi.BulkReserve.Route, svc.doBulkReserve)          // MARKER: BulkReserve
+	svc.Subscribe( // MARKER: Create
+		"Create", svc.doCreate,
+		sub.At(yellowpagesapi.Create.Method, yellowpagesapi.Create.Route),
+		sub.Description(`Create creates a new object, returning its key.`),
+		sub.Function(yellowpagesapi.CreateIn{}, yellowpagesapi.CreateOut{}),
+	)
+	svc.Subscribe( // MARKER: Store
+		"Store", svc.doStore,
+		sub.At(yellowpagesapi.Store.Method, yellowpagesapi.Store.Route),
+		sub.Description(`Store updates the object.`),
+		sub.Function(yellowpagesapi.StoreIn{}, yellowpagesapi.StoreOut{}),
+	)
+	svc.Subscribe( // MARKER: MustStore
+		"MustStore", svc.doMustStore,
+		sub.At(yellowpagesapi.MustStore.Method, yellowpagesapi.MustStore.Route),
+		sub.Description(`MustStore updates the object.`),
+		sub.Function(yellowpagesapi.MustStoreIn{}, yellowpagesapi.MustStoreOut{}),
+	)
+	svc.Subscribe( // MARKER: Revise
+		"Revise", svc.doRevise,
+		sub.At(yellowpagesapi.Revise.Method, yellowpagesapi.Revise.Route),
+		sub.Description(`Revise updates the object only if the revision matches.`),
+		sub.Function(yellowpagesapi.ReviseIn{}, yellowpagesapi.ReviseOut{}),
+	)
+	svc.Subscribe( // MARKER: MustRevise
+		"MustRevise", svc.doMustRevise,
+		sub.At(yellowpagesapi.MustRevise.Method, yellowpagesapi.MustRevise.Route),
+		sub.Description(`MustRevise updates the object only if the revision matches.`),
+		sub.Function(yellowpagesapi.MustReviseIn{}, yellowpagesapi.MustReviseOut{}),
+	)
+	svc.Subscribe( // MARKER: Delete
+		"Delete", svc.doDelete,
+		sub.At(yellowpagesapi.Delete.Method, yellowpagesapi.Delete.Route),
+		sub.Description(`Delete deletes the object.`),
+		sub.Function(yellowpagesapi.DeleteIn{}, yellowpagesapi.DeleteOut{}),
+	)
+	svc.Subscribe( // MARKER: MustDelete
+		"MustDelete", svc.doMustDelete,
+		sub.At(yellowpagesapi.MustDelete.Method, yellowpagesapi.MustDelete.Route),
+		sub.Description(`MustDelete deletes the object.`),
+		sub.Function(yellowpagesapi.MustDeleteIn{}, yellowpagesapi.MustDeleteOut{}),
+	)
+	svc.Subscribe( // MARKER: List
+		"List", svc.doList,
+		sub.At(yellowpagesapi.List.Method, yellowpagesapi.List.Route),
+		sub.Description(`List returns the objects matching the query, and the total count of matches regardless of the limit.`),
+		sub.Function(yellowpagesapi.ListIn{}, yellowpagesapi.ListOut{}),
+	)
+	svc.Subscribe( // MARKER: Lookup
+		"Lookup", svc.doLookup,
+		sub.At(yellowpagesapi.Lookup.Method, yellowpagesapi.Lookup.Route),
+		sub.Description(`Lookup returns the single object matching the query. It errors if more than one object matches the query.`),
+		sub.Function(yellowpagesapi.LookupIn{}, yellowpagesapi.LookupOut{}),
+	)
+	svc.Subscribe( // MARKER: MustLookup
+		"MustLookup", svc.doMustLookup,
+		sub.At(yellowpagesapi.MustLookup.Method, yellowpagesapi.MustLookup.Route),
+		sub.Description(`MustLookup returns the single object matching the query. It errors unless exactly one object matches the query.`),
+		sub.Function(yellowpagesapi.MustLookupIn{}, yellowpagesapi.MustLookupOut{}),
+	)
+	svc.Subscribe( // MARKER: Load
+		"Load", svc.doLoad,
+		sub.At(yellowpagesapi.Load.Method, yellowpagesapi.Load.Route),
+		sub.Description(`Load returns the object associated with the key.`),
+		sub.Function(yellowpagesapi.LoadIn{}, yellowpagesapi.LoadOut{}),
+	)
+	svc.Subscribe( // MARKER: MustLoad
+		"MustLoad", svc.doMustLoad,
+		sub.At(yellowpagesapi.MustLoad.Method, yellowpagesapi.MustLoad.Route),
+		sub.Description(`MustLoad returns the object associated with the key. It errors if the object is not found.`),
+		sub.Function(yellowpagesapi.MustLoadIn{}, yellowpagesapi.MustLoadOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkLoad
+		"BulkLoad", svc.doBulkLoad,
+		sub.At(yellowpagesapi.BulkLoad.Method, yellowpagesapi.BulkLoad.Route),
+		sub.Description(`BulkLoad returns the objects matching the keys.`),
+		sub.Function(yellowpagesapi.BulkLoadIn{}, yellowpagesapi.BulkLoadOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkDelete
+		"BulkDelete", svc.doBulkDelete,
+		sub.At(yellowpagesapi.BulkDelete.Method, yellowpagesapi.BulkDelete.Route),
+		sub.Description(`BulkDelete deletes the objects matching the keys, returning the keys of the deleted objects.`),
+		sub.Function(yellowpagesapi.BulkDeleteIn{}, yellowpagesapi.BulkDeleteOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkCreate
+		"BulkCreate", svc.doBulkCreate,
+		sub.At(yellowpagesapi.BulkCreate.Method, yellowpagesapi.BulkCreate.Route),
+		sub.Description(`BulkCreate creates multiple objects, returning their keys.`),
+		sub.Function(yellowpagesapi.BulkCreateIn{}, yellowpagesapi.BulkCreateOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkStore
+		"BulkStore", svc.doBulkStore,
+		sub.At(yellowpagesapi.BulkStore.Method, yellowpagesapi.BulkStore.Route),
+		sub.Description(`BulkStore updates multiple objects, returning the keys of the stored objects.`),
+		sub.Function(yellowpagesapi.BulkStoreIn{}, yellowpagesapi.BulkStoreOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkRevise
+		"BulkRevise", svc.doBulkRevise,
+		sub.At(yellowpagesapi.BulkRevise.Method, yellowpagesapi.BulkRevise.Route),
+		sub.Description(`BulkRevise updates multiple objects, returning the number of rows affected.
+Only rows with matching revisions are updated.`),
+		sub.Function(yellowpagesapi.BulkReviseIn{}, yellowpagesapi.BulkReviseOut{}),
+	)
+	svc.Subscribe( // MARKER: Purge
+		"Purge", svc.doPurge,
+		sub.At(yellowpagesapi.Purge.Method, yellowpagesapi.Purge.Route),
+		sub.Description(`Purge deletes all objects matching the query, returning the keys of the deleted objects.`),
+		sub.Function(yellowpagesapi.PurgeIn{}, yellowpagesapi.PurgeOut{}),
+	)
+	svc.Subscribe( // MARKER: Count
+		"Count", svc.doCount,
+		sub.At(yellowpagesapi.Count.Method, yellowpagesapi.Count.Route),
+		sub.Description(`Count returns the number of objects matching the query, disregarding pagination.`),
+		sub.Function(yellowpagesapi.CountIn{}, yellowpagesapi.CountOut{}),
+	)
+	svc.Subscribe( // MARKER: CreateREST
+		"CreateREST", svc.doCreateREST,
+		sub.At(yellowpagesapi.CreateREST.Method, yellowpagesapi.CreateREST.Route),
+		sub.Description(`CreateREST creates a new person via REST, returning its key.`),
+		sub.Function(yellowpagesapi.CreateRESTIn{}, yellowpagesapi.CreateRESTOut{}),
+	)
+	svc.Subscribe( // MARKER: StoreREST
+		"StoreREST", svc.doStoreREST,
+		sub.At(yellowpagesapi.StoreREST.Method, yellowpagesapi.StoreREST.Route),
+		sub.Description(`StoreREST updates an existing person via REST.`),
+		sub.Function(yellowpagesapi.StoreRESTIn{}, yellowpagesapi.StoreRESTOut{}),
+	)
+	svc.Subscribe( // MARKER: DeleteREST
+		"DeleteREST", svc.doDeleteREST,
+		sub.At(yellowpagesapi.DeleteREST.Method, yellowpagesapi.DeleteREST.Route),
+		sub.Description(`DeleteREST deletes an existing person via REST.`),
+		sub.Function(yellowpagesapi.DeleteRESTIn{}, yellowpagesapi.DeleteRESTOut{}),
+	)
+	svc.Subscribe( // MARKER: LoadREST
+		"LoadREST", svc.doLoadREST,
+		sub.At(yellowpagesapi.LoadREST.Method, yellowpagesapi.LoadREST.Route),
+		sub.Description(`LoadREST loads a person by key via REST.`),
+		sub.Function(yellowpagesapi.LoadRESTIn{}, yellowpagesapi.LoadRESTOut{}),
+	)
+	svc.Subscribe( // MARKER: ListREST
+		"ListREST", svc.doListREST,
+		sub.At(yellowpagesapi.ListREST.Method, yellowpagesapi.ListREST.Route),
+		sub.Description(`ListREST lists persons matching the query via REST.`),
+		sub.Function(yellowpagesapi.ListRESTIn{}, yellowpagesapi.ListRESTOut{}),
+	)
+	svc.Subscribe( // MARKER: TryReserve
+		"TryReserve", svc.doTryReserve,
+		sub.At(yellowpagesapi.TryReserve.Method, yellowpagesapi.TryReserve.Route),
+		sub.Description(`TryReserve attempts to reserve a person for the given duration, returning true if successful.`),
+		sub.Function(yellowpagesapi.TryReserveIn{}, yellowpagesapi.TryReserveOut{}),
+	)
+	svc.Subscribe( // MARKER: TryBulkReserve
+		"TryBulkReserve", svc.doTryBulkReserve,
+		sub.At(yellowpagesapi.TryBulkReserve.Method, yellowpagesapi.TryBulkReserve.Route),
+		sub.Description(`TryBulkReserve attempts to reserve persons for the given duration, returning the keys of those successfully reserved.
+Only persons whose reservation has expired (reserved_before < NOW) are reserved.`),
+		sub.Function(yellowpagesapi.TryBulkReserveIn{}, yellowpagesapi.TryBulkReserveOut{}),
+	)
+	svc.Subscribe( // MARKER: Reserve
+		"Reserve", svc.doReserve,
+		sub.At(yellowpagesapi.Reserve.Method, yellowpagesapi.Reserve.Route),
+		sub.Description(`Reserve unconditionally reserves a person for the given duration, returning true if the person exists.`),
+		sub.Function(yellowpagesapi.ReserveIn{}, yellowpagesapi.ReserveOut{}),
+	)
+	svc.Subscribe( // MARKER: BulkReserve
+		"BulkReserve", svc.doBulkReserve,
+		sub.At(yellowpagesapi.BulkReserve.Method, yellowpagesapi.BulkReserve.Route),
+		sub.Description(`BulkReserve unconditionally reserves persons for the given duration, returning the keys of those that exist.`),
+		sub.Function(yellowpagesapi.BulkReserveIn{}, yellowpagesapi.BulkReserveOut{}),
+	)
 
 	// HINT: Add web endpoints here
-	svc.Subscribe(yellowpagesapi.Demo.Method, yellowpagesapi.Demo.Route, svc.Demo) // MARKER: Demo
+	svc.Subscribe( // MARKER: Demo
+		"Demo", svc.Demo,
+		sub.At(yellowpagesapi.Demo.Method, yellowpagesapi.Demo.Route),
+		sub.Description(`Demo serves the web user interface for managing persons.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -182,6 +325,35 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
+}
+
+// doOpenAPI was removed; the connector serves :888/openapi.json natively.
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
+	return nil
+}
+
+/*
+SQLDataSourceName is the connection string of the SQL database.
+*/
+func (svc *Intermediate) SQLDataSourceName() (value string) { // MARKER: SQLDataSourceName
+	return svc.Config("SQLDataSourceName")
+}
+
+/*
+SetSQLDataSourceName sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetSQLDataSourceName(value string) (err error) { // MARKER: SQLDataSourceName
+	return svc.SetConfig("SQLDataSourceName", value)
 }
 
 // doCreate handles marshaling for Create.
@@ -490,356 +662,6 @@ func (svc *Intermediate) doBulkReserve(w http.ResponseWriter, r *http.Request) (
 		return err
 	})
 	return err // No trace
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		{ // MARKER: Create
-			Type:        "function",
-			Name:        "Create",
-			Method:      yellowpagesapi.Create.Method,
-			Route:       yellowpagesapi.Create.Route,
-			Summary:     "Create(obj *Person) (objKey PersonKey)",
-			Description: `Create creates a new object, returning its key.`,
-			InputArgs:   yellowpagesapi.CreateIn{},
-			OutputArgs:  yellowpagesapi.CreateOut{},
-		},
-		{ // MARKER: Store
-			Type:        "function",
-			Name:        "Store",
-			Method:      yellowpagesapi.Store.Method,
-			Route:       yellowpagesapi.Store.Route,
-			Summary:     "Store(obj *Person) (stored bool)",
-			Description: `Store updates the object.`,
-			InputArgs:   yellowpagesapi.StoreIn{},
-			OutputArgs:  yellowpagesapi.StoreOut{},
-		},
-		{ // MARKER: MustStore
-			Type:        "function",
-			Name:        "MustStore",
-			Method:      yellowpagesapi.MustStore.Method,
-			Route:       yellowpagesapi.MustStore.Route,
-			Summary:     "MustStore(obj *Person)",
-			Description: `MustStore updates the object, erroring if not found.`,
-			InputArgs:   yellowpagesapi.MustStoreIn{},
-			OutputArgs:  yellowpagesapi.MustStoreOut{},
-		},
-		{ // MARKER: Revise
-			Type:        "function",
-			Name:        "Revise",
-			Method:      yellowpagesapi.Revise.Method,
-			Route:       yellowpagesapi.Revise.Route,
-			Summary:     "Revise(obj *Person) (revised bool)",
-			Description: `Revise updates the object only if the revision matches.`,
-			InputArgs:   yellowpagesapi.ReviseIn{},
-			OutputArgs:  yellowpagesapi.ReviseOut{},
-		},
-		{ // MARKER: MustRevise
-			Type:        "function",
-			Name:        "MustRevise",
-			Method:      yellowpagesapi.MustRevise.Method,
-			Route:       yellowpagesapi.MustRevise.Route,
-			Summary:     "MustRevise(obj *Person)",
-			Description: `MustRevise updates the object only if the revision matches, erroring on conflict.`,
-			InputArgs:   yellowpagesapi.MustReviseIn{},
-			OutputArgs:  yellowpagesapi.MustReviseOut{},
-		},
-		{ // MARKER: Delete
-			Type:        "function",
-			Name:        "Delete",
-			Method:      yellowpagesapi.Delete.Method,
-			Route:       yellowpagesapi.Delete.Route,
-			Summary:     "Delete(objKey PersonKey) (deleted bool)",
-			Description: `Delete deletes the object.`,
-			InputArgs:   yellowpagesapi.DeleteIn{},
-			OutputArgs:  yellowpagesapi.DeleteOut{},
-		},
-		{ // MARKER: MustDelete
-			Type:        "function",
-			Name:        "MustDelete",
-			Method:      yellowpagesapi.MustDelete.Method,
-			Route:       yellowpagesapi.MustDelete.Route,
-			Summary:     "MustDelete(objKey PersonKey)",
-			Description: `MustDelete deletes the object, erroring if not found.`,
-			InputArgs:   yellowpagesapi.MustDeleteIn{},
-			OutputArgs:  yellowpagesapi.MustDeleteOut{},
-		},
-		{ // MARKER: List
-			Type:        "function",
-			Name:        "List",
-			Method:      yellowpagesapi.List.Method,
-			Route:       yellowpagesapi.List.Route,
-			Summary:     "List(query Query) (objs []*Person, totalCount int)",
-			Description: `List returns the objects matching the query, and the total count of matches regardless of the limit.`,
-			InputArgs:   yellowpagesapi.ListIn{},
-			OutputArgs:  yellowpagesapi.ListOut{},
-		},
-		{ // MARKER: Lookup
-			Type:        "function",
-			Name:        "Lookup",
-			Method:      yellowpagesapi.Lookup.Method,
-			Route:       yellowpagesapi.Lookup.Route,
-			Summary:     "Lookup(query Query) (obj *Person, found bool)",
-			Description: `Lookup returns the single object matching the query. It errors if more than one object matches the query.`,
-			InputArgs:   yellowpagesapi.LookupIn{},
-			OutputArgs:  yellowpagesapi.LookupOut{},
-		},
-		{ // MARKER: MustLookup
-			Type:        "function",
-			Name:        "MustLookup",
-			Method:      yellowpagesapi.MustLookup.Method,
-			Route:       yellowpagesapi.MustLookup.Route,
-			Summary:     "MustLookup(query Query) (obj *Person)",
-			Description: `MustLookup returns the single object matching the query. It errors unless exactly one object matches the query.`,
-			InputArgs:   yellowpagesapi.MustLookupIn{},
-			OutputArgs:  yellowpagesapi.MustLookupOut{},
-		},
-		{ // MARKER: Load
-			Type:        "function",
-			Name:        "Load",
-			Method:      yellowpagesapi.Load.Method,
-			Route:       yellowpagesapi.Load.Route,
-			Summary:     "Load(objKey PersonKey) (obj *Person, found bool)",
-			Description: `Load returns the object associated with the key.`,
-			InputArgs:   yellowpagesapi.LoadIn{},
-			OutputArgs:  yellowpagesapi.LoadOut{},
-		},
-		{ // MARKER: MustLoad
-			Type:        "function",
-			Name:        "MustLoad",
-			Method:      yellowpagesapi.MustLoad.Method,
-			Route:       yellowpagesapi.MustLoad.Route,
-			Summary:     "MustLoad(objKey PersonKey) (obj *Person)",
-			Description: `MustLoad returns the object associated with the key. It errors if the object is not found.`,
-			InputArgs:   yellowpagesapi.MustLoadIn{},
-			OutputArgs:  yellowpagesapi.MustLoadOut{},
-		},
-		{ // MARKER: BulkLoad
-			Type:        "function",
-			Name:        "BulkLoad",
-			Method:      yellowpagesapi.BulkLoad.Method,
-			Route:       yellowpagesapi.BulkLoad.Route,
-			Summary:     "BulkLoad(objKeys []PersonKey) (objs []*Person)",
-			Description: `BulkLoad returns the objects matching the keys.`,
-			InputArgs:   yellowpagesapi.BulkLoadIn{},
-			OutputArgs:  yellowpagesapi.BulkLoadOut{},
-		},
-		{ // MARKER: BulkDelete
-			Type:        "function",
-			Name:        "BulkDelete",
-			Method:      yellowpagesapi.BulkDelete.Method,
-			Route:       yellowpagesapi.BulkDelete.Route,
-			Summary:     "BulkDelete(objKeys []PersonKey) (deletedKeys []PersonKey)",
-			Description: `BulkDelete deletes the objects matching the keys, returning the keys of the deleted objects.`,
-			InputArgs:   yellowpagesapi.BulkDeleteIn{},
-			OutputArgs:  yellowpagesapi.BulkDeleteOut{},
-		},
-		{ // MARKER: BulkCreate
-			Type:        "function",
-			Name:        "BulkCreate",
-			Method:      yellowpagesapi.BulkCreate.Method,
-			Route:       yellowpagesapi.BulkCreate.Route,
-			Summary:     "BulkCreate(objs []*Person) (objKeys []PersonKey)",
-			Description: `BulkCreate creates multiple objects, returning their keys.`,
-			InputArgs:   yellowpagesapi.BulkCreateIn{},
-			OutputArgs:  yellowpagesapi.BulkCreateOut{},
-		},
-		{ // MARKER: BulkStore
-			Type:        "function",
-			Name:        "BulkStore",
-			Method:      yellowpagesapi.BulkStore.Method,
-			Route:       yellowpagesapi.BulkStore.Route,
-			Summary:     "BulkStore(objs []*Person) (storedKeys []PersonKey)",
-			Description: `BulkStore updates multiple objects, returning the keys of the stored objects.`,
-			InputArgs:   yellowpagesapi.BulkStoreIn{},
-			OutputArgs:  yellowpagesapi.BulkStoreOut{},
-		},
-		{ // MARKER: BulkRevise
-			Type:        "function",
-			Name:        "BulkRevise",
-			Method:      yellowpagesapi.BulkRevise.Method,
-			Route:       yellowpagesapi.BulkRevise.Route,
-			Summary:     "BulkRevise(objs []*Person) (revisedKeys []PersonKey)",
-			Description: `BulkRevise updates multiple objects. Only rows with matching revisions are updated.`,
-			InputArgs:   yellowpagesapi.BulkReviseIn{},
-			OutputArgs:  yellowpagesapi.BulkReviseOut{},
-		},
-		{ // MARKER: Purge
-			Type:        "function",
-			Name:        "Purge",
-			Method:      yellowpagesapi.Purge.Method,
-			Route:       yellowpagesapi.Purge.Route,
-			Summary:     "Purge(query Query) (deletedKeys []PersonKey)",
-			Description: `Purge deletes all objects matching the query, returning the keys of the deleted objects.`,
-			InputArgs:   yellowpagesapi.PurgeIn{},
-			OutputArgs:  yellowpagesapi.PurgeOut{},
-		},
-		{ // MARKER: Count
-			Type:        "function",
-			Name:        "Count",
-			Method:      yellowpagesapi.Count.Method,
-			Route:       yellowpagesapi.Count.Route,
-			Summary:     "Count(query Query) (count int)",
-			Description: `Count returns the number of objects matching the query, disregarding pagination.`,
-			InputArgs:   yellowpagesapi.CountIn{},
-			OutputArgs:  yellowpagesapi.CountOut{},
-		},
-		{ // MARKER: CreateREST
-			Type:        "function",
-			Name:        "CreateREST",
-			Method:      yellowpagesapi.CreateREST.Method,
-			Route:       yellowpagesapi.CreateREST.Route,
-			Summary:     "CreateREST(*Person) (objKey PersonKey)",
-			Description: `CreateREST creates a new person via REST, returning its key.`,
-			InputArgs:   yellowpagesapi.CreateRESTIn{},
-			OutputArgs:  yellowpagesapi.CreateRESTOut{},
-		},
-		{ // MARKER: StoreREST
-			Type:        "function",
-			Name:        "StoreREST",
-			Method:      yellowpagesapi.StoreREST.Method,
-			Route:       yellowpagesapi.StoreREST.Route,
-			Summary:     "StoreREST(key PersonKey, *Person)",
-			Description: `StoreREST updates an existing person via REST.`,
-			InputArgs:   yellowpagesapi.StoreRESTIn{},
-			OutputArgs:  yellowpagesapi.StoreRESTOut{},
-		},
-		{ // MARKER: DeleteREST
-			Type:        "function",
-			Name:        "DeleteREST",
-			Method:      yellowpagesapi.DeleteREST.Method,
-			Route:       yellowpagesapi.DeleteREST.Route,
-			Summary:     "DeleteREST(key PersonKey)",
-			Description: `DeleteREST deletes an existing person via REST.`,
-			InputArgs:   yellowpagesapi.DeleteRESTIn{},
-			OutputArgs:  yellowpagesapi.DeleteRESTOut{},
-		},
-		{ // MARKER: LoadREST
-			Type:        "function",
-			Name:        "LoadREST",
-			Method:      yellowpagesapi.LoadREST.Method,
-			Route:       yellowpagesapi.LoadREST.Route,
-			Summary:     "LoadREST(key PersonKey) (httpResponseBody *Person)",
-			Description: `LoadREST loads a person by key via REST.`,
-			InputArgs:   yellowpagesapi.LoadRESTIn{},
-			OutputArgs:  yellowpagesapi.LoadRESTOut{},
-		},
-		{ // MARKER: ListREST
-			Type:        "function",
-			Name:        "ListREST",
-			Method:      yellowpagesapi.ListREST.Method,
-			Route:       yellowpagesapi.ListREST.Route,
-			Summary:     "ListREST(q Query) ([]*Person)",
-			Description: `ListREST lists persons matching the query via REST.`,
-			InputArgs:   yellowpagesapi.ListRESTIn{},
-			OutputArgs:  yellowpagesapi.ListRESTOut{},
-		},
-		{ // MARKER: TryReserve
-			Type:        "function",
-			Name:        "TryReserve",
-			Method:      yellowpagesapi.TryReserve.Method,
-			Route:       yellowpagesapi.TryReserve.Route,
-			Summary:     "TryReserve(objKey PersonKey, dur time.Duration) (reserved bool)",
-			Description: `TryReserve attempts to reserve a person for the given duration, returning true if successful.`,
-			InputArgs:   yellowpagesapi.TryReserveIn{},
-			OutputArgs:  yellowpagesapi.TryReserveOut{},
-		},
-		{ // MARKER: TryBulkReserve
-			Type:        "function",
-			Name:        "TryBulkReserve",
-			Method:      yellowpagesapi.TryBulkReserve.Method,
-			Route:       yellowpagesapi.TryBulkReserve.Route,
-			Summary:     "TryBulkReserve(objKeys []PersonKey, dur time.Duration) (reservedKeys []PersonKey)",
-			Description: `TryBulkReserve attempts to reserve persons for the given duration, returning the keys of those successfully reserved.`,
-			InputArgs:   yellowpagesapi.TryBulkReserveIn{},
-			OutputArgs:  yellowpagesapi.TryBulkReserveOut{},
-		},
-		{ // MARKER: Reserve
-			Type:        "function",
-			Name:        "Reserve",
-			Method:      yellowpagesapi.Reserve.Method,
-			Route:       yellowpagesapi.Reserve.Route,
-			Summary:     "Reserve(objKey PersonKey, dur time.Duration) (reserved bool)",
-			Description: `Reserve unconditionally reserves a person for the given duration, returning true if the person exists.`,
-			InputArgs:   yellowpagesapi.ReserveIn{},
-			OutputArgs:  yellowpagesapi.ReserveOut{},
-		},
-		{ // MARKER: BulkReserve
-			Type:        "function",
-			Name:        "BulkReserve",
-			Method:      yellowpagesapi.BulkReserve.Method,
-			Route:       yellowpagesapi.BulkReserve.Route,
-			Summary:     "BulkReserve(objKeys []PersonKey, dur time.Duration) (reservedKeys []PersonKey)",
-			Description: `BulkReserve unconditionally reserves persons for the given duration, returning the keys of those that exist.`,
-			InputArgs:   yellowpagesapi.BulkReserveIn{},
-			OutputArgs:  yellowpagesapi.BulkReserveOut{},
-		},
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Demo
-			Type:        "web",
-			Name:        "Demo",
-			Method:      yellowpagesapi.Demo.Method,
-			Route:       yellowpagesapi.Demo.Route,
-			Summary:     "Demo()",
-			Description: `Demo serves the web user interface for managing persons.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
-}
-
-// doOnObserveMetrics is called when metrics are produced.
-func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
-	return svc.Parallel(
-	// HINT: Call JIT observers to record the metric here
-	)
-}
-
-// doOnConfigChanged is called when the config of the microservice changes.
-func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
-	// HINT: Call named callbacks here
-	return nil
-}
-
-/*
-SQLDataSourceName is the connection string of the SQL database.
-*/
-func (svc *Intermediate) SQLDataSourceName() (value string) { // MARKER: SQLDataSourceName
-	return svc.Config("SQLDataSourceName")
-}
-
-/*
-SetSQLDataSourceName sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetSQLDataSourceName(value string) (err error) { // MARKER: SQLDataSourceName
-	return svc.SetConfig("SQLDataSourceName", value)
 }
 
 // marshalFunction handles marshaling for functional endpoints.

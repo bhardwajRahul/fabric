@@ -41,26 +41,8 @@ var (
 	_ = marshalPublish
 	_ = marshalFunction
 	_ = marshalTask
+	_ = marshalWorkflow
 	_ workflow.Flow
-)
-
-// Hostname is the default hostname of the microservice.
-const Hostname = "smtp.ingress.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	OnIncomingEmail = Def{Method: "POST", Route: ":417/on-incoming-email"} // MARKER: OnIncomingEmail
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -116,6 +98,116 @@ func (_c MulticastClient) ForHost(host string) MulticastClient {
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
+
+// WorkflowRunner executes a workflow by name with initial state, blocking until termination.
+// foremanapi.Client satisfies this interface.
+type WorkflowRunner interface {
+	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error)
+}
+
+// Executor runs tasks and workflows synchronously, blocking until termination.
+// It is primarily intended for integration tests.
+type Executor struct {
+	svc     service.Publisher
+	host    string
+	opts    []pub.Option
+	inFlow  *workflow.Flow
+	outFlow *workflow.Flow
+	runner  WorkflowRunner
+}
+
+// NewExecutor creates a new executor proxy to the microservice.
+func NewExecutor(caller service.Publisher) Executor {
+	return Executor{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the executor with a different hostname to be applied to requests.
+func (_c Executor) ForHost(host string) Executor {
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOptions returns a copy of the executor with options to be applied to requests.
+func (_c Executor) WithOptions(opts ...pub.Option) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
+// The input flow's state is available to the task in addition to the typed input arguments.
+func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
+// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
+func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner}
+}
+
+// WithWorkflowRunner returns a copy of the executor with a workflow runner for executing workflows.
+// foremanapi.NewClient(svc) satisfies the WorkflowRunner interface.
+func (_c Executor) WithWorkflowRunner(runner WorkflowRunner) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner}
+}
+
+// marshalTask supports task execution via the Executor.
+func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
+	flow := inFlow
+	if flow == nil {
+		flow = workflow.NewFlow()
+	}
+	err = flow.SetState(in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	body, err := json.Marshal(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Body(body),
+		pub.ContentType("application/json"),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	flow = workflow.NewFlow()
+	err = json.NewDecoder(httpRes.Body).Decode(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if outFlow != nil {
+		*outFlow = *flow
+	}
+	if out != nil {
+		err = flow.ParseState(out)
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// marshalWorkflow supports workflow execution via the Executor.
+func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL string, in any, out any) (status string, err error) {
+	status, state, err := runner.Run(ctx, workflowURL, in)
+	if err != nil {
+		return status, err // No trace
+	}
+	if out != nil && state != nil {
+		data, err := json.Marshal(state)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+		err = json.Unmarshal(data, out)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+	}
+	return status, nil
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -244,17 +336,6 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// --- OnIncomingEmail event ---
-
-// OnIncomingEmailIn are the input arguments of OnIncomingEmail.
-type OnIncomingEmailIn struct { // MARKER: OnIncomingEmail
-	Email *Email `json:"email,omitzero"`
-}
-
-// OnIncomingEmailOut are the output arguments of OnIncomingEmail.
-type OnIncomingEmailOut struct { // MARKER: OnIncomingEmail
-}
-
 // OnIncomingEmailResponse packs the response of OnIncomingEmail.
 type OnIncomingEmailResponse multicastResponse // MARKER: OnIncomingEmail
 
@@ -294,85 +375,14 @@ func (c Hook) OnIncomingEmail(handler func(ctx context.Context, email *Email) (e
 		})
 		return err // No trace
 	}
+	const name = "OnIncomingEmail"
 	path := httpx.JoinHostAndPath(c.host, OnIncomingEmail.Route)
-	unsub, err = c.svc.Subscribe(OnIncomingEmail.Method, path, doOnIncomingEmail, c.opts...)
-	return unsub, errors.Trace(err)
-}
-
-// Executor runs tasks and workflows synchronously, blocking until termination.
-// It is primarily intended for integration tests. Production code should use
-// the foreman Client to create and start flows asynchronously.
-type Executor struct {
-	svc     service.Publisher
-	host    string
-	opts    []pub.Option
-	inFlow  *workflow.Flow
-	outFlow *workflow.Flow
-}
-
-// NewExecutor creates a new executor proxy to the microservice.
-func NewExecutor(caller service.Publisher) Executor {
-	return Executor{svc: caller, host: Hostname}
-}
-
-// ForHost returns a copy of the executor with a different hostname to be applied to requests.
-func (_c Executor) ForHost(host string) Executor {
-	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithOptions returns a copy of the executor with options to be applied to requests.
-func (_c Executor) WithOptions(opts ...pub.Option) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
-// The input flow's state is available to the task in addition to the typed input arguments.
-func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow}
-}
-
-// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
-// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
-func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow}
-}
-
-// marshalTask supports task execution via the Executor.
-func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
-	flow := inFlow
-	if flow == nil {
-		flow = workflow.NewFlow()
+	subOpts := append([]sub.Option{
+		sub.At(OnIncomingEmail.Method, path),
+		sub.InboundEvent(OnIncomingEmailIn{}, OnIncomingEmailOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnIncomingEmail, subOpts...); err != nil {
+		return nil, errors.Trace(err)
 	}
-	err = flow.SetState(in)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	body, err := json.Marshal(flow)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	u := httpx.JoinHostAndPath(host, route)
-	httpRes, err := svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(u),
-		pub.Body(body),
-		pub.ContentType("application/json"),
-		pub.Options(opts...),
-	)
-	if err != nil {
-		return err // No trace
-	}
-	err = json.NewDecoder(httpRes.Body).Decode(flow)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if outFlow != nil {
-		*outFlow = *flow
-	}
-	if out != nil {
-		err = flow.ParseState(out)
-		return errors.Trace(err)
-	}
-	return nil
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }

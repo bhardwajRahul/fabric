@@ -21,6 +21,8 @@ import (
 	"net/http"
 
 	"github.com/microbus-io/errors"
+
+	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 )
 
 /*
@@ -71,4 +73,13 @@ Metrics returns the Prometheus metrics collected by the microservice.
 */
 func (svc *Service) Metrics(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Metrics
 	return nil
+}
+
+/*
+OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports
+filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their
+ingress boundary.
+*/
+func (svc *Service) OpenAPI(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) { // MARKER: OpenAPI
+	return nil, 0, nil
 }

@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = llmapi.Hostname
-	Version  = 3
+	Version  = 5
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,8 +60,8 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Chat(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error)                                                                               // MARKER: Chat
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error)                                                                       // MARKER: Turn
+	Chat(ctx context.Context, messages []llmapi.Message, tools []string) (messagesOut []llmapi.Message, err error)                                                                                    // MARKER: Chat
+	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error)                                                                          // MARKER: Turn
 	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error)                                                 // MARKER: InitChat
 	CallLLM(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error)                                                                 // MARKER: CallLLM
 	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, err error) // MARKER: ProcessResponse
@@ -103,14 +100,41 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(llmapi.Chat.Method, llmapi.Chat.Route, svc.doChat) // MARKER: Chat
-	svc.Subscribe(llmapi.Turn.Method, llmapi.Turn.Route, svc.doTurn) // MARKER: Turn
+	svc.Subscribe( // MARKER: Chat
+		"Chat", svc.doChat,
+		sub.At(llmapi.Chat.Method, llmapi.Chat.Route),
+		sub.Description(`Chat sends messages to an LLM with optional tools and returns the response messages.
+
+Each tool is the canonical URL of a Microbus endpoint. The LLM service fetches the OpenAPI
+document of each distinct host:port to resolve the endpoint into a callable tool.
+
+Input:
+  - messages: messages is the conversation history to send to the LLM
+  - tools: tools is a list of Microbus endpoint URLs to expose to the LLM
+
+Output:
+  - messagesOut: messagesOut is the full conversation including new messages produced by the LLM`),
+		sub.Function(llmapi.ChatIn{}, llmapi.ChatOut{}),
+	)
+	svc.Subscribe( // MARKER: Turn
+		"Turn", svc.doTurn,
+		sub.At(llmapi.Turn.Method, llmapi.Turn.Route),
+		sub.Description(`Turn executes a single LLM turn: sends messages and tool definitions to the LLM provider
+and returns the completion (text response and/or tool calls).
+
+Input:
+  - messages: messages is the conversation history to send to the LLM
+  - tools: tools is the resolved tool definitions with schemas
+
+Output:
+  - completion: completion is the LLM's response including text and tool calls`),
+		sub.Function(llmapi.TurnIn{}, llmapi.TurnOut{}),
+	)
 
 	// HINT: Add web endpoints here
 
@@ -134,13 +158,38 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add inbound event sinks here
 
 	// HINT: Add task endpoints here
-	svc.Subscribe(llmapi.InitChat.Method, llmapi.InitChat.Route, svc.doInitChat)                      // MARKER: InitChat
-	svc.Subscribe(llmapi.CallLLM.Method, llmapi.CallLLM.Route, svc.doCallLLM)                         // MARKER: CallLLM
-	svc.Subscribe(llmapi.ProcessResponse.Method, llmapi.ProcessResponse.Route, svc.doProcessResponse) // MARKER: ProcessResponse
-	svc.Subscribe(llmapi.ExecuteTool.Method, llmapi.ExecuteTool.Route, svc.doExecuteTool)             // MARKER: ExecuteTool
+	svc.Subscribe( // MARKER: InitChat
+		"InitChat", svc.doInitChat,
+		sub.At(llmapi.InitChat.Method, llmapi.InitChat.Route),
+		sub.Description(`InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.`),
+		sub.Task(llmapi.InitChatIn{}, llmapi.InitChatOut{}),
+	)
+	svc.Subscribe( // MARKER: CallLLM
+		"CallLLM", svc.doCallLLM,
+		sub.At(llmapi.CallLLM.Method, llmapi.CallLLM.Route),
+		sub.Description(`CallLLM sends the current messages and tools to the LLM provider.`),
+		sub.Task(llmapi.CallLLMIn{}, llmapi.CallLLMOut{}),
+	)
+	svc.Subscribe( // MARKER: ProcessResponse
+		"ProcessResponse", svc.doProcessResponse,
+		sub.At(llmapi.ProcessResponse.Method, llmapi.ProcessResponse.Route),
+		sub.Description(`ProcessResponse inspects the LLM response and routes to the next step.`),
+		sub.Task(llmapi.ProcessResponseIn{}, llmapi.ProcessResponseOut{}),
+	)
+	svc.Subscribe( // MARKER: ExecuteTool
+		"ExecuteTool", svc.doExecuteTool,
+		sub.At(llmapi.ExecuteTool.Method, llmapi.ExecuteTool.Route),
+		sub.Description(`ExecuteTool executes a single tool call, identified by the currentTool forEach variable.`),
+		sub.Task(llmapi.ExecuteToolIn{}, llmapi.ExecuteToolOut{}),
+	)
 
 	// HINT: Add graph endpoints here
-	svc.Subscribe(llmapi.ChatLoop.Method, llmapi.ChatLoop.Route, svc.doChatLoop) // MARKER: ChatLoop
+	svc.Subscribe( // MARKER: ChatLoop
+		"ChatLoop", svc.doChatLoop,
+		sub.At(llmapi.ChatLoop.Method, llmapi.ChatLoop.Route),
+		sub.Description(`ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.`),
+		sub.Workflow(llmapi.ChatLoopIn{}, llmapi.ChatLoopOut{}),
+	)
 
 	_ = marshalFunction
 	return svc
@@ -166,75 +215,6 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 		return err // No trace
 	})
 	return err // No trace
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Chat
-			Type:    "function",
-			Name:    "Chat",
-			Method:  llmapi.Chat.Method,
-			Route:   llmapi.Chat.Route,
-			Summary: "Chat(messages []Message, tools []Tool) (messagesOut []Message)",
-			Description: `Chat sends messages to an LLM with optional tools and returns the full conversation including new messages.
-
-Input:
-  - messages: messages is the conversation history to send to the LLM
-  - tools: tools is a list of Microbus endpoint URLs to expose as LLM tools
-
-Output:
-  - messagesOut: messagesOut is the full conversation including new messages produced by the LLM`,
-			InputArgs:  llmapi.ChatIn{},
-			OutputArgs: llmapi.ChatOut{},
-		},
-		{ // MARKER: Turn
-			Type:    "function",
-			Name:    "Turn",
-			Method:  llmapi.Turn.Method,
-			Route:   llmapi.Turn.Route,
-			Summary: "Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)",
-			Description: `Turn executes a single LLM turn: sends messages and tool definitions to the LLM provider and returns the completion.
-
-Input:
-  - messages: messages is the conversation history to send to the LLM
-  - tools: tools is the resolved tool definitions with schemas
-
-Output:
-  - completion: completion is the LLM's response including text and tool calls`,
-			InputArgs:  llmapi.TurnIn{},
-			OutputArgs: llmapi.TurnOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

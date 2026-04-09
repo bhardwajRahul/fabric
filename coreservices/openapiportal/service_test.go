@@ -45,13 +45,6 @@ var (
 	_ openapiportalapi.Client
 )
 
-func TestOpenapiportal_OpenAPI(t *testing.T) {
-	t.Parallel()
-
-	// No OpenAPI endpoints are registered for this microservice
-	t.Skip()
-}
-
 func TestOpenapiportal_Mock(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -76,19 +69,35 @@ func TestOpenapiportal_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("list", func(t *testing.T) { // MARKER: List
+	t.Run("document", func(t *testing.T) { // MARKER: Document
 		assert := testarossa.For(t)
 
 		w := httpx.NewResponseRecorder()
 		r := httpx.MustNewRequest("GET", "/", nil)
 
-		err := mock.List(w, r)
+		err := mock.Document(w, r)
 		assert.Error(err) // Not mocked yet
-		mock.MockList(func(w http.ResponseWriter, r *http.Request) (err error) {
+		mock.MockDocument(func(w http.ResponseWriter, r *http.Request) (err error) {
 			w.WriteHeader(http.StatusOK)
 			return nil
 		})
-		err = mock.List(w, r)
+		err = mock.Document(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("explorer", func(t *testing.T) { // MARKER: Explorer
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Explorer(w, r)
+		assert.Error(err) // Not mocked yet
+		mock.MockExplorer(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Explorer(w, r)
 		assert.NoError(err)
 	})
 }

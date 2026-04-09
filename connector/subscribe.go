@@ -47,60 +47,54 @@ import (
 type HTTPHandler = sub.HTTPHandler
 
 /*
-Subscribe assigns a function to handle HTTP requests to the given route.
-If the route does not include a hostname, the default host is used.
-If a port is not specified, 443 is used by default.
-If a method is not specified, "ANY" is used by default to capture all methods.
-Path arguments are designated by curly braces.
+Listen subscribes a handler under a typed name. The name must be a Go-style upper-case
+identifier (e.g. "MyEndpoint2") and unique within the connector. Exactly one feature option
+([sub.Function], [sub.Web], [sub.InboundEvent], [sub.Task], [sub.Workflow]) must be supplied.
 
-Examples of valid routes:
+Defaults filled in after options are applied:
+  - Method defaults to "ANY".
+  - Route defaults to ":443/my-subscription" with the port determined by the feature type
+    (443 for function/web, 417 for inbound events, 428 for tasks/graphs).
+  - Queue defaults to the connector's hostname.
 
-	(empty)
-	/
-	/path
-	:1080
-	:1080/
-	:1080/path
-	:0/any/port
-	/path/with/slash
-	path/with/no/slash
-	/section/{section}/page/{page...}
-	https://www.example.com/path
-	https://www.example.com:1080/path
-	//www.example.com:1080/path
+Returns an error if the name is invalid, already registered, or if the option set is malformed.
 */
-func (c *Connector) Subscribe(method string, route string, handler sub.HTTPHandler, options ...sub.Option) (unsub func() (err error), err error) {
+func (c *Connector) Subscribe(name string, handler sub.HTTPHandler, options ...sub.Option) error {
 	if c.hostname == "" {
-		return nil, c.captureInitErr(errors.New("hostname is not set"))
+		return c.captureInitErr(errors.New("hostname is not set"))
 	}
-	if method == "" {
-		method = "ANY"
-	}
-	newSub, err := sub.NewSub(method, c.hostname, route, handler, options...)
+	newSub, err := sub.NewSubscription(name, c.hostname, handler, options...)
 	if err != nil {
-		return nil, c.captureInitErr(errors.Trace(err))
+		return c.captureInitErr(errors.Trace(err))
 	}
-	key := utils.RandomIdentifier(12)
-	c.subs.Store(key, newSub)
+	if _, loaded := c.subs.LoadOrStore(name, newSub); loaded {
+		return c.captureInitErr(errors.New("duplicate subscription name '%s'", name))
+	}
 	if c.isPhase(startedUp) {
-		err := c.activateSub(newSub)
-		if err != nil {
-			return nil, c.captureInitErr(errors.Trace(err))
+		if err := c.activateSub(newSub); err != nil {
+			c.subs.Delete(name)
+			return c.captureInitErr(errors.Trace(err))
 		}
 		c.notifyOnNewSubs(newSub)
 		c.transportConn.WaitForSub()
 	}
-	unsub = func() (err error) {
-		err = c.deactivateSub(newSub)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if c.isPhase(startedUp) {
-			c.transportConn.WaitForSub()
-		}
-		return nil
+	return nil
+}
+
+// Unsubscribe removes the subscription registered with [Connector.Subscribe] under the given name.
+// Returns an error if no subscription with that name exists.
+func (c *Connector) Unsubscribe(name string) error {
+	s, ok := c.subs.Delete(name)
+	if !ok {
+		return errors.New("unknown subscription name '%s'", name)
 	}
-	return unsub, nil
+	if err := c.deactivateSub(s); err != nil {
+		return errors.Trace(err)
+	}
+	if c.isPhase(startedUp) {
+		c.transportConn.WaitForSub()
+	}
+	return nil
 }
 
 // onRequest handles an incoming request. It acks it, then calls the handler to process it and responds to the caller.
@@ -140,7 +134,8 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 }
 
 // activateSubs subscribes all subscriptions with the transport.
-// It is called during startup.
+// It is called during startup. Subscriptions already activated by
+// [Connector.activateInfraSubs] are skipped via the idempotent guard in [Connector.activateSub].
 func (c *Connector) activateSubs() (err error) {
 	subs := c.subs.Values()
 	for _, sub := range subs {
@@ -153,6 +148,27 @@ func (c *Connector) activateSubs() (err error) {
 		c.notifyOnNewSubs(subs...)
 	}
 	c.transportConn.WaitForSub()
+	return nil
+}
+
+// activateInfraSubs activates only subscriptions tagged with [sub.Infra].
+// It is called during startup before the user's OnStartup callback runs, so
+// framework-internal subscriptions (e.g. the distributed cache) are reachable
+// from inside OnStartup. Peer notification is deferred to [Connector.activateSubs].
+func (c *Connector) activateInfraSubs() error {
+	activated := false
+	for _, s := range c.subs.Values() {
+		if !s.Infra {
+			continue
+		}
+		if err := c.activateSub(s); err != nil {
+			return errors.Trace(err)
+		}
+		activated = true
+	}
+	if activated {
+		c.transportConn.WaitForSub()
+	}
 	return nil
 }
 
@@ -222,6 +238,48 @@ func (c *Connector) deactivateSubs() error {
 		}
 	}
 	c.transportConn.WaitForSub()
+	return lastErr // No trace
+}
+
+// deactivateNonInfraSubs unsubscribes all subscriptions except those tagged with [sub.Infra].
+// It is called during shutdown before OnShutdown runs, so user code stops receiving requests
+// while infra subscriptions (e.g. the distributed cache) remain reachable to OnShutdown.
+func (c *Connector) deactivateNonInfraSubs() error {
+	var lastErr error
+	deactivated := false
+	for _, s := range c.subs.Values() {
+		if s.Infra {
+			continue
+		}
+		if err := c.deactivateSub(s); err != nil {
+			lastErr = errors.Trace(err)
+		}
+		deactivated = true
+	}
+	if deactivated {
+		c.transportConn.WaitForSub()
+	}
+	return lastErr // No trace
+}
+
+// deactivateInfraSubs unsubscribes only subscriptions tagged with [sub.Infra].
+// It is called during shutdown after OnShutdown returns, so framework-internal subscriptions
+// (e.g. the distributed cache) remain reachable while user shutdown code runs.
+func (c *Connector) deactivateInfraSubs() error {
+	var lastErr error
+	deactivated := false
+	for _, s := range c.subs.Values() {
+		if !s.Infra {
+			continue
+		}
+		if err := c.deactivateSub(s); err != nil {
+			lastErr = errors.Trace(err)
+		}
+		deactivated = true
+	}
+	if deactivated {
+		c.transportConn.WaitForSub()
+	}
 	return lastErr // No trace
 }
 
@@ -403,7 +461,12 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		if actor == "" || !utils.LooksLikeJWT(actor) {
 			handlerErr = errors.New("", http.StatusUnauthorized)
 		} else {
-			handlerErr = c.verifyToken(actor, s.RequiredClaims)
+			var claims jwt.MapClaims
+			claims, handlerErr = c.verifyToken(actor, s.RequiredClaims)
+			if handlerErr == nil {
+				ctx = logActorClaims(ctx, claims)
+				httpReq = httpReq.WithContext(ctx)
+			}
 		}
 	}
 
@@ -566,45 +629,70 @@ func (c *Connector) notifyOnNewSubs(subs ...*sub.Subscription) error {
 	return nil
 }
 
-// verifyToken verifies the signature of an actor JWT.
+// verifyToken verifies the signature of an actor JWT and evaluates requiredClaims against
+// its payload. On success it returns the verified claims, which the caller may cache for
+// downstream non-security uses such as logging.
 // If the kid is unknown, it fetches JWKS from the issuer host.
-func (c *Connector) verifyToken(token string, requiredClaims string) error {
+func (c *Connector) verifyToken(token string, requiredClaims string) (jwt.MapClaims, error) {
 	// Get the alg and kid from the token's header
 	parsed, _, err := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
 	if err != nil {
-		return errors.New("", http.StatusUnauthorized)
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
 	alg, _ := parsed.Header["alg"].(string)
-	if alg == "none" && c.deployment == TESTING {
-		// Recognize unsigned tokens set by [frame.Frame.SetActor] during tests
-		return nil
+
+	// Unsigned tokens (e.g. those minted by pub.Actor) are accepted only in TESTING,
+	// where signing is impractical. Signature verification is skipped, but the claim
+	// evaluation below still runs - an unsigned token's payload must satisfy
+	// requiredClaims just like a signed one.
+	if alg == "none" {
+		if c.deployment != TESTING {
+			return nil, errors.New("", http.StatusUnauthorized)
+		}
+		claims, ok := parsed.Claims.(jwt.MapClaims)
+		if !ok {
+			return nil, errors.New("", http.StatusUnauthorized)
+		}
+		satisfy, err := boolexp.Eval(requiredClaims, map[string]any(claims))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if !satisfy {
+			return nil, errors.New("", http.StatusForbidden)
+		}
+		return claims, nil
 	}
+
 	kid, _ := parsed.Header["kid"].(string)
 	if kid == "" {
-		return errors.New("", http.StatusUnauthorized)
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
 
 	// Verify the token with the issuer
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return errors.New("", http.StatusUnauthorized)
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
 	issStr, _ := claims["iss"].(string)
-	if !strings.HasPrefix(issStr, "microbus://") {
-		return errors.New("", http.StatusUnauthorized)
+	_, ok = claims["microbus"].(string)
+	if !ok && !strings.HasPrefix(issStr, "microbus://") { // microbus scheme for backward compatibility
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
-	host := issStr[len("microbus://"):]
+	_, issuerHost, ok := strings.Cut(issStr, "://")
+	if !ok {
+		issuerHost = issStr
+	}
 
 	// Look up the public key, refresh cache if needed
 	key, found := c.lookupActorKey(kid)
 	if !found {
-		err = c.fetchActorKeys(host)
+		err = c.fetchActorKeys(issuerHost)
 		if err != nil {
-			return errors.New("", http.StatusUnauthorized)
+			return nil, errors.New("", http.StatusUnauthorized, err)
 		}
 		key, found = c.lookupActorKey(kid)
 		if !found {
-			return errors.New("", http.StatusUnauthorized)
+			return nil, errors.New("", http.StatusUnauthorized)
 		}
 	}
 
@@ -613,19 +701,19 @@ func (c *Connector) verifyToken(token string, requiredClaims string) error {
 		return key, nil
 	})
 	if err != nil {
-		return errors.New("", http.StatusUnauthorized)
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
 
 	// Check the required claims against the access token's claims
 	satisfy, err := boolexp.Eval(requiredClaims, map[string]any(claims))
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	if !satisfy {
-		return errors.New("", http.StatusForbidden)
+		return nil, errors.New("", http.StatusForbidden)
 	}
 
-	return nil
+	return claims, nil
 }
 
 // lookupActorKey returns the cached Ed25519 public key for the given kid.

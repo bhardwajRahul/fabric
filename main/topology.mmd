@@ -10,13 +10,16 @@ graph TB
     http.ingress.core ---> bearer.token.core
     http.ingress.core ---> access.token.core
     openapiportal.core[OpenAPI Portal<br>openapiportal.core]
+    mcp.core[MCP Portal<br>mcp.core] ---> openapiportal.core
     foreman.core[Foreman<br>foreman.core] --- foreman.core.db[(SQL)]
+    shell.core[Shell<br>shell.core]
     llm.core[LLM<br>llm.core] ---> claude.llm.core[Claude LLM<br>claude.llm.core]
     llm.core ---> openai.llm.core[OpenAI LLM<br>openai.llm.core]
     llm.core ---> gemini.llm.core[Gemini LLM<br>gemini.llm.core]
     claude.llm.core ---> http.egress.core
     openai.llm.core ---> http.egress.core
     gemini.llm.core ---> http.egress.core
+    chatbox.example[Chatbox<br>chatbox.example]
     creditflow.example[CreditFlow<br>creditflow.example]
     browser.example[Browser<br>browser.example] ---> http.egress.core[HTTP Egress<br>http.egress.core]
     eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
@@ -26,6 +29,6 @@ graph TB
     messaging.example[Messaging<br>messaging.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class hello.example,calculator.example,browser.example,login.example,eventsource.example,eventsink.example,yellowpages.example,helloworld.example,messaging.example,creditflow.example svc
-    class http.ingress.core,metrics.core,bearer.token.core,access.token.core,http.egress.core,configurator.core,openapiportal.core,foreman.core,llm.core,claude.llm.core,openai.llm.core,gemini.llm.core core
+    class hello.example,calculator.example,browser.example,login.example,eventsource.example,eventsink.example,yellowpages.example,helloworld.example,messaging.example,creditflow.example,chatbox.example svc
+    class http.ingress.core,metrics.core,bearer.token.core,access.token.core,http.egress.core,configurator.core,openapiportal.core,mcp.core,foreman.core,llm.core,claude.llm.core,openai.llm.core,gemini.llm.core,shell.core core
     class yellowpages.example.db,foreman.core.db ext

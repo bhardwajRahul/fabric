@@ -41,30 +41,8 @@ var (
 	_ = marshalPublish
 	_ = marshalFunction
 	_ = marshalTask
+	_ = marshalWorkflow
 	_ workflow.Flow
-)
-
-// Hostname is the default hostname of the microservice.
-const Hostname = "login.example"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Login       = Def{Method: "ANY", Route: `/login`}        // MARKER: Login
-	Logout      = Def{Method: "ANY", Route: `/logout`}       // MARKER: Logout
-	Welcome     = Def{Method: "ANY", Route: `/welcome`}      // MARKER: Welcome
-	AdminOnly   = Def{Method: "GET", Route: `/admin-only`}   // MARKER: AdminOnly
-	ManagerOnly = Def{Method: "GET", Route: `/manager-only`} // MARKER: ManagerOnly
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -83,28 +61,17 @@ type Client struct {
 
 // NewClient creates a new unicast client proxy to the microservice.
 func NewClient(caller service.Publisher) Client {
-	return Client{
-		svc:  caller,
-		host: Hostname,
-	}
+	return Client{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
 func (_c Client) ForHost(host string) Client {
-	return Client{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return Client{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c Client) WithOptions(opts ...pub.Option) Client {
-	return Client{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return Client{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // MulticastClient is a lightweight proxy for making multicast calls to the microservice.
@@ -116,28 +83,124 @@ type MulticastClient struct {
 
 // NewMulticastClient creates a new multicast client proxy to the microservice.
 func NewMulticastClient(caller service.Publisher) MulticastClient {
-	return MulticastClient{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastClient{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the client with a different hostname to be applied to requests.
 func (_c MulticastClient) ForHost(host string) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastClient{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
-	return MulticastClient{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
+	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
+
+// WorkflowRunner executes a workflow by name with initial state, blocking until termination.
+// foremanapi.Client satisfies this interface.
+type WorkflowRunner interface {
+	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error)
+}
+
+// Executor runs tasks and workflows synchronously, blocking until termination.
+// It is primarily intended for integration tests.
+type Executor struct {
+	svc     service.Publisher
+	host    string
+	opts    []pub.Option
+	inFlow  *workflow.Flow
+	outFlow *workflow.Flow
+	runner  WorkflowRunner
+}
+
+// NewExecutor creates a new executor proxy to the microservice.
+func NewExecutor(caller service.Publisher) Executor {
+	return Executor{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the executor with a different hostname to be applied to requests.
+func (_c Executor) ForHost(host string) Executor {
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOptions returns a copy of the executor with options to be applied to requests.
+func (_c Executor) WithOptions(opts ...pub.Option) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
+func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
+func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner}
+}
+
+// WithWorkflowRunner returns a copy of the executor with a workflow runner for executing workflows.
+func (_c Executor) WithWorkflowRunner(runner WorkflowRunner) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner}
+}
+
+// marshalTask supports task execution via the Executor.
+func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
+	flow := inFlow
+	if flow == nil {
+		flow = workflow.NewFlow()
 	}
+	err = flow.SetState(in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	body, err := json.Marshal(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Body(body),
+		pub.ContentType("application/json"),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	flow = workflow.NewFlow()
+	err = json.NewDecoder(httpRes.Body).Decode(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if outFlow != nil {
+		*outFlow = *flow
+	}
+	if out != nil {
+		err = flow.ParseState(out)
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// marshalWorkflow supports workflow execution via the Executor.
+func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL string, in any, out any) (status string, err error) {
+	status, state, err := runner.Run(ctx, workflowURL, in)
+	if err != nil {
+		return status, err // No trace
+	}
+	if out != nil && state != nil {
+		data, err := json.Marshal(state)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+		err = json.Unmarshal(data, out)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+	}
+	return status, nil
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -149,28 +212,17 @@ type MulticastTrigger struct {
 
 // NewMulticastTrigger creates a new multicast trigger of events of the microservice.
 func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  caller,
-		host: Hostname,
-	}
+	return MulticastTrigger{svc: caller, host: Hostname}
 }
 
 // ForHost returns a copy of the trigger with a different hostname to be applied to requests.
 func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: host,
-		opts: _c.opts,
-	}
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
 }
 
 // WithOptions returns a copy of the trigger with options to be applied to requests.
 func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
-	return MulticastTrigger{
-		svc:  _c.svc,
-		host: _c.host,
-		opts: append(_c.opts, opts...),
-	}
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
 // Hook assists in the subscription to the events of the microservice.
@@ -182,254 +234,17 @@ type Hook struct {
 
 // NewHook creates a new hook to the events of the microservice.
 func NewHook(listener service.Subscriber) Hook {
-	return Hook{
-		svc:  listener,
-		host: Hostname,
-	}
+	return Hook{svc: listener, host: Hostname}
 }
 
 // ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
 func (c Hook) ForHost(host string) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: host,
-		opts: c.opts,
-	}
+	return Hook{svc: c.svc, host: host, opts: c.opts}
 }
 
 // WithOptions returns a copy of the hook with options to be applied to subscriptions.
 func (c Hook) WithOptions(opts ...sub.Option) Hook {
-	return Hook{
-		svc:  c.svc,
-		host: c.host,
-		opts: append(c.opts, opts...),
-	}
-}
-
-/*
-Login renders a simple login screen that authenticates a user.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c Client) Login(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Login
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Login renders a simple login screen that authenticates a user.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c MulticastClient) Login(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Login
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Logout renders a page that logs out the user.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c Client) Logout(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Logout
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Logout renders a page that logs out the user.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c MulticastClient) Logout(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Logout
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Welcome renders a page that is shown to the user after a successful login.
-Rendering is adjusted based on the user's roles.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c Client) Welcome(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Welcome
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-Welcome renders a page that is shown to the user after a successful login.
-Rendering is adjusted based on the user's roles.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-If the body is of type io.Reader, []byte or string, it is serialized in binary form.
-If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
-*/
-func (_c MulticastClient) Welcome(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Welcome
-	if method == "" {
-		method = "POST"
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-AdminOnly is only accessible by admins.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-*/
-func (_c Client) AdminOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: AdminOnly
-	return _c.svc.Request(
-		ctx,
-		pub.Method(AdminOnly.Method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-AdminOnly is only accessible by admins.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-*/
-func (_c MulticastClient) AdminOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: AdminOnly
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(AdminOnly.Method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-ManagerOnly is only accessible by managers.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-*/
-func (_c Client) ManagerOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: ManagerOnly
-	return _c.svc.Request(
-		ctx,
-		pub.Method(ManagerOnly.Method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Options(_c.opts...),
-	)
-}
-
-/*
-ManagerOnly is only accessible by managers.
-
-If a URL is provided, it is resolved relative to the URL of the endpoint.
-*/
-func (_c MulticastClient) ManagerOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: ManagerOnly
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(ManagerOnly.Method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Options(_c.opts...),
-	)
-}
-
-// Executor runs tasks and workflows synchronously, blocking until termination.
-// It is primarily intended for integration tests. Production code should use
-// the foreman Client to create and start flows asynchronously.
-type Executor struct {
-	svc     service.Publisher
-	host    string
-	opts    []pub.Option
-	inFlow  *workflow.Flow
-	outFlow *workflow.Flow
-}
-
-// NewExecutor creates a new executor proxy to the microservice.
-func NewExecutor(caller service.Publisher) Executor {
-	return Executor{svc: caller, host: Hostname}
-}
-
-// ForHost returns a copy of the executor with a different hostname to be applied to requests.
-func (_c Executor) ForHost(host string) Executor {
-	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithOptions returns a copy of the executor with options to be applied to requests.
-func (_c Executor) WithOptions(opts ...pub.Option) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
-// The input flow's state is available to the task in addition to the typed input arguments.
-func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow}
-}
-
-// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
-// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
-func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow}
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
 }
 
 // marshalRequest supports functional endpoints.
@@ -514,42 +329,212 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// marshalTask supports task execution via the Executor.
-func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
-	flow := inFlow
-	if flow == nil {
-		flow = workflow.NewFlow()
+/*
+Login renders a simple login screen that authenticates a user.
+Known users are hardcoded as "admin", "manager" and "user".
+The password is "password".
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c Client) Login(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Login
+	if method == "" {
+		method = Login.Method
 	}
-	err = flow.SetState(in)
-	if err != nil {
-		return errors.Trace(err)
+	if method == "ANY" {
+		method = "POST"
 	}
-	body, err := json.Marshal(flow)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	u := httpx.JoinHostAndPath(host, route)
-	httpRes, err := svc.Request(
+	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(u),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
+		pub.RelativeURL(relativeURL),
 		pub.Body(body),
-		pub.ContentType("application/json"),
-		pub.Options(opts...),
+		pub.Options(_c.opts...),
 	)
-	if err != nil {
-		return err // No trace
+}
+
+/*
+Login renders a simple login screen that authenticates a user.
+Known users are hardcoded as "admin", "manager" and "user".
+The password is "password".
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c MulticastClient) Login(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Login
+	if method == "" {
+		method = Login.Method
 	}
-	err = json.NewDecoder(httpRes.Body).Decode(flow)
-	if err != nil {
-		return errors.Trace(err)
+	if method == "ANY" {
+		method = "POST"
 	}
-	if outFlow != nil {
-		*outFlow = *flow
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Login.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+Logout renders a page that logs out the user.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c Client) Logout(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Logout
+	if method == "" {
+		method = Logout.Method
 	}
-	if out != nil {
-		err = flow.ParseState(out)
-		return errors.Trace(err)
+	if method == "ANY" {
+		method = "POST"
 	}
-	return nil
+	return _c.svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+Logout renders a page that logs out the user.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c MulticastClient) Logout(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Logout
+	if method == "" {
+		method = Logout.Method
+	}
+	if method == "ANY" {
+		method = "POST"
+	}
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Logout.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+Welcome renders a page that is shown to the user after a successful login.
+Rendering is adjusted based on the user's roles.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c Client) Welcome(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Welcome
+	if method == "" {
+		method = Welcome.Method
+	}
+	if method == "ANY" {
+		method = "POST"
+	}
+	return _c.svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+Welcome renders a page that is shown to the user after a successful login.
+Rendering is adjusted based on the user's roles.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c MulticastClient) Welcome(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Welcome
+	if method == "" {
+		method = Welcome.Method
+	}
+	if method == "ANY" {
+		method = "POST"
+	}
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Welcome.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+AdminOnly is only accessible by admins.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c Client) AdminOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: AdminOnly
+	return _c.svc.Request(
+		ctx,
+		pub.Method(AdminOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+AdminOnly is only accessible by admins.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c MulticastClient) AdminOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: AdminOnly
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(AdminOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, AdminOnly.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+ManagerOnly is only accessible by managers.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c Client) ManagerOnly(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: ManagerOnly
+	return _c.svc.Request(
+		ctx,
+		pub.Method(ManagerOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+ManagerOnly is only accessible by managers.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+*/
+func (_c MulticastClient) ManagerOnly(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: ManagerOnly
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(ManagerOnly.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ManagerOnly.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
 }

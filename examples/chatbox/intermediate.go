@@ -20,21 +20,19 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+
 	"github.com/microbus-io/fabric/examples/chatbox/chatboxapi"
 	"github.com/microbus-io/fabric/examples/chatbox/resources"
 )
@@ -50,21 +48,23 @@ var (
 	_ httpx.BodyReader
 	_ sub.Option
 	_ utils.SyncMap[string, string]
-	_ chatboxapi.Client
 	_ *workflow.Flow
+	_ chatboxapi.Client
+	_ llmapi.Message
 )
 
 const (
 	Hostname = chatboxapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
+// The intermediate delegates handling to this interface.
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
-	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: Demo
+	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                 // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.
@@ -98,16 +98,26 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`Chatbox is a demo LLM provider that pattern-matches user messages to demonstrate the tool-calling flow.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(chatboxapi.Turn.Method, chatboxapi.Turn.Route, svc.doTurn) // MARKER: Turn
+	svc.Subscribe( // MARKER: Turn
+		"Turn", svc.doTurn,
+		sub.At(chatboxapi.Turn.Method, chatboxapi.Turn.Route),
+		sub.Description(`Turn executes a single LLM turn using the chatbox demo provider.
+It pattern-matches math questions and generates tool calls to the calculator.`),
+		sub.Function(chatboxapi.TurnIn{}, chatboxapi.TurnOut{}),
+	)
 
 	// HINT: Add web endpoints here
-	svc.Subscribe(chatboxapi.Demo.Method, chatboxapi.Demo.Route, svc.Demo) // MARKER: Demo
+	svc.Subscribe( // MARKER: Demo
+		"Demo", svc.Demo,
+		sub.At(chatboxapi.Demo.Method, chatboxapi.Demo.Route),
+		sub.Description(`Demo serves the interactive demo page for the chatbox.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -134,59 +144,6 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 		return err // No trace
 	})
 	return err // No trace
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Turn
-			Type:        "function",
-			Name:        "Turn",
-			Method:      chatboxapi.Turn.Method,
-			Route:       chatboxapi.Turn.Route,
-			Summary:     "Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)",
-			Description: `Turn executes a single LLM turn using the chatbox demo provider.`,
-			InputArgs:   chatboxapi.TurnIn{},
-			OutputArgs:  chatboxapi.TurnOut{},
-		},
-		{ // MARKER: Demo
-			Type:        "web",
-			Name:        "Demo",
-			Method:      chatboxapi.Demo.Method,
-			Route:       chatboxapi.Demo.Route,
-			Summary:     "Demo()",
-			Description: `Demo serves the interactive demo page for the chatbox.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

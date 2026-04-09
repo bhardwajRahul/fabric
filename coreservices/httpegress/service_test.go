@@ -282,47 +282,6 @@ func TestHttpegress_Mocked(t *testing.T) {
 	}
 }
 
-func TestHttpegress_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	ports := []string{
-		// HINT: Include all ports of functional or web endpoints
-		"444",
-	}
-	for _, port := range ports {
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(httpegressapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(string(body), "openapi")
-				}
-			}
-		})
-	}
-}
-
 func TestHttpegress_Mock(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

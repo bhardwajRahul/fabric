@@ -1,6 +1,6 @@
 ---
-name: Initializing a Microbus Project
-description: Sets up a project with the latest the Microbus framework. Use when explicitly asked by the user to initialize a project to use the Microbus framework, or to upgrade an existing Microbus project to the latest version of the framework.
+name: init-project
+description: TRIGGER when user asks to initialize, set up, or bootstrap a Microbus project. Creates main/main.go, config files, agent files, .gitignore, VS Code launch config, and authentication scaffolding.
 ---
 
 **CRITICAL**: Do NOT explore or analyze the project unless explicitly instructed to do so. The instructions in this skill are self-contained.

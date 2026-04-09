@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -104,7 +101,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Hello microservice demonstrates the various capabilities of a microservice.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
@@ -112,13 +108,48 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe(helloapi.Hello.Method, helloapi.Hello.Route, svc.Hello)                      // MARKER: Hello
-	svc.Subscribe(helloapi.Echo.Method, helloapi.Echo.Route, svc.Echo)                         // MARKER: Echo
-	svc.Subscribe(helloapi.Ping.Method, helloapi.Ping.Route, svc.Ping)                         // MARKER: Ping
-	svc.Subscribe(helloapi.Calculator.Method, helloapi.Calculator.Route, svc.Calculator)       // MARKER: Calculator
-	svc.Subscribe(helloapi.BusPNG.Method, helloapi.BusPNG.Route, svc.BusPNG)                   // MARKER: BusPNG
-	svc.Subscribe(helloapi.Localization.Method, helloapi.Localization.Route, svc.Localization) // MARKER: Localization
-	svc.Subscribe(helloapi.Root.Method, helloapi.Root.Route, svc.Root)                         // MARKER: Root
+	svc.Subscribe( // MARKER: Hello
+		"Hello", svc.Hello,
+		sub.At(helloapi.Hello.Method, helloapi.Hello.Route),
+		sub.Description(`Hello prints a greeting.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Echo
+		"Echo", svc.Echo,
+		sub.At(helloapi.Echo.Method, helloapi.Echo.Route),
+		sub.Description(`Echo back the incoming request in wire format.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Ping
+		"Ping", svc.Ping,
+		sub.At(helloapi.Ping.Method, helloapi.Ping.Route),
+		sub.Description(`Ping all microservices and list them.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Calculator
+		"Calculator", svc.Calculator,
+		sub.At(helloapi.Calculator.Method, helloapi.Calculator.Route),
+		sub.Description(`Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: BusPNG
+		"BusPNG", svc.BusPNG,
+		sub.At(helloapi.BusPNG.Method, helloapi.BusPNG.Route),
+		sub.Description(`BusPNG serves an image from the embedded resources.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Localization
+		"Localization", svc.Localization,
+		sub.At(helloapi.Localization.Method, helloapi.Localization.Route),
+		sub.Description(`Localization prints hello in the language best matching the request's Accept-Language header.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Root
+		"Root", svc.Root,
+		sub.At(helloapi.Root.Method, helloapi.Root.Route),
+		sub.Description(`Root is the top-most root page.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -146,97 +177,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Hello
-			Type:        "web",
-			Name:        "Hello",
-			Method:      helloapi.Hello.Method,
-			Route:       helloapi.Hello.Route,
-			Summary:     "Hello()",
-			Description: `Hello prints a greeting.`,
-		},
-		{ // MARKER: Echo
-			Type:        "web",
-			Name:        "Echo",
-			Method:      helloapi.Echo.Method,
-			Route:       helloapi.Echo.Route,
-			Summary:     "Echo()",
-			Description: `Echo back the incoming request in wire format.`,
-		},
-		{ // MARKER: Ping
-			Type:        "web",
-			Name:        "Ping",
-			Method:      helloapi.Ping.Method,
-			Route:       helloapi.Ping.Route,
-			Summary:     "Ping()",
-			Description: `Ping all microservices and list them.`,
-		},
-		{ // MARKER: Calculator
-			Type:        "web",
-			Name:        "Calculator",
-			Method:      helloapi.Calculator.Method,
-			Route:       helloapi.Calculator.Route,
-			Summary:     "Calculator()",
-			Description: `Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.`,
-		},
-		{ // MARKER: BusPNG
-			Type:        "web",
-			Name:        "BusPNG",
-			Method:      helloapi.BusPNG.Method,
-			Route:       helloapi.BusPNG.Route,
-			Summary:     "BusPNG()",
-			Description: `BusPNG serves an image from the embedded resources.`,
-		},
-		{ // MARKER: Localization
-			Type:        "web",
-			Name:        "Localization",
-			Method:      helloapi.Localization.Method,
-			Route:       helloapi.Localization.Route,
-			Summary:     "Localization()",
-			Description: `Localization prints hello in the language best matching the request's Accept-Language header.`,
-		},
-		{ // MARKER: Root
-			Type:        "web",
-			Name:        "Root",
-			Method:      helloapi.Root.Method,
-			Route:       helloapi.Root.Route,
-			Summary:     "Root()",
-			Description: `Root is the top-most root page.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

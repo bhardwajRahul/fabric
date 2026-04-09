@@ -1,5 +1,5 @@
 ---
-name: Take the Agent-Guided Tour
+name: take-tour
 description: Runs the agent-guided tour of Microbus using examples. Use when the user asks to take the tour.
 ---
 
@@ -15,18 +15,19 @@ Take the agent-guided tour:
 - [ ] Step 2: Extend main app
 - [ ] Step 3: Docker Compose
 - [ ] Step 4: Run the example app
-- [ ] Step 5: Calculator
-- [ ] Step 6: Hello
-- [ ] Step 7: Messaging
-- [ ] Step 8: Browser
-- [ ] Step 9: Yellow Pages
-- [ ] Step 10: Login
-- [ ] Step 11: Credit Flow
-- [ ] Step 12: Chatbox
-- [ ] Step 13: Telemetry
-- [ ] Step 14: Stop example app
-- [ ] Step 15: Stop Docker containers
-- [ ] Step 16: What's next
+- [ ] Step 5: OpenAPI portal
+- [ ] Step 6: Calculator
+- [ ] Step 7: Hello
+- [ ] Step 8: Messaging
+- [ ] Step 9: Browser
+- [ ] Step 10: Yellow Pages
+- [ ] Step 11: Login
+- [ ] Step 12: Credit Flow
+- [ ] Step 13: Chatbox
+- [ ] Step 14: Telemetry
+- [ ] Step 15: Stop example app
+- [ ] Step 16: Stop Docker containers
+- [ ] Step 17: What's next
 ```
 
 #### Step 1: Download Examples
@@ -130,7 +131,25 @@ go run main.go
 
 **CRITICAL**: Interrupt or kill the example app when the user ends the tour or exists the session.
 
-#### Step 5: Calculator
+#### Step 5: OpenAPI Portal
+
+Before diving into individual microservices, show the user the system from the outside. The `openapi.core` portal aggregates the OpenAPI documents of every running service into a single interactive surface, so the user gets a feel for the whole running app before drilling in.
+
+Explain the portal to the user and present the following links for them to experiment with in their browser:
+
+- http://localhost:8080/openapi - Swagger-UI-style HTML browser; lists every running service and lets the user expand any one to see its endpoints, parameter tables, and sample payloads
+- http://localhost:8080/openapi?hostname=calculator.example - the same browser scoped to a single service
+- http://localhost:8080/openapi.json - the JSON aggregate document covering every running service, suitable for piping to other tools
+- http://localhost:8080/openapi.json?hostname=calculator.example - the JSON document for a single service
+
+Mention to the user that the portal is generated automatically from each service's live subscriptions - there's no hand-maintained spec file to drift. Tasks, inbound events, and outbound events are filtered out at the source so the portal shows only what's externally callable (functions, web handlers, workflow graphs).
+
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Walk the user through the structure of one service's entry: tags, paths, parameters, request/response schemas. Offer to show how the JSON output would feed an LLM tool-calling client.
+- "End the tour" - Skip to step 15
+
+#### Step 6: Calculator
 
 The `calculator.example` microservice demonstrates basic functional endpoints (RPCs) that perform mathematical operations. It shows how to define typed request/response functions, handle input validation errors, and work with custom types like points.
 
@@ -144,9 +163,9 @@ Explain the microservice to the user and present the following links for them to
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 6: Hello
+#### Step 7: Hello
 
 The `hello.example` microservice demonstrates a variety of framework capabilities including configuration properties, tickers, embedded static resources, and inter-service communication. It calls into `calculator.example` to show how microservices interact with each other, and multicasts a ping to discover all running microservices.
 
@@ -161,9 +180,9 @@ Explain the microservice to the user and present the following links for them to
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 7: Messaging
+#### Step 8: Messaging
 
 The `messaging.example` microservice demonstrates service-to-service communication patterns - unicast (load-balanced), multicast (all peers respond), and direct addressing - as well as the distributed cache for sharing state across instances.
 
@@ -176,9 +195,9 @@ Explain the microservice to the user and present the following links for them to
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 8: Browser
+#### Step 9: Browser
 
 The `browser.example` microservice demonstrates how to make outbound HTTP requests using the HTTP egress proxy. It provides a simple web UI with an address bar that fetches and displays the HTML source of any URL.
 
@@ -189,9 +208,9 @@ Explain the microservice to the user and present the following link for them to 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 9: Yellow Pages
+#### Step 10: Yellow Pages
 
 The `yellowpages.example` microservice demonstrates a SQL CRUD microservice scaffolded using the `sequel` skills. It persists `Person` records with fields for first name, last name, email, and birthday. It includes a full set of CRUD, bulk, and REST endpoints, as well as a web UI for testing. If a SQL database is not configured, it falls back to an in-memory store.
 
@@ -204,9 +223,9 @@ Explain the microservice to the user and present the following links for them to
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 10: Login
+#### Step 11: Login
 
 The `login.example` microservice demonstrates authentication and role-based access control using JWT tokens. It includes a login form, protected pages with different role requirements, and cookie-based session management. Try logging in with `admin@example.com`, `manager@example.com`, or `user@example.com` (any password works).
 
@@ -217,9 +236,9 @@ Explain the microservice to the user and present the following link for them to 
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 11: Credit Flow
+#### Step 12: Credit Flow
 
 The `creditflow.example` microservice demonstrates agentic workflows - multi-step processes orchestrated by the Foreman core service. It implements a credit approval workflow with 11 tasks spanning credit verification, employment verification, and identity verification. The workflow showcases advanced patterns: fan-out/fan-in parallelism, forEach iteration over employers, conditional transitions, goto loops for borderline credit scores, subgraphs for identity verification, reducers for merging parallel results, time budgets, retries, and sleep signals.
 
@@ -234,9 +253,9 @@ Explain the microservice to the user and present the following links for them to
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 12: Chatbox
+#### Step 13: Chatbox
 
 The `chatbox.example` microservice demonstrates the LLM integration capabilities of Microbus. It implements a demo LLM provider that pattern-matches math questions and uses the Calculator microservice as a tool - all without requiring a real LLM API key. The demo showcases the full tool-calling flow: the LLM service resolves tool schemas from OpenAPI, the demo provider requests a tool call, the LLM service executes it against the Calculator, and the result is fed back to produce the final answer.
 
@@ -259,9 +278,9 @@ Suggest the user try questions like "What is 6 times 7?", "How much is 100 divid
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 14
+- "End the tour" - Skip to step 15
 
-#### Step 13: Telemetry
+#### Step 14: Telemetry
 
 Skip this step if the user elected not to install the LGTM stack with Docker.
 
@@ -270,11 +289,11 @@ Explain to the user that they can view the telemetry collected by Grafana at htt
 Present the user with these options:
 - "End the tour" - Proceed to the next step
 
-#### Step 14: Stop Example App
+#### Step 15: Stop Example App
 
 Interrupt or kill the example app that was spun up earlier.
 
-#### Step 15: Stop Docker Containers
+#### Step 16: Stop Docker Containers
 
 Skip this step if the user elected not to install NATS and LGTM with Docker in step 3.
 
@@ -284,7 +303,7 @@ Stop the Docker containers that were started earlier.
 docker compose -f setup/microbus.yaml -p microbus down
 ```
 
-#### Step 16: What's Next
+#### Step 17: What's Next
 
 Tell the user this concludes the tour and suggest to them that they try creating their own microservice by prompting the agent. Offer a few example prompts to get them started:
 

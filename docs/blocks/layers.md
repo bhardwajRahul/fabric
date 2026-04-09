@@ -48,7 +48,9 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **Foreman** - The [foreman](../structure/coreservices-foreman.md) is the orchestration engine for agentic workflows, managing the lifecycle of flows that progress through a series of task steps. It persists all state in a SQL database.
 
-**LLM** - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Any Microbus endpoint is automatically a tool - the service fetches schemas from OpenAPI at call time and supports Claude, OpenAI and Gemini backends via configuration.
+**LLM** - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Callers supply `*openapi.Endpoint` values as tools via `llmapi.ToolsOf`; the service drives the tool-calling loop and dispatches calls over the bus. It supports Claude, ChatGPT and Gemini backends via configuration.
+
+**MCP portal** - The [MCP portal](../structure/coreservices-mcpportal.md) microservice exposes the bus's tools to LLM clients via the [Model Context Protocol](../blocks/mcp.md). MCP-aware clients connect to a single endpoint and discover, then invoke, the tools they're authorized to call.
 
 ## Coding Agents
 
@@ -139,6 +141,10 @@ Microbus uses a messaging bus for the transport layer of service-to-service comm
 **Grafana** - [Grafana](https://grafana.com)'s LGTM stack is a bundle of applications (Loki, Grafana, Tempo, Mimir) that collect and visualize OpenTelemetry.
 
 **OpenAPI** - [OpenAPI](https://www.openapis.org) is a widely used API description standard. The endpoints of all microservices on Microbus are publicly described with OpenAPI.
+
+**JSON Schema** - [JSON Schema](https://json-schema.org) is a standard for describing the shape of JSON data. Microbus uses JSON Schema for the input and output payloads of endpoints; OpenAPI references JSON Schema for its component definitions.
+
+**MCP** - [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open standard for connecting LLM clients to external tools. The [MCP portal](../structure/coreservices-mcpportal.md) exposes Microbus endpoints as MCP tools so any MCP-aware client (e.g. Claude Desktop, Claude Code) can discover and invoke them.
 
 **JWT** - [JSON web token (JWT)](https://jwt.io/introduction) is an open standard that defines a compact and self-contained way for securely transmitting information between parties as a JSON object.
 

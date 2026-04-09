@@ -1,6 +1,6 @@
 ---
-name: Adding a new microservice
-description: Creates and initializes a new microservice. Use when explicitly asked by the user to create a new microservice.
+name: add-microservice
+description: TRIGGER when user asks to create, scaffold, or initialize a new microservice. Creates the full directory structure including service.go, intermediate.go, client.go, mock.go, manifest.yaml, and test scaffolding.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -14,15 +14,16 @@ Creating a new microservice:
 - [ ] Step 1: Determine the name and description
 - [ ] Step 2: Create a directory structure
 - [ ] Step 3: Prepare coding agent files
-- [ ] Step 4: Prepare client.go
-- [ ] Step 5: Prepare embed.go
-- [ ] Step 6: Prepare service.go
-- [ ] Step 7: Prepare intermediate.go
-- [ ] Step 8: Prepare mock.go
-- [ ] Step 9: Prepare service_test.go
-- [ ] Step 10: Prepare manifest.yaml
-- [ ] Step 11: Add to main app
-- [ ] Step 12: Propose features
+- [ ] Step 4: Prepare endpoints.go
+- [ ] Step 5: Prepare client.go
+- [ ] Step 6: Prepare embed.go
+- [ ] Step 7: Prepare service.go
+- [ ] Step 8: Prepare intermediate.go
+- [ ] Step 9: Prepare mock.go
+- [ ] Step 10: Prepare service_test.go
+- [ ] Step 11: Prepare manifest.yaml
+- [ ] Step 12: Add to main app
+- [ ] Step 13: Propose features
 ```
 
 #### Step 1: Determine the Name and Description
@@ -93,13 +94,18 @@ Save the prompt as follows.
 Prompt comes here...
 ```
 
-#### Step 4: Prepare `client.go`
+#### Step 4: Prepare `endpoints.go`
 
-Create `myserviceapi/client.go` with the content of the template `client.go` located in the directory of this skill.
+Create `myserviceapi/endpoints.go` with the content of the template `endpoints.go` located in the directory of this skill.
 
 - The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
+- The `Def` struct holds the routing identity (`Method` and `Route`) of each endpoint. Add-feature skills append `Foo = Def{Method: ..., Route: ...}` lines to the `var (...)` block. The endpoint name, description, and input/output schemas live with the `svc.Subscribe(...)` call in `intermediate.go`, not in this file
 
-#### Step 5: Prepare `embed.go`
+#### Step 5: Prepare `client.go`
+
+Create `myserviceapi/client.go` with the content of the template `client.go` located in the directory of this skill. No edits required - this file holds the type-safe client/multicast/trigger/hook/executor proxies and shared marshaling helpers.
+
+#### Step 6: Prepare `embed.go`
 
 Create `resources/embed.go` with the following content verbatim.
 
@@ -112,34 +118,33 @@ import "embed"
 var FS embed.FS
 ```
 
-#### Step 6: Prepare `service.go`
+#### Step 7: Prepare `service.go`
 
 Create `service.go` with the content of the template `service.go` located in the directory of this skill.
 
 - Match the package name to the directory name
 - Set the comment of the type definition of `Service` to describe this particular microservice. The provided value is a template. Do not copy it verbatim
 
-#### Step 7: Prepare `intermediate.go`
+#### Step 8: Prepare `intermediate.go`
 
 Create `intermediate.go` with the content of the template `intermediate.go` located in the directory of this skill.
 
 - Set the description of the microservice in `svc.SetDescription`
 
-#### Step 8: Prepare `mock.go`
+#### Step 9: Prepare `mock.go`
 
 Create `mock.go` with the content of the template `mock.go` located in the directory of this skill.
 
 Note that it is the intention of `Mock` to shadow the functions of `Service`.
 
-#### Step 9: Prepare `service_test.go`
+#### Step 10: Prepare `service_test.go`
 
 Create `service_test.go` with the content of the template `service_test.go` located in the directory of this skill.
 
 - Match the package name to the directory name
 - The imports are pre-declared for convenience now, before adding test code later
-- Be sure to include `TestMyService_OpenAPI` even though initially it is a no op
 
-#### Step 10: Prepare `manifest.yaml`
+#### Step 11: Prepare `manifest.yaml`
 
 Look in `go.mod` and identify the current version of the `github.com/microbus-io/fabric` dependency. This is the framework version. Set it in `manifest.yaml` next. When working inside the fabric repository itself, there is no such dependency. Use instead the latest version you can find in any other `manifest.yaml` in the project.
 
@@ -153,7 +158,7 @@ general:
   frameworkVersion: 1.23.0 
 ```
 
-#### Step 11: Add to Main App
+#### Step 12: Add to Main App
 
 Find `main/main.go` relative to the project root. Add the new microservice to the app in the `main` function. Add the appropriate import statement at the top of the file.
 
@@ -173,7 +178,7 @@ func main() {
 }
 ```
 
-#### Step 12: Propose Features
+#### Step 13: Propose Features
 
 Ask the user if they'd like you to propose a design for the microservice. If the user declines, skip the remainder of this step.
 

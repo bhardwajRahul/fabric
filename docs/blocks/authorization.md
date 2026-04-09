@@ -28,7 +28,7 @@ When a bearer token is found, the middleware exchanges it for a short-lived acce
 2. The `iss` claim identifies the token issuer microservice. The middleware fetches the issuer's public keys from its JWKS endpoint and caches them by `kid`
 3. The bearer token's signature is verified against the matching public key
 4. The verified claims are forwarded to the [access token](../structure/coreservices-accesstoken.md) core microservice, which mints a short-lived access token. Any registered claims transformers are applied to enrich the claims (e.g. adding roles, tenant ID, or permissions from a user database) before the access token is signed
-5. The access token preserves the original identity provider in the `idp` claim and instead sets the `iss` claim to `microbus://access.token.core`
+5. The access token preserves the original identity provider in the `idp` claim and instead sets the `iss` claim to `https://access.token.core`
 6. The signed access token is attached to the request and propagated automatically to downstream microservices
 
 Access tokens use ephemeral Ed25519 key pairs that rotate automatically. Like the bearer token service, the access token microservice exposes a JWKS endpoint that aggregates public keys from all replicas, enabling any microservice to verify access tokens independently.

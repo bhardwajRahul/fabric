@@ -18,9 +18,9 @@ package foremanapi
 
 // Query specifies filtering and pagination options for listing flows.
 type Query struct {
-	Status       string `json:"status,omitzero"`
-	WorkflowName string `json:"workflowName,omitzero"`
-	ThreadKey    string `json:"threadKey,omitzero"`
-	CursorFlowID string `json:"cursorFlowID,omitzero"`
-	Limit        int    `json:"limit,omitzero"`
+	Status        string `json:"status,omitzero"`
+	WorkflowName  string `json:"workflowName,omitzero"`
+	ThreadKey     string `json:"threadKey,omitzero"`
+	CursorFlowKey string `json:"cursorFlowKey,omitzero"`
+	Limit         int    `json:"limit,omitzero"`
 }

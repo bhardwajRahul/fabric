@@ -18,8 +18,6 @@ package calculator
 
 import (
 	"context"
-	"io"
-	"net/http"
 	"sync"
 	"testing"
 
@@ -28,7 +26,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -46,46 +43,6 @@ var (
 	_ testarossa.Asserter
 	_ calculatorapi.Client
 )
-
-func TestCalculator_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	ports := []string{
-		"443",
-	}
-	for _, port := range ports {
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(calculatorapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-				}
-			}
-		})
-	}
-}
 
 func TestCalculator_Mock(t *testing.T) {
 	t.Parallel()

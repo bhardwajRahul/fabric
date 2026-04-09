@@ -25,6 +25,7 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -73,11 +74,15 @@ func TestConnector_LoadResString(t *testing.T) {
 	alpha := New("alpha.load.res.string.connector")
 
 	beta := New("beta.load.res.string.connector")
-	beta.Subscribe("GET", "localized", func(w http.ResponseWriter, r *http.Request) error {
-		s, _ := beta.LoadResString(r.Context(), "Hello")
-		w.Write([]byte(s))
-		return nil
-	})
+	beta.Subscribe("Localized",
+		func(w http.ResponseWriter, r *http.Request) error {
+			s, _ := beta.LoadResString(r.Context(), "Hello")
+			w.Write([]byte(s))
+			return nil
+		},
+		sub.At("GET", "localized"),
+		sub.Web(),
+	)
 	beta.SetResFSDir("testdata")
 
 	// Startup the microservices

@@ -19,17 +19,14 @@ package foreman
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/pub"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
@@ -74,12 +71,12 @@ func TestForeman_Mock(t *testing.T) {
 
 		_, err := mock.Create(ctx, "test-workflow", nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockCreate(func(ctx context.Context, workflowName string, initialState any) (flowID string, err error) {
+		mock.MockCreate(func(ctx context.Context, workflowName string, initialState any) (flowKey string, err error) {
 			return "test-flow-id", nil
 		})
-		flowID, err := mock.Create(ctx, "test-workflow", nil)
+		flowKey, err := mock.Create(ctx, "test-workflow", nil)
 		assert.Expect(
-			flowID, "test-flow-id",
+			flowKey, "test-flow-id",
 			err, nil,
 		)
 	})
@@ -89,7 +86,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		err := mock.Start(ctx, "test-flow-id")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockStart(func(ctx context.Context, flowID string) (err error) {
+		mock.MockStart(func(ctx context.Context, flowKey string) (err error) {
 			return nil
 		})
 		err = mock.Start(ctx, "test-flow-id")
@@ -101,7 +98,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		err := mock.StartNotify(ctx, "test-flow-id", "my.caller.host")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockStartNotify(func(ctx context.Context, flowID string, notifyHostname string) (err error) {
+		mock.MockStartNotify(func(ctx context.Context, flowKey string, notifyHostname string) (err error) {
 			return nil
 		})
 		err = mock.StartNotify(ctx, "test-flow-id", "my.caller.host")
@@ -113,7 +110,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		_, _, err := mock.Snapshot(ctx, "test-flow-id")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockSnapshot(func(ctx context.Context, flowID string) (status string, state map[string]any, err error) {
+		mock.MockSnapshot(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
 			return "completed", map[string]any{"x": 1}, nil
 		})
 		status, state, err := mock.Snapshot(ctx, "test-flow-id")
@@ -129,7 +126,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		err := mock.Resume(ctx, "test-flow-id", nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockResume(func(ctx context.Context, flowID string, resumeData any) (err error) {
+		mock.MockResume(func(ctx context.Context, flowKey string, resumeData any) (err error) {
 			return nil
 		})
 		err = mock.Resume(ctx, "test-flow-id", map[string]any{"answer": 42})
@@ -141,7 +138,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		err := mock.Cancel(ctx, "test-flow-id")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockCancel(func(ctx context.Context, flowID string) (err error) {
+		mock.MockCancel(func(ctx context.Context, flowKey string) (err error) {
 			return nil
 		})
 		err = mock.Cancel(ctx, "test-flow-id")
@@ -165,12 +162,12 @@ func TestForeman_Mock(t *testing.T) {
 
 		_, err := mock.CreateTask(ctx, "svc:428/my-task", nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockCreateTask(func(ctx context.Context, taskName string, initialState any) (flowID string, err error) {
+		mock.MockCreateTask(func(ctx context.Context, taskName string, initialState any) (flowKey string, err error) {
 			return "test-flow-id", nil
 		})
-		flowID, err := mock.CreateTask(ctx, "svc:428/my-task", nil)
+		flowKey, err := mock.CreateTask(ctx, "svc:428/my-task", nil)
 		assert.Expect(
-			flowID, "test-flow-id",
+			flowKey, "test-flow-id",
 			err, nil,
 		)
 	})
@@ -180,7 +177,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		_, _, err := mock.Await(ctx, "test-flow-id")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockAwait(func(ctx context.Context, flowID string) (status string, state map[string]any, err error) {
+		mock.MockAwait(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
 			return foremanapi.StatusCompleted, map[string]any{"result": "done"}, nil
 		})
 		status, state, err := mock.Await(ctx, "test-flow-id")
@@ -196,7 +193,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		err := mock.NotifyStatusChange(ctx, "test-flow-id", foremanapi.StatusCompleted)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockNotifyStatusChange(func(ctx context.Context, flowID string, status string) (err error) {
+		mock.MockNotifyStatusChange(func(ctx context.Context, flowKey string, status string) (err error) {
 			return nil
 		})
 		err = mock.NotifyStatusChange(ctx, "test-flow-id", foremanapi.StatusCompleted)
@@ -208,7 +205,7 @@ func TestForeman_Mock(t *testing.T) {
 
 		_, err := mock.History(ctx, "test-flow-id")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockHistory(func(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error) {
+		mock.MockHistory(func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error) {
 			return []foremanapi.FlowStep{
 				{StepDepth: 1, TaskName: "task-1", Status: "completed"},
 			}, nil
@@ -237,63 +234,6 @@ func TestForeman_Mock(t *testing.T) {
 			err, nil,
 		)
 	})
-}
-
-func TestForeman_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	svc := NewService()
-	tester := connector.New("tester.client")
-
-	app := application.New()
-	app.Add(svc, tester)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		foremanapi.Create.Route,             // MARKER: Create
-		foremanapi.CreateTask.Route,         // MARKER: CreateTask
-		foremanapi.Start.Route,              // MARKER: Start
-		foremanapi.StartNotify.Route,        // MARKER: StartNotify
-		foremanapi.Snapshot.Route,           // MARKER: Snapshot
-		foremanapi.Resume.Route,             // MARKER: Resume
-		foremanapi.Fork.Route,               // MARKER: Fork
-		foremanapi.Cancel.Route,             // MARKER: Cancel
-		foremanapi.History.Route,            // MARKER: History
-		foremanapi.Retry.Route,              // MARKER: Retry
-		foremanapi.List.Route,               // MARKER: List
-		foremanapi.Enqueue.Route,            // MARKER: Enqueue
-		foremanapi.Await.Route,              // MARKER: Await
-		foremanapi.NotifyStatusChange.Route, // MARKER: NotifyStatusChange
-		foremanapi.BreakBefore.Route,        // MARKER: BreakBefore
-		foremanapi.Run.Route,                // MARKER: Run
-		foremanapi.Continue.Route,           // MARKER: Continue
-		foremanapi.HistoryMermaid.Route,     // MARKER: HistoryMermaid
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(foremanapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
 }
 
 func TestForeman_LowLevel(t *testing.T) {
@@ -647,37 +587,49 @@ const testWorkflowURL = "https://test.workflow.host:428/my-workflow"
 // taskA sets result="hello". taskB appends " world" unless needInput=true (then it interrupts).
 func newTestWorkflowSvc() *connector.Connector {
 	graphSvc := connector.New("test.workflow.host")
-	graphSvc.Subscribe("GET", ":428/my-workflow", func(w http.ResponseWriter, r *http.Request) error {
-		g := workflow.NewGraph(testWorkflowURL)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("result")
-		g.AddTransition("https://test.workflow.host:428/task-a", "https://test.workflow.host:428/task-b")
-		g.AddTransition("https://test.workflow.host:428/task-b", workflow.END)
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(map[string]any{"graph": g})
-	})
-	graphSvc.Subscribe("POST", ":428/task-a", func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-			return err
-		}
-		f.SetString("result", "hello")
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
-	graphSvc.Subscribe("POST", ":428/task-b", func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-			return err
-		}
-		if f.GetBool("needInput") {
-			f.Interrupt(map[string]any{"request": "more data"})
+	graphSvc.Subscribe("MyWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph(testWorkflowURL)
+			g.DeclareInputs("*")
+			g.DeclareOutputs("result")
+			g.AddTransition("https://test.workflow.host:428/task-a", "https://test.workflow.host:428/task-b")
+			g.AddTransition("https://test.workflow.host:428/task-b", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/my-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("TaskA",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("result", "hello")
+			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(&f)
-		}
-		f.SetString("result", f.GetString("result")+" world")
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
+		},
+		sub.At("POST", ":428/task-a"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("TaskB",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			if f.GetBool("needInput") {
+				f.Interrupt(map[string]any{"request": "more data"})
+				return json.NewEncoder(w).Encode(&f)
+			}
+			f.SetString("result", f.GetString("result")+" world")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/task-b"),
+		sub.Web(),
+	)
 	return graphSvc
 }
 
@@ -1015,27 +967,35 @@ func TestForeman_Retry(t *testing.T) {
 
 	// Set up a workflow with a task that fails once then succeeds
 	graphSvc := connector.New("test.fail.host")
-	graphSvc.Subscribe("GET", ":428/fail-workflow", func(w http.ResponseWriter, r *http.Request) error {
-		g := workflow.NewGraph("https://test.fail.host:428/fail-workflow")
-		g.DeclareInputs("*")
-		g.DeclareOutputs("result")
-		g.AddTransition("https://test.fail.host:428/fail-task", workflow.END)
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(map[string]any{"graph": g})
-	})
+	graphSvc.Subscribe("FailWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.fail.host:428/fail-workflow")
+			g.DeclareInputs("*")
+			g.DeclareOutputs("result")
+			g.AddTransition("https://test.fail.host:428/fail-task", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/fail-workflow"),
+		sub.Web(),
+	)
 	// This task fails on first attempt, succeeds on retry
 	var failOnce bool
-	graphSvc.Subscribe("POST", ":428/fail-task", func(w http.ResponseWriter, r *http.Request) error {
-		if !failOnce {
-			failOnce = true
-			return errors.New("transient error")
-		}
-		var f workflow.Flow
-		json.NewDecoder(r.Body).Decode(&f)
-		f.SetString("result", "recovered")
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
+	graphSvc.Subscribe("FailTask",
+		func(w http.ResponseWriter, r *http.Request) error {
+			if !failOnce {
+				failOnce = true
+				return errors.New("transient error")
+			}
+			var f workflow.Flow
+			json.NewDecoder(r.Body).Decode(&f)
+			f.SetString("result", "recovered")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/fail-task"),
+		sub.Web(),
+	)
 
 	tester := connector.New("tester.retry")
 	app := application.New()
@@ -1166,54 +1126,70 @@ const testErrorWorkflowURL = "https://test.error.host:428/error-workflow"
 // taskA -> errorHandler -> END (error path)
 func newTestErrorWorkflowSvc() *connector.Connector {
 	svc := connector.New("test.error.host")
-	svc.Subscribe("GET", ":428/error-workflow", func(w http.ResponseWriter, r *http.Request) error {
-		taskA := "https://test.error.host:428/task-a"
-		taskB := "https://test.error.host:428/task-b"
-		errorHandler := "https://test.error.host:428/error-handler"
+	svc.Subscribe("ErrorWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			taskA := "https://test.error.host:428/task-a"
+			taskB := "https://test.error.host:428/task-b"
+			errorHandler := "https://test.error.host:428/error-handler"
 
-		g := workflow.NewGraph(testErrorWorkflowURL)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
-		g.AddTransition(taskA, taskB)
-		g.AddTransition(taskB, workflow.END)
-		g.AddErrorTransition(taskA, errorHandler)
-		g.AddTransition(errorHandler, workflow.END)
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(map[string]any{"graph": g})
-	})
-	svc.Subscribe("POST", ":428/task-a", func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-			return err
-		}
-		if f.GetBool("failTask") {
-			return errors.New("task-a failed intentionally", http.StatusInternalServerError)
-		}
-		f.SetString("result", "success")
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
-	svc.Subscribe("POST", ":428/task-b", func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-			return err
-		}
-		f.SetString("result", f.GetString("result")+" via task-b")
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
-	svc.Subscribe("POST", ":428/error-handler", func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-			return err
-		}
-		// Read the error from onErr state field as a TracedError
-		var onErr errors.TracedError
-		f.Get("onErr", &onErr)
-		f.SetString("result", "handled: "+onErr.Error())
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
+			g := workflow.NewGraph(testErrorWorkflowURL)
+			g.DeclareInputs("*")
+			g.DeclareOutputs("*")
+			g.AddTransition(taskA, taskB)
+			g.AddTransition(taskB, workflow.END)
+			g.AddErrorTransition(taskA, errorHandler)
+			g.AddTransition(errorHandler, workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/error-workflow"),
+		sub.Web(),
+	)
+	svc.Subscribe("TaskA",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			if f.GetBool("failTask") {
+				return errors.New("task-a failed intentionally", http.StatusInternalServerError)
+			}
+			f.SetString("result", "success")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/task-a"),
+		sub.Web(),
+	)
+	svc.Subscribe("TaskB",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("result", f.GetString("result")+" via task-b")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/task-b"),
+		sub.Web(),
+	)
+	svc.Subscribe("ErrorHandler",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			// Read the error from onErr state field as a TracedError
+			var onErr errors.TracedError
+			f.Get("onErr", &onErr)
+			f.SetString("result", "handled: "+onErr.Error())
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/error-handler"),
+		sub.Web(),
+	)
 	return svc
 }
 

@@ -45,36 +45,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "gemini.llm.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Turn = &Def{Method: "POST", Route: `:444/turn`} // MARKER: Turn
-)
-
-// TurnIn are the input arguments of Turn.
-type TurnIn struct { // MARKER: Turn
-	Messages []llmapi.Message `json:"messages,omitzero"`
-	Tools    []llmapi.ToolDef `json:"tools,omitzero"`
-}
-
-// TurnOut are the output arguments of Turn.
-type TurnOut struct { // MARKER: Turn
-	Completion *llmapi.TurnCompletion `json:"completion,omitzero"`
-}
-
 // TurnResponse packs the response of Turn.
 type TurnResponse multicastResponse // MARKER: Turn
 
@@ -87,7 +57,7 @@ func (_res *TurnResponse) Get() (completion *llmapi.TurnCompletion, err error) {
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (_c MulticastClient) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) iter.Seq[*TurnResponse] { // MARKER: Turn
+func (_c MulticastClient) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) iter.Seq[*TurnResponse] { // MARKER: Turn
 	_in := TurnIn{Messages: messages, Tools: tools}
 	_out := TurnOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
@@ -105,7 +75,7 @@ func (_c MulticastClient) Turn(ctx context.Context, messages []llmapi.Message, t
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (_c Client) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (_c Client) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
 	_in := TurnIn{Messages: messages, Tools: tools}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)

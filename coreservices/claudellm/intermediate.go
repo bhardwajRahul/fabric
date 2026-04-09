@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -56,7 +53,7 @@ var (
 
 const (
 	Hostname = claudellmapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -64,7 +61,7 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
+	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
 }
 
 // NewService creates a new instance of the microservice.
@@ -98,13 +95,17 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(claudellmapi.Turn.Method, claudellmapi.Turn.Route, svc.doTurn) // MARKER: Turn
+	svc.Subscribe( // MARKER: Turn
+		"Turn", svc.doTurn,
+		sub.At(claudellmapi.Turn.Method, claudellmapi.Turn.Route),
+		sub.Description(`Turn executes a single LLM turn using the Claude provider.`),
+		sub.Function(claudellmapi.TurnIn{}, claudellmapi.TurnOut{}),
+	)
 
 	// HINT: Add web endpoints here
 
@@ -149,58 +150,6 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 		return err // No trace
 	})
 	return err // No trace
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Turn
-			Type:    "function",
-			Name:    "Turn",
-			Method:  claudellmapi.Turn.Method,
-			Route:   claudellmapi.Turn.Route,
-			Summary: "Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)",
-			Description: `Turn executes a single LLM turn using the Claude provider.
-
-Input:
-  - messages: messages is the conversation history
-  - tools: tools is the resolved tool definitions
-
-Output:
-  - completion: completion is the LLM's response`,
-			InputArgs:  claudellmapi.TurnIn{},
-			OutputArgs: claudellmapi.TurnOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

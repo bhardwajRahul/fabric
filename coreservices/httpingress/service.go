@@ -597,13 +597,16 @@ func (svc *Service) exchangeToken(ctx context.Context, bearerToken string) (acce
 	}
 
 	// Extract the issuer hostname
-	host := ""
-	if issStr, ok := claims["iss"].(string); ok {
-		if strings.HasPrefix(issStr, "microbus://") {
-			host = issStr[len("microbus://"):]
-		}
+	issStr, _ := claims["iss"].(string)
+	_, ok = claims["microbus"].(string)
+	if !ok && !strings.HasPrefix(issStr, "microbus://") { // microbus scheme for backward compatibility
+		return "", nil
 	}
-	if host == "" {
+	_, issuerHost, ok := strings.Cut(issStr, "://")
+	if !ok {
+		issuerHost = issStr
+	}
+	if issuerHost == "" {
 		return "", nil
 	}
 
@@ -616,7 +619,7 @@ func (svc *Service) exchangeToken(ctx context.Context, bearerToken string) (acce
 	// Look up the public key, refresh cache if needed
 	key, found := svc.lookupBearerTokenKey(kid)
 	if !found {
-		err = svc.fetchBearerTokenKeys(ctx, host)
+		err = svc.fetchBearerTokenKeys(ctx, issuerHost)
 		if err != nil {
 			if errors.StatusCode(err) == http.StatusNotFound {
 				return "", nil

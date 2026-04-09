@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = httpegressapi.Hostname
-	Version  = 157
+	Version  = 158
 )
 
 // ToDo is implemented by the service or mock.
@@ -97,14 +94,19 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The HTTP egress microservice relays HTTP requests to the internet.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
 
-	svc.Subscribe("POST", httpegressapi.MakeRequest.Route, svc.MakeRequest) // MARKER: MakeRequest
+	svc.Subscribe( // MARKER: MakeRequest
+		"MakeRequest", svc.MakeRequest,
+		sub.At(httpegressapi.MakeRequest.Method, httpegressapi.MakeRequest.Route),
+		sub.Description(`MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
+The proxied request is expected to be posted in the body of the request in binary form (RFC7231).`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -120,50 +122,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: MakeRequest
-			Type:    "web",
-			Name:    "MakeRequest",
-			Method:  "POST",
-			Route:   httpegressapi.MakeRequest.Route,
-			Summary: "MakeRequest()",
-			Description: `MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
-The proxied request is expected to be posted in the body of the request in binary form (RFC7231).`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

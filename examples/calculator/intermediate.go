@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -100,15 +97,29 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Calculator microservice performs simple mathematical operations.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
 	// HINT: Add functional endpoints here
-	svc.Subscribe(calculatorapi.Arithmetic.Method, calculatorapi.Arithmetic.Route, svc.doArithmetic) // MARKER: Arithmetic
-	svc.Subscribe(calculatorapi.Square.Method, calculatorapi.Square.Route, svc.doSquare)             // MARKER: Square
-	svc.Subscribe(calculatorapi.Distance.Method, calculatorapi.Distance.Route, svc.doDistance)       // MARKER: Distance
+	svc.Subscribe( // MARKER: Arithmetic
+		"Arithmetic", svc.doArithmetic,
+		sub.At(calculatorapi.Arithmetic.Method, calculatorapi.Arithmetic.Route),
+		sub.Description(`Arithmetic performs an arithmetic operation between two integers x and y given an operator op.`),
+		sub.Function(calculatorapi.ArithmeticIn{}, calculatorapi.ArithmeticOut{}),
+	)
+	svc.Subscribe( // MARKER: Square
+		"Square", svc.doSquare,
+		sub.At(calculatorapi.Square.Method, calculatorapi.Square.Route),
+		sub.Description(`Square prints the square of the integer x.`),
+		sub.Function(calculatorapi.SquareIn{}, calculatorapi.SquareOut{}),
+	)
+	svc.Subscribe( // MARKER: Distance
+		"Distance", svc.doDistance,
+		sub.At(calculatorapi.Distance.Method, calculatorapi.Distance.Route),
+		sub.Description(`Distance calculates the distance between two points. It demonstrates the use of the defined type Point.`),
+		sub.Function(calculatorapi.DistanceIn{}, calculatorapi.DistanceOut{}),
+	)
 
 	// HINT: Add web endpoints here
 
@@ -128,71 +139,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Arithmetic
-			Type:        "function",
-			Name:        "Arithmetic",
-			Method:      calculatorapi.Arithmetic.Method,
-			Route:       calculatorapi.Arithmetic.Route,
-			Summary:     "Arithmetic(x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int)",
-			Description: `Arithmetic performs an arithmetic operation between two integers x and y given an operator op.`,
-			InputArgs:   calculatorapi.ArithmeticIn{},
-			OutputArgs:  calculatorapi.ArithmeticOut{},
-		},
-		{ // MARKER: Square
-			Type:        "function",
-			Name:        "Square",
-			Method:      calculatorapi.Square.Method,
-			Route:       calculatorapi.Square.Route,
-			Summary:     "Square(x int) (xEcho int, result int)",
-			Description: `Square prints the square of the integer x.`,
-			InputArgs:   calculatorapi.SquareIn{},
-			OutputArgs:  calculatorapi.SquareOut{},
-		},
-		{ // MARKER: Distance
-			Type:        "function",
-			Name:        "Distance",
-			Method:      calculatorapi.Distance.Method,
-			Route:       calculatorapi.Distance.Route,
-			Summary:     "Distance(p1 Point, p2 Point) (d float64)",
-			Description: `Distance calculates the distance between two points. It demonstrates the use of the defined type Point.`,
-			InputArgs:   calculatorapi.DistanceIn{},
-			OutputArgs:  calculatorapi.DistanceOut{},
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

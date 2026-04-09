@@ -391,3 +391,22 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - Foreman core microservice
 - LLM core microservice with Claude, Gemini and OpenAI providers
 - Restructured agent coding rules to compress size
+
+[Milestone 47](https://github.com/microbus-io/fabric/tree/milestone/47):
+
+- `ExternalizeURL` added to the `Connector`
+- `microbus://` protocol in `iss` claims replaced with `microbus` claim
+- Refactoring of coding agent skill names and trigger descriptions
+- New `shell` core microservice for running shell commands
+- Typed `Subscribe(name, handler, opts...)` API replaces the untyped positional form; `Unsubscribe(name)` is symmetric
+- New `sub.At`, `sub.Description`, `sub.Function`, `sub.Web`, `sub.InboundEvent`, `sub.Task`, `sub.Workflow`, `sub.Infra` options
+- Connector serves `:888/openapi.json` built-in; per-service `doOpenAPI` and `TestMyService_OpenAPI` retired
+- `*api/endpoints.go` uses `Def{Method, Route}` literals with a `URL()` helper instead of `*openapi.Endpoint` vars
+- `openapi.Doc` renamed to `openapi.Document`; the `openapi/doc` subpackage was inlined into `openapi`
+- LLM `Chat` accepts `[]string` of endpoint URLs and fetches each host's OpenAPI document at chat time; `llmapi.ToolsOf` removed
+- Renamed the `openaillm` provider to `chatgptllm` (hostname `chatgpt.llm.core`)
+- `chatbox.example` microservice demonstrates the LLM tool-calling flow with a mock provider
+- OpenAPI portal rewritten to produce JSON document and HTML explorer
+- New `mcpportal` core microservice
+- Path parameters no longer carry `style: deepObject` (query-only per OpenAPI 3.1)
+- Evaluate claims of unsigned tokens in `TESTING`

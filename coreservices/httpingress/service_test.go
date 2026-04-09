@@ -90,165 +90,250 @@ func TestHttpingress_Incoming(t *testing.T) {
 		svc,
 		tester,
 		connector.New("ports").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("request.memory.limit").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("POST", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				b, _ := io.ReadAll(r.Body)
-				w.Write(b)
-				return nil
-			})
-			c.Subscribe("POST", "hold", func(w http.ResponseWriter, r *http.Request) error {
-				entered <- true
-				<-done
-				w.Write([]byte("done"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					b, _ := io.ReadAll(r.Body)
+					w.Write(b)
+					return nil
+				},
+				sub.At("POST", "ok"),
+				sub.Web(),
+			)
+			c.Subscribe("Hold",
+				func(w http.ResponseWriter, r *http.Request) error {
+					entered <- true
+					<-done
+					w.Write([]byte("done"))
+					return nil
+				},
+				sub.At("POST", "hold"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("compression").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				w.Header().Set("Content-Type", "text/plain")
-				w.Write(bytes.Repeat([]byte("Hello123"), 1024)) // 8KB
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Header().Set("Content-Type", "text/plain")
+					w.Write(bytes.Repeat([]byte("Hello123"), 1024)) // 8KB
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("port.mapping").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok443", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
-			c.Subscribe("GET", ":555/ok555", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok443",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "ok443"),
+				sub.Web(),
+			)
+			c.Subscribe("Ok555",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", ":555/ok555"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("forwarded.headers").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				var sb strings.Builder
-				for _, h := range []string{"X-Forwarded-Host", "X-Forwarded-Prefix", "X-Forwarded-Proto", "X-Forwarded-For", "X-Forwarded-Path"} {
-					if r.Header.Get(h) != "" {
-						sb.WriteString(h)
-						sb.WriteString(": ")
-						sb.WriteString(r.Header.Get(h))
-						sb.WriteString("\n")
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					var sb strings.Builder
+					for _, h := range []string{"X-Forwarded-Host", "X-Forwarded-Prefix", "X-Forwarded-Proto", "X-Forwarded-For", "X-Forwarded-Path"} {
+						if r.Header.Get(h) != "" {
+							sb.WriteString(h)
+							sb.WriteString(": ")
+							sb.WriteString(r.Header.Get(h))
+							sb.WriteString("\n")
+						}
 					}
-				}
-				w.Write([]byte(sb.String()))
-				return nil
-			})
+					w.Write([]byte(sb.String()))
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("root").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("Root"))
-				return nil
-			})
+			c.Subscribe("Root",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("Root"))
+					return nil
+				},
+				sub.At("GET", "/"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("cors").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				callCount++
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					callCount++
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("parse.form").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("POST", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				err := r.ParseForm()
-				if err != nil {
-					return errors.Trace(err)
-				}
-				w.Write([]byte("ok"))
-				return nil
-			})
-			c.Subscribe("POST", "more", func(w http.ResponseWriter, r *http.Request) error {
-				r.Body = http.MaxBytesReader(w, r.Body, 12*1024*1024)
-				err := r.ParseForm()
-				if err != nil {
-					return errors.Trace(err)
-				}
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					err := r.ParseForm()
+					if err != nil {
+						return errors.Trace(err)
+					}
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("POST", "ok"),
+				sub.Web(),
+			)
+			c.Subscribe("More",
+				func(w http.ResponseWriter, r *http.Request) error {
+					r.Body = http.MaxBytesReader(w, r.Body, 12*1024*1024)
+					err := r.ParseForm()
+					if err != nil {
+						return errors.Trace(err)
+					}
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("POST", "more"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("internal.headers").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", ":555/ok", func(w http.ResponseWriter, r *http.Request) error {
-				request = r
-				w.Header().Set(frame.HeaderPrefix+"In-Response", "STOP")
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					request = r
+					w.Header().Set(frame.HeaderPrefix+"In-Response", "STOP")
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", ":555/ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("greeting").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", ":555/ok", func(w http.ResponseWriter, r *http.Request) error {
-				request = r
-				w.Write([]byte("ok"))
-				return nil
-			})
-			c.Subscribe("GET", ":500/ok", func(w http.ResponseWriter, r *http.Request) error {
-				request = r
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok555",
+				func(w http.ResponseWriter, r *http.Request) error {
+					request = r
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", ":555/ok"),
+				sub.Web(),
+			)
+			c.Subscribe("Ok500",
+				func(w http.ResponseWriter, r *http.Request) error {
+					request = r
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", ":500/ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("blocked.paths").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "admin.php", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
-			c.Subscribe("GET", "admin.ppp", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("AdminPhp",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "admin.php"),
+				sub.Web(),
+			)
+			c.Subscribe("AdminPpp",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "admin.ppp"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("no.cache").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("auth.token.entry").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				if ok, _ := frame.Of(r).IfActor(`iss`); ok {
-					countActors++
-				}
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					if ok, _ := frame.Of(r).IfActor(`iss`); ok {
+						countActors++
+					}
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("authorization").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "protected", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("Access Granted"))
-				return nil
-			}, sub.RequiredClaims("role=='major'"))
-			c.Subscribe("GET", "//login-page", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("Login"))
-				return nil
-			})
+			c.Subscribe("Protected",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("Access Granted"))
+					return nil
+				},
+				sub.At("GET", "protected"),
+				sub.Web(),
+				sub.RequiredClaims("role=='major'"),
+			)
+			c.Subscribe("LoginPage",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("Login"))
+					return nil
+				},
+				sub.At("GET", "//login-page"),
+				sub.Web(),
+			)
 			return nil
 		}),
 		connector.New("multi.value.headers").Init(func(c *connector.Connector) (err error) {
-			c.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-				request = r
-				w.Header()["Multi-Value"] = []string{
-					"Return 1",
-					"Return 2",
-				}
-				return nil
-			})
+			c.Subscribe("Ok",
+				func(w http.ResponseWriter, r *http.Request) error {
+					request = r
+					w.Header()["Multi-Value"] = []string{
+						"Return 1",
+						"Return 2",
+					}
+					return nil
+				},
+				sub.At("GET", "ok"),
+				sub.Web(),
+			)
 			return nil
 		}),
 	)
@@ -642,9 +727,10 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Attempt to impersonate issuer (wrong key, no kid)
 		jwtToken = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"iss": "microbus://" + bearertokenapi.Hostname,
-			"iat": now.Unix(),
-			"exp": now.Add(time.Hour).Unix(),
+			"iss":      "https://" + bearertokenapi.Hostname,
+			"microbus": "1",
+			"iat":      now.Unix(),
+			"exp":      now.Add(time.Hour).Unix(),
 		})
 		signedJWT, err = jwtToken.SignedString([]byte("wrong-key"))
 		assert.NoError(err)
@@ -656,7 +742,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Do not accept incoming Microbus-Actor header
 		req.Header.Del("Authorization")
-		req.Header.Set(frame.HeaderActor, `{"iss":"microbus://`+bearertokenapi.Hostname+`"}`)
+		req.Header.Set(frame.HeaderActor, `{"iss":"https://`+bearertokenapi.Hostname+`","microbus":"1"}`)
 
 		_, err = httpClient.Do(req)
 		assert.NoError(err)

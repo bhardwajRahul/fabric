@@ -42,31 +42,8 @@ var (
 	_ = marshalPublish
 	_ = marshalFunction
 	_ = marshalTask
+	_ = marshalWorkflow
 	_ workflow.Flow
-)
-
-// Hostname is the default hostname of the microservice.
-const Hostname = "configurator.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Values     = Def{Method: "ANY", Route: `:888/values`}    // MARKER: Values
-	Refresh    = Def{Method: "ANY", Route: `:444/refresh`}   // MARKER: Refresh
-	SyncRepo   = Def{Method: "ANY", Route: `:888/sync-repo`} // MARKER: SyncRepo
-	Values443  = Def{Method: "ANY", Route: `:443/values`}    // MARKER: Values443
-	Refresh443 = Def{Method: "ANY", Route: `:443/refresh`}   // MARKER: Refresh443
-	Sync443    = Def{Method: "ANY", Route: `:443/sync`}      // MARKER: Sync443
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -122,6 +99,116 @@ func (_c MulticastClient) ForHost(host string) MulticastClient {
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
+
+// WorkflowRunner executes a workflow by name with initial state, blocking until termination.
+// foremanapi.Client satisfies this interface.
+type WorkflowRunner interface {
+	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error)
+}
+
+// Executor runs tasks and workflows synchronously, blocking until termination.
+// It is primarily intended for integration tests.
+type Executor struct {
+	svc     service.Publisher
+	host    string
+	opts    []pub.Option
+	inFlow  *workflow.Flow
+	outFlow *workflow.Flow
+	runner  WorkflowRunner
+}
+
+// NewExecutor creates a new executor proxy to the microservice.
+func NewExecutor(caller service.Publisher) Executor {
+	return Executor{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the executor with a different hostname to be applied to requests.
+func (_c Executor) ForHost(host string) Executor {
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOptions returns a copy of the executor with options to be applied to requests.
+func (_c Executor) WithOptions(opts ...pub.Option) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
+// The input flow's state is available to the task in addition to the typed input arguments.
+func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner}
+}
+
+// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
+// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
+func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner}
+}
+
+// WithWorkflowRunner returns a copy of the executor with a workflow runner for executing workflows.
+// foremanapi.NewClient(svc) satisfies the WorkflowRunner interface.
+func (_c Executor) WithWorkflowRunner(runner WorkflowRunner) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner}
+}
+
+// marshalTask supports task execution via the Executor.
+func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
+	flow := inFlow
+	if flow == nil {
+		flow = workflow.NewFlow()
+	}
+	err = flow.SetState(in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	body, err := json.Marshal(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	u := httpx.JoinHostAndPath(host, route)
+	httpRes, err := svc.Request(
+		ctx,
+		pub.Method(method),
+		pub.URL(u),
+		pub.Body(body),
+		pub.ContentType("application/json"),
+		pub.Options(opts...),
+	)
+	if err != nil {
+		return err // No trace
+	}
+	flow = workflow.NewFlow()
+	err = json.NewDecoder(httpRes.Body).Decode(flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if outFlow != nil {
+		*outFlow = *flow
+	}
+	if out != nil {
+		err = flow.ParseState(out)
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// marshalWorkflow supports workflow execution via the Executor.
+func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL string, in any, out any) (status string, err error) {
+	status, state, err := runner.Run(ctx, workflowURL, in)
+	if err != nil {
+		return status, err // No trace
+	}
+	if out != nil && state != nil {
+		data, err := json.Marshal(state)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+		err = json.Unmarshal(data, out)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+	}
+	return status, nil
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -250,16 +337,6 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// ValuesIn are the input arguments of Values.
-type ValuesIn struct { // MARKER: Values
-	Names []string `json:"names,omitzero"`
-}
-
-// ValuesOut are the output arguments of Values.
-type ValuesOut struct { // MARKER: Values
-	Values map[string]string `json:"values,omitzero"`
-}
-
 // ValuesResponse packs the response of Values.
 type ValuesResponse multicastResponse // MARKER: Values
 
@@ -267,16 +344,6 @@ type ValuesResponse multicastResponse // MARKER: Values
 func (_res *ValuesResponse) Get() (values map[string]string, err error) { // MARKER: Values
 	_d := _res.data.(*ValuesOut)
 	return _d.Values, _res.err
-}
-
-/*
-Values returns the values associated with the specified config property names for the caller microservice.
-*/
-func (_c Client) Values(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values
-	_in := ValuesIn{Names: names}
-	_out := ValuesOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values.Method, Values.Route, &_in, &_out)
-	return _out.Values, err // No trace
 }
 
 /*
@@ -297,12 +364,14 @@ func (_c MulticastClient) Values(ctx context.Context, names []string) iter.Seq[*
 	}
 }
 
-// RefreshIn are the input arguments of Refresh.
-type RefreshIn struct { // MARKER: Refresh
-}
-
-// RefreshOut are the output arguments of Refresh.
-type RefreshOut struct { // MARKER: Refresh
+/*
+Values returns the values associated with the specified config property names for the caller microservice.
+*/
+func (_c Client) Values(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values
+	_in := ValuesIn{Names: names}
+	_out := ValuesOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values.Method, Values.Route, &_in, &_out)
+	return _out.Values, err // No trace
 }
 
 // RefreshResponse packs the response of Refresh.
@@ -311,17 +380,6 @@ type RefreshResponse multicastResponse // MARKER: Refresh
 // Get unpacks the return arguments of Refresh.
 func (_res *RefreshResponse) Get() (err error) { // MARKER: Refresh
 	return _res.err
-}
-
-/*
-Refresh tells all microservices to contact the configurator and refresh their configs.
-An error is returned if any of the values sent to the microservices fails validation.
-*/
-func (_c Client) Refresh(ctx context.Context) (err error) { // MARKER: Refresh
-	_in := RefreshIn{}
-	_out := RefreshOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh.Method, Refresh.Route, &_in, &_out)
-	return err // No trace
 }
 
 /*
@@ -343,14 +401,15 @@ func (_c MulticastClient) Refresh(ctx context.Context) iter.Seq[*RefreshResponse
 	}
 }
 
-// SyncRepoIn are the input arguments of SyncRepo.
-type SyncRepoIn struct { // MARKER: SyncRepo
-	Timestamp time.Time                    `json:"timestamp,omitzero"`
-	Values    map[string]map[string]string `json:"values,omitzero"`
-}
-
-// SyncRepoOut are the output arguments of SyncRepo.
-type SyncRepoOut struct { // MARKER: SyncRepo
+/*
+Refresh tells all microservices to contact the configurator and refresh their configs.
+An error is returned if any of the values sent to the microservices fails validation.
+*/
+func (_c Client) Refresh(ctx context.Context) (err error) { // MARKER: Refresh
+	_in := RefreshIn{}
+	_out := RefreshOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh.Method, Refresh.Route, &_in, &_out)
+	return err // No trace
 }
 
 // SyncRepoResponse packs the response of SyncRepo.
@@ -359,16 +418,6 @@ type SyncRepoResponse multicastResponse // MARKER: SyncRepo
 // Get unpacks the return arguments of SyncRepo.
 func (_res *SyncRepoResponse) Get() (err error) { // MARKER: SyncRepo
 	return _res.err
-}
-
-/*
-SyncRepo is used to synchronize values among replica peers of the configurator.
-*/
-func (_c Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: SyncRepo
-	_in := SyncRepoIn{Timestamp: timestamp, Values: values}
-	_out := SyncRepoOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, SyncRepo.Method, SyncRepo.Route, &_in, &_out)
-	return err // No trace
 }
 
 /*
@@ -389,14 +438,14 @@ func (_c MulticastClient) SyncRepo(ctx context.Context, timestamp time.Time, val
 	}
 }
 
-// Values443In are the input arguments of Values443.
-type Values443In struct { // MARKER: Values443
-	Names []string `json:"names,omitzero"`
-}
-
-// Values443Out are the output arguments of Values443.
-type Values443Out struct { // MARKER: Values443
-	Values map[string]string `json:"values,omitzero"`
+/*
+SyncRepo is used to synchronize values among replica peers of the configurator.
+*/
+func (_c Client) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: SyncRepo
+	_in := SyncRepoIn{Timestamp: timestamp, Values: values}
+	_out := SyncRepoOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, SyncRepo.Method, SyncRepo.Route, &_in, &_out)
+	return err // No trace
 }
 
 // Values443Response packs the response of Values443.
@@ -406,16 +455,6 @@ type Values443Response multicastResponse // MARKER: Values443
 func (_res *Values443Response) Get() (values map[string]string, err error) { // MARKER: Values443
 	_d := _res.data.(*Values443Out)
 	return _d.Values, _res.err
-}
-
-/*
-Deprecated.
-*/
-func (_c Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values443
-	_in := Values443In{Names: names}
-	_out := Values443Out{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values443.Method, Values443.Route, &_in, &_out)
-	return _out.Values, err // No trace
 }
 
 /*
@@ -436,12 +475,14 @@ func (_c MulticastClient) Values443(ctx context.Context, names []string) iter.Se
 	}
 }
 
-// Refresh443In are the input arguments of Refresh443.
-type Refresh443In struct { // MARKER: Refresh443
-}
-
-// Refresh443Out are the output arguments of Refresh443.
-type Refresh443Out struct { // MARKER: Refresh443
+/*
+Deprecated.
+*/
+func (_c Client) Values443(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values443
+	_in := Values443In{Names: names}
+	_out := Values443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Values443.Method, Values443.Route, &_in, &_out)
+	return _out.Values, err // No trace
 }
 
 // Refresh443Response packs the response of Refresh443.
@@ -450,16 +491,6 @@ type Refresh443Response multicastResponse // MARKER: Refresh443
 // Get unpacks the return arguments of Refresh443.
 func (_res *Refresh443Response) Get() (err error) { // MARKER: Refresh443
 	return _res.err
-}
-
-/*
-Deprecated.
-*/
-func (_c Client) Refresh443(ctx context.Context) (err error) { // MARKER: Refresh443
-	_in := Refresh443In{}
-	_out := Refresh443Out{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh443.Method, Refresh443.Route, &_in, &_out)
-	return err // No trace
 }
 
 /*
@@ -480,14 +511,14 @@ func (_c MulticastClient) Refresh443(ctx context.Context) iter.Seq[*Refresh443Re
 	}
 }
 
-// Sync443In are the input arguments of Sync443.
-type Sync443In struct { // MARKER: Sync443
-	Timestamp time.Time                    `json:"timestamp,omitzero"`
-	Values    map[string]map[string]string `json:"values,omitzero"`
-}
-
-// Sync443Out are the output arguments of Sync443.
-type Sync443Out struct { // MARKER: Sync443
+/*
+Deprecated.
+*/
+func (_c Client) Refresh443(ctx context.Context) (err error) { // MARKER: Refresh443
+	_in := Refresh443In{}
+	_out := Refresh443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Refresh443.Method, Refresh443.Route, &_in, &_out)
+	return err // No trace
 }
 
 // Sync443Response packs the response of Sync443.
@@ -496,16 +527,6 @@ type Sync443Response multicastResponse // MARKER: Sync443
 // Get unpacks the return arguments of Sync443.
 func (_res *Sync443Response) Get() (err error) { // MARKER: Sync443
 	return _res.err
-}
-
-/*
-Deprecated.
-*/
-func (_c Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: Sync443
-	_in := Sync443In{Timestamp: timestamp, Values: values}
-	_out := Sync443Out{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Sync443.Method, Sync443.Route, &_in, &_out)
-	return err // No trace
 }
 
 /*
@@ -526,80 +547,12 @@ func (_c MulticastClient) Sync443(ctx context.Context, timestamp time.Time, valu
 	}
 }
 
-// Executor runs tasks and workflows synchronously, blocking until termination.
-// It is primarily intended for integration tests. Production code should use
-// the foreman Client to create and start flows asynchronously.
-type Executor struct {
-	svc     service.Publisher
-	host    string
-	opts    []pub.Option
-	inFlow  *workflow.Flow
-	outFlow *workflow.Flow
-}
-
-// NewExecutor creates a new executor proxy to the microservice.
-func NewExecutor(caller service.Publisher) Executor {
-	return Executor{svc: caller, host: Hostname}
-}
-
-// ForHost returns a copy of the executor with a different hostname to be applied to requests.
-func (_c Executor) ForHost(host string) Executor {
-	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithOptions returns a copy of the executor with options to be applied to requests.
-func (_c Executor) WithOptions(opts ...pub.Option) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow}
-}
-
-// WithInputFlow returns a copy of the executor with an input flow to use for task execution.
-// The input flow's state is available to the task in addition to the typed input arguments.
-func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow}
-}
-
-// WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
-// The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
-func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow}
-}
-
-// marshalTask supports task execution via the Executor.
-func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any, inFlow *workflow.Flow, outFlow *workflow.Flow) (err error) {
-	flow := inFlow
-	if flow == nil {
-		flow = workflow.NewFlow()
-	}
-	err = flow.SetState(in)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	body, err := json.Marshal(flow)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	u := httpx.JoinHostAndPath(host, route)
-	httpRes, err := svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(u),
-		pub.Body(body),
-		pub.ContentType("application/json"),
-		pub.Options(opts...),
-	)
-	if err != nil {
-		return err // No trace
-	}
-	err = json.NewDecoder(httpRes.Body).Decode(flow)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if outFlow != nil {
-		*outFlow = *flow
-	}
-	if out != nil {
-		err = flow.ParseState(out)
-		return errors.Trace(err)
-	}
-	return nil
+/*
+Deprecated.
+*/
+func (_c Client) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: Sync443
+	_in := Sync443In{Timestamp: timestamp, Values: values}
+	_out := Sync443Out{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Sync443.Method, Sync443.Route, &_in, &_out)
+	return err // No trace
 }

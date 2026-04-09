@@ -18,39 +18,38 @@ limitations under the License.
     <head>
         <title>Login</title>
         <style>
-            * {
-                font-family: "helvetica neue", helvetica, sans-serif;
-                font-size: 14pt;
-            }
-            FORM {
-                display: block;
-                width: 440px;
-                margin: auto;
-                margin-top: 25vh;
-            }
-            FORM > TABLE {
-                border: solid 1px #888888;
-                border-radius: 8px;
-                padding: 16px;
-            }
-            INPUT[type=text], INPUT[type=password]{
-                display: block;
-                width: 100%;
-            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+            .hint { max-width: 440px; margin: 40px auto 0; color: #666; font-size: 0.9em; }
+            form { display: block; max-width: 440px; margin: 16px auto; }
+            .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; }
+            .card table { width: 100%; }
+            .card td { padding: 4px 0; }
+            input[type=text], input[type=password] { display: block; width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+            input[type=submit] { padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+            input[type=submit]:hover { background: #1565c0; }
+            .denied { color: #c62828; font-weight: bold; margin-top: 12px; }
         </style>
     </head>
     <body>
-        Usernames: "admin@example.com", "manager@example.com" or "user@example.com"<br>
-        Password: "password"
+        <div class="hint">
+            Credentials:
+            <ul>
+                <li>admin@example.com / password</li>
+                <li>manager@example.com / password</li>
+                <li>user@example.com / password</li>
+            </ul>
+        </div>
 
         <form method="POST">
             <input type="hidden" name="src" value="{{ .Src }}">
-            <table>
-                <tr><td>Username</td><td><input type="text" name="u" value="{{ .U }}"></td></tr>
-                <tr><td>Password</td><td><input type="password" name="p" value="{{ .P }}"></td></tr>
-                <tr><td></td><td><input type="submit" name="l" value="Login"></td></tr>
-            </table>
-            {{ if .Denied }}Access Denied{{ end }}
+            <div class="card">
+                <table>
+                    <tr><td>Username</td><td><input type="text" name="u" value="{{ .U }}"></td></tr>
+                    <tr><td>Password</td><td><input type="password" name="p" value="{{ .P }}"></td></tr>
+                    <tr><td></td><td><input type="submit" name="l" value="Login"></td></tr>
+                </table>
+                {{ if .Denied }}<div class="denied">Access Denied</div>{{ end }}
+            </div>
         </form>
     </body>
 </html>

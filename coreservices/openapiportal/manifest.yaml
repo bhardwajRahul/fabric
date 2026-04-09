@@ -15,16 +15,21 @@
 general:
   name: OpenAPIPortal
   hostname: openapiportal.core
-  description: The OpenAPI microservice lists links to the OpenAPI endpoint of all microservices that provide one on the requested port.
+  description: The OpenAPI portal serves an aggregated OpenAPI 3.1 document covering every microservice on the bus, plus per-service docs proxied from each microservice's :888/openapi.json. Endpoints are filtered by the caller's claims (per-service) and the request's port (consumer-side).
   package: github.com/microbus-io/fabric/coreservices/openapiportal
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
+  modifiedAt: "2026-04-28T22:00:00Z"
 
 downstream:
   - hostname: control.core
     package: github.com/microbus-io/fabric/coreservices/control
 
 webs:
-  List:
-    description: List displays links to the OpenAPI endpoints of all microservices.
-    method: ANY
+  Document:
+    description: Document returns the OpenAPI 3.1 document as JSON. Without a `hostname` query arg, returns an aggregate covering every microservice on the bus, with one tag per service preserving each service's description. With `?hostname=<host>`, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port (with :0 paths treated as wildcard).
+    method: GET
+    route: //openapi.json:0
+  Explorer:
+    description: Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without `?hostname=<host>`, lists every service with its description and endpoint count. With `?hostname=<host>`, shows that service's endpoints. Filtered by the caller's claims and the request's port (consumer-side).
+    method: GET
     route: //openapi:0

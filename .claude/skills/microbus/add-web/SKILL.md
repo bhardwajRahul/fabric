@@ -1,6 +1,6 @@
 ---
-name: Adding a Web Handler Endpoint
-description: Creates or modify a web handler endpoint of a microservice. Use when explicitly asked by the user to create or modify a web handler endpoint of a microservice.
+name: add-web
+description: TRIGGER when user asks to add or modify a web handler, HTML page, file download, or raw HTTP endpoint. Use for endpoints that work with http.ResponseWriter/http.Request. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -18,10 +18,10 @@ Creating or modifying a web endpoint:
 - [ ] Step 3: Determine a description
 - [ ] Step 4: Determine required claims
 - [ ] Step 5: Extend the ToDo interface
-- [ ] Step 6: Extend the clients
-- [ ] Step 7: Implement the logic
-- [ ] Step 8: Bind the handler to the microservice
-- [ ] Step 9: Expose the endpoint via OpenAPI
+- [ ] Step 6: Define the endpoint
+- [ ] Step 7: Extend the clients
+- [ ] Step 8: Implement the logic
+- [ ] Step 9: Bind the handler to the microservice
 - [ ] Step 10: Extend the mock
 - [ ] Step 11: Test the handler
 - [ ] Step 12: Housekeeping
@@ -62,9 +62,9 @@ type ToDo interface {
 }
 ```
 
-#### Step 6: Extend the Clients
+#### Step 6: Define the Endpoint
 
-Define the endpoint in the `var` block at the top of `myserviceapi/client.go`, after the corresponding `HINT` comment.
+Append the endpoint definition to the `var` block in `myserviceapi/endpoints.go`, after the corresponding `HINT` comment. The `Def` struct carries only the `Method` and `Route` from Step 2; the endpoint name, description, and required claims are wired up via `svc.Subscribe` in `intermediate.go` (Step 9).
 
 ```go
 var (
@@ -74,9 +74,11 @@ var (
 )
 ```
 
+#### Step 7: Extend the Clients
+
 Append the following methods at the end of `myserviceapi/client.go`.
 
-- If the method of the endpoint is anything other than `ANY`, omit the `method` argument and instead hardcode it as the argument of `pub.Method`
+- If the method of the endpoint is anything other than `ANY`, omit the `method` argument of the stub and use `pub.Method(MyWeb.Method)` instead of `pub.Method(method)` - reference the endpoint's `Method` field rather than hardcoding a string literal
 - If the method is `GET`, `HEAD`, `OPTIONS`, or `TRACE` which don't support a body, omit the `body` argument and the `pub.Body` option and remove the lines about body serialization from the doc comment
 
 ```go
@@ -129,7 +131,7 @@ func (_c MulticastClient) MyWeb(ctx context.Context, method string, relativeURL 
 }
 ```
 
-#### Step 7: Implement the Logic
+#### Step 8: Implement the Logic
 
 Implement the web handler in `service.go`:
 - Use `r.PathValue("argName")` to obtain the values of path arguments by name, if needed
@@ -144,17 +146,24 @@ func (svc *Service) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { 
 }
 ```
 
-#### Step 8: Bind the Handler to the Microservice
+#### Step 9: Bind the Handler to the Microservice
 
 Bind the web handler to the microservice in the `NewIntermediate` constructor in `intermediate.go`, after the corresponding `HINT` comment. If other subscriptions already exist under this HINT, add the new one after the last existing subscription.
 
 ```go
 func NewIntermediate(impl ToDo) *Intermediate {
 	// ...
-	svc.Subscribe(myserviceapi.MyWeb.Method, myserviceapi.MyWeb.Route, svc.MyWeb) // MARKER: MyWeb
+	svc.Subscribe( // MARKER: MyWeb
+"MyWeb", svc.MyWeb,
+		sub.At(myserviceapi.MyWeb.Method, myserviceapi.MyWeb.Route),
+sub.Description(`MyWeb does X.`),
+		sub.Web(),
+	)
 	// ...
 }
 ```
+
+The first argument to `svc.Subscribe` is the endpoint name (must be a Go identifier starting with an uppercase letter). The `sub.Description` carries the godoc text from Step 3. `sub.Web()` declares the feature type so the connector's built-in OpenAPI handler can categorize the endpoint correctly.
 
 Add the following options to `svc.Subscribe` as needed:
 
@@ -163,33 +172,6 @@ Add the following options to `svc.Subscribe` as needed:
   - `sub.NoQueue()`: requests are processed by all subscribers
   - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
 - `sub.RequiredClaims(requiredClaims)` to define the authorization requirements of the endpoint. Omit to allow all requests
-
-#### Step 9: Expose the Endpoint via OpenAPI
-
-Register the web handler endpoint in `doOpenAPI` in `intermediate.go`, after the corresponding `HINT` comment.
-
-- For a web handler endpoint, the `Type` field should be set to `web`
-- Set the simplified signature of the endpoint, with no arguments, in the `Summary` field
-- Set the `RequiredClaims` boolean expression, if relevant to this endpoint. Otherwise, omit the field or leave it empty
-
-```go
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	// ...
-	endpoints := []*openapi.Endpoint{
-		// ...
-		{ // MARKER: MyWeb
-			Type:          "web",
-			Name:          "MyWeb",
-			Method:        myserviceapi.MyWeb.Method,
-			Route:         myserviceapi.MyWeb.Route,
-			Summary:       "MyWeb()",
-			Description:   `MyWeb does X.`,
-			RequiredClaims: ``,
-		},
-	}
-	// ...
-}
-```
 
 #### Step 10: Extend the Mock
 
@@ -242,16 +224,6 @@ t.Run("my_web", func(t *testing.T) { // MARKER: MyWeb
 ```
 
 #### Step 11: Test the Handler
-
-Add the route of the web handler to the `routes` slice in `TestMyService_OpenAPI` in `service_test.go`.
-
-```go
-routes := []string{
-	// HINT: Insert routes of functional and web endpoints here
-	// ...
-	myserviceapi.MyWeb.Route, // MARKER: MyWeb
-}
-```
 
 Append the integration test to `service_test.go`.
 
@@ -323,4 +295,4 @@ t.Run("test_case_name", func(t *testing.T) {
 
 #### Step 12: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -29,7 +28,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
@@ -38,6 +36,7 @@ import (
 	"github.com/microbus-io/fabric/coreservices/llm"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/examples/calculator"
+	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 	"github.com/microbus-io/fabric/examples/chatbox/chatboxapi"
 )
 
@@ -59,46 +58,6 @@ var (
 	_ llm.Service
 	_ calculator.Service
 )
-
-func TestChatbox_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	svc := NewService()
-	tester := connector.New("tester.client")
-
-	app := application.New()
-	app.Add(svc, tester)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		chatboxapi.Turn.Route, // MARKER: Turn
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(chatboxapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
 
 func TestChatbox_Mock(t *testing.T) {
 	t.Parallel()
@@ -132,7 +91,7 @@ func TestChatbox_Mock(t *testing.T) {
 
 		_, err := mock.Turn(ctx, exampleMessages, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) {
+		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
 			return expectedCompletion, nil
 		})
 		result, err := mock.Turn(ctx, exampleMessages, nil)
@@ -159,7 +118,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
-		tools := []llmapi.ToolDef{{Name: "Arithmetic", Description: "Calculator", InputSchema: json.RawMessage(`{}`)}}
+		tools := []llmapi.Tool{{Name: "Arithmetic", Description: "Calculator", InputSchema: json.RawMessage(`{}`)}}
 		completion, err := client.Turn(ctx, messages, tools)
 		if assert.NoError(err) && assert.NotNil(completion) {
 			assert.Expect(len(completion.ToolCalls), 1)
@@ -218,12 +177,10 @@ func TestChatbox_EndToEnd(t *testing.T) {
 
 	t.Run("chat_with_calculator", func(t *testing.T) {
 		assert := testarossa.For(t)
-
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
-		tools := []llmapi.Tool{{URL: "https://calculator.example:443/arithmetic"}}
+		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, err := client.Chat(ctx, messages, tools)
 		if assert.NoError(err) {
-			// Should have: assistant (tool call), tool result, assistant (answer)
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]
 			assert.Expect(last.Role, "assistant")

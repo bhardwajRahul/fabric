@@ -16,7 +16,7 @@ general:
   hostname: access.token.core
   description: AccessToken generates short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation.
   package: github.com/microbus-io/fabric/coreservices/accesstoken
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.27.0
 
 functions:
   Mint:

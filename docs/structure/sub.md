@@ -15,10 +15,16 @@ The `sub` package defines the internal `Subscription` struct that facilitates th
 | https://another.host/path | https://another.host:443/path |
 | https://another.host:1080/path | https://another.host:1080/path |
 
-This package also defines various `Option`s that can be applied to the `Subscription` using the options pattern. This pattern is used in Go for expressing optional arguments. 
+This package also defines various `Option`s that can be applied to the `Subscription` using the options pattern. This pattern is used in Go for expressing optional arguments.
 
 For example:
 
 ```go
-con.Subscribe("GET", "/path", handler, sub.NoQueue())
+con.Subscribe("MyHandler", handler,
+    sub.At("GET", "/path"),
+    sub.Web(),
+    sub.NoQueue(),
+)
 ```
+
+`Connector.Subscribe` takes a unique name (a Go identifier) and a handler as required positional arguments, then a variadic list of options. Exactly one feature option must be applied - `sub.Function`, `sub.Web`, `sub.InboundEvent`, `sub.Task`, or `sub.Workflow` - to declare the kind of endpoint being registered. `Connector.Unsubscribe(name)` removes a registration by name.

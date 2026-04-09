@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -29,19 +28,19 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
+	"github.com/microbus-io/fabric/coreservices/chatgptllm"
 	"github.com/microbus-io/fabric/coreservices/claudellm"
 	"github.com/microbus-io/fabric/coreservices/claudellm/claudellmapi"
 	"github.com/microbus-io/fabric/coreservices/geminillm"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
-	"github.com/microbus-io/fabric/coreservices/openaillm"
 	"github.com/microbus-io/fabric/examples/calculator"
+	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 )
 
 var (
@@ -63,54 +62,6 @@ var (
 	_ claudellm.Mock
 	_ calculator.Service
 )
-
-func TestLLM_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the tester client
-	tester := connector.New("tester.client")
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		llmapi.Chat.Route, // MARKER: Chat
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(llmapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
 
 func TestLLM_Mock(t *testing.T) {
 	t.Parallel()
@@ -144,7 +95,7 @@ func TestLLM_Mock(t *testing.T) {
 
 		_, err := mock.Chat(ctx, exampleMessages, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockChat(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error) {
+		mock.MockChat(func(ctx context.Context, messages []llmapi.Message, tools []string) (messagesOut []llmapi.Message, err error) {
 			return expectedMessages, nil
 		})
 		result, err := mock.Chat(ctx, exampleMessages, nil)
@@ -209,9 +160,9 @@ func TestLLM_ChatLive(t *testing.T) {
 	gemini.SetAPIKey("") // AI...
 	gemini.SetModel("gemini-2.0-flash")
 
-	openai := openaillm.NewService()
-	openai.SetAPIKey("") // sk-...
-	gemini.SetModel("gpt-4")
+	chatgpt := chatgptllm.NewService()
+	chatgpt.SetAPIKey("") // sk-...
+	chatgpt.SetModel("gpt-4")
 
 	egressSvc := httpegress.NewService()
 	calcSvc := calculator.NewService()
@@ -220,7 +171,7 @@ func TestLLM_ChatLive(t *testing.T) {
 	client := llmapi.NewClient(tester)
 
 	app := application.New()
-	app.Add(svc, claude, gemini, openai, egressSvc, calcSvc, tester)
+	app.Add(svc, claude, gemini, chatgpt, egressSvc, calcSvc, tester)
 	app.RunInTest(t)
 
 	t.Run("text_only", func(t *testing.T) {
@@ -236,9 +187,8 @@ func TestLLM_ChatLive(t *testing.T) {
 
 	t.Run("with_tools", func(t *testing.T) {
 		assert := testarossa.For(t)
-
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7? Use the calculator tool."}}
-		tools := []llmapi.Tool{{URL: "https://calculator.example:443/arithmetic"}}
+		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, err := client.Chat(ctx, messages, tools)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
@@ -267,7 +217,7 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) {
+		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
 			return &llmapi.TurnCompletion{Content: "Hello from mocked provider!"}, nil
 		})
 		defer providerMock.MockTurn(nil)
@@ -283,12 +233,10 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 
 	t.Run("tool_calling", func(t *testing.T) {
 		assert := testarossa.For(t)
-
 		callCount := 0
-		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) {
+		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
 			callCount++
 			if callCount == 1 {
-				// First call: request a tool call
 				return &llmapi.TurnCompletion{
 					ToolCalls: []llmapi.ToolCall{{
 						ID:        "call_1",
@@ -297,13 +245,12 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 					}},
 				}, nil
 			}
-			// Second call: return final text
 			return &llmapi.TurnCompletion{Content: "3 + 5 = 8"}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		tools := []llmapi.Tool{{URL: "https://calculator.example:443/arithmetic"}}
+		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, err := client.Chat(ctx, messages, tools)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)

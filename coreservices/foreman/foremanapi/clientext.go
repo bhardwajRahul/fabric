@@ -43,8 +43,8 @@ func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialSt
 }
 
 // AwaitAndParse blocks until the flow stops, then unmarshals the state into result.
-func (_c Client) AwaitAndParse(ctx context.Context, flowID string, result any) (status string, err error) {
-	status, state, err := _c.Await(ctx, flowID)
+func (_c Client) AwaitAndParse(ctx context.Context, flowKey string, result any) (status string, err error) {
+	status, state, err := _c.Await(ctx, flowKey)
 	if err != nil {
 		return status, errors.Trace(err)
 	}
@@ -62,8 +62,8 @@ func (_c Client) AwaitAndParse(ctx context.Context, flowID string, result any) (
 }
 
 // SnapshotAndParse returns the current status and unmarshals the state into result.
-func (_c Client) SnapshotAndParse(ctx context.Context, flowID string, result any) (status string, err error) {
-	status, state, err := _c.Snapshot(ctx, flowID)
+func (_c Client) SnapshotAndParse(ctx context.Context, flowKey string, result any) (status string, err error) {
+	status, state, err := _c.Snapshot(ctx, flowKey)
 	if err != nil {
 		return status, errors.Trace(err)
 	}

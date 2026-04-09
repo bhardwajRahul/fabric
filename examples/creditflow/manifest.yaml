@@ -17,8 +17,8 @@ general:
   hostname: creditflow.example
   description: CreditFlow is an example microservice that demonstrates agentic workflow features.
   package: github.com/microbus-io/fabric/examples/creditflow
-  frameworkVersion: 1.26.0
-  modifiedAt: "2026-04-06T20:30:00Z"
+  frameworkVersion: 1.27.0
+  modifiedAt: "2026-04-23T10:00:00Z"
 
 downstream:
   - hostname: foreman.core

@@ -51,8 +51,8 @@ components:
                     format: int64
 ```
 
-An `openapi.json` endpoint is created for each port of each microservice to serve the OpenAPI document. For example, the OpenAPI endpoint of the `:443` endpoints of the calculator microservice is located at https://localhost:8080/calculator.example/openapi.json. In Microbus, ports are used to control access to a microservice's endpoints. A separate document for each port follows that philosophy and exposes only the endpoints on the same port as the request's.
+Every microservice publishes an OpenAPI document describing its endpoints. The document is filtered by what the caller is authorized to see - operations whose claims the caller can't satisfy are simply absent.
 
-The [OpenAPI portal core microservice](../structure/coreservices-openapiportal.md) aggregates the OpenAPI endpoints of all microservices on the bus and renders an HTML page that lists them to a human reader.
+The [OpenAPI portal](../structure/coreservices-openapiportal.md) brings these per-service documents together. It serves an aggregated OpenAPI document covering every microservice on the bus, and a human-friendly browser for exploring them.
 
 [Swagger](https://swagger.io) is a set of popular tools for working with APIs in general and OpenAPI in particular. The [OpenAPI editor](https://editor-next.swagger.io) is an especially useful one that allows editing and exploring OpenAPI documents online.

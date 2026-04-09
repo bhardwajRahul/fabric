@@ -81,8 +81,8 @@ func (svc *Service) logCompletion(ctx context.Context, resp *llmapi.TurnCompleti
 }
 
 // turn calls the provider's Turn endpoint over the bus.
-func (svc *Service) turn(ctx context.Context, messages []llmapi.Message, toolDefs []llmapi.ToolDef) (*llmapi.TurnCompletion, error) {
-	completion, err := llmapi.NewClient(svc).ForHost(svc.ProviderHostname()).Turn(ctx, messages, toolDefs)
+func (svc *Service) turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (*llmapi.TurnCompletion, error) {
+	completion, err := llmapi.NewClient(svc).ForHost(svc.ProviderHostname()).Turn(ctx, messages, tools)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -92,30 +92,41 @@ func (svc *Service) turn(ctx context.Context, messages []llmapi.Message, toolDef
 /*
 Turn executes a single LLM turn. This endpoint delegates to the configured provider microservice.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
 	return svc.turn(ctx, messages, tools)
 }
 
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
+Each entry in tools is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
+"https://calculator.example/arithmetic"). Chat groups the URLs by host:port, fetches the
+OpenAPI document of each host, and resolves each URL to a callable tool. Only
+FeatureFunction, FeatureWeb, and FeatureWorkflow endpoints are exposed.
+
+Example:
+
+	messages := []llmapi.Message{
+		{Role: "user", Content: "What is 17 * 23, and what's the weather in Paris?"},
+	}
+	tools := []string{
+		calculatorapi.Arithmetic.URL(),
+		dataapi.Fetch.URL(),
+	}
+	messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools)
+
 Input:
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is a list of Microbus endpoint URLs to expose as LLM tools
+  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
 */
-func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error) { // MARKER: Chat
-	// Resolve tool schemas from OpenAPI
-	var toolDefs []llmapi.ToolDef
-	if len(tools) > 0 {
-		toolDefs, err = svc.resolveTools(ctx, tools)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, toolURLs []string) (messagesOut []llmapi.Message, err error) { // MARKER: Chat
+	tools, err := svc.fetchTools(ctx, toolURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-
 	maxRounds := svc.MaxToolRounds()
 
 	// Conversation with the LLM
@@ -126,7 +137,7 @@ func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, tools [
 		_ = round
 		// Call the LLM
 		svc.logPrompt(ctx, currentMessages)
-		resp, err := svc.turn(ctx, currentMessages, toolDefs)
+		resp, err := svc.turn(ctx, currentMessages, tools)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -155,7 +166,7 @@ func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, tools [
 
 		// Execute each tool call
 		for _, tc := range resp.ToolCalls {
-			result, err := svc.executeTool(ctx, tc, toolDefs)
+			result, err := svc.executeTool(ctx, tc, tools)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -187,18 +198,12 @@ func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, tools [
 }
 
 /*
-InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
+InitChat stores the caller-supplied tools in flow state for use by the chat loop.
 */
 func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
-	// Resolve tool schemas
 	if len(tools) > 0 {
-		toolDefs, err := svc.resolveTools(ctx, tools)
-		if err != nil {
-			return 0, 0, errors.Trace(err)
-		}
-		flow.Set("toolSchemas", toolDefs)
+		flow.Set("toolSchemas", tools)
 	}
-
 	maxToolRounds = svc.MaxToolRounds()
 	toolRounds = 0
 	return maxToolRounds, toolRounds, nil
@@ -209,12 +214,12 @@ CallLLM sends the current messages and tools to the LLM provider.
 */
 func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error) { // MARKER: CallLLM
 	// Read tool schemas
-	var toolDefs []llmapi.ToolDef
-	flow.Get("toolSchemas", &toolDefs)
+	var tools []llmapi.Tool
+	flow.Get("toolSchemas", &tools)
 
 	// Call the LLM
 	svc.logPrompt(ctx, messages)
-	resp, err := svc.turn(ctx, messages, toolDefs)
+	resp, err := svc.turn(ctx, messages, tools)
 	if err != nil {
 		return "", nil, errors.Trace(err)
 	}
@@ -325,12 +330,12 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 	// First run - execute the tool
 	var currentTool llmapi.ToolCall
 	flow.Get("currentTool", &currentTool)
-	var toolDefs []llmapi.ToolDef
-	flow.Get("toolSchemas", &toolDefs)
+	var tools []llmapi.Tool
+	flow.Get("toolSchemas", &tools)
 
 	// Find the tool definition
-	var def llmapi.ToolDef
-	for _, t := range toolDefs {
+	var def llmapi.Tool
+	for _, t := range tools {
 		if t.Name == currentTool.Name {
 			def = t
 			break
@@ -341,7 +346,7 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 	}
 
 	// Workflow tools are executed as dynamic subgraphs
-	if def.FeatureType == "workflow" {
+	if def.Type == "workflow" {
 		// Snapshot current state keys so we can identify child output on re-entry
 		snap := flow.Snapshot()
 		stateKeys := make([]string, 0, len(snap))
@@ -359,7 +364,7 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 	}
 
 	// Regular endpoint tools are executed via direct bus call
-	result, err := svc.executeTool(ctx, currentTool, toolDefs)
+	result, err := svc.executeTool(ctx, currentTool, tools)
 	if err != nil {
 		return false, errors.Trace(err)
 	}

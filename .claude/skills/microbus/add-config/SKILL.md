@@ -1,6 +1,6 @@
 ---
-name: Adding a Configuration Property
-description: Creates or modify a configuration property of a microservice. Use when explicitly asked by the user to create or modify a configuration property of a microservice, or when it makes sense to externalize a certain setting of the microservice.
+name: add-config
+description: TRIGGER when user asks to add or modify a configuration property or setting, or to make a value configurable. Affects intermediate.go, manifest.yaml. Do NOT manually define configs - this skill wires up getter, setter, and validation.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -357,4 +357,4 @@ my.service.hostname:
 
 #### Step 13: Housekeeping
 
-Follow the `microbus/housekeeping` skill.
+Follow the `housekeeping` skill.

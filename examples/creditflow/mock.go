@@ -24,6 +24,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
@@ -223,6 +224,7 @@ func (svc *Mock) MockIdentityVerification(handler func(ctx context.Context, flow
 		svc.mockIdentityVerificationGraph = nil
 		return svc
 	}
+	mockName := "MockIdentityVerification" + utils.RandomIdentifier(8)
 	mockRoute := ":428/mock-wf-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockIdentityVerificationGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
@@ -230,7 +232,7 @@ func (svc *Mock) MockIdentityVerification(handler func(ctx context.Context, flow
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}
-	unsub, _ := svc.Subscribe("POST", mockRoute, func(w http.ResponseWriter, r *http.Request) error {
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
 		var f workflow.Flow
 		err := json.NewDecoder(r.Body).Decode(&f)
 		if err != nil {
@@ -247,8 +249,13 @@ func (svc *Mock) MockIdentityVerification(handler func(ctx context.Context, flow
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)
-	})
-	svc.unsubMockIdentityVerification = unsub
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(creditflowapi.IdentityVerificationIn{}, creditflowapi.IdentityVerificationOut{}),
+	)
+	if err == nil {
+		svc.unsubMockIdentityVerification = func() error { return svc.Unsubscribe(mockName) }
+	}
 	return svc
 }
 
@@ -338,6 +345,7 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 		svc.mockCreditApprovalGraph = nil
 		return svc
 	}
+	mockName := "MockCreditApproval" + utils.RandomIdentifier(8)
 	mockRoute := ":428/mock-wf-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockCreditApprovalGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
@@ -345,7 +353,7 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}
-	unsub, _ := svc.Subscribe("POST", mockRoute, func(w http.ResponseWriter, r *http.Request) error {
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
 		var f workflow.Flow
 		err := json.NewDecoder(r.Body).Decode(&f)
 		if err != nil {
@@ -362,8 +370,13 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)
-	})
-	svc.unsubMockCreditApproval = unsub
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(creditflowapi.CreditApprovalIn{}, creditflowapi.CreditApprovalOut{}),
+	)
+	if err == nil {
+		svc.unsubMockCreditApproval = func() error { return svc.Unsubscribe(mockName) }
+	}
 	return svc
 }
 

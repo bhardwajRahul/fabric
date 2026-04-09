@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = openapiportalapi.Hostname
-	Version  = 159
+	Version  = 166
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,7 +60,8 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	List(w http.ResponseWriter, r *http.Request) (err error) // MARKER: List
+	Document(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Document
+	Explorer(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Explorer
 }
 
 // NewService creates a new instance of the microservice.
@@ -94,11 +92,11 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		ToDo:      impl,
 	}
 	svc.SetVersion(Version)
-	svc.SetDescription(`The OpenAPI microservice lists links to the OpenAPI endpoint of all microservices that provide one
-on the requested port.`)
+	svc.SetDescription(`The OpenAPI portal serves an aggregated OpenAPI 3.1 document covering every microservice on the bus,
+plus per-service docs proxied from each microservice's :888/openapi.json. Endpoints are filtered by the caller's claims
+(per-service) and the request's port (consumer-side).`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", `:0/openapi.json`, svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
@@ -106,7 +104,18 @@ on the requested port.`)
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe(openapiportalapi.List.Method, openapiportalapi.List.Route, svc.List) // MARKER: List
+	svc.Subscribe( // MARKER: Document
+		"Document", svc.Document,
+		sub.At(openapiportalapi.Document.Method, openapiportalapi.Document.Route),
+		sub.Description(`Document returns the OpenAPI 3.1 document as JSON. Without a hostname query arg, returns an aggregate covering every microservice on the bus. With ?hostname=<host>, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Explorer
+		"Explorer", svc.Explorer,
+		sub.At(openapiportalapi.Explorer.Method, openapiportalapi.Explorer.Route),
+		sub.Description(`Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without ?hostname=<host>, lists every service. With ?hostname=<host>, shows that service's endpoints.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -122,49 +131,6 @@ on the requested port.`)
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: List
-			Type:        "web",
-			Name:        "List",
-			Method:      openapiportalapi.List.Method,
-			Route:       openapiportalapi.List.Route,
-			Summary:     "List()",
-			Description: `List displays links to the OpenAPI endpoints of all microservices.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

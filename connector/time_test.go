@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -37,23 +38,31 @@ func TestConnector_ClockOffset(t *testing.T) {
 	var betaTime time.Time
 	var betaShift time.Duration
 	beta := New("beta.clock.offset.connector")
-	beta.Subscribe("GET", "shift", func(w http.ResponseWriter, r *http.Request) error {
-		ctx := r.Context()
-		betaTime = beta.Now(ctx)
-		betaShift = frame.Of(ctx).ClockShift()
-		beta.GET(r.Context(), "https://gamma.clock.offset.connector/shift")
-		return nil
-	})
+	beta.Subscribe("Shift",
+		func(w http.ResponseWriter, r *http.Request) error {
+			ctx := r.Context()
+			betaTime = beta.Now(ctx)
+			betaShift = frame.Of(ctx).ClockShift()
+			beta.GET(r.Context(), "https://gamma.clock.offset.connector/shift")
+			return nil
+		},
+		sub.At("GET", "shift"),
+		sub.Web(),
+	)
 
 	var gammaTime time.Time
 	var gammaShift time.Duration
 	gamma := New("gamma.clock.offset.connector")
-	gamma.Subscribe("GET", "shift", func(w http.ResponseWriter, r *http.Request) error {
-		ctx := r.Context()
-		gammaTime = beta.Now(ctx)
-		gammaShift = frame.Of(ctx).ClockShift()
-		return nil
-	})
+	gamma.Subscribe("Shift",
+		func(w http.ResponseWriter, r *http.Request) error {
+			ctx := r.Context()
+			gammaTime = beta.Now(ctx)
+			gammaShift = frame.Of(ctx).ClockShift()
+			return nil
+		},
+		sub.At("GET", "shift"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	ctx := t.Context()

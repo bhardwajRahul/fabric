@@ -396,7 +396,7 @@ func (f *Flow) diffAndApply(source any, snapshot, state, changes map[string]any)
 
 // flowJSON is the wire format for Flow.
 type flowJSON struct {
-	FlowID                 string         `json:"flowID"`
+	FlowKey                string         `json:"flowKey"`
 	WorkflowName           string         `json:"workflowName"`
 	TaskName               string         `json:"taskName"`
 	StepNum                int            `json:"stepNum"`

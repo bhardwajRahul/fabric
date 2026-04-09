@@ -84,7 +84,7 @@ func (svc *Service) AddClaimsTransformer(transformer ClaimsTransformer) error {
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
-	svc.issClaim = "microbus://" + svc.Hostname()
+	svc.issClaim = "https://" + svc.Hostname()
 	err = svc.loadKey(svc.PrivateKey(), &svc.primary)
 	if err != nil {
 		return errors.Trace(err)
@@ -209,6 +209,7 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 	}
 	// Set critical claims last so they cannot be overridden by transformers
 	jwtClaims["iss"] = svc.issClaim
+	jwtClaims["microbus"] = "1"
 	jwtClaims["iat"] = now.Add(-5 * time.Minute).Unix()                   // 5 minutes in the past
 	jwtClaims["exp"] = now.Add(svc.AuthTokenTTL() + 5*time.Minute).Unix() // 5 minutes of grace for clock skew
 	jwtClaims["jti"] = utils.RandomIdentifier(24)

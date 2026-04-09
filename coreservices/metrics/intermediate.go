@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = metricsapi.Hostname
-	Version  = 214
+	Version  = 215
 )
 
 // ToDo is implemented by the service or mock.
@@ -97,7 +94,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The Metrics service is a core microservice that aggregates metrics from other microservices and makes them available for collection.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
@@ -105,7 +101,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add functional endpoints here
 
 	// Web endpoints
-	svc.Subscribe(`GET`, metricsapi.Collect.Route, svc.Collect) // MARKER: Collect
+	svc.Subscribe( // MARKER: Collect
+		"Collect", svc.Collect,
+		sub.At(metricsapi.Collect.Method, metricsapi.Collect.Route),
+		sub.Description(`Collect returns the latest aggregated metrics.`),
+		sub.Web(),
+	)
 
 	// HINT: Add metrics here
 
@@ -127,49 +128,6 @@ This key is required except in local development and tests.`),
 
 	_ = marshalFunction
 	return svc
-}
-
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-		{ // MARKER: Collect
-			Type:        "web",
-			Name:        "Collect",
-			Method:      "GET",
-			Route:       metricsapi.Collect.Route,
-			Summary:     "Collect()",
-			Description: `Collect the metrics of all microservices.`,
-		},
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
 }
 
 // doOnObserveMetrics is called when metrics are produced.

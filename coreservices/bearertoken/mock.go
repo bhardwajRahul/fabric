@@ -18,10 +18,13 @@ package bearertoken
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
@@ -29,7 +32,10 @@ import (
 
 var (
 	_ http.Request
+	_ json.Encoder
 	_ errors.TracedError
+	_ httpx.BodyReader
+	_ = utils.RandomIdentifier
 	_ *workflow.Flow
 	_ bearertokenapi.Client
 )

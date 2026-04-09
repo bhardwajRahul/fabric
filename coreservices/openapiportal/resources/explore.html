@@ -1,0 +1,141 @@
+<!--
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{if .Hostname}}{{.Hostname}}{{else}}Microbus OpenAPI Explorer{{end}}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #2c2c2c; line-height: 1.5; }
+  h1 { font-weight: 600; margin-bottom: 0.25em; }
+  h2 { font-weight: 600; margin-top: 1.5em; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.25em; }
+  a { color: #0066cc; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .lead { color: #666; margin-top: 0; }
+  .back { margin-bottom: 1em; font-size: 0.9em; }
+  .service { padding: 0.85em 0; border-bottom: 1px solid #eee; }
+  .service:last-child { border-bottom: none; }
+  .service-name { font-size: 1.1em; font-weight: 600; }
+  .service-desc { color: #555; margin-top: 0.25em; font-size: 0.95em; white-space: pre-wrap; }
+  .service-meta { color: #999; font-size: 0.85em; margin-top: 0.25em; }
+  .op { border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 0.6em; background: #fafafa; overflow: hidden; }
+  .op > summary { padding: 0.85em 1em; cursor: pointer; list-style-position: outside; user-select: none; }
+  .op > summary::marker { color: #999; }
+  .op > summary::-webkit-details-marker { color: #999; }
+  .op[open] > summary { border-bottom: 1px solid #e0e0e0; }
+  .op-head { display: inline-flex; align-items: baseline; gap: 0.6em; flex-wrap: wrap; }
+  .op-body { padding: 0.85em 1em; background: white; }
+  .op-body h4 { margin: 0.85em 0 0.35em 0; font-size: 0.78em; font-weight: 600; color: #777; text-transform: uppercase; letter-spacing: 0.05em; }
+  .op-body h4:first-child { margin-top: 0; }
+  .op-body pre { background: #2c2c2c; color: #f4f4f4; padding: 0.75em 1em; border-radius: 3px; overflow-x: auto; font-size: 0.82em; font-family: 'SF Mono', Menlo, Consolas, monospace; line-height: 1.4; margin: 0.25em 0 0 0; }
+  .params { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+  .params th { text-align: left; font-weight: 600; color: #666; padding: 0.35em 0.6em 0.35em 0; border-bottom: 1px solid #e0e0e0; font-size: 0.85em; }
+  .params td { padding: 0.45em 0.6em 0.45em 0; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  .params td:first-child, .params th:first-child { padding-left: 0; }
+  .params .pname { font-family: 'SF Mono', Menlo, Consolas, monospace; font-weight: 600; }
+  .params .ploc { color: #999; font-size: 0.85em; }
+  .params .preq { color: #d9534f; font-size: 0.8em; font-weight: 600; }
+  .resp { margin-bottom: 0.85em; }
+  .resp:last-child { margin-bottom: 0; }
+  .resp-head { display: flex; align-items: baseline; gap: 0.6em; }
+  .resp-code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-weight: 600; min-width: 40px; }
+  .resp-desc { color: #555; font-size: 0.9em; }
+  .method { display: inline-block; min-width: 60px; padding: 0.2em 0.6em; border-radius: 3px; color: white; font-weight: 600; font-size: 0.8em; text-align: center; letter-spacing: 0.03em; }
+  .method-GET { background: #4990e2; }
+  .method-POST { background: #5cb85c; }
+  .method-PUT { background: #f0ad4e; }
+  .method-DELETE { background: #d9534f; }
+  .method-PATCH { background: #5bc0de; }
+  .method-ANY, .method-HEAD, .method-OPTIONS, .method-TRACE { background: #888; }
+  .path { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.95em; word-break: break-all; }
+  .name { color: #999; font-size: 0.85em; }
+  .feature { display: inline-block; padding: 0.1em 0.5em; border-radius: 3px; font-size: 0.7em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; background: #eee; color: #666; }
+  .feature-workflow { background: #fff3cd; color: #856404; }
+  .feature-web { background: #d1ecf1; color: #0c5460; }
+  .summary { color: #2c2c2c; font-weight: 600; font-size: 0.95em; margin-bottom: 0.4em; }
+  .description { color: #2c2c2c; margin-top: 0.4em; font-size: 0.9em; white-space: pre-wrap; }
+  .empty { color: #999; font-style: italic; }
+</style>
+</head>
+<body>
+{{if .Hostname}}
+  <div class="back"><a href="/openapi">&larr; All services</a></div>
+  <h1>{{.Hostname}}</h1>
+  {{if .Description}}<p class="lead">{{.Description}}</p>{{end}}
+  {{range .Operations}}
+  <details class="op">
+    <summary>
+      {{if .Summary}}<div class="summary">{{.Summary}}</div>{{end}}
+      <span class="op-head">
+        <span class="method method-{{.Method}}">{{.Method}}</span>
+        <span class="path">{{.Path}}</span>
+        {{if .Name}}<span class="name">{{.Name}}</span>{{end}}
+        {{if .FeatureType}}<span class="feature feature-{{.FeatureType}}">{{.FeatureType}}</span>{{end}}
+      </span>
+    </summary>
+    <div class="op-body">
+      {{if .Description}}<div class="description">{{.Description}}</div>{{end}}
+      {{if .Parameters}}
+      <h4>Parameters</h4>
+      <table class="params">
+        <tr><th>Name</th><th>In</th><th>Schema</th></tr>
+        {{range .Parameters}}
+        <tr>
+          <td>
+            <span class="pname">{{.Name}}</span>
+            {{if .Required}}<span class="preq">required</span>{{end}}
+            {{if .Description}}<div class="description">{{.Description}}</div>{{end}}
+          </td>
+          <td class="ploc">{{.In}}</td>
+          <td>{{if .Schema}}<pre>{{.Schema}}</pre>{{end}}</td>
+        </tr>
+        {{end}}
+      </table>
+      {{end}}
+      {{if .RequestBody}}
+      <h4>Request body <span class="ploc">application/json</span></h4>
+      <pre>{{.RequestBody}}</pre>
+      {{end}}
+      {{if .Responses}}
+      <h4>Responses</h4>
+      {{range .Responses}}
+      <div class="resp">
+        <div class="resp-head">
+          <span class="resp-code">{{.Code}}</span>
+          <span class="resp-desc">{{.Description}}</span>
+        </div>
+        {{if .Schema}}<pre>{{.Schema}}</pre>{{end}}
+      </div>
+      {{end}}
+      {{end}}
+    </div>
+  </details>
+  {{end}}
+  {{if eq (len .Operations) 0}}<p class="empty">No accessible endpoints on this port.</p>{{end}}
+{{else}}
+  <h1>Microbus OpenAPI Explorer</h1>
+  <p class="lead">Browse the microservices on the bus.</p>
+  {{range .Services}}
+  <div class="service">
+    <div class="service-name"><a href="/openapi?hostname={{.Hostname}}">{{.Hostname}}</a></div>
+    {{if .Description}}<div class="service-desc">{{.Description}}</div>{{end}}
+    <div class="service-meta">{{.Count}} endpoint{{if ne .Count 1}}s{{end}}</div>
+  </div>
+  {{end}}
+  {{if eq (len .Services) 0}}<p class="empty">No services found.</p>{{end}}
+{{end}}
+</body>
+</html>

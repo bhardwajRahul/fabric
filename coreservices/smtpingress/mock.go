@@ -18,10 +18,13 @@ package smtpingress
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/smtpingress/smtpingressapi"
@@ -29,7 +32,10 @@ import (
 
 var (
 	_ http.Request
+	_ json.Encoder
 	_ errors.TracedError
+	_ httpx.BodyReader
+	_ = utils.RandomIdentifier
 	_ *workflow.Flow
 	_ smtpingressapi.Client
 )
@@ -55,7 +61,7 @@ func NewMock() *Mock {
 // OnStartup is called when the microservice is started up.
 func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
-		return errors.New("mocking disallowed in '%s' deployment", svc.Deployment())
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
 	}
 	return nil
 }
@@ -74,7 +80,8 @@ func (svc *Mock) MockOnChangedPort(handler func(ctx context.Context) (err error)
 // OnChangedPort executes the mock handler.
 func (svc *Mock) OnChangedPort(ctx context.Context) (err error) { // MARKER: Port
 	if svc.mockOnChangedPort == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedPort(ctx)
 	return errors.Trace(err)
@@ -89,7 +96,8 @@ func (svc *Mock) MockOnChangedEnabled(handler func(ctx context.Context) (err err
 // OnChangedEnabled executes the mock handler.
 func (svc *Mock) OnChangedEnabled(ctx context.Context) (err error) { // MARKER: Enabled
 	if svc.mockOnChangedEnabled == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedEnabled(ctx)
 	return errors.Trace(err)
@@ -104,7 +112,8 @@ func (svc *Mock) MockOnChangedMaxSize(handler func(ctx context.Context) (err err
 // OnChangedMaxSize executes the mock handler.
 func (svc *Mock) OnChangedMaxSize(ctx context.Context) (err error) { // MARKER: MaxSize
 	if svc.mockOnChangedMaxSize == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedMaxSize(ctx)
 	return errors.Trace(err)
@@ -119,7 +128,8 @@ func (svc *Mock) MockOnChangedMaxClients(handler func(ctx context.Context) (err 
 // OnChangedMaxClients executes the mock handler.
 func (svc *Mock) OnChangedMaxClients(ctx context.Context) (err error) { // MARKER: MaxClients
 	if svc.mockOnChangedMaxClients == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedMaxClients(ctx)
 	return errors.Trace(err)
@@ -134,7 +144,8 @@ func (svc *Mock) MockOnChangedWorkers(handler func(ctx context.Context) (err err
 // OnChangedWorkers executes the mock handler.
 func (svc *Mock) OnChangedWorkers(ctx context.Context) (err error) { // MARKER: Workers
 	if svc.mockOnChangedWorkers == nil {
-		return nil
+		err = errors.New("mock not implemented", http.StatusNotImplemented)
+		return
 	}
 	err = svc.mockOnChangedWorkers(ctx)
 	return errors.Trace(err)

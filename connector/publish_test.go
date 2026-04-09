@@ -47,13 +47,17 @@ func TestConnector_Echo(t *testing.T) {
 	alpha := New("alpha.echo.connector")
 
 	beta := New("beta.echo.connector")
-	beta.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(err)
-		_, err = w.Write(body)
-		assert.NoError(err)
-		return nil
-	})
+	beta.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			body, err := io.ReadAll(r.Body)
+			assert.NoError(err)
+			_, err = w.Write(body)
+			assert.NoError(err)
+			return nil
+		},
+		sub.At("ANY", "echo"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -118,17 +122,21 @@ func TestConnector_Error(t *testing.T) {
 	alpha := New("alpha.error.connector")
 
 	beta := New("beta.error.connector")
-	beta.Subscribe("GET", "err", func(w http.ResponseWriter, r *http.Request) error {
-		return errors.New("pattern %s %d", "XYZ", 123,
-			http.StatusBadRequest,
-			errors.New("original error"),
-			"int", 888,
-			"str", "ABC",
-			"bool", true,
-			"dur", time.Second,
-			"time", time.Now(),
-		)
-	})
+	beta.Subscribe("Err",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return errors.New("pattern %s %d", "XYZ", 123,
+				http.StatusBadRequest,
+				errors.New("original error"),
+				"int", 888,
+				"str", "ABC",
+				"bool", true,
+				"dur", time.Second,
+				"time", time.Now(),
+			)
+		},
+		sub.At("GET", "err"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -160,27 +168,31 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 	alpha := New("alpha.echo.serial.connector")
 	var echoCount atomic.Int32
 	var errCount atomic.Int32
-	alpha.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		echoCount.Add(1)
-		sz := 32 << 10
-		if r.ContentLength > 0 {
-			sz = int(r.ContentLength)
-		}
-		block := mem.Alloc(sz)
-		for {
-			n, err := io.ReadFull(r.Body, block[:sz])
-			if n == 0 || err == io.EOF {
-				break
+	alpha.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			echoCount.Add(1)
+			sz := 32 << 10
+			if r.ContentLength > 0 {
+				sz = int(r.ContentLength)
 			}
-			if err != nil {
-				errCount.Add(1)
+			block := mem.Alloc(sz)
+			for {
+				n, err := io.ReadFull(r.Body, block[:sz])
+				if n == 0 || err == io.EOF {
+					break
+				}
+				if err != nil {
+					errCount.Add(1)
+				}
+				w.Write(block[:n])
 			}
-			w.Write(block[:n])
-		}
-		mem.Free(block)
-		r.Body.Close()
-		return nil
-	})
+			mem.Free(block)
+			r.Body.Close()
+			return nil
+		},
+		sub.At("POST", "echo"),
+		sub.Web(),
+	)
 
 	beta := New("beta.echo.serial.connector")
 
@@ -344,29 +356,33 @@ func serialChain(b *testing.B, payloadSize int) {
 	// Create the microservice
 	con := New("serial.chain.connector")
 	var echoCount atomic.Int32
-	con.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		if frame.Of(r).CallDepth() < 10 {
-			// Go one level deeper
-			res, err := con.POST(r.Context(), "https://serial.chain.connector/echo", r.Body)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if res.Body != nil {
-				buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
-				io.Copy(buf, res.Body)
+	con.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			if frame.Of(r).CallDepth() < 10 {
+				// Go one level deeper
+				res, err := con.POST(r.Context(), "https://serial.chain.connector/echo", r.Body)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if res.Body != nil {
+					buf := bytes.NewBuffer(mem.Alloc(int(res.ContentLength)))
+					io.Copy(buf, res.Body)
+					w.Write(buf.Bytes())
+					mem.Free(buf.Bytes())
+				}
+			} else {
+				// Echo back the request
+				echoCount.Add(1)
+				buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+				io.Copy(buf, r.Body)
 				w.Write(buf.Bytes())
 				mem.Free(buf.Bytes())
 			}
-		} else {
-			// Echo back the request
-			echoCount.Add(1)
-			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-			io.Copy(buf, r.Body)
-			w.Write(buf.Bytes())
-			mem.Free(buf.Bytes())
-		}
-		return nil
-	})
+			return nil
+		},
+		sub.At("POST", "echo"),
+		sub.Web(),
+	)
 
 	// Startup the microservice
 	con.Startup(ctx)
@@ -470,14 +486,18 @@ func echoParallel(b *testing.B, concurrency int, payloadSize int) {
 	alpha := New("alpha.echo.parallel.connector")
 	var echoCount atomic.Int32
 	var errCount atomic.Int32
-	alpha.Subscribe("ANY", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		echoCount.Add(1)
-		buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
-		io.Copy(buf, r.Body)
-		w.Write(buf.Bytes())
-		mem.Free(buf.Bytes())
-		return nil
-	})
+	alpha.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			echoCount.Add(1)
+			buf := bytes.NewBuffer(mem.Alloc(int(r.ContentLength)))
+			io.Copy(buf, r.Body)
+			w.Write(buf.Bytes())
+			mem.Free(buf.Bytes())
+			return nil
+		},
+		sub.At("ANY", "echo"),
+		sub.Web(),
+	)
 
 	beta := New("beta.echo.parallel.connector")
 	beta.ackTimeout = time.Second
@@ -619,12 +639,16 @@ func TestConnector_EchoParallelCapacity(t *testing.T) {
 	// Create the microservice
 	alpha := New("alpha.echo.parallel.capacity.connector")
 	var echoCount atomic.Int32
-	alpha.Subscribe("POST", "echo", func(w http.ResponseWriter, r *http.Request) error {
-		echoCount.Add(1)
-		body, _ := io.ReadAll(r.Body)
-		w.Write(body)
-		return nil
-	})
+	alpha.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			echoCount.Add(1)
+			body, _ := io.ReadAll(r.Body)
+			w.Write(body)
+			return nil
+		},
+		sub.At("POST", "echo"),
+		sub.Web(),
+	)
 
 	beta := New("beta.echo.parallel.capacity.connector")
 
@@ -683,11 +707,15 @@ func TestConnector_QueryArgs(t *testing.T) {
 
 	// Create the microservices
 	con := New("query.args.connector")
-	con.Subscribe("GET", "arg", func(w http.ResponseWriter, r *http.Request) error {
-		arg := r.URL.Query().Get("arg")
-		assert.Equal("not_empty", arg)
-		return nil
-	})
+	con.Subscribe("Arg",
+		func(w http.ResponseWriter, r *http.Request) error {
+			arg := r.URL.Query().Get("arg")
+			assert.Equal("not_empty", arg)
+			return nil
+		},
+		sub.At("GET", "arg"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := con.Startup(ctx)
@@ -712,16 +740,24 @@ func TestConnector_LoadBalancing(t *testing.T) {
 	count2 := int32(0)
 
 	beta1 := New("beta.load.balancing.connector")
-	beta1.Subscribe("GET", "lb", func(w http.ResponseWriter, r *http.Request) error {
-		atomic.AddInt32(&count1, 1)
-		return nil
-	})
+	beta1.Subscribe("Lb",
+		func(w http.ResponseWriter, r *http.Request) error {
+			atomic.AddInt32(&count1, 1)
+			return nil
+		},
+		sub.At("GET", "lb"),
+		sub.Web(),
+	)
 
 	beta2 := New("beta.load.balancing.connector")
-	beta2.Subscribe("GET", "lb", func(w http.ResponseWriter, r *http.Request) error {
-		atomic.AddInt32(&count2, 1)
-		return nil
-	})
+	beta2.Subscribe("Lb",
+		func(w http.ResponseWriter, r *http.Request) error {
+			atomic.AddInt32(&count2, 1)
+			return nil
+		},
+		sub.At("GET", "lb"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -762,11 +798,15 @@ func TestConnector_Concurrent(t *testing.T) {
 	alpha := New("alpha.concurrent.connector")
 
 	beta := New("beta.concurrent.connector")
-	beta.Subscribe("GET", "wait", func(w http.ResponseWriter, r *http.Request) error {
-		ms, _ := strconv.Atoi(r.URL.Query().Get("ms"))
-		time.Sleep(time.Millisecond * time.Duration(ms))
-		return nil
-	})
+	beta.Subscribe("Wait",
+		func(w http.ResponseWriter, r *http.Request) error {
+			ms, _ := strconv.Atoi(r.URL.Query().Get("ms"))
+			time.Sleep(time.Millisecond * time.Duration(ms))
+			return nil
+		},
+		sub.At("GET", "wait"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -804,18 +844,22 @@ func TestConnector_CallDepth(t *testing.T) {
 	// Create the microservice
 	con := New("call.depth.connector")
 	con.maxCallDepth = 8
-	con.Subscribe("GET", "next", func(w http.ResponseWriter, r *http.Request) error {
-		depth++
+	con.Subscribe("Next",
+		func(w http.ResponseWriter, r *http.Request) error {
+			depth++
 
-		step, _ := strconv.Atoi(r.URL.Query().Get("step"))
-		assert.Equal(depth, step)
-		assert.Equal(depth, frame.Of(r).CallDepth())
+			step, _ := strconv.Atoi(r.URL.Query().Get("step"))
+			assert.Equal(depth, step)
+			assert.Equal(depth, frame.Of(r).CallDepth())
 
-		_, err := con.GET(r.Context(), "https://call.depth.connector/next?step="+strconv.Itoa(step+1))
-		assert.Error(err)
-		assert.Contains(err.Error(), "call depth overflow")
-		return errors.Trace(err)
-	})
+			_, err := con.GET(r.Context(), "https://call.depth.connector/next?step="+strconv.Itoa(step+1))
+			assert.Error(err)
+			assert.Contains(err.Error(), "call depth overflow")
+			return errors.Trace(err)
+		},
+		sub.At("GET", "next"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := con.Startup(ctx)
@@ -837,11 +881,15 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 
 	// Create the microservice
 	con := New("timeout.drawdown.connector")
-	con.Subscribe("GET", "next", func(w http.ResponseWriter, r *http.Request) error {
-		depth++
-		_, err := con.GET(r.Context(), "https://timeout.drawdown.connector/next")
-		return errors.Trace(err)
-	})
+	con.Subscribe("Next",
+		func(w http.ResponseWriter, r *http.Request) error {
+			depth++
+			_, err := con.GET(r.Context(), "https://timeout.drawdown.connector/next")
+			return errors.Trace(err)
+		},
+		sub.At("GET", "next"),
+		sub.Web(),
+	)
 
 	// Startup the microservice
 	err := con.Startup(ctx)
@@ -869,10 +917,14 @@ func TestConnector_TimeoutContext(t *testing.T) {
 	// Create the microservice
 	con := New("timeout.context.connector")
 	var deadline time.Time
-	con.Subscribe("GET", "ok", func(w http.ResponseWriter, r *http.Request) error {
-		deadline, _ = r.Context().Deadline()
-		return nil
-	})
+	con.Subscribe("Ok",
+		func(w http.ResponseWriter, r *http.Request) error {
+			deadline, _ = r.Context().Deadline()
+			return nil
+		},
+		sub.At("GET", "ok"),
+		sub.Web(),
+	)
 
 	// Startup the microservice
 	err := con.Startup(ctx)
@@ -937,10 +989,14 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 
 	// Create the microservice
 	con := New("timeout.slow.connector")
-	con.Subscribe("GET", "slow", func(w http.ResponseWriter, r *http.Request) error {
-		time.Sleep(time.Second)
-		return nil
-	})
+	con.Subscribe("Slow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			time.Sleep(time.Second)
+			return nil
+		},
+		sub.At("GET", "slow"),
+		sub.Web(),
+	)
 
 	// Startup the microservice
 	err := con.Startup(ctx)
@@ -993,11 +1049,15 @@ func TestConnector_ContextTimeout(t *testing.T) {
 	con := New("context.timeout.connector")
 
 	done := false
-	con.Subscribe("GET", "timeout", func(w http.ResponseWriter, r *http.Request) error {
-		<-r.Context().Done()
-		done = true
-		return r.Context().Err()
-	})
+	con.Subscribe("Timeout",
+		func(w http.ResponseWriter, r *http.Request) error {
+			<-r.Context().Done()
+			done = true
+			return r.Context().Err()
+		},
+		sub.At("GET", "timeout"),
+		sub.Web(),
+	)
 
 	err := con.Startup(ctx)
 	assert.NoError(err)
@@ -1014,47 +1074,76 @@ func TestConnector_ContextTimeout(t *testing.T) {
 }
 
 func TestConnector_Multicast(t *testing.T) {
-	t.Parallel()
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
 
 	// Create the microservices
 	noqueue1 := New("multicast.connector")
-	noqueue1.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("noqueue1"))
-		return nil
-	}, sub.NoQueue())
+	noqueue1.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("noqueue1"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	noqueue2 := New("multicast.connector")
-	noqueue2.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("noqueue2"))
-		return nil
-	}, sub.NoQueue())
+	noqueue2.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("noqueue2"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	named1 := New("multicast.connector")
-	named1.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("named1"))
-		return nil
-	}, sub.Queue("MyQueue"))
+	named1.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("named1"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.Queue("MyQueue"),
+	)
 
 	named2 := New("multicast.connector")
-	named2.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("named2"))
-		return nil
-	}, sub.Queue("MyQueue"))
+	named2.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("named2"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.Queue("MyQueue"),
+	)
 
 	def1 := New("multicast.connector")
-	def1.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("def1"))
-		return nil
-	}, sub.DefaultQueue())
+	def1.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("def1"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.DefaultQueue(),
+	)
 
 	def2 := New("multicast.connector")
-	def2.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("def2"))
-		return nil
-	}, sub.DefaultQueue())
+	def2.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("def2"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.DefaultQueue(),
+	)
 
 	// Startup the microservices
 	for _, i := range []*Connector{noqueue1, noqueue2, named1, named2, def1, def2} {
@@ -1077,8 +1166,8 @@ func TestConnector_Multicast(t *testing.T) {
 			responded[string(body)] = true
 		}
 	}
-	dur := time.Since(t0)
-	assert.True(dur >= ackTimeout && dur < ackTimeout+time.Second)
+	firstDur := time.Since(t0)
+	assert.True(firstDur >= ackTimeout && firstDur < ackTimeout+time.Second)
 	assert.Len(responded, 4)
 	assert.True(responded["noqueue1"])
 	assert.True(responded["noqueue2"])
@@ -1087,7 +1176,10 @@ func TestConnector_Multicast(t *testing.T) {
 	assert.True(responded["def1"] || responded["def2"])
 	assert.False(responded["def1"] && responded["def2"])
 
-	// Make the second request, should be quicker due to known responders optimization
+	// Second request should be faster due to the known-responders optimization (skips the
+	// ack wait). Comparing against the first request's duration is more robust than against
+	// ackTimeout directly: under load the absolute clock can drift, but the relative
+	// ordering still demonstrates the optimization is working.
 	t0 = time.Now()
 	responded = map[string]bool{}
 	ch = client.Publish(ctx, pub.GET("https://multicast.connector/cast"), pub.Multicast())
@@ -1099,8 +1191,8 @@ func TestConnector_Multicast(t *testing.T) {
 			responded[string(body)] = true
 		}
 	}
-	dur = time.Since(t0)
-	assert.True(dur < ackTimeout)
+	dur := time.Since(t0)
+	assert.True(dur < firstDur)
 	assert.Len(responded, 4)
 	assert.True(responded["noqueue1"])
 	assert.True(responded["noqueue2"])
@@ -1119,24 +1211,39 @@ func TestConnector_MulticastPartialTimeout(t *testing.T) {
 
 	// Create the microservices
 	slow := New("multicast.partial.timeout.connector")
-	slow.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		time.Sleep(delay * 2)
-		w.Write([]byte("slow"))
-		return nil
-	}, sub.NoQueue())
+	slow.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			time.Sleep(delay * 2)
+			w.Write([]byte("slow"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	fast := New("multicast.partial.timeout.connector")
-	fast.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("fast"))
-		return nil
-	}, sub.NoQueue())
+	fast.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("fast"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	tooSlow := New("multicast.partial.timeout.connector")
-	tooSlow.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		time.Sleep(delay * 4)
-		w.Write([]byte("too slow"))
-		return nil
-	}, sub.NoQueue())
+	tooSlow.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			time.Sleep(delay * 4)
+			w.Write([]byte("too slow"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	// Startup the microservice
 	err := slow.Startup(ctx)
@@ -1185,15 +1292,25 @@ func TestConnector_MulticastError(t *testing.T) {
 
 	// Create the microservices
 	bad := New("multicast.error.connector")
-	bad.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		return errors.New("bad situation")
-	}, sub.NoQueue())
+	bad.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return errors.New("bad situation")
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	good := New("multicast.error.connector")
-	good.Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-		w.Write([]byte("good situation"))
-		return nil
-	}, sub.NoQueue())
+	good.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			w.Write([]byte("good situation"))
+			return nil
+		},
+		sub.At("GET", "cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 
 	// Startup the microservice
 	err := bad.Startup(ctx)
@@ -1274,10 +1391,15 @@ func TestConnector_MassMulticast(t *testing.T) {
 			cons[i] = New("mass.multicast.connector")
 			cons[i].SetDeployment(TESTING)
 			cons[i].SetPlane(randomPlane)
-			cons[i].Subscribe("GET", "cast", func(w http.ResponseWriter, r *http.Request) error {
-				w.Write([]byte("ok"))
-				return nil
-			}, sub.NoQueue())
+			cons[i].Subscribe("Cast",
+				func(w http.ResponseWriter, r *http.Request) error {
+					w.Write([]byte("ok"))
+					return nil
+				},
+				sub.At("GET", "cast"),
+				sub.Web(),
+				sub.NoQueue(),
+			)
 
 			err := cons[i].Startup(ctx)
 			assert.NoError(err)
@@ -1321,33 +1443,51 @@ func TestConnector_KnownResponders(t *testing.T) {
 
 	// Create the microservices
 	alpha1 := New("alpha.known.responders.connector")
-	alpha1.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	})
+	alpha1.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "https://known.responders.connector/cast"),
+		sub.Web(),
+	)
 	err := alpha1.Startup(ctx)
 	assert.NoError(err)
 	defer alpha1.Shutdown(ctx)
 
 	alpha2 := New("alpha.known.responders.connector")
-	alpha2.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	})
+	alpha2.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "https://known.responders.connector/cast"),
+		sub.Web(),
+	)
 	err = alpha2.Startup(ctx)
 	assert.NoError(err)
 	defer alpha2.Shutdown(ctx)
 
 	beta := New("beta.known.responders.connector")
-	beta.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
+	beta.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "https://known.responders.connector/cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 	err = beta.Startup(ctx)
 	assert.NoError(err)
 	defer beta.Shutdown(ctx)
 
 	gamma := New("gamma.known.responders.connector")
-	gamma.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
+	gamma.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "https://known.responders.connector/cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 	err = gamma.Startup(ctx)
 	assert.NoError(err)
 	defer gamma.Shutdown(ctx)
@@ -1379,9 +1519,14 @@ func TestConnector_KnownResponders(t *testing.T) {
 
 	// Add a new microservice
 	delta := New("delta.known.responders.connector")
-	delta.Subscribe("GET", "https://known.responders.connector/cast", func(w http.ResponseWriter, r *http.Request) error {
-		return nil
-	}, sub.NoQueue())
+	delta.Subscribe("Cast",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return nil
+		},
+		sub.At("GET", "https://known.responders.connector/cast"),
+		sub.Web(),
+		sub.NoQueue(),
+	)
 	err = delta.Startup(ctx)
 	assert.NoError(err)
 
@@ -1415,12 +1560,16 @@ func TestConnector_LifetimeCancellation(t *testing.T) {
 
 	done := false
 	step := make(chan bool)
-	con.Subscribe("GET", "something", func(w http.ResponseWriter, r *http.Request) error {
-		step <- true
-		<-r.Context().Done()
-		done = true
-		return r.Context().Err()
-	})
+	con.Subscribe("Something",
+		func(w http.ResponseWriter, r *http.Request) error {
+			step <- true
+			<-r.Context().Done()
+			done = true
+			return r.Context().Err()
+		},
+		sub.At("GET", "something"),
+		sub.Web(),
+	)
 
 	err := con.Startup(ctx)
 	assert.NoError(err)
@@ -1459,11 +1608,16 @@ func TestConnector_ResponseQueueTiming(t *testing.T) {
 		go func() {
 			cons[i] = New("response.queue.timing.connector")
 			cons[i].SetDeployment(TESTING)
-			cons[i].Subscribe("GET", "multicast", func(w http.ResponseWriter, r *http.Request) error {
-				time.Sleep(time.Duration(100*i+100) * time.Millisecond)
-				responses.Add(1)
-				return nil
-			}, sub.NoQueue())
+			cons[i].Subscribe("Multicast",
+				func(w http.ResponseWriter, r *http.Request) error {
+					time.Sleep(time.Duration(100*i+100) * time.Millisecond)
+					responses.Add(1)
+					return nil
+				},
+				sub.At("GET", "multicast"),
+				sub.Web(),
+				sub.NoQueue(),
+			)
 			err := cons[i].Startup(ctx)
 			assert.NoError(err)
 			wg.Done()
@@ -1527,9 +1681,14 @@ func TestConnector_UnicastToNoQueue(t *testing.T) {
 		go func() {
 			cons[i] = New("unicast.to.no.queue.connector")
 			cons[i].SetDeployment(TESTING)
-			cons[i].Subscribe("GET", "no-queue", func(w http.ResponseWriter, r *http.Request) error {
-				return nil
-			}, sub.NoQueue())
+			cons[i].Subscribe("NoQueue",
+				func(w http.ResponseWriter, r *http.Request) error {
+					return nil
+				},
+				sub.At("GET", "no-queue"),
+				sub.Web(),
+				sub.NoQueue(),
+			)
 			err := cons[i].Startup(ctx)
 			assert.NoError(err)
 			wg.Done()
@@ -1560,61 +1719,77 @@ func TestConnector_Baggage(t *testing.T) {
 
 	betaCalled := false
 	beta := New("beta.baggage.connector")
-	beta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
-		betaCalled = true
-		assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
-		assert.Equal("en-US", r.Header.Get("Accept-Language"))
-		assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
-		// Call gamma without making changes
-		beta.Request(r.Context(),
-			pub.GET("https://gamma.baggage.connector/noop"),
-		)
-		return nil
-	})
+	beta.Subscribe("Noop",
+		func(w http.ResponseWriter, r *http.Request) error {
+			betaCalled = true
+			assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
+			assert.Equal("en-US", r.Header.Get("Accept-Language"))
+			assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
+			// Call gamma without making changes
+			beta.Request(r.Context(),
+				pub.GET("https://gamma.baggage.connector/noop"),
+			)
+			return nil
+		},
+		sub.At("GET", "noop"),
+		sub.Web(),
+	)
 
 	gammaCalled := false
 	gamma := New("gamma.baggage.connector")
-	gamma.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
-		gammaCalled = true
-		assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
-		assert.Equal("en-US", r.Header.Get("Accept-Language"))
-		assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
-		gamma.Request(r.Context(),
-			// Call delta making changes to non-empty values
-			pub.GET("https://delta.baggage.connector/noop"),
-			pub.Baggage("Suitcase", "Books"),
-			pub.Header("Accept-Language", "en-UK"),
-			pub.Header("X-Forwarded-For", "11.22.33.44"),
-		)
-		return nil
-	})
+	gamma.Subscribe("Noop",
+		func(w http.ResponseWriter, r *http.Request) error {
+			gammaCalled = true
+			assert.Equal("Clothes", frame.Of(r).Baggage("Suitcase"))
+			assert.Equal("en-US", r.Header.Get("Accept-Language"))
+			assert.Equal("1.2.3.4", r.Header.Get("X-Forwarded-For"))
+			gamma.Request(r.Context(),
+				// Call delta making changes to non-empty values
+				pub.GET("https://delta.baggage.connector/noop"),
+				pub.Baggage("Suitcase", "Books"),
+				pub.Header("Accept-Language", "en-UK"),
+				pub.Header("X-Forwarded-For", "11.22.33.44"),
+			)
+			return nil
+		},
+		sub.At("GET", "noop"),
+		sub.Web(),
+	)
 
 	deltaCalled := false
 	delta := New("delta.baggage.connector")
-	delta.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
-		deltaCalled = true
-		assert.Equal("Books", frame.Of(r).Baggage("Suitcase"))
-		assert.Equal("en-UK", r.Header.Get("Accept-Language"))
-		assert.Equal("11.22.33.44", r.Header.Get("X-Forwarded-For"))
-		delta.Request(r.Context(),
-			// Call epsilon making changes to empty values
-			pub.GET("https://epsilon.baggage.connector/noop"),
-			pub.Baggage("Suitcase", ""),
-			pub.Header("Accept-Language", ""),
-			pub.Header("X-Forwarded-For", ""),
-		)
-		return nil
-	})
+	delta.Subscribe("Noop",
+		func(w http.ResponseWriter, r *http.Request) error {
+			deltaCalled = true
+			assert.Equal("Books", frame.Of(r).Baggage("Suitcase"))
+			assert.Equal("en-UK", r.Header.Get("Accept-Language"))
+			assert.Equal("11.22.33.44", r.Header.Get("X-Forwarded-For"))
+			delta.Request(r.Context(),
+				// Call epsilon making changes to empty values
+				pub.GET("https://epsilon.baggage.connector/noop"),
+				pub.Baggage("Suitcase", ""),
+				pub.Header("Accept-Language", ""),
+				pub.Header("X-Forwarded-For", ""),
+			)
+			return nil
+		},
+		sub.At("GET", "noop"),
+		sub.Web(),
+	)
 
 	epsilonCalled := false
 	epsilon := New("epsilon.baggage.connector")
-	epsilon.Subscribe("GET", "noop", func(w http.ResponseWriter, r *http.Request) error {
-		epsilonCalled = true
-		assert.Equal("", frame.Of(r).Baggage("Suitcase"))
-		assert.Equal("", r.Header.Get("Accept-Language"))
-		assert.Equal("", r.Header.Get("X-Forwarded-For"))
-		return nil
-	})
+	epsilon.Subscribe("Noop",
+		func(w http.ResponseWriter, r *http.Request) error {
+			epsilonCalled = true
+			assert.Equal("", frame.Of(r).Baggage("Suitcase"))
+			assert.Equal("", r.Header.Get("Accept-Language"))
+			assert.Equal("", r.Header.Get("X-Forwarded-For"))
+			return nil
+		},
+		sub.At("GET", "noop"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -1658,11 +1833,15 @@ func TestConnector_MultiValueHeader(t *testing.T) {
 	alpha := New("alpha.multi.value.header.connector")
 
 	beta := New("beta.multi.value.header.connector")
-	beta.Subscribe("GET", "receive", func(w http.ResponseWriter, r *http.Request) error {
-		assert.Len(r.Header["Multi-Value-In"], 3)
-		w.Header()["Multi-Value-Out"] = []string{"1", "2", "3"}
-		return nil
-	})
+	beta.Subscribe("Receive",
+		func(w http.ResponseWriter, r *http.Request) error {
+			assert.Len(r.Header["Multi-Value-In"], 3)
+			w.Header()["Multi-Value-Out"] = []string{"1", "2", "3"}
+			return nil
+		},
+		sub.At("GET", "receive"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)
@@ -1694,10 +1873,14 @@ func TestConnector_TimeToReturn(t *testing.T) {
 	alpha := New("alpha.time.to.return.echo.connector")
 
 	beta := New("beta.time.to.return.connector")
-	beta.Subscribe("GET", "delayed", func(w http.ResponseWriter, r *http.Request) error {
-		time.Sleep(delay)
-		return nil
-	})
+	beta.Subscribe("Delayed",
+		func(w http.ResponseWriter, r *http.Request) error {
+			time.Sleep(delay)
+			return nil
+		},
+		sub.At("GET", "delayed"),
+		sub.Web(),
+	)
 
 	// Startup the microservices
 	err := alpha.Startup(ctx)

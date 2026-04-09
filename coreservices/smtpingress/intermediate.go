@@ -20,16 +20,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
@@ -55,7 +52,7 @@ var (
 
 const (
 	Hostname = smtpingressapi.Hostname
-	Version  = 181
+	Version  = 182
 )
 
 // ToDo is implemented by the service or mock.
@@ -101,7 +98,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetDescription(`The SMTP ingress microservice listens for incoming emails and fires corresponding events.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
-	svc.Subscribe("GET", ":0/openapi.json", svc.doOpenAPI)
 	svc.SetResFS(resources.FS)
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
@@ -114,36 +110,36 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	// HINT: Add tickers here
 
-	// Configs
+	// HINT: Add configs here
 	svc.DefineConfig( // MARKER: Port
 		"Port",
 		cfg.Description(`Port is the TCP port to listen to.`),
-		cfg.DefaultValue(`25`),
-		cfg.Validation(`int [1,65535]`),
+		cfg.DefaultValue("25"),
+		cfg.Validation("int [1,65535]"),
 	)
 	svc.DefineConfig( // MARKER: Enabled
 		"Enabled",
 		cfg.Description(`Enabled determines whether the email server is started.`),
-		cfg.DefaultValue(`true`),
-		cfg.Validation(`bool`),
+		cfg.DefaultValue("true"),
+		cfg.Validation("bool"),
 	)
 	svc.DefineConfig( // MARKER: MaxSize
 		"MaxSize",
 		cfg.Description(`MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.`),
-		cfg.DefaultValue(`10`),
-		cfg.Validation(`int [0,1024]`),
+		cfg.DefaultValue("10"),
+		cfg.Validation("int [0,1024]"),
 	)
 	svc.DefineConfig( // MARKER: MaxClients
 		"MaxClients",
 		cfg.Description(`MaxClients controls how many client connections can be opened in parallel. Defaults to 128.`),
-		cfg.DefaultValue(`128`),
-		cfg.Validation(`int [1,1024]`),
+		cfg.DefaultValue("128"),
+		cfg.Validation("int [1,1024]"),
 	)
 	svc.DefineConfig( // MARKER: Workers
 		"Workers",
 		cfg.Description(`Workers controls how many workers process incoming mail. Defaults to 8.`),
-		cfg.DefaultValue(`8`),
-		cfg.Validation(`int [1,1024]`),
+		cfg.DefaultValue("8"),
+		cfg.Validation("int [1,1024]"),
 	)
 
 	// HINT: Add inbound event sinks here
@@ -156,41 +152,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	return svc
 }
 
-// doOpenAPI renders the OpenAPI document of the microservice.
-func (svc *Intermediate) doOpenAPI(w http.ResponseWriter, r *http.Request) (err error) {
-	oapiSvc := openapi.Service{
-		ServiceName: svc.Hostname(),
-		Description: svc.Description(),
-		Version:     svc.Version(),
-		Endpoints:   []*openapi.Endpoint{},
-		RemoteURI:   frame.Of(r).XForwardedFullURL(),
-	}
-
-	endpoints := []*openapi.Endpoint{
-		// HINT: Register web handlers and functional endpoints by adding them here
-	}
-
-	// Filter by the port of the request
-	rePort := regexp.MustCompile(`:(` + regexp.QuoteMeta(r.URL.Port()) + `|0)(/|$)`)
-	reAnyPort := regexp.MustCompile(`:[0-9]+(/|$)`)
-	for _, ep := range endpoints {
-		if rePort.MatchString(ep.Route) || r.URL.Port() == "443" && !reAnyPort.MatchString(ep.Route) {
-			oapiSvc.Endpoints = append(oapiSvc.Endpoints, ep)
-		}
-	}
-	if len(oapiSvc.Endpoints) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	if svc.Deployment() == connector.LOCAL {
-		encoder.SetIndent("", "  ")
-	}
-	err = encoder.Encode(&oapiSvc)
-	return errors.Trace(err)
-}
-
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
@@ -200,34 +161,35 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
 	if changed("Port") { // MARKER: Port
 		err = svc.OnChangedPort(ctx)
 		if err != nil {
-			return err // No trace
+			return errors.Trace(err)
 		}
 	}
 	if changed("Enabled") { // MARKER: Enabled
 		err = svc.OnChangedEnabled(ctx)
 		if err != nil {
-			return err // No trace
+			return errors.Trace(err)
 		}
 	}
 	if changed("MaxSize") { // MARKER: MaxSize
 		err = svc.OnChangedMaxSize(ctx)
 		if err != nil {
-			return err // No trace
+			return errors.Trace(err)
 		}
 	}
 	if changed("MaxClients") { // MARKER: MaxClients
 		err = svc.OnChangedMaxClients(ctx)
 		if err != nil {
-			return err // No trace
+			return errors.Trace(err)
 		}
 	}
 	if changed("Workers") { // MARKER: Workers
 		err = svc.OnChangedWorkers(ctx)
 		if err != nil {
-			return err // No trace
+			return errors.Trace(err)
 		}
 	}
 	return nil

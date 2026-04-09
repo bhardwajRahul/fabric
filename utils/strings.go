@@ -100,18 +100,28 @@ func ToSnakeCase(id string) string {
 	return strings.ReplaceAll(ToKebabCase(id), "-", "_")
 }
 
-// LooksLikeJWT checks if the token is likely to be a signed representation of a JWT.
+// LooksLikeJWT checks if the token is likely to be a JWT.
+//
+// Accepts both signed and unsigned (alg=none) tokens. The shortest valid signed JWT uses
+// HS256 with an empty payload:
+//
+//	eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.8VKCTiBegJPuPIZlp0wbV0Sbdn5BS6TE5DCx6oYNc5o
+//
+// The shortest valid unsigned JWT uses alg=none with an empty payload (and a trailing dot
+// for the empty signature section):
+//
+//	eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.e30.
 func LooksLikeJWT(token string) bool {
-	// Shortest JWT using HS256 algorithm and no payload:
-	// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.8VKCTiBegJPuPIZlp0wbV0Sbdn5BS6TE5DCx6oYNc5o
-	if len(token) < 36+1+3+1+43 {
+	// Floor: 35 (alg=none header) + 1 (dot) + 3 (e30 payload) + 1 (dot) + 0 (empty sig) = 40
+	if len(token) < 40 {
 		return false
 	}
 	// A JWT starts with {" which encodes to ey in base64
 	if !strings.HasPrefix(token, "ey") {
 		return false
 	}
-	// Identify the sections
+	// Identify the sections. Each dot is counted as part of the section that follows it,
+	// so sectionLen[1] and sectionLen[2] include their leading dot.
 	sectionLen := [3]int{0, 0, 0}
 	dots := 0
 	for _, rn := range token {
@@ -125,7 +135,19 @@ func LooksLikeJWT(token string) bool {
 		}
 		sectionLen[dots]++
 	}
-	if dots != 2 || sectionLen[0] < 36 || sectionLen[1] < 3 || sectionLen[2] < 43 {
+	if dots != 2 {
+		return false
+	}
+	// alg=none header is 35 chars; HS256 / EdDSA / RS256 headers are 36+ chars.
+	if sectionLen[0] < 35 {
+		return false
+	}
+	if sectionLen[1] < 3 { // dot + at least 2 payload chars
+		return false
+	}
+	// Signature: either empty (just the dot, length 1, for unsigned tokens) or a real
+	// signature with at least 43 chars after the dot.
+	if sectionLen[2] != 1 && sectionLen[2] < 1+43 {
 		return false
 	}
 	return true

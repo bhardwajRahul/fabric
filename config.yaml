@@ -30,3 +30,6 @@ llm.core:
 http.ingress.core:
 #  Ports: 8080
 #  TimeBudget: 20s
+
+shell.core:
+#  MaxOutputBytes: 262144

@@ -21,7 +21,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
@@ -60,46 +58,6 @@ var (
 	_ strings.Builder
 	_ httpegress.Mock
 )
-
-func TestGeminiLLM_OpenAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	svc := NewService()
-	tester := connector.New("tester.client")
-
-	app := application.New()
-	app.Add(svc, tester)
-	app.RunInTest(t)
-
-	rePort := regexp.MustCompile(`:([0-9]+)(/|$)`)
-	routes := []string{
-		// HINT: Insert routes of functional and web endpoints here
-		geminillmapi.Turn.Route, // MARKER: Turn
-	}
-	for _, route := range routes {
-		port := "443"
-		matches := rePort.FindStringSubmatch(route)
-		if len(matches) > 1 {
-			port = matches[1]
-		}
-		t.Run("port_"+port, func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := tester.Request(
-				ctx,
-				pub.GET(httpx.JoinHostAndPath(geminillmapi.Hostname, ":"+port+"/openapi.json")),
-			)
-			if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
-				body, err := io.ReadAll(res.Body)
-				if assert.NoError(err) {
-					assert.Contains(body, "openapi")
-					assert.Contains(body, route)
-				}
-			}
-		})
-	}
-}
 
 func TestGeminiLLM_Mock(t *testing.T) {
 	t.Parallel()
@@ -133,7 +91,7 @@ func TestGeminiLLM_Mock(t *testing.T) {
 
 		_, err := mock.Turn(ctx, exampleMessages, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) {
+		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
 			return expectedCompletion, nil
 		})
 		result, err := mock.Turn(ctx, exampleMessages, nil)

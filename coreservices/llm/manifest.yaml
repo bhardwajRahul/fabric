@@ -17,8 +17,8 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  frameworkVersion: 1.26.0
-  modifiedAt: "2026-04-05T10:00:00Z"
+  frameworkVersion: 1.27.0
+  modifiedAt: "2026-04-27T15:00:00Z"
 
 configs:
   ProviderHostname:
@@ -37,12 +37,12 @@ configs:
 
 functions:
   Chat:
-    signature: Chat(messages []Message, tools []Tool) (messagesOut []Message)
+    signature: Chat(messages []Message, tools []string) (messagesOut []Message)
     description: Chat sends messages to an LLM with optional tools and returns the response messages.
     method: POST
     route: :444/chat
   Turn:
-    signature: Turn(messages []Message, tools []ToolDef) (completion *TurnCompletion)
+    signature: Turn(messages []Message, tools []Tool) (completion *TurnCompletion)
     description: Turn executes a single LLM turn by delegating to the configured provider microservice.
     method: POST
     route: :444/turn

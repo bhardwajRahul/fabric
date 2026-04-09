@@ -1,5 +1,5 @@
 ---
-name: Chart Topology Diagram
+name: chart-topology
 description: Regenerates the topology diagram of the application's microservices. Use when microservices are added or removed from main/main.go, or when downstream dependencies change.
 ---
 

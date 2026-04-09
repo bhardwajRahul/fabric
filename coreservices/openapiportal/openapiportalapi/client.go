@@ -44,25 +44,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "openapiportal.core"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	List = Def{Method: "ANY", Route: "//openapi:0"} // MARKER: List
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any
@@ -245,20 +226,17 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 }
 
 /*
-List displays links to the OpenAPI endpoints of all microservices.
+Document returns the aggregated OpenAPI 3.1 document as JSON covering every microservice on the bus.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c Client) List(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: List
-	if method == "" {
-		method = "POST"
-	}
+func (_c Client) Document(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Document
 	return _c.svc.Request(
 		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, List.Route)),
+		pub.Method("GET"),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Document.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
@@ -266,25 +244,59 @@ func (_c Client) List(ctx context.Context, method string, relativeURL string, bo
 }
 
 /*
-List displays links to the OpenAPI endpoints of all microservices.
+Document returns the aggregated OpenAPI 3.1 document as JSON covering every microservice on the bus.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
 If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
 */
-func (_c MulticastClient) List(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: List
-	if method == "" {
-		method = "POST"
-	}
+func (_c MulticastClient) Document(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Document
 	return _c.svc.Publish(
 		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, List.Route)),
+		pub.Method("GET"),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Document.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
 }
+
+/*
+Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c Client) Explorer(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Explorer
+	return _c.svc.Request(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Explorer.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+/*
+Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus.
+
+If a URL is provided, it is resolved relative to the URL of the endpoint.
+If the body is of type io.Reader, []byte or string, it is serialized in binary form.
+If it is of type url.Values, it is serialized as form data. All other types are serialized as JSON.
+*/
+func (_c MulticastClient) Explorer(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Explorer
+	return _c.svc.Publish(
+		ctx,
+		pub.Method("GET"),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Explorer.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
 
 // Executor runs tasks and workflows synchronously, blocking until termination.
 // It is primarily intended for integration tests. Production code should use

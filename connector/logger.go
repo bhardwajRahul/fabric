@@ -25,9 +25,54 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/mem"
 )
+
+// logActorKeyType is a private context-key type so only this package can read or write the
+// log-actor cache.
+type logActorKeyType struct{}
+
+var logActorKey = logActorKeyType{}
+
+// logActorClaims returns a context carrying the verified actor claims for use as log attributes.
+// It is intended to be called by the connector immediately after verifyToken succeeds.
+func logActorClaims(ctx context.Context, claims jwt.MapClaims) context.Context {
+	if ctx == nil || claims == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, logActorKey, claims)
+}
+
+// appendActorClaims appends iss/sub/tenant log attributes from the cached actor claims, if present.
+// Sub is potentially PII (often an email) - operators must apply log retention and access
+// controls accordingly.
+func appendActorClaims(args []any, ctx context.Context) []any {
+	if ctx == nil {
+		return args
+	}
+	claims, _ := ctx.Value(logActorKey).(jwt.MapClaims)
+	if claims == nil {
+		return args
+	}
+	if iss, ok := claims["iss"].(string); ok && iss != "" {
+		args = append(args, "iss", iss)
+	}
+	if sub, ok := claims["sub"].(string); ok && sub != "" {
+		args = append(args, "sub", sub)
+	}
+	if tenant, ok := claims["tenant"]; ok {
+		args = append(args, "tenant", tenant)
+	} else if tid, ok := claims["tid"]; ok {
+		args = append(args, "tenant", tid)
+	}
+	if roles, ok := claims["roles"]; ok && roles != nil {
+		args = append(args, "roles", roles)
+	}
+	return args
+}
 
 const (
 	Gray    = "\033[38;2;128;128;128m" // #808080
@@ -65,6 +110,7 @@ func (c *Connector) LogDebug(ctx context.Context, msg string, args ...any) {
 		}
 		args = append(args, "trace", traceID)
 	}
+	args = appendActorClaims(args, ctx)
 	logger.Debug(msg, args...)
 	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
@@ -94,6 +140,7 @@ func (c *Connector) LogInfo(ctx context.Context, msg string, args ...any) {
 		}
 		args = append(args, "trace", traceID)
 	}
+	args = appendActorClaims(args, ctx)
 	logger.Info(msg, args...)
 	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
@@ -123,6 +170,7 @@ func (c *Connector) LogWarn(ctx context.Context, msg string, args ...any) {
 		}
 		args = append(args, "trace", traceID)
 	}
+	args = appendActorClaims(args, ctx)
 	logger.Warn(msg, args...)
 	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,
@@ -169,6 +217,7 @@ func (c *Connector) LogError(ctx context.Context, msg string, args ...any) {
 		}
 		args = append(args, "trace", traceID)
 	}
+	args = appendActorClaims(args, ctx)
 	logger.Error(msg, args...)
 	_ = c.IncrementCounter(ctx, "microbus_log_messages", 1,
 		"message", msg,

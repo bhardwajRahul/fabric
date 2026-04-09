@@ -6,4 +6,4 @@
 
 This microservice implements the `Turn` endpoint for the Google Gemini LLM provider. It translates between the Microbus LLM message format and the Gemini generateContent API format, handling functionCall/functionResponse parts and role mapping (assistant→model).
 
-Types (`Message`, `ToolDef`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
+Types (`Message`, `Tool`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.

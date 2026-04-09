@@ -38,7 +38,8 @@ type Publisher interface {
 
 // Subscriber are the actions used to subscribe to the bus.
 type Subscriber interface {
-	Subscribe(method string, path string, handler sub.HTTPHandler, options ...sub.Option) (unsub func() (err error), err error)
+	Subscribe(name string, handler sub.HTTPHandler, options ...sub.Option) error
+	Unsubscribe(name string) error
 }
 
 // PublisherSubscriber is both a publisher and a subscriber.

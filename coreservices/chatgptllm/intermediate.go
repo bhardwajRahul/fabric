@@ -1,0 +1,224 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package chatgptllm
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/coreservices/chatgptllm/chatgptllmapi"
+	"github.com/microbus-io/fabric/coreservices/chatgptllm/resources"
+	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+)
+
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ chatgptllmapi.Client
+	_ *workflow.Flow
+)
+
+const (
+	Hostname = chatgptllmapi.Hostname
+	Version  = 2
+)
+
+// ToDo is implemented by the service or mock.
+type ToDo interface {
+	OnStartup(ctx context.Context) (err error)
+	OnShutdown(ctx context.Context) (err error)
+	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
+}
+
+// NewService creates a new instance of the microservice.
+func NewService() *Service {
+	svc := &Service{}
+	svc.Intermediate = NewIntermediate(svc)
+	return svc
+}
+
+// Init enables a single-statement pattern for initializing the microservice.
+func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
+	svc.Connector.Init(func(_ *connector.Connector) (err error) {
+		return initializer(svc)
+	})
+	return svc
+}
+
+// Intermediate extends and customizes the generic base connector.
+type Intermediate struct {
+	*connector.Connector
+	ToDo
+}
+
+// NewIntermediate creates a new instance of the intermediate.
+func NewIntermediate(impl ToDo) *Intermediate {
+	svc := &Intermediate{
+		Connector: connector.New(Hostname),
+		ToDo:      impl,
+	}
+	svc.SetVersion(Version)
+	svc.SetDescription(`The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Chat Completions API.`)
+	svc.SetOnStartup(svc.OnStartup)
+	svc.SetOnShutdown(svc.OnShutdown)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+	svc.Subscribe( // MARKER: Turn
+		"Turn", svc.doTurn,
+		sub.At(chatgptllmapi.Turn.Method, chatgptllmapi.Turn.Route),
+		sub.Description(`Turn executes a single LLM turn using the ChatGPT provider.`),
+		sub.Function(chatgptllmapi.TurnIn{}, chatgptllmapi.TurnOut{}),
+	)
+
+	// HINT: Add web endpoints here
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
+
+	// HINT: Add configs here
+	svc.DefineConfig( // MARKER: BaseURL
+		"BaseURL",
+		cfg.Description(`BaseURL is the base URL of the OpenAI API.`),
+		cfg.DefaultValue("https://api.openai.com"),
+		cfg.Validation("url"),
+	)
+	svc.DefineConfig( // MARKER: APIKey
+		"APIKey",
+		cfg.Description(`APIKey is the API key for the OpenAI API.`),
+		cfg.Secret(),
+	)
+	svc.DefineConfig( // MARKER: Model
+		"Model",
+		cfg.Description(`Model is the OpenAI model identifier to use.`),
+		cfg.DefaultValue("gpt-4"),
+	)
+
+	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
+	_ = marshalFunction
+	return svc
+}
+
+// doTurn handles marshaling for Turn.
+func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Turn
+	var in chatgptllmapi.TurnIn
+	var out chatgptllmapi.TurnOut
+	err = marshalFunction(w, r, chatgptllmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
+		out.Completion, err = svc.Turn(r.Context(), in.Messages, in.Tools)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
+	return nil
+}
+
+/*
+BaseURL is the base URL of the OpenAI API.
+*/
+func (svc *Intermediate) BaseURL() (value string) { // MARKER: BaseURL
+	return svc.Config("BaseURL")
+}
+
+/*
+SetBaseURL sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetBaseURL(value string) (err error) { // MARKER: BaseURL
+	return svc.SetConfig("BaseURL", value)
+}
+
+/*
+APIKey is the API key for the OpenAI API.
+*/
+func (svc *Intermediate) APIKey() (value string) { // MARKER: APIKey
+	return svc.Config("APIKey")
+}
+
+/*
+SetAPIKey sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetAPIKey(value string) (err error) { // MARKER: APIKey
+	return svc.SetConfig("APIKey", value)
+}
+
+/*
+Model is the OpenAI model identifier to use.
+*/
+func (svc *Intermediate) Model() (value string) { // MARKER: Model
+	return svc.Config("Model")
+}
+
+/*
+SetModel sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetModel(value string) (err error) { // MARKER: Model
+	return svc.SetConfig("Model", value)
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}

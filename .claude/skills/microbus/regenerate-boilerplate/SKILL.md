@@ -1,5 +1,5 @@
 ---
-name: Regenerate Boilerplate
+name: regenerate-boilerplate
 description: Regenerates the boilerplate files of a microservice from its manifest and service code. Use when boilerplate files are corrupted, outdated, or need to be rebuilt from scratch.
 ---
 
@@ -48,6 +48,7 @@ Before deleting the existing boilerplate, read `intermediate.go` and note the cu
 
 **CRITICAL**: Delete the following boilerplate files. The goal of this workflow is to create them from scratch. Do NOT skip deletion and edit in place.
 
+- `myserviceapi/endpoints.go`
 - `myserviceapi/client.go`
 - `resources/embed.go`
 - `intermediate.go`
@@ -57,9 +58,10 @@ Before deleting the existing boilerplate, read `intermediate.go` and note the cu
 
 #### Step 5: Initialize Boilerplate Files
 
-Follow these steps from the `microbus/add-microservice` skill to recreate the boilerplate files from scratch:
+Follow these steps from the `add-microservice` skill to recreate the boilerplate files from scratch:
 
-- **Prepare `client.go`**: Use the hostname and package from `manifest.yaml`
+- **Prepare `endpoints.go`**: Use the hostname from `manifest.yaml`. Leave the endpoint `var (...)` block empty for now - it will be populated with `Def{Method, Route}` literals in the per-feature regen steps below
+- **Prepare `client.go`**
 - **Prepare `embed.go`**
 - **Prepare `intermediate.go`**: Use the description from `manifest.yaml`
 - **Prepare `mock.go`**
@@ -68,7 +70,7 @@ Do NOT follow the steps that create `service.go`, `service_test.go`, `manifest.y
 
 #### Step 6: Regenerate Configs
 
-For each config listed under `configs` in `manifest.yaml`, follow the `microbus/add-config` skill but ONLY these steps:
+For each config listed under `configs` in `manifest.yaml`, follow the `add-config` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface** (only if the config has `callback: true`)
 - **Define the config**
@@ -80,33 +82,32 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 7: Regenerate Functional Endpoints
 
-For each function listed under `functions` in `manifest.yaml`, follow the `microbus/add-function` skill but ONLY these steps:
+For each function listed under `functions` in `manifest.yaml`, follow the `add-function` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface**
-- **Define the payload structs**
+- **Define the endpoint and payload structs**
 - **Extend the clients**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
-- **Expose the endpoint via OpenAPI**
 - **Extend the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
 #### Step 8: Regenerate Web Handler Endpoints
 
-For each web handler listed under `webs` in `manifest.yaml`, follow the `microbus/add-web` skill but ONLY these steps:
+For each web handler listed under `webs` in `manifest.yaml`, follow the `add-web` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface**
+- **Define the endpoint**
 - **Extend the clients**
 - **Bind the handler to the microservice**
-- **Expose the endpoint via OpenAPI**
 - **Extend the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
 #### Step 9: Regenerate Outbound Events
 
-For each event listed under `outboundEvents` in `manifest.yaml`, follow the `microbus/add-outbound-event` skill but ONLY these steps:
+For each event listed under `outboundEvents` in `manifest.yaml`, follow the `add-outbound-event` skill but ONLY these steps:
 
 - **Define the payload structs**
 - **Extend the trigger and hook**
@@ -115,7 +116,7 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 10: Regenerate Inbound Event Sinks
 
-For each event listed under `inboundEvents` in `manifest.yaml`, follow the `microbus/add-inbound-event` skill but ONLY these steps:
+For each event listed under `inboundEvents` in `manifest.yaml`, follow the `add-inbound-event` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface**
 - **Bind the inbound event sink to the microservice**
@@ -125,11 +126,12 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 11: Regenerate Task Endpoints
 
-For each task listed under `tasks` in `manifest.yaml`, follow the `microbus/add-task` skill but ONLY these steps:
+For each task listed under `tasks` in `manifest.yaml`, follow the `add-task` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface**
 - **Define complex types** (only if the task uses types not already defined)
-- **Extend the API**
+- **Define the endpoint and payload structs**
+- **Extend the executor**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
 - **Extend the mock**
@@ -138,9 +140,10 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 12: Regenerate Workflow Graph Endpoints
 
-For each workflow listed under `workflows` in `manifest.yaml`, follow the `microbus/add-workflow` skill but ONLY these steps:
+For each workflow listed under `workflows` in `manifest.yaml`, follow the `add-workflow` skill but ONLY these steps:
 
-- **Extend the API**
+- **Define the endpoint and payload structs**
+- **Extend the executor**
 - **Extend the `ToDo` interface**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
@@ -150,7 +153,7 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 13: Regenerate Tickers
 
-For each ticker listed under `tickers` in `manifest.yaml`, follow the `microbus/add-ticker` skill but ONLY these steps:
+For each ticker listed under `tickers` in `manifest.yaml`, follow the `add-ticker` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface**
 - **Bind the handler to the microservice**
@@ -160,7 +163,7 @@ Skip the steps that affect `service.go` and `service_test.go`. Skip the housekee
 
 #### Step 14: Regenerate Metrics
 
-For each metric listed under `metrics` in `manifest.yaml`, follow the `microbus/add-metric` skill but ONLY these steps:
+For each metric listed under `metrics` in `manifest.yaml`, follow the `add-metric` skill but ONLY these steps:
 
 - **Extend the `ToDo` interface** (only if the metric has `observable: true`)
 - **Describe the metric**

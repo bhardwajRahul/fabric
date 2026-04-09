@@ -18,7 +18,7 @@ package foremanapi
 
 // FlowSummary is a summary of a flow for listing purposes.
 type FlowSummary struct {
-	FlowID       string `json:"flowID,omitzero"`
+	FlowKey      string `json:"flowKey,omitzero"`
 	ThreadKey    string `json:"threadKey,omitzero"`
 	WorkflowName string `json:"workflowName,omitzero"`
 	Status       string `json:"status,omitzero"`

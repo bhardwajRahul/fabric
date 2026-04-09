@@ -44,27 +44,6 @@ var (
 	_ workflow.Flow
 )
 
-// Hostname is the default hostname of the microservice.
-const Hostname = "eventsource.example"
-
-// Def defines an endpoint of the microservice.
-type Def struct {
-	Method string
-	Route  string
-}
-
-// URL is the full URL to the endpoint.
-func (d *Def) URL() string {
-	return httpx.JoinHostAndPath(Hostname, d.Route)
-}
-
-var (
-	// HINT: Insert endpoint definitions here
-	Register        = Def{Method: "ANY", Route: `:443/register`}           // MARKER: Register
-	OnAllowRegister = Def{Method: "POST", Route: `:417/on-allow-register`} // MARKER: OnAllowRegister
-	OnRegistered    = Def{Method: "POST", Route: `:417/on-registered`}     // MARKER: OnRegistered
-)
-
 // multicastResponse packs the response of a functional multicast.
 type multicastResponse struct {
 	data         any
@@ -246,18 +225,6 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// --- Register function ---
-
-// RegisterIn are the input arguments of Register.
-type RegisterIn struct { // MARKER: Register
-	Email string `json:"email,omitzero"`
-}
-
-// RegisterOut are the output arguments of Register.
-type RegisterOut struct { // MARKER: Register
-	Allowed bool `json:"allowed,omitzero"`
-}
-
 // RegisterResponse packs the response of Register.
 type RegisterResponse multicastResponse // MARKER: Register
 
@@ -293,18 +260,6 @@ func (_c Client) Register(ctx context.Context, email string) (allowed bool, err 
 	_out := RegisterOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Register.Method, Register.Route, &_in, &_out)
 	return _out.Allowed, err // No trace
-}
-
-// --- OnAllowRegister event ---
-
-// OnAllowRegisterIn are the input arguments of OnAllowRegister.
-type OnAllowRegisterIn struct { // MARKER: OnAllowRegister
-	Email string `json:"email,omitzero"`
-}
-
-// OnAllowRegisterOut are the output arguments of OnAllowRegister.
-type OnAllowRegisterOut struct { // MARKER: OnAllowRegister
-	Allow bool `json:"allow,omitzero"`
 }
 
 // OnAllowRegisterResponse packs the response of OnAllowRegister.
@@ -347,20 +302,16 @@ func (c Hook) OnAllowRegister(handler func(ctx context.Context, email string) (a
 		})
 		return err // No trace
 	}
+	const name = "OnAllowRegister"
 	path := httpx.JoinHostAndPath(c.host, OnAllowRegister.Route)
-	unsub, err = c.svc.Subscribe(OnAllowRegister.Method, path, doOnAllowRegister, c.opts...)
-	return unsub, errors.Trace(err)
-}
-
-// --- OnRegistered event ---
-
-// OnRegisteredIn are the input arguments of OnRegistered.
-type OnRegisteredIn struct { // MARKER: OnRegistered
-	Email string `json:"email,omitzero"`
-}
-
-// OnRegisteredOut are the output arguments of OnRegistered.
-type OnRegisteredOut struct { // MARKER: OnRegistered
+	subOpts := append([]sub.Option{
+		sub.At(OnAllowRegister.Method, path),
+		sub.InboundEvent(OnAllowRegisterIn{}, OnAllowRegisterOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnAllowRegister, subOpts...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }
 
 // OnRegisteredResponse packs the response of OnRegistered.
@@ -402,9 +353,16 @@ func (c Hook) OnRegistered(handler func(ctx context.Context, email string) (err 
 		})
 		return err // No trace
 	}
+	const name = "OnRegistered"
 	path := httpx.JoinHostAndPath(c.host, OnRegistered.Route)
-	unsub, err = c.svc.Subscribe(OnRegistered.Method, path, doOnRegistered, c.opts...)
-	return unsub, errors.Trace(err)
+	subOpts := append([]sub.Option{
+		sub.At(OnRegistered.Method, path),
+		sub.InboundEvent(OnRegisteredIn{}, OnRegisteredOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnRegistered, subOpts...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.
