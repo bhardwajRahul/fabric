@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 var _ = fmt.Stringer(QArgs{})
 
 /*
-QArgs faciliates the creation of URL query arguments for the common case where there is only
+QArgs facilitates the creation of URL query arguments for the common case where there is only
 one value per key. Values of any type are converted to a string. Keys are case-sensitive.
 
 Usage:

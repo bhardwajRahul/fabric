@@ -1883,8 +1883,7 @@ func (svc *Service) Enqueue(ctx context.Context, shard int, stepID int) (err err
 }
 
 // fetchGraph retrieves a workflow graph definition by making a GET request to the workflow URL.
-// workflowName can be a short form like "playground.fabric:428/multiply-and-check"
-// or a full URL like "https://playground.fabric:428/multiply-and-check".
+// workflowName is the full URL like "https://playground.fabric:428/multiply-and-check".
 func (svc *Service) fetchGraph(ctx context.Context, workflowName string) (*workflow.Graph, error) {
 	u := workflowName
 	if !strings.Contains(u, "://") {
@@ -2638,11 +2637,14 @@ postExecution:
 	}
 	defer tx.Rollback()
 
-	// Acquire an exclusive lock on the flow row to serialize fan-in workers
-	err = tx.QueryRowContext(ctx,
-		"SELECT step_id FROM microbus_flows WHERE flow_id=? FOR_UPDATE()",
+	// Acquire an exclusive lock on the flow row to serialize fan-in workers.
+	// An UPDATE (rather than SELECT FOR UPDATE) is used to immediately acquire a
+	// write lock, preventing SQLite shared-cache deadlocks where two deferred
+	// transactions both hold read locks and neither can upgrade to write.
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_flows SET updated_at=NOW_UTC() WHERE flow_id=?",
 		flowID,
-	).Scan(new(int))
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -26,29 +26,29 @@ import (
 	"github.com/microbus-io/fabric/utils"
 )
 
-// JoinHostAndPath combines the path shorthand with a hostname.
-func JoinHostAndPath(host string, path string) string {
-	if path == "" {
+// JoinHostAndPath combines the route with a hostname.
+func JoinHostAndPath(host string, route string) string {
+	if route == "" {
 		// (empty)
 		return "https://" + host
 	}
-	if strings.HasPrefix(path, ":") {
+	if strings.HasPrefix(route, ":") {
 		// :1080/path
-		return "https://" + host + path
+		return "https://" + host + route
 	}
-	if strings.HasPrefix(path, "//") {
+	if strings.HasPrefix(route, "//") {
 		// //host.name/path/with/slash
-		return "https:" + path
+		return "https:" + route
 	}
-	if strings.HasPrefix(path, "/") {
+	if strings.HasPrefix(route, "/") {
 		// /path/with/slash
-		return "https://" + host + path
+		return "https://" + host + route
 	}
-	if !strings.Contains(path, "://") {
+	if !strings.Contains(route, "://") {
 		// path/with/no/slash
-		return "https://" + host + "/" + path
+		return "https://" + host + "/" + route
 	}
-	return path
+	return route
 }
 
 // ResolveURL resolves a URL in relation to the endpoint's base path.

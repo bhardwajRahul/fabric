@@ -29,6 +29,7 @@ import (
 	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
 	"github.com/microbus-io/fabric/examples/chatbox/chatboxapi"
 )
 
@@ -175,7 +176,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 
 	// Call the LLM service's Chat endpoint with the calculator as a tool
 	messages := []llmapi.Message{{Role: "user", Content: userMessage}}
-	tools := []llmapi.Tool{{URL: "https://calculator.example:443/arithmetic"}}
+	tools := []llmapi.Tool{{URL: calculatorapi.Arithmetic.URL()}}
 	result, err := llmapi.NewClient(svc).Chat(r.Context(), messages, tools)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

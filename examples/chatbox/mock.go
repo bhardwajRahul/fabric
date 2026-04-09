@@ -45,7 +45,7 @@ var (
 type Mock struct {
 	*Intermediate
 	mockTurn func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
-	mockDemo func(w http.ResponseWriter, r *http.Request) (err error)                                                                   // MARKER: Demo
+	mockDemo func(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: Demo
 }
 
 // NewMock creates a new mockable version of the microservice.

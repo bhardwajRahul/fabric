@@ -91,7 +91,7 @@ type ToDo interface {
 	TryBulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) // MARKER: TryBulkReserve
 	Reserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error)                                     // MARKER: Reserve
 	BulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error)    // MARKER: BulkReserve
-	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                       // MARKER: Demo
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                        // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.

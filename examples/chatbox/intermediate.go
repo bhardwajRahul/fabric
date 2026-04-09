@@ -64,7 +64,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
-	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                   // MARKER: Demo
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.

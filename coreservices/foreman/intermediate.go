@@ -68,23 +68,23 @@ type ToDo interface {
 	StartNotify(ctx context.Context, flowID string, notifyHostname string) (err error)            // MARKER: StartNotify
 	Snapshot(ctx context.Context, flowID string) (status string, state map[string]any, err error) // MARKER: Snapshot
 
-	Resume(ctx context.Context, flowID string, resumeData any) (err error)                                  // MARKER: Resume
-	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) // MARKER: Fork
-	Cancel(ctx context.Context, flowID string) (err error)                                                  // MARKER: Cancel
-	History(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error)                    // MARKER: History
-	Retry(ctx context.Context, flowID string) (err error)                                                   // MARKER: Retry
-	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)           // MARKER: List
-	CreateTask(ctx context.Context, taskName string, initialState any) (flowID string, err error)           // MARKER: CreateTask
-	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                         // MARKER: Enqueue
-	Await(ctx context.Context, flowID string) (status string, state map[string]any, err error)              // MARKER: Await
-	NotifyStatusChange(ctx context.Context, flowID string, status string) (err error)                       // MARKER: NotifyStatusChange
-	PurgeExpiredFlows(ctx context.Context) (err error)                                                      // MARKER: PurgeExpiredFlows
-	BreakBefore(ctx context.Context, flowID string, taskName string, enabled bool) (err error)              // MARKER: BreakBefore
-	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error)    // MARKER: Run
-	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                // MARKER: Continue
-	OnChangedNumShards(ctx context.Context) (err error)                                                     // MARKER: NumShards
-	OnObserveQueueDepth(ctx context.Context) (err error)                                                    // MARKER: QueueDepth
-	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                      // MARKER: HistoryMermaid
+	Resume(ctx context.Context, flowID string, resumeData any) (err error)                                           // MARKER: Resume
+	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                     // MARKER: Fork
+	Cancel(ctx context.Context, flowID string) (err error)                                                           // MARKER: Cancel
+	History(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error)                             // MARKER: History
+	Retry(ctx context.Context, flowID string) (err error)                                                            // MARKER: Retry
+	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                    // MARKER: List
+	CreateTask(ctx context.Context, taskName string, initialState any) (flowID string, err error)                    // MARKER: CreateTask
+	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                  // MARKER: Enqueue
+	Await(ctx context.Context, flowID string) (status string, state map[string]any, err error)                       // MARKER: Await
+	NotifyStatusChange(ctx context.Context, flowID string, status string) (err error)                                // MARKER: NotifyStatusChange
+	PurgeExpiredFlows(ctx context.Context) (err error)                                                               // MARKER: PurgeExpiredFlows
+	BreakBefore(ctx context.Context, flowID string, taskName string, enabled bool) (err error)                       // MARKER: BreakBefore
+	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error) // MARKER: Run
+	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)              // MARKER: Continue
+	OnChangedNumShards(ctx context.Context) (err error)                                                              // MARKER: NumShards
+	OnObserveQueueDepth(ctx context.Context) (err error)                                                             // MARKER: QueueDepth
+	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                               // MARKER: HistoryMermaid
 }
 
 // NewService creates a new instance of the microservice.
@@ -127,7 +127,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe(foremanapi.Create.Method, foremanapi.Create.Route, svc.doCreate)                // MARKER: Create
 	svc.Subscribe(foremanapi.Start.Method, foremanapi.Start.Route, svc.doStart)                   // MARKER: Start
 	svc.Subscribe(foremanapi.StartNotify.Method, foremanapi.StartNotify.Route, svc.doStartNotify) // MARKER: StartNotify
-	svc.Subscribe(foremanapi.Snapshot.Method, foremanapi.Snapshot.Route, svc.doSnapshot)           // MARKER: Snapshot
+	svc.Subscribe(foremanapi.Snapshot.Method, foremanapi.Snapshot.Route, svc.doSnapshot)          // MARKER: Snapshot
 
 	svc.Subscribe(foremanapi.Resume.Method, foremanapi.Resume.Route, svc.doResume)                                                    // MARKER: Resume
 	svc.Subscribe(foremanapi.Fork.Method, foremanapi.Fork.Route, svc.doFork)                                                          // MARKER: Fork
@@ -140,7 +140,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe(foremanapi.Await.Method, foremanapi.Await.Route, svc.doAwait)                                                       // MARKER: Await
 	svc.Subscribe(foremanapi.NotifyStatusChange.Method, foremanapi.NotifyStatusChange.Route, svc.doNotifyStatusChange, sub.NoQueue()) // MARKER: NotifyStatusChange
 	svc.Subscribe(foremanapi.BreakBefore.Method, foremanapi.BreakBefore.Route, svc.doBreakBefore)                                     // MARKER: BreakBefore
-	svc.Subscribe(foremanapi.Run.Method, foremanapi.Run.Route, svc.doRun)                                                            // MARKER: Run
+	svc.Subscribe(foremanapi.Run.Method, foremanapi.Run.Route, svc.doRun)                                                             // MARKER: Run
 	svc.Subscribe(foremanapi.Continue.Method, foremanapi.Continue.Route, svc.doContinue)                                              // MARKER: Continue
 
 	// HINT: Add web endpoints here

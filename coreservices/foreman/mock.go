@@ -40,22 +40,22 @@ type Mock struct {
 	mockStartNotify func(ctx context.Context, flowID string, notifyHostname string) (err error)                 // MARKER: StartNotify
 	mockSnapshot    func(ctx context.Context, flowID string) (status string, state map[string]any, err error)   // MARKER: Snapshot
 
-	mockResume              func(ctx context.Context, flowID string, resumeData any) (err error)                                    // MARKER: Resume
-	mockFork                func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) // MARKER: Fork
-	mockCancel              func(ctx context.Context, flowID string) (err error)                                                    // MARKER: Cancel
-	mockHistory             func(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error)                       // MARKER: History
-	mockRetry               func(ctx context.Context, flowID string) (err error)                                                    // MARKER: Retry
-	mockList                func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)           // MARKER: List
-	mockCreateTask          func(ctx context.Context, taskName string, initialState any) (flowID string, err error)                 // MARKER: CreateTask
-	mockEnqueue             func(ctx context.Context, shard int, stepID int) (err error)                                            // MARKER: Enqueue
-	mockAwait               func(ctx context.Context, flowID string) (status string, state map[string]any, err error)               // MARKER: Await
-	mockNotifyStatusChange  func(ctx context.Context, flowID string, status string) (err error)                                     // MARKER: NotifyStatusChange
-	mockPurgeExpiredFlows   func(ctx context.Context) (err error)                                                                   // MARKER: PurgeExpiredFlows
-	mockBreakBefore         func(ctx context.Context, flowID string, taskName string, enabled bool) (err error)                                          // MARKER: BreakBefore
+	mockResume              func(ctx context.Context, flowID string, resumeData any) (err error)                                              // MARKER: Resume
+	mockFork                func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                      // MARKER: Fork
+	mockCancel              func(ctx context.Context, flowID string) (err error)                                                              // MARKER: Cancel
+	mockHistory             func(ctx context.Context, flowID string) (steps []foremanapi.FlowStep, err error)                                 // MARKER: History
+	mockRetry               func(ctx context.Context, flowID string) (err error)                                                              // MARKER: Retry
+	mockList                func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                     // MARKER: List
+	mockCreateTask          func(ctx context.Context, taskName string, initialState any) (flowID string, err error)                           // MARKER: CreateTask
+	mockEnqueue             func(ctx context.Context, shard int, stepID int) (err error)                                                      // MARKER: Enqueue
+	mockAwait               func(ctx context.Context, flowID string) (status string, state map[string]any, err error)                         // MARKER: Await
+	mockNotifyStatusChange  func(ctx context.Context, flowID string, status string) (err error)                                               // MARKER: NotifyStatusChange
+	mockPurgeExpiredFlows   func(ctx context.Context) (err error)                                                                             // MARKER: PurgeExpiredFlows
+	mockBreakBefore         func(ctx context.Context, flowID string, taskName string, enabled bool) (err error)                               // MARKER: BreakBefore
 	mockRun                 func(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error) // MARKER: Run
-	mockContinue            func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                // MARKER: Continue
-	mockOnObserveQueueDepth func(ctx context.Context) (err error)                                                                                            // MARKER: QueueDepth
-	mockHistoryMermaid      func(w http.ResponseWriter, r *http.Request) (err error)                                                // MARKER: HistoryMermaid
+	mockContinue            func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                   // MARKER: Continue
+	mockOnObserveQueueDepth func(ctx context.Context) (err error)                                                                             // MARKER: QueueDepth
+	mockHistoryMermaid      func(w http.ResponseWriter, r *http.Request) (err error)                                                          // MARKER: HistoryMermaid
 }
 
 // NewMock creates a new mockable version of the microservice.

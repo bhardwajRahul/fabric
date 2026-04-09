@@ -193,8 +193,7 @@ The actor's JWT claims are captured at `Create` time and stored in the flow's `a
 
 When `SQLDataSourceName` is empty (default in `TESTING` deployment), the foreman uses an in-memory SQLite database via `sequel.OpenTesting`. Key differences from server-based databases:
 
-- **`FOR_UPDATE()` virtual function** - used in `advanceFlow` instead of raw `FOR UPDATE`. Expands to the appropriate syntax per driver; empty string on SQLite where transaction-level locking is sufficient.
-- **Shared-cache deadlocks** - SQLite with `cache=shared` uses table-level locks. Concurrent transactions that read-then-write the same table produce `SQLITE_LOCKED_SHAREDCACHE` errors. The foreman handles this gracefully in fan-out: one worker wins and advances the flow, the other's failure is harmless.
+- **Write-first transactions** - `advanceFlow` uses an `UPDATE` as the first operation in its transaction to immediately acquire a write lock. On MySQL/Postgres, this serializes concurrent workers (equivalent to `SELECT ... FOR UPDATE`). On SQLite with `cache=shared`, this prevents deadlocks: deferred transactions that start with reads both acquire SHARED locks, and neither can upgrade to write when the other holds a read lock. Starting with a write acquires the lock immediately, causing the second transaction to block until the first commits.
 - **Migration scripts** - all `.sql` files in `resources/sql/` include `-- DRIVER: sqlite` variants.
 
 ## Database Indexing Strategy

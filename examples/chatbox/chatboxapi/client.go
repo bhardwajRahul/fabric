@@ -61,8 +61,8 @@ func (d *Def) URL() string {
 
 var (
 	// HINT: Insert endpoint definitions here
-	Turn = &Def{Method: "POST", Route: `:444/turn`} // MARKER: Turn
-	Demo = &Def{Method: "ANY", Route: `//chatbox.example/demo`}   // MARKER: Demo
+	Turn = &Def{Method: "POST", Route: `:444/turn`}             // MARKER: Turn
+	Demo = &Def{Method: "ANY", Route: `//chatbox.example/demo`} // MARKER: Demo
 )
 
 // TurnIn are the input arguments of Turn.

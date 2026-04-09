@@ -34,7 +34,6 @@ import (
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/fabric/workflow"
 
-
 	"github.com/microbus-io/fabric/examples/creditflow/creditflowapi"
 	"github.com/microbus-io/fabric/examples/creditflow/resources"
 )
@@ -65,20 +64,20 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
-	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error)                                                                                                            // MARKER: VerifyCredit
+	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error)                                                                                       // MARKER: VerifyCredit
 	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error)                                                                             // MARKER: VerifyEmployment
 	InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                        // MARKER: InitIdentityVerification
-	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error)                                                                                                   // MARKER: VerifySSN
+	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error)                                                                                                  // MARKER: VerifySSN
 	VerifyAddress(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                             // MARKER: VerifyAddress
-	VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string, faultInjection string) (phoneVerified bool, err error)                                                                                       // MARKER: VerifyPhoneNumber
+	VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string, faultInjection string) (phoneVerified bool, err error)                                                                                      // MARKER: VerifyPhoneNumber
 	IdentityDecision(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error)                                                             // MARKER: IdentityDecision
 	IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                          // MARKER: IdentityVerification
 	RequestMoreInfo(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                                      // MARKER: RequestMoreInfo
-	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error)                                             // MARKER: ReviewCredit
-	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                                // MARKER: HandleCreditError
+	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error)                                           // MARKER: ReviewCredit
+	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                               // MARKER: HandleCreditError
 	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                                     // MARKER: Decision
-	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) // MARKER: CreditApproval
-	Demo(w http.ResponseWriter, r *http.Request) (err error)              // MARKER: Demo
+	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                // MARKER: CreditApproval
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                                              // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.
@@ -141,7 +140,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe(creditflowapi.IdentityDecision.Method, creditflowapi.IdentityDecision.Route, svc.doIdentityDecision)                         // MARKER: IdentityDecision
 	svc.Subscribe(creditflowapi.RequestMoreInfo.Method, creditflowapi.RequestMoreInfo.Route, svc.doRequestMoreInfo)                            // MARKER: RequestMoreInfo
 	svc.Subscribe(creditflowapi.ReviewCredit.Method, creditflowapi.ReviewCredit.Route, svc.doReviewCredit)                                     // MARKER: ReviewCredit
-	svc.Subscribe(creditflowapi.HandleCreditError.Method, creditflowapi.HandleCreditError.Route, svc.doHandleCreditError)                       // MARKER: HandleCreditError
+	svc.Subscribe(creditflowapi.HandleCreditError.Method, creditflowapi.HandleCreditError.Route, svc.doHandleCreditError)                      // MARKER: HandleCreditError
 	svc.Subscribe(creditflowapi.Decision.Method, creditflowapi.Decision.Route, svc.doDecision)                                                 // MARKER: Decision
 
 	// HINT: Add graph endpoints here

@@ -43,13 +43,13 @@ var (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockChat            func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error)             // MARKER: Chat
-	mockTurn            func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error)                   // MARKER: Turn
-	mockInitChat        func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error) // MARKER: InitChat
-	mockCallLLM         func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error)                                   // MARKER: CallLLM
+	mockChat            func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error)                                                                    // MARKER: Chat
+	mockTurn            func(ctx context.Context, messages []llmapi.Message, tools []llmapi.ToolDef) (completion *llmapi.TurnCompletion, err error)                                                            // MARKER: Turn
+	mockInitChat        func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error)                                          // MARKER: InitChat
+	mockCallLLM         func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error)                                                         // MARKER: CallLLM
 	mockProcessResponse func(ctx context.Context, flow *workflow.Flow, llmContent string, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, err error) // MARKER: ProcessResponse
-	mockExecuteTool     func(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error)                                                     // MARKER: ExecuteTool
-	mockChatLoop        func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error) // MARKER: ChatLoop
+	mockExecuteTool     func(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error)                                                                                    // MARKER: ExecuteTool
+	mockChatLoop        func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (messagesOut []llmapi.Message, err error)                                               // MARKER: ChatLoop
 }
 
 // NewMock creates a new mockable version of the microservice.

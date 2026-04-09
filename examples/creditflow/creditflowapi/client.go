@@ -75,7 +75,7 @@ var (
 	HandleCreditError        = Def{Method: "POST", Route: ":428/handle-credit-error"}        // MARKER: HandleCreditError
 	Decision                 = Def{Method: "POST", Route: ":428/decision"}                   // MARKER: Decision
 	CreditApproval           = Def{Method: "GET", Route: ":428/credit-approval"}             // MARKER: CreditApproval
-	Demo                     = Def{Method: "ANY", Route: "/demo"}                           // MARKER: Demo
+	Demo                     = Def{Method: "ANY", Route: "/demo"}                            // MARKER: Demo
 )
 
 // multicastResponse packs the response of a functional multicast.

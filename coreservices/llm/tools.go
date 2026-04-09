@@ -51,13 +51,14 @@ func (svc *Service) resolveToolFromOpenAPI(ctx context.Context, tool llmapi.Tool
 	}
 
 	// The OpenAPI spec is at the same host:port with the path replaced by /openapi.json
-	afterScheme := strings.TrimPrefix(toolURL, "https://")
-	slashIdx := strings.Index(afterScheme, "/")
-	hostPort := afterScheme
-	if slashIdx >= 0 {
-		hostPort = afterScheme[:slashIdx]
+	var openAPIURL string
+	doubleSlash := strings.Index(toolURL, "://")
+	pathSlash := strings.Index(toolURL[doubleSlash+3:], "/")
+	if pathSlash > 0 {
+		openAPIURL = toolURL[:doubleSlash+3+pathSlash] + "/openapi.json"
+	} else {
+		openAPIURL = toolURL + "/openapi.json"
 	}
-	openAPIURL := "https://" + hostPort + "/openapi.json"
 
 	resp, err := svc.Request(
 		ctx,
@@ -88,7 +89,7 @@ func (svc *Service) resolveToolFromOpenAPI(ctx context.Context, tool llmapi.Tool
 	}
 
 	// Find the matching path and operation
-	fullPath := "/" + afterScheme
+	fullPath := toolURL[doubleSlash+2:]
 	var op *openapi.Operation
 	var httpMethod string
 	for specPath, methods := range doc.Paths {

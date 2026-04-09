@@ -275,7 +275,7 @@ func (g *Graph) Mermaid() string {
 	labels := make(map[string]string, len(g.nodes))
 	for i, t := range g.nodes {
 		ids[t.Name] = fmt.Sprintf("t%d", i)
-		labels[t.Name] = strings.TrimPrefix(t.Name, "https://")
+		labels[t.Name] = stripProto(t.Name)
 	}
 
 	// Entry point arrow
@@ -490,9 +490,13 @@ func mapsEqual(a, b map[string]bool) bool {
 	return true
 }
 
-// stripProto removes the "https://" prefix from a task URL for cleaner error messages.
+// stripProto removes the scheme prefix from a task URL for cleaner error messages.
 func stripProto(s string) string {
-	return strings.TrimPrefix(s, "https://")
+	var x string
+	if _, x, _ = strings.Cut(s, "://"); x == "" {
+		x = s
+	}
+	return x
 }
 
 // MarshalJSON serializes the graph to JSON.
