@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Setup NATS server
-        uses: step-security/nats-action@v0
+        uses: onichandame/nats-action@master
         with:
           port: 4222
       - uses: actions/setup-go@v6
