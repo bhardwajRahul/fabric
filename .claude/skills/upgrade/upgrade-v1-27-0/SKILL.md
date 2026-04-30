@@ -1,18 +1,17 @@
 ---
 name: upgrade-v1-27-0
 user-invocable: false
-description: Called by upgrade-microbus. Upgrades the project from v1.26.x or v1.27.x to the current latest layout. Reshapes each microservice's *api package to use Hostname + In/Out structs + Def{Method, Route} literals, replaces svc.Subscribe(...) calls in intermediate.go with svc.Subscribe("Name", handler, sub.Method/Route/Description/<Feature>), drops the per-service doOpenAPI handler (the connector now serves :0/openapi.json built-in), drops Test*_OpenAPI tests, and migrates LLM tool callers to the []string URL contract.
+description: Called by upgrade-microbus. Upgrades the project from v1.26.x to the current latest layout. Replaces svc.Subscribe(...) calls in intermediate.go with svc.Subscribe("Name", handler, sub.Method/Route/Description/<Feature>), drops the per-service doOpenAPI handler (the connector now serves :0/openapi.json built-in), drops Test*_OpenAPI tests, and migrates LLM tool callers to the []string URL contract.
 ---
 
 ## Background
 
 Two waves of changes have to land together when upgrading from v1.26.x:
 
-**Wave 1 (originally v1.27.0):**
+**Wave 1:**
 - The OpenAI provider service was renamed from `openaillm` (hostname `openai.llm.core`) to `chatgptllm` (hostname `chatgpt.llm.core`).
 
-**Wave 2 (post-v1.27.0):**
-- Each microservice's `*api/` package now holds the `Hostname` constant, In/Out structs, and a `var (...)` block of `Def{Method, Route}` literals. The old `*openapi.Endpoint` vars and the package-level `Service *openapi.Service` are gone. `Def.URL()` is the canonical helper for building `https://hostname:port/route` strings.
+**Wave 2:**
 - Subscriptions are registered through `svc.Subscribe("Name", handler, sub.At(..., ...), sub.Description(...) sub.<Feature>(In{}, Out{}))` instead of the untyped `svc.Subscribe(method, route, handler, opts...)`. The connector keeps an `Unsubscribe(name)` to undo a `Listen`.
 - The per-service `doOpenAPI` handler is gone. The connector serves `/openapi.json` built-in (initially on `:0`; moved to `:888` in Wave 3 - see below): it walks its own subscription map, filters by feature type and actor claims, and renders the OpenAPI document directly. Microservices no longer import `openapi` or render anything themselves.
 - The `openapi` package now contains both the registration types (`Service`, `Endpoint`, `Document`, …) and the `Render` function - the old `openapi/doc` subpackage is gone. `openapi.Doc` was renamed to `openapi.Document`.
@@ -55,33 +54,15 @@ Upgrade a Microbus project to the current layout:
 
 #### Step 1: Find All Microservices to Upgrade
 
-Find all microservice directories in the project that contain a `*api/client.go` file. Exclude files under `.claude/skills/` - those templates are maintained separately. A microservice is already on the latest layout if its `*api/endpoints.go` contains a `type Def struct` declaration and a `var (...)` block of `Def{Method:..., Route:...}` literals, **and** there is no `var Service = &openapi.Service{...}` and no `*openapi.Endpoint{...}` literal in the file.
+Find all microservice directories in the project that contain a `*api/client.go` file. Exclude files under `.claude/skills/` - those templates are maintained separately. A microservice is already on the latest layout if its `intermediate.go` uses the named-Subscribe form (`svc.Subscribe("Name", handler, sub.At(...), sub.<Feature>(...))`) and contains no `doOpenAPI` method.
 
 #### Step 2: Regenerate Boilerplate Per Microservice
 
 For each microservice that needs upgrading, pick **one** of these two paths:
 
-**Path A - Minimal patch (preferred when the microservice was last touched on v1.27.x and only needs the Listen/Def reshape).** Edit in place - this is dramatically faster than a full regenerate. Five edits, in order:
+**Path A - Minimal patch (preferred when the microservice only needs the Listen reshape).** Edit in place - this is dramatically faster than a full regenerate. Five edits, in order:
 
-1. **Reshape `*api/endpoints.go`**.
-   - Drop the `import "github.com/microbus-io/fabric/openapi"` line. Add `import "github.com/microbus-io/fabric/httpx"` if not present.
-   - Add the `Def` type and `URL()` helper at the top (right after the `Hostname` constant):
-     ```go
-     // Def is the routing identity of an endpoint exposed by this microservice.
-     type Def struct {
-         Method string
-         Route  string
-     }
-
-     // URL is the full URL of the endpoint, joined with the package-level Hostname.
-     func (d Def) URL() string {
-         return httpx.JoinHostAndPath(Hostname, d.Route)
-     }
-     ```
-   - Replace each `Foo = &openapi.Endpoint{Type: ..., Name: ..., Hostname: ..., Method: ..., Route: ..., Summary: ..., Description: ..., InputArgs: ..., OutputArgs: ...}` literal with a single-line `Foo = Def{Method: ..., Route: ...}` literal. Preserve the `// MARKER: Foo` comment. Drop the `Type`, `Name`, `Hostname`, `Summary`, `Description`, `InputArgs`, `OutputArgs`, `RequiredClaims` fields - they move to the `svc.Subscribe(...)` block in `intermediate.go`.
-   - Delete the package-level `var Service = &openapi.Service{...}` block entirely.
-
-2. **Rewrite each `svc.Subscribe(...)` call in `intermediate.go` as a `svc.Subscribe(...)` block**. For every subscription except the openapi one (handled in step 3), the new shape is:
+1. **Rewrite each `svc.Subscribe(...)` call in `intermediate.go` as a `svc.Subscribe(...)` block**. For every subscription except the openapi one (handled in step 2), the new shape is:
    ```go
    svc.Subscribe( // MARKER: Foo
 "Foo", svc.doFoo,
@@ -97,11 +78,11 @@ sub.Description(`Foo does X.`),
    - `sub.Workflow(In{}, Out{})` for workflow graphs
    - Inbound events do NOT use `svc.Subscribe` directly - they go through the source service's `Hook` (which itself calls `Listen`/`Unsubscribe` internally).
 
-   The `sub.Description(...)` text is the godoc that used to live on the `*openapi.Endpoint.Description` field. Carry over multi-line descriptions verbatim, including any `Input:` / `Output:` sections. Carry over `sub.RequiredClaims(...)`, `sub.NoQueue()`, `sub.Queue(...)` from any options that were on the old `Subscribe` call.
+   The `sub.Description(...)` text is the godoc on the handler method in `service.go`. Carry over multi-line descriptions verbatim, including any `Input:` / `Output:` sections. Carry over `sub.RequiredClaims(...)`, `sub.NoQueue()`, `sub.Queue(...)` from any options that were on the old `Subscribe` call.
 
-3. **Delete the `:0/openapi.json` Subscribe call and the entire `doOpenAPI` method from `intermediate.go`.** Both lines are gone - the connector serves the route built-in. Drop the now-unused imports: `frame`, `openapi`, `openapi/doc`. Bump the `Version` const by 1.
+2. **Delete the `:0/openapi.json` Subscribe call and the entire `doOpenAPI` method from `intermediate.go`.** Both lines are gone - the connector serves the route built-in. Drop the now-unused imports: `frame`, `openapi`, `openapi/doc`. Bump the `Version` const by 1.
 
-4. **Update outbound-event `Hook` methods in `*api/client.go`**. The Hook generator now uses `Listen`/`Unsubscribe` instead of `Subscribe`. For each `func (c Hook) OnFoo(...)` method, replace the body with the new pattern:
+3. **Update outbound-event `Hook` methods in `*api/client.go`**. The Hook generator now uses `Listen`/`Unsubscribe` instead of `Subscribe`. For each `func (c Hook) OnFoo(...)` method, replace the body with the new pattern:
    ```go
    func (c Hook) OnFoo(handler func(...)) (unsub func() error, err error) { // MARKER: OnFoo
        doOnFoo := func(w http.ResponseWriter, r *http.Request) error { /* unchanged */ }
@@ -118,9 +99,9 @@ sub.InboundEvent(OnFooIn{}, OnFooOut{}),
    }
    ```
 
-5. **Remove `TestMyService_OpenAPI` from `service_test.go`** if present. Drop any imports that become unused (`io`, `net/http`, `httpx`, `pub`, `regexp` are common stragglers - keep them if other tests still reference them or if they appear in the lint-suppression `var (_ ...)` block).
+4. **Remove `TestMyService_OpenAPI` from `service_test.go`** if present. Drop any imports that become unused (`io`, `net/http`, `httpx`, `pub`, `regexp` are common stragglers - keep them if other tests still reference them or if they appear in the lint-suppression `var (_ ...)` block).
 
-6. **Bump `manifest.yaml`** `frameworkVersion` to the current target version and update `modifiedAt` to the current UTC timestamp.
+5. **Bump `manifest.yaml`** `frameworkVersion` to the current target version and update `modifiedAt` to the current UTC timestamp.
 
 `service.go`, `mock.go`, `AGENTS.md`, `CLAUDE.md`, `PROMPTS.md` stay untouched in Path A.
 
@@ -274,8 +255,6 @@ Common stragglers to grep for (post-upgrade, none of these should appear in prod
 - `_\?,\s*err\s*[:=]\+\s*[a-zA-Z_][a-zA-Z0-9_.]*\.Subscribe(` - legacy two-return `Subscribe` form; the new API returns `error` only and unsub is by name (see Step 3)
 - `\.Subscribe("(GET\|POST\|PUT\|DELETE\|PATCH\|HEAD\|OPTIONS\|ANY)"` - legacy positional form with HTTP method as the first argument (see Step 3)
 - `func \(svc \*Intermediate\) doOpenAPI\(` - old per-service OpenAPI handler
-- `\*openapi\.Endpoint\b` - old endpoint var type; `Def{...}` replaces it
-- `var Service = &openapi\.Service` - old package-level Service var; should be deleted
 - `openapi/doc"` - old `Render` import path; the renderer is now in `openapi` itself
 - `openapi\.Doc\b` - renamed to `openapi.Document`
 - `llmapi\.ToolsOf\b` - replaced by `[]string{...URL()}`
