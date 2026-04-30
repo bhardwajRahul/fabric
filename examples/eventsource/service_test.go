@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -368,36 +369,42 @@ func TestEventsource_OnRegistered(t *testing.T) { // MARKER: OnRegistered
 		assert := testarossa.For(t)
 
 		// Track that events are fired for each registration
-		expectedEmails := map[string]bool{
-			"alice@example.com": true,
-			"bob@company.org":   true,
-			"carol@test.io":     true,
-			"paul@nowhere.cc":   true,
-			"john@somewhere.cc": true,
+		emails := []string{
+			"alice@example.com",
+			"bob@company.org",
+			"carol@test.io",
+			"paul@nowhere.cc",
+			"john@somewhere.cc",
 		}
-		done := make(chan bool, len(expectedEmails))
+		done := make(chan bool, len(emails))
+		var mu sync.Mutex
+		seen := make(map[string]int, len(emails))
 
 		unsub, _ := hook.OnRegistered(func(ctx context.Context, email string) (err error) {
-			// Verify each email matches expected order
-			found := expectedEmails[email]
-			expectedEmails[email] = false
-			assert.True(found, "%s", email)
+			mu.Lock()
+			seen[email]++
+			mu.Unlock()
 			done <- true
 			return nil
 		})
 		defer unsub()
 
 		// Register multiple users
-		for email := range expectedEmails {
+		for _, email := range emails {
 			allowed, err := client.Register(ctx, email)
 			assert.Expect(
 				allowed, true,
 				err, nil,
 			)
 		}
-		for range expectedEmails {
+		for range emails {
 			<-done // OnRegistered is firing async, so need to wait
 		}
+		mu.Lock()
+		for _, email := range emails {
+			assert.Equal(1, seen[email], "%s", email)
+		}
+		mu.Unlock()
 	})
 
 	t.Run("event_receives_original_email", func(t *testing.T) {

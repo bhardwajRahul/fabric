@@ -64,7 +64,10 @@ func (svc *Service) OnAllowRegister(ctx context.Context, email string) (allow bo
 		return false, nil
 	}
 	plane := svc.Plane()
-	if slices.Contains(registrations[plane], email) {
+	mux.Lock()
+	taken := slices.Contains(registrations[plane], email)
+	mux.Unlock()
+	if taken {
 		return false, nil
 	}
 	return true, nil
