@@ -29,6 +29,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/microbus-io/errors"
@@ -608,11 +609,22 @@ func TestConnector_SubPendingOps(t *testing.T) {
 	<-start
 	assert.Equal(int32(2), con.pendingOps.Load())
 
+	// The handler goroutine's deferred c.pendingOps.Add(-1) runs after the response is
+	// published on the transport, so under heavy parallel test load the caller's GET can
+	// return (and unblock end) before the decrement is observed. Poll briefly.
+	waitForPending := func(want int32) {
+		deadline := time.Now().Add(2 * time.Second)
+		for con.pendingOps.Load() != want && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+	}
 	<-hold
 	<-end
+	waitForPending(1)
 	assert.Equal(int32(1), con.pendingOps.Load())
 	<-hold
 	<-end
+	waitForPending(0)
 	assert.Zero(con.pendingOps.Load())
 }
 
