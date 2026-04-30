@@ -3725,7 +3725,7 @@ func (svc *Service) Await(ctx context.Context, flowKey string) (status string, s
 		case <-ch:
 			continue
 		case <-ctx.Done():
-			return "", nil, nil
+			return "", nil, errors.Trace(ctx.Err(), http.StatusRequestTimeout)
 		}
 	}
 }

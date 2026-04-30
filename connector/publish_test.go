@@ -1436,7 +1436,7 @@ func TestConnector_MassMulticast(t *testing.T) {
 }
 
 func TestConnector_KnownResponders(t *testing.T) {
-	t.Parallel()
+	// No parallel - time sensitive test
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
