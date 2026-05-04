@@ -9,7 +9,7 @@ The Microbus framework uses environment variables for various purposes:
 - Configuring the URL to the OpenTelemetry collector endpoint
 - Designating a geographic locality
 
-Environment variables may also be set by placing an `env.yaml` or `env.local.yaml` file in the working directory of the executable running the microservice, or any ancestor directory thereof. The bundled example application includes such a file at `main/env.yaml`.
+Environment variables may also be set by placing an `env.yaml` or `env.local.yaml` file in the working directory of the executable running the microservice, or any ancestor directory thereof. The bundled example application includes such a file at `main/env.yaml`. The [`env` package](../structure/env.md) writes these values through to the real OS environment at process start, so third-party SDKs that read `os.Getenv` directly (the OTel exporter, gRPC, AWS SDK, etc.) see them transparently. Real OS env vars set before the binary launches always win over yaml values.
 
 ### Transports
 
@@ -45,6 +45,8 @@ Setting the `MICROBUS_LOG_DEBUG` environment variable to `1` or `true` is requir
 Microbus pushes telemetry to Grafana via its OpenTelemetry collector. The endpoint of the collector is configured using the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` environment variables.
 
 The `OTEL_METRIC_EXPORT_INTERVAL` variable can be used to set the interval (in milliseconds) between pushes of metrics. It defaults to 15 seconds in `LOCAL` or `TESTING` deployments, and 60 seconds in `PROD` or `LAB` deployments.
+
+The `OTEL_EXPORTER_OTLP_TIMEOUT` variable sets the per-export timeout in milliseconds. Microbus uses lazy connection (no eager dial at startup) and disables retries on the OTLP exporter, so a misconfigured or unreachable collector does not stall startup or block exports indefinitely - exports simply time out and are dropped.
 
 Other [OpenTelemetry environment variables](https://opentelemetry.io/docs/languages/sdk-configuration/) are respected.
 

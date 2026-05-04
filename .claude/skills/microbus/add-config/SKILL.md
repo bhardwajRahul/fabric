@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Creating or modifying a configuration property:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Determine type
 - [ ] Step 3: Determine properties
 - [ ] Step 4: Extend the ToDo interface
@@ -28,9 +28,9 @@ Creating or modifying a configuration property:
 - [ ] Step 13: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Determine Type
 

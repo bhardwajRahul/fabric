@@ -13,16 +13,16 @@ Copy this checklist and track your progress:
 
 ```
 Renaming the object:
-- [ ] Step 1: Read Local AGENTS.md File
+- [ ] Step 1: Read Local CLAUDE.md File
 - [ ] Step 2: Update Type Definitions
 - [ ] Step 3: Update References
 - [ ] Step 4: Alias the Old Type Definitions
 - [ ] Step 5: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Update Type Definitions
 

@@ -63,7 +63,11 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+	if model == "" {
+		return "", nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+
 	// Convert messages
 	contents := make([]geminiContent, 0, len(messages))
 	for _, msg := range messages {
@@ -136,45 +140,50 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 		Contents: contents,
 		Tools:    gemTools,
 	}
+	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0) {
+		reqBody.GenerationConfig = &geminiGenConfig{
+			MaxOutputTokens: options.MaxTokens,
+			Temperature:     options.Temperature,
+		}
+	}
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	apiURL := svc.BaseURL() + "/v1beta/models/" + svc.Model() + ":generateContent?key=" + svc.APIKey()
+	apiURL := svc.BaseURL() + "/v1beta/models/" + model + ":generateContent?key=" + svc.APIKey()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return nil, errors.New("Gemini API error %d: %s", httpResp.StatusCode, string(respBody))
+		return "", nil, llmapi.Usage{}, errors.New("Gemini API error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	var gemResp geminiResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&gemResp)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	completion = &llmapi.TurnCompletion{}
 	if len(gemResp.Candidates) > 0 {
 		for _, part := range gemResp.Candidates[0].Content.Parts {
 			if part.Text != "" {
-				completion.Content += part.Text
+				content += part.Text
 			}
 			if part.FunctionCall != nil {
 				args, _ := json.Marshal(part.FunctionCall.Args)
-				completion.ToolCalls = append(completion.ToolCalls, llmapi.ToolCall{
+				toolCalls = append(toolCalls, llmapi.ToolCall{
 					ID:        part.FunctionCall.Name,
 					Name:      part.FunctionCall.Name,
 					Arguments: args,
@@ -182,5 +191,22 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 			}
 		}
 	}
-	return completion, nil
+
+	cachedTokens := gemResp.UsageMetadata.CachedContentTokenCount
+	usage = llmapi.Usage{
+		InputTokens:     gemResp.UsageMetadata.PromptTokenCount - cachedTokens,
+		OutputTokens:    gemResp.UsageMetadata.CandidatesTokenCount,
+		CacheReadTokens: cachedTokens,
+		Model:           gemResp.ModelVersion,
+		Turns:           1,
+	}
+	if usage.InputTokens < 0 {
+		usage.InputTokens = gemResp.UsageMetadata.PromptTokenCount
+		usage.CacheReadTokens = 0
+	}
+	if usage.Model == "" {
+		usage.Model = model
+	}
+
+	return content, toolCalls, usage, nil
 }

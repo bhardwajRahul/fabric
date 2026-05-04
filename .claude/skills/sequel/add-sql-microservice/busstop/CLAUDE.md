@@ -1,1 +1,1 @@
-**CRITICAL**: Read `AGENTS.md` immediately.
+# busstop.hostname

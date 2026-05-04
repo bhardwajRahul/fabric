@@ -352,7 +352,7 @@ func (_c MulticastClient) Ping(ctx context.Context, method string, relativeURL s
 }
 
 /*
-Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.
+Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice in order to demonstrate a call from one microservice to another.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.
@@ -373,7 +373,7 @@ func (_c Client) Calculator(ctx context.Context, method string, relativeURL stri
 }
 
 /*
-Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.
+Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice in order to demonstrate a call from one microservice to another.
 
 If a URL is provided, it is resolved relative to the URL of the endpoint.
 If the body is of type io.Reader, []byte or string, it is serialized in binary form.

@@ -1,2 +1,2 @@
+# http.egress.core
 
-**CRITICAL**: Read `AGENTS.md` immediately.

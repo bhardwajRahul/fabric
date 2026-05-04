@@ -31,4 +31,8 @@ Port `:444` is used by convention for endpoints that should remain internal. Any
 
 Port `:417` is the default port used for [events](../blocks/events.md).
 
-An endpoint that subscribes on port `:0` receives messages on any port. 
+An endpoint that subscribes on port `:0` receives messages on any port.
+
+Port `:428` is the default port used for [task endpoints](../blocks/agentic-workflows.md) of agentic workflows.
+
+In a `PROD` deployment, the [HTTP ingress proxy](../structure/coreservices-httpingress.md) blocks inbound requests on ports `:1` through `:1023`, except `:80` and `:443`. Port `:888` is blocked in all deployments.

@@ -63,7 +63,11 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Turn executes a single LLM turn using the ChatGPT provider.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+	if model == "" {
+		return "", nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+
 	// Convert messages
 	oaiMsgs := make([]openaiMessage, 0, len(messages))
 	for _, msg := range messages {
@@ -105,52 +109,69 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 	}
 
 	reqBody := openaiRequest{
-		Model:    svc.Model(),
+		Model:    model,
 		Messages: oaiMsgs,
 		Tools:    oaiTools,
+	}
+	if options != nil {
+		reqBody.MaxTokens = options.MaxTokens
+		reqBody.Temperature = options.Temperature
 	}
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
 	apiURL := svc.BaseURL() + "/v1/chat/completions"
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+svc.APIKey())
 
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return nil, errors.New("OpenAI API error %d: %s", httpResp.StatusCode, string(respBody))
+		return "", nil, llmapi.Usage{}, errors.New("OpenAI API error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	var oaiResp openaiResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&oaiResp)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	completion = &llmapi.TurnCompletion{}
 	if len(oaiResp.Choices) > 0 {
 		choice := oaiResp.Choices[0].Message
-		completion.Content = choice.Content
+		content = choice.Content
 		for _, tc := range choice.ToolCalls {
-			completion.ToolCalls = append(completion.ToolCalls, llmapi.ToolCall{
+			toolCalls = append(toolCalls, llmapi.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: json.RawMessage(tc.Function.Arguments),
 			})
 		}
 	}
-	return completion, nil
+
+	cachedTokens := oaiResp.Usage.PromptTokensDetails.CachedTokens
+	usage = llmapi.Usage{
+		InputTokens:     oaiResp.Usage.PromptTokens - cachedTokens,
+		OutputTokens:    oaiResp.Usage.CompletionTokens,
+		CacheReadTokens: cachedTokens,
+		Model:           oaiResp.Model,
+		Turns:           1,
+	}
+	if usage.InputTokens < 0 {
+		usage.InputTokens = oaiResp.Usage.PromptTokens
+		usage.CacheReadTokens = 0
+	}
+
+	return content, toolCalls, usage, nil
 }

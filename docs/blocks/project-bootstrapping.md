@@ -26,7 +26,6 @@ myproject/
 │   ├── env.yaml                # Environment variables for main app
 │   └── main.go                 # Main application
 ├── .gitignore
-├── AGENTS.md                   # Instructions for coding agents
 ├── CLAUDE.md                   # Instructions for Claude
 ├── config.yaml                 # Configuration properties
 ├── config.local.yaml           # git ignored configuration properties

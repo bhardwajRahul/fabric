@@ -1,2 +1,2 @@
+# smtp.ingress.core
 
-**CRITICAL**: Read `AGENTS.md` immediately.

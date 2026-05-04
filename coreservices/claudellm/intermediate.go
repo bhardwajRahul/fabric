@@ -53,7 +53,7 @@ var (
 
 const (
 	Hostname = claudellmapi.Hostname
-	Version  = 2
+	Version  = 3
 )
 
 // ToDo is implemented by the service or mock.
@@ -61,7 +61,7 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
+	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) // MARKER: Turn
 }
 
 // NewService creates a new instance of the microservice.
@@ -125,11 +125,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.Description(`APIKey is the API key for the Claude API.`),
 		cfg.Secret(),
 	)
-	svc.DefineConfig( // MARKER: Model
-		"Model",
-		cfg.Description(`Model is the Claude model identifier to use.`),
-		cfg.DefaultValue("claude-haiku-4-5"),
-	)
 
 	// HINT: Add inbound event sinks here
 
@@ -146,7 +141,7 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in claudellmapi.TurnIn
 	var out claudellmapi.TurnOut
 	err = marshalFunction(w, r, claudellmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Completion, err = svc.Turn(r.Context(), in.Messages, in.Tools)
+		out.Content, out.ToolCalls, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace
@@ -191,20 +186,6 @@ SetAPIKey sets the value of the configuration property.
 */
 func (svc *Intermediate) SetAPIKey(value string) (err error) { // MARKER: APIKey
 	return svc.SetConfig("APIKey", value)
-}
-
-/*
-Model is the Claude model identifier to use.
-*/
-func (svc *Intermediate) Model() (value string) { // MARKER: Model
-	return svc.Config("Model")
-}
-
-/*
-SetModel sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetModel(value string) (err error) { // MARKER: Model
-	return svc.SetConfig("Model", value)
 }
 
 // marshalFunction handles marshaling for functional endpoints.

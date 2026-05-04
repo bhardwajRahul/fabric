@@ -286,27 +286,41 @@ func (f Frame) SetCallDepth(depth int) {
 
 // TimeBudget is the duration budgeted for the request to complete.
 // A value of 0 indicates no time budget.
+//
+// The wire format is a Go duration string (e.g. "5ms", "1h30m"). A bare integer is
+// also accepted and interpreted as a count of milliseconds, for backward compatibility
+// with frames serialized by older versions of the framework.
 func (f Frame) TimeBudget() time.Duration {
 	v := f.h.Get(HeaderTimeBudget)
 	if v == "" {
 		return 0
 	}
-	ms, err := strconv.Atoi(v)
-	if err != nil || ms < 0 {
+	if ms, err := strconv.Atoi(v); err == nil {
+		// Legacy wire format: bare integer = milliseconds.
+		if ms < 0 {
+			return 0
+		}
+		return time.Millisecond * time.Duration(ms)
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
 		return 0
 	}
-	return time.Millisecond * time.Duration(ms)
+	return d
 }
 
 // SetTimeBudget budgets a duration for the request to complete.
 // A value of 0 indicates no time budget.
+//
+// The duration is serialized via [time.Duration.String]. A budget of zero or negative
+// removes the header. See [Frame.TimeBudget] for the wire format and backward-compatibility
+// notes.
 func (f Frame) SetTimeBudget(budget time.Duration) {
-	ms := int(budget.Milliseconds())
-	if ms <= 0 {
+	if budget <= 0 {
 		f.h.Del(HeaderTimeBudget)
-	} else {
-		f.h.Set(HeaderTimeBudget, strconv.Itoa(ms))
+		return
 	}
+	f.h.Set(HeaderTimeBudget, budget.String())
 }
 
 // Queue indicates the queue of the subscription that handled the request.

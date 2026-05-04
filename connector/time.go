@@ -164,7 +164,8 @@ func (c *Connector) runTicker(job *tickerCallback) {
 				ctx,
 				"microbus_callback_duration_seconds",
 				dur.Seconds(),
-				"handler", handlerName,
+				"name", job.Name,
+				"type", "ticker",
 				"error", func() string {
 					if err != nil {
 						return "ERROR"

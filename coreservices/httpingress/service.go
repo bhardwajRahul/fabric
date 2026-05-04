@@ -313,10 +313,12 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx,
 		"microbus_server_request_duration_seconds",
 		time.Since(handlerStartTime).Seconds(),
-		"handler", r.Host+"/",
+		"canonical", r.Host+"/",
+		"name", "ServeHTTP",
 		"port", port,
 		"method", r.Method,
 		"code", ww.StatusCode(),
+		"feature", "ingress",
 		"error", func() string {
 			if err != nil {
 				return "ERROR"
@@ -328,10 +330,12 @@ func (svc *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx,
 		"microbus_server_response_body_bytes",
 		float64(ww.ContentLength()),
-		"handler", r.Host+"/",
+		"canonical", r.Host+"/",
+		"name", "ServeHTTP",
 		"port", port,
 		"method", r.Method,
 		"code", ww.StatusCode(),
+		"feature", "ingress",
 		"error", func() string {
 			if err != nil {
 				return "ERROR"
@@ -356,8 +360,28 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		// Ignore requests to invalid internal hostnames, such as via https://example.com/%3Fterms=1 or https://example.com/.env
 		return errors.New("", http.StatusNotFound)
 	}
-	// Disallow requests to control plane port 888
-	if u.Port() == "888" {
+	// Disallow requests to internal ports
+	port := 443
+	if u.Scheme == "http" {
+		port = 80
+	}
+	if u.Port() != "" {
+		port, err = strconv.Atoi(u.Port())
+		if err != nil {
+			return errors.New("", http.StatusNotFound)
+		}
+	}
+	switch {
+	case port <= 0 || port >= 65536:
+		// Not a valid port
+		return errors.New("", http.StatusNotFound)
+	case port == 888:
+		// Control plane port 888 is never allowed
+		return errors.New("", http.StatusNotFound)
+	case port == 80 || port == 443: // HTTP ports are allowed
+		// Allow
+	case port < 1024 && svc.Deployment() == connector.PROD:
+		// Reserved ports are not allowed in PROD
 		return errors.New("", http.StatusNotFound)
 	}
 	internalURL := u.String()

@@ -75,22 +75,23 @@ var opMap = map[string]string{
 Turn executes a single LLM turn using the chatbox demo provider.
 It pattern-matches math questions and generates tool calls to the calculator.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+	usage = llmapi.Usage{Model: model, Turns: 1}
+
 	if len(messages) == 0 {
-		return &llmapi.TurnCompletion{Content: "I'm the Chatbox demo. Ask me a math question!"}, nil
+		return "I'm the Chatbox demo. Ask me a math question!", nil, usage, nil
 	}
 
 	lastMsg := messages[len(messages)-1]
 
 	// If the last message is a tool result, format it as a response
 	if lastMsg.Role == "tool" {
-		// Parse the tool result to extract the answer
 		var result map[string]any
 		json.Unmarshal([]byte(lastMsg.Content), &result)
 		if r, ok := result["result"]; ok {
-			return &llmapi.TurnCompletion{Content: fmt.Sprintf("The answer is %v.", r)}, nil
+			return fmt.Sprintf("The answer is %v.", r), nil, usage, nil
 		}
-		return &llmapi.TurnCompletion{Content: fmt.Sprintf("The result is: %s", lastMsg.Content)}, nil
+		return fmt.Sprintf("The result is: %s", lastMsg.Content), nil, usage, nil
 	}
 
 	// Try to match a math question
@@ -116,16 +117,13 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 			}
 
 			if calcTool != nil {
-				// Generate a tool call
 				args, _ := json.Marshal(map[string]any{"x": x, "op": op, "y": y})
-				return &llmapi.TurnCompletion{
-					Content: fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y),
-					ToolCalls: []llmapi.ToolCall{{
+				return fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y),
+					[]llmapi.ToolCall{{
 						ID:        "chatbox_1",
 						Name:      calcTool.Name,
 						Arguments: args,
-					}},
-				}, nil
+					}}, usage, nil
 			}
 
 			// No calculator tool - do the math ourselves
@@ -141,19 +139,17 @@ func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools [
 				if y != 0 {
 					answer = x / y
 				} else {
-					return &llmapi.TurnCompletion{Content: "Cannot divide by zero."}, nil
+					return "Cannot divide by zero.", nil, usage, nil
 				}
 			}
-			return &llmapi.TurnCompletion{Content: fmt.Sprintf("%d %s %d = %d", x, op, y, answer)}, nil
+			return fmt.Sprintf("%d %s %d = %d", x, op, y, answer), nil, usage, nil
 		}
 
 		// No pattern matched
-		return &llmapi.TurnCompletion{
-			Content: "I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"",
-		}, nil
+		return "I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"", nil, usage, nil
 	}
 
-	return &llmapi.TurnCompletion{Content: "I don't understand that message."}, nil
+	return "I don't understand that message.", nil, usage, nil
 }
 
 /*
@@ -166,18 +162,28 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 	}
 
 	// POST: process the chat message via the LLM service
-	r.ParseForm()
+	if err = r.ParseForm(); err != nil {
+		return errors.Trace(err)
+	}
 	userMessage := r.FormValue("message")
 	if userMessage == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Missing message"))
 		return nil
 	}
+	provider := r.FormValue("provider")
+	if provider == "" {
+		provider = Hostname
+	}
+	model := r.FormValue("model")
+	if model == "" {
+		model = "chatbox-default"
+	}
 
-	// Call the LLM service's Chat endpoint with the calculator as a tool
+	// Call the LLM service's Chat endpoint with the calculator as a tool.
 	messages := []llmapi.Message{{Role: "user", Content: userMessage}}
 	tools := []string{calculatorapi.Arithmetic.URL()}
-	result, err := llmapi.NewClient(svc).Chat(r.Context(), messages, tools)
+	result, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, messages, tools, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

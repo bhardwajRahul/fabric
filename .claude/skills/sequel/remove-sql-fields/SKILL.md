@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Removing fields of the object:
-- [ ] Step 1: Read Local AGENTS.md File
+- [ ] Step 1: Read Local CLAUDE.md File
 - [ ] Step 2: Update the Type Definition of the Object
 - [ ] Step 3: Update the Type Definition of the Query
 - [ ] Step 4: Update Database Schema
@@ -23,9 +23,9 @@ Removing fields of the object:
 - [ ] Step 8: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Update the Type Definition of the Object
 

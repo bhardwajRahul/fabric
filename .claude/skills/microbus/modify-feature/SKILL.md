@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Modifying a feature of a microservice:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Identify the feature
 - [ ] Step 3: Consult the corresponding "add" skill
 - [ ] Step 4: Locate the feature's code
@@ -22,9 +22,9 @@ Modifying a feature of a microservice:
 - [ ] Step 7: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Identify the Feature
 

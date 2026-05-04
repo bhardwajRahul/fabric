@@ -19,7 +19,6 @@ package connector
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
@@ -30,7 +29,6 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/trc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -80,10 +78,18 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 		if protocol == "" && strings.Contains(endpoint, ":4317") {
 			protocol = "grpc"
 		}
+		// See connector/CLAUDE.md "OTLP exporter resilience" for why retries are disabled
+		// and how export timeout is configured.
 		if protocol == "grpc" {
-			exp, err = otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithEndpointURL(endpoint))
+			exp, err = otlpmetricgrpc.New(ctx,
+				otlpmetricgrpc.WithEndpointURL(endpoint),
+				otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{Enabled: false}),
+			)
 		} else {
-			exp, err = otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(endpoint))
+			exp, err = otlpmetrichttp.New(ctx,
+				otlpmetrichttp.WithEndpointURL(endpoint),
+				otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{Enabled: false}),
+			)
 		}
 		if err != nil {
 			return errors.Trace(err)
@@ -244,8 +250,6 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 		return nil
 	}
 
-	// OpenTelemetry: create a span for the callback
-	ctx, span := c.StartSpan(c.Lifetime(), "observe-metrics", trc.Internal())
 	c.pendingOps.Add(1)
 	startTime := time.Now()
 
@@ -262,20 +266,14 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 			err = callbackErr // Remember the last error
 		}
 	}
-	if err != nil {
-		// OpenTelemetry: record the error
-		span.SetError(err)
-		c.ForceTrace(ctx)
-	} else {
-		span.SetOK(http.StatusOK)
-	}
 	dur := time.Since(startTime)
 	c.pendingOps.Add(-1)
 	_ = c.RecordHistogram(
 		ctx,
 		"microbus_callback_duration_seconds",
 		dur.Seconds(),
-		"handler", "observe-metrics",
+		"name", "OnObserveMetrics",
+		"type", "metric",
 		"error", func() string {
 			if err != nil {
 				return "ERROR"
@@ -283,7 +281,6 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 			return "OK"
 		}(),
 	)
-	span.End()
 	return nil
 }
 

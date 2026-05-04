@@ -23,9 +23,11 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/dlru"
 	"github.com/microbus-io/fabric/utils"
@@ -871,4 +873,220 @@ func TestDLRU_AvailableInOnStartup(t *testing.T) {
 	err = gamma.Startup(ctx)
 	assert.NoError(err)
 	defer gamma.Shutdown(ctx)
+}
+
+func TestDLRU_LoadOrCompute(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	alpha := connector.New("load.or.compute.dlru")
+	err := alpha.Startup(ctx)
+	testarossa.For(t).NoError(err)
+	defer alpha.Shutdown(ctx)
+	cache := alpha.DistribCache()
+
+	t.Run("miss_invokes_maker_and_caches", func(t *testing.T) {
+		assert := testarossa.For(t)
+		var calls int
+		value, err := cache.LoadOrCompute(ctx, "miss-key", func(ctx context.Context) ([]byte, error) {
+			calls++
+			return []byte("computed"), nil
+		})
+		assert.NoError(err)
+		assert.Equal([]byte("computed"), value)
+		assert.Equal(1, calls)
+
+		// Second call should hit the cache; maker not invoked.
+		value, err = cache.LoadOrCompute(ctx, "miss-key", func(ctx context.Context) ([]byte, error) {
+			calls++
+			return []byte("should-not-be-called"), nil
+		})
+		assert.NoError(err)
+		assert.Equal([]byte("computed"), value)
+		assert.Equal(1, calls)
+	})
+
+	t.Run("singleflight_dedups_concurrent_makers", func(t *testing.T) {
+		assert := testarossa.For(t)
+		const goroutines = 100
+		var calls atomic.Int64
+		release := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		results := make([][]byte, goroutines)
+		errs := make([]error, goroutines)
+		for i := range goroutines {
+			go func() {
+				defer wg.Done()
+				<-release
+				results[i], errs[i] = cache.LoadOrCompute(ctx, "stampede-key", func(ctx context.Context) ([]byte, error) {
+					calls.Add(1)
+					time.Sleep(50 * time.Millisecond) // widen the singleflight window
+					return []byte("once"), nil
+				})
+			}()
+		}
+		close(release)
+		wg.Wait()
+		assert.Equal(int64(1), calls.Load())
+		for i := range goroutines {
+			assert.NoError(errs[i])
+			assert.Equal([]byte("once"), results[i])
+		}
+	})
+
+	t.Run("error_not_cached_and_returned_to_waiters", func(t *testing.T) {
+		assert := testarossa.For(t)
+		const goroutines = 20
+		var calls atomic.Int64
+		release := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		errs := make([]error, goroutines)
+		for i := range goroutines {
+			go func() {
+				defer wg.Done()
+				<-release
+				_, errs[i] = cache.LoadOrCompute(ctx, "error-key", func(ctx context.Context) ([]byte, error) {
+					calls.Add(1)
+					time.Sleep(50 * time.Millisecond)
+					return nil, errors.New("maker failed")
+				})
+			}()
+		}
+		close(release)
+		wg.Wait()
+		assert.Equal(int64(1), calls.Load())
+		for i := range goroutines {
+			assert.Error(errs[i])
+			assert.Contains(errs[i].Error(), "maker failed")
+		}
+
+		// Cache stayed empty; next caller retries.
+		_, ok, err := cache.Load(ctx, "error-key")
+		assert.NoError(err)
+		assert.False(ok)
+
+		value, err := cache.LoadOrCompute(ctx, "error-key", func(ctx context.Context) ([]byte, error) {
+			return []byte("recovered"), nil
+		})
+		assert.NoError(err)
+		assert.Equal([]byte("recovered"), value)
+	})
+
+	t.Run("validates_inputs", func(t *testing.T) {
+		assert := testarossa.For(t)
+		_, err := cache.LoadOrCompute(ctx, "", func(ctx context.Context) ([]byte, error) {
+			return nil, nil
+		})
+		assert.Error(err)
+		_, err = cache.LoadOrCompute(ctx, "key", nil)
+		assert.Error(err)
+	})
+
+	t.Run("forwards_store_options", func(t *testing.T) {
+		assert := testarossa.For(t)
+		// Compress is detectable: the brotli wrapper rewrites stored bytes, but Load returns
+		// the decompressed payload, so verify by storing a long string and reading back equal.
+		payload := []byte(utils.RandomIdentifier(4 << 10)) // 4KiB
+		value, err := cache.LoadOrCompute(ctx, "compressed-key", func(ctx context.Context) ([]byte, error) {
+			return payload, nil
+		}, dlru.Compress(true))
+		assert.NoError(err)
+		assert.Equal(payload, value)
+
+		got, ok, err := cache.Load(ctx, "compressed-key")
+		assert.NoError(err)
+		assert.True(ok)
+		assert.Equal(payload, got)
+	})
+}
+
+func TestDLRU_GetOrCompute(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	alpha := connector.New("get.or.compute.dlru")
+	err := alpha.Startup(ctx)
+	testarossa.For(t).NoError(err)
+	defer alpha.Shutdown(ctx)
+	cache := alpha.DistribCache()
+
+	type user struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+
+	t.Run("miss_invokes_maker_and_caches_typed_value", func(t *testing.T) {
+		assert := testarossa.For(t)
+		var calls int
+		var got user
+		err := cache.GetOrCompute(ctx, "user/1", &got, func(ctx context.Context) (any, error) {
+			calls++
+			return user{ID: 1, Name: "Alice"}, nil
+		})
+		assert.NoError(err)
+		assert.Equal(user{ID: 1, Name: "Alice"}, got)
+		assert.Equal(1, calls)
+
+		// Second call hits cache.
+		var got2 user
+		err = cache.GetOrCompute(ctx, "user/1", &got2, func(ctx context.Context) (any, error) {
+			calls++
+			return user{ID: 999, Name: "Bogus"}, nil
+		})
+		assert.NoError(err)
+		assert.Equal(user{ID: 1, Name: "Alice"}, got2)
+		assert.Equal(1, calls)
+	})
+
+	t.Run("singleflight_dedups_concurrent_makers", func(t *testing.T) {
+		assert := testarossa.For(t)
+		const goroutines = 100
+		var calls atomic.Int64
+		release := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+		results := make([]user, goroutines)
+		errs := make([]error, goroutines)
+		for i := range goroutines {
+			go func() {
+				defer wg.Done()
+				<-release
+				errs[i] = cache.GetOrCompute(ctx, "user/stampede", &results[i], func(ctx context.Context) (any, error) {
+					calls.Add(1)
+					time.Sleep(50 * time.Millisecond)
+					return user{ID: 42, Name: "Bob"}, nil
+				})
+			}()
+		}
+		close(release)
+		wg.Wait()
+		assert.Equal(int64(1), calls.Load())
+		for i := range goroutines {
+			assert.NoError(errs[i])
+			assert.Equal(user{ID: 42, Name: "Bob"}, results[i])
+		}
+	})
+
+	t.Run("error_not_cached", func(t *testing.T) {
+		assert := testarossa.For(t)
+		var got user
+		err := cache.GetOrCompute(ctx, "user/error", &got, func(ctx context.Context) (any, error) {
+			return nil, errors.New("backend down")
+		})
+		assert.Error(err)
+		assert.Contains(err.Error(), "backend down")
+
+		ok, err := cache.Has(ctx, "user/error")
+		assert.NoError(err)
+		assert.False(ok)
+	})
+
+	t.Run("nil_maker_returns_error", func(t *testing.T) {
+		assert := testarossa.For(t)
+		var got user
+		err := cache.GetOrCompute(ctx, "user/nil", &got, nil)
+		assert.Error(err)
+	})
 }

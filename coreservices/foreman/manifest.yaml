@@ -17,9 +17,9 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  frameworkVersion: 1.27.0
+  frameworkVersion: 1.28.0
   db: SQL
-  modifiedAt: "2026-04-26T12:00:00Z"
+  modifiedAt: "2026-05-02T03:54:31Z"
 
 functions:
   Create:

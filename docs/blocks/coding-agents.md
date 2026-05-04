@@ -25,7 +25,7 @@ All code follows a [uniform code structure](../blocks/uniform-code.md). A famili
 
 Coding agents don't operate on instinct alone. Microbus provides a layered system of instructions that train the agent to work correctly.
 
-[`AGENTS.md`](../blocks/agents-md.md) files provide context at two levels. A global `AGENTS.md` at the root of the project includes instructions applicable to the project as a whole, while a local `AGENTS.md` in each microservice's directory keeps context specific to that microservice. The local file is maintained by the agent itself as it works.
+[`CLAUDE.md`](../blocks/claude-md.md) files provide context at two levels. A global `CLAUDE.md` at the root of the project includes instructions applicable to the project as a whole, while a local `CLAUDE.md` in each microservice's directory keeps context specific to that microservice. The local file is maintained by the agent itself as it works.
 
 `.claude/rules/microbus.md` contains the conventions and patterns for working on a Microbus solution. This file is updated with each release of Microbus and should not be edited by hand.
 

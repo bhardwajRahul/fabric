@@ -89,16 +89,17 @@ func TestClaudeLLM_Mock(t *testing.T) {
 		assert := testarossa.For(t)
 
 		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedCompletion := &llmapi.TurnCompletion{Content: "Hi there!"}
+		expectedContent := "Hi there!"
 
-		_, err := mock.Turn(ctx, exampleMessages, nil)
+		_, _, _, err := mock.Turn(ctx, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
-			return expectedCompletion, nil
+		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			return expectedContent, nil, llmapi.Usage{Turns: 1, Model: model}, nil
 		})
-		result, err := mock.Turn(ctx, exampleMessages, nil)
+		content, _, usage, err := mock.Turn(ctx, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
 		assert.Expect(
-			result, expectedCompletion,
+			content, expectedContent,
+			usage.Turns, 1,
 			err, nil,
 		)
 	})
@@ -127,7 +128,7 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "/v1/messages") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"content":[{"type":"text","text":"Hello from Claude!"}],"stop_reason":"end_turn"}`))
+				w.Write([]byte(`{"content":[{"type":"text","text":"Hello from Claude!"}],"stop_reason":"end_turn","model":"claude-haiku-4-5","usage":{"input_tokens":10,"output_tokens":5}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -136,10 +137,13 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Expect(completion.Content, "Hello from Claude!")
-			assert.Expect(len(completion.ToolCalls), 0)
+		content, toolCalls, usage, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Expect(content, "Hello from Claude!")
+			assert.Expect(len(toolCalls), 0)
+			assert.Expect(usage.InputTokens, 10)
+			assert.Expect(usage.OutputTokens, 5)
+			assert.Expect(usage.Turns, 1)
 		}
 	})
 
@@ -150,7 +154,7 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "/v1/messages") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"content":[{"type":"tool_use","id":"toolu_1","name":"Arithmetic","input":{"x":3,"op":"+","y":5}}],"stop_reason":"tool_use"}`))
+				w.Write([]byte(`{"content":[{"type":"tool_use","id":"toolu_1","name":"Arithmetic","input":{"x":3,"op":"+","y":5}}],"stop_reason":"tool_use","model":"claude-haiku-4-5","usage":{"input_tokens":15,"output_tokens":8}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -159,10 +163,10 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Expect(len(completion.ToolCalls), 1)
-			assert.Expect(completion.ToolCalls[0].Name, "Arithmetic")
+		_, toolCalls, _, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Expect(len(toolCalls), 1)
+			assert.Expect(toolCalls[0].Name, "Arithmetic")
 		}
 	})
 }

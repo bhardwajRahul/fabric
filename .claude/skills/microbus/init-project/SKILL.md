@@ -51,13 +51,6 @@ Create `CLAUDE.md` at the root of the project with the following content.
 If the file already exists, prepend the content to the existing file unless it is already there.
 
 ```md
-**CRITICAL**: Read `AGENTS.md` immediately.
-```
-
-Create `AGENTS.md` at the root of the project with the following content.
-If the file already exists, prepend the content to the existing file unless it is already there.
-
-```md
 **CRITICAL**: This project uses the Microbus framework. Read all `.md` files in `.claude/rules/` before starting any task.
 ```
 

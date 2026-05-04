@@ -67,108 +67,145 @@ func (svc *Service) logPrompt(ctx context.Context, messages []llmapi.Message) {
 	}
 }
 
-// logCompletion logs the LLM's response content and tool call names.
-func (svc *Service) logCompletion(ctx context.Context, resp *llmapi.TurnCompletion) {
-	reply := resp.Content
+// logCompletion logs the LLM's response and emits the LLMTokens metric.
+func (svc *Service) logCompletion(ctx context.Context, provider string, content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage) {
+	reply := content
 	if len(reply) > 1024 {
 		reply = reply[:1024] + "..."
 	}
-	toolNames := make([]string, len(resp.ToolCalls))
-	for i, tc := range resp.ToolCalls {
+	toolNames := make([]string, len(toolCalls))
+	for i, tc := range toolCalls {
 		toolNames[i] = tc.Name
 	}
-	svc.LogInfo(ctx, "LLM answered", "reply", reply, "toolCalls", toolNames)
+	svc.LogInfo(ctx, "LLM answered",
+		"reply", reply,
+		"toolCalls", toolNames,
+		"inputTokens", usage.InputTokens,
+		"outputTokens", usage.OutputTokens,
+	)
+
+	model := usage.Model
+	if usage.InputTokens > 0 {
+		svc.IncrementLLMTokens(ctx, usage.InputTokens, provider, model, "input")
+	}
+	if usage.OutputTokens > 0 {
+		svc.IncrementLLMTokens(ctx, usage.OutputTokens, provider, model, "output")
+	}
+	if usage.CacheReadTokens > 0 {
+		svc.IncrementLLMTokens(ctx, usage.CacheReadTokens, provider, model, "cacheRead")
+	}
+	if usage.CacheWriteTokens > 0 {
+		svc.IncrementLLMTokens(ctx, usage.CacheWriteTokens, provider, model, "cacheWrite")
+	}
 }
 
 // turn calls the provider's Turn endpoint over the bus.
-func (svc *Service) turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (*llmapi.TurnCompletion, error) {
-	completion, err := llmapi.NewClient(svc).ForHost(svc.ProviderHostname()).Turn(ctx, messages, tools)
+func (svc *Service) turn(ctx context.Context, providerHost string, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+	content, toolCalls, usage, err = llmapi.NewClient(svc).ForHost(providerHost).Turn(ctx, model, messages, tools, options)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
-	return completion, nil
+	return content, toolCalls, usage, nil
 }
 
 /*
-Turn executes a single LLM turn. This endpoint delegates to the configured provider microservice.
+Turn on llm.core is a stub. The interface contract is defined here so providers can implement it,
+but llm.core does not route or delegate. Callers should ForHost(<providerHostname>) directly to
+hit a specific provider, or use Chat for the full conversation loop.
 */
-func (svc *Service) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
-	return svc.turn(ctx, messages, tools)
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+	return "", nil, llmapi.Usage{}, errors.New("not implemented on llm.core; call ForHost(<provider>).Turn or use Chat", http.StatusNotImplemented)
 }
 
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
-Each entry in tools is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
-"https://calculator.example/arithmetic"). Chat groups the URLs by host:port, fetches the
-OpenAPI document of each host, and resolves each URL to a callable tool. Only
-FeatureFunction, FeatureWeb, and FeatureWorkflow endpoints are exposed.
+The provider hostname picks which provider microservice handles the request (e.g.
+"claude.llm.core"). The model identifier is provider-specific.
 
-Example:
-
-	messages := []llmapi.Message{
-		{Role: "user", Content: "What is 17 * 23, and what's the weather in Paris?"},
-	}
-	tools := []string{
-		calculatorapi.Arithmetic.URL(),
-		dataapi.Fetch.URL(),
-	}
-	messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools)
+Each entry in toolURLs is the canonical URL of a Microbus endpoint to expose to the LLM.
+Chat groups the URLs by host:port, fetches the OpenAPI document of each host, and resolves
+each URL to a callable tool. Only FeatureFunction, FeatureWeb, and FeatureWorkflow endpoints
+are exposed.
 
 Input:
+  - provider: provider is the hostname of the LLM provider microservice to use
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
+  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
+  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
+  - usage: usage is the aggregate token consumption across all turns
 */
-func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, toolURLs []string) (messagesOut []llmapi.Message, err error) { // MARKER: Chat
+func (svc *Service) Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error) { // MARKER: Chat
+	if provider == "" {
+		return nil, llmapi.Usage{}, errors.New("provider is required", http.StatusBadRequest)
+	}
+	if model == "" {
+		return nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+
 	tools, err := svc.fetchTools(ctx, toolURLs)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, llmapi.Usage{}, errors.Trace(err)
 	}
+
 	maxRounds := svc.MaxToolRounds()
+	var turnOpts *llmapi.TurnOptions
+	if options != nil {
+		if options.MaxToolRounds > 0 {
+			maxRounds = options.MaxToolRounds
+		}
+		if options.MaxTokens > 0 || options.Temperature != 0 {
+			turnOpts = &llmapi.TurnOptions{
+				MaxTokens:   options.MaxTokens,
+				Temperature: options.Temperature,
+			}
+		}
+	}
 
 	// Conversation with the LLM
 	currentMessages := make([]llmapi.Message, len(messages))
 	copy(currentMessages, messages)
 
-	for round := range maxRounds {
-		_ = round
+	for range maxRounds {
 		// Call the LLM
 		svc.logPrompt(ctx, currentMessages)
-		resp, err := svc.turn(ctx, currentMessages, tools)
+		content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, tools, turnOpts)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, usage, errors.Trace(err)
 		}
-		svc.logCompletion(ctx, resp)
+		svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
+		usage.Add(turnUsage)
 
 		// If no tool calls, we're done
-		if len(resp.ToolCalls) == 0 {
-			if resp.Content != "" {
+		if len(toolCalls) == 0 {
+			if content != "" {
 				messagesOut = append(messagesOut, llmapi.Message{
 					Role:    "assistant",
-					Content: resp.Content,
+					Content: content,
 				})
 			}
-			return messagesOut, nil
+			return messagesOut, usage, nil
 		}
 
 		// Record the assistant's response with tool calls metadata
-		toolCallsJSON, _ := json.Marshal(resp.ToolCalls)
+		toolCallsJSON, _ := json.Marshal(toolCalls)
 		assistantMsg := llmapi.Message{
 			Role:      "assistant",
-			Content:   resp.Content,
+			Content:   content,
 			ToolCalls: string(toolCallsJSON),
 		}
 		messagesOut = append(messagesOut, assistantMsg)
 		currentMessages = append(currentMessages, assistantMsg)
 
 		// Execute each tool call
-		for _, tc := range resp.ToolCalls {
+		for _, tc := range toolCalls {
 			result, err := svc.executeTool(ctx, tc, tools)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, usage, errors.Trace(err)
 			}
 
 			toolResultMsg := llmapi.Message{
@@ -183,28 +220,38 @@ func (svc *Service) Chat(ctx context.Context, messages []llmapi.Message, toolURL
 
 	// Exhausted tool rounds - make one final call without tools to get a text response
 	svc.logPrompt(ctx, currentMessages)
-	resp, err := svc.turn(ctx, currentMessages, nil)
+	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, nil, turnOpts)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, usage, errors.Trace(err)
 	}
-	svc.logCompletion(ctx, resp)
-	if resp.Content != "" {
+	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
+	usage.Add(turnUsage)
+	if content != "" {
 		messagesOut = append(messagesOut, llmapi.Message{
 			Role:    "assistant",
-			Content: resp.Content,
+			Content: content,
 		})
 	}
-	return messagesOut, nil
+	return messagesOut, usage, nil
 }
 
 /*
-InitChat stores the caller-supplied tools in flow state for use by the chat loop.
+InitChat stores the caller-supplied tools and options in flow state for use by the chat loop.
 */
-func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
+func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
 	if len(tools) > 0 {
 		flow.Set("toolSchemas", tools)
 	}
 	maxToolRounds = svc.MaxToolRounds()
+	if options != nil && options.MaxToolRounds > 0 {
+		maxToolRounds = options.MaxToolRounds
+	}
+	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0) {
+		flow.Set("turnOptions", &llmapi.TurnOptions{
+			MaxTokens:   options.MaxTokens,
+			Temperature: options.Temperature,
+		})
+	}
 	toolRounds = 0
 	return maxToolRounds, toolRounds, nil
 }
@@ -212,32 +259,38 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages 
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error) { // MARKER: CallLLM
+func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
 	// Read tool schemas
 	var tools []llmapi.Tool
 	flow.Get("toolSchemas", &tools)
 
+	// Read turn options
+	var turnOpts *llmapi.TurnOptions
+	flow.Get("turnOptions", &turnOpts)
+
 	// Call the LLM
 	svc.logPrompt(ctx, messages)
-	resp, err := svc.turn(ctx, messages, tools)
+	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, messages, tools, turnOpts)
 	if err != nil {
-		return "", nil, errors.Trace(err)
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
-	svc.logCompletion(ctx, resp)
+	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
 
-	return resp.Content, resp.ToolCalls, nil
+	return content, toolCalls, turnUsage, nil
 }
 
 /*
-ProcessResponse inspects the LLM response and routes to the next step.
+ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
 */
-func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, err error) { // MARKER: ProcessResponse
+func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// Read internal state
 	var pending []llmapi.ToolCall
 	flow.Get("pendingToolCalls", &pending)
 
-	// Get accumulated response messages
+	// Get accumulated response messages and usage
 	flow.Get("messagesOut", &messagesOut)
+	flow.Get("usage", &usageOut)
+	usageOut.Add(turnUsage)
 
 	toolRoundsOut = toolRounds
 
@@ -250,7 +303,7 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 				Content: llmContent,
 			})
 		}
-		return messagesOut, toolsRequested, toolRoundsOut, nil
+		return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
 	// Tool calls present - check round limit
@@ -263,7 +316,7 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 				Content: llmContent,
 			})
 		}
-		return messagesOut, toolsRequested, toolRoundsOut, nil
+		return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
 	// Tool calls present - record assistant message and set up forEach
@@ -284,8 +337,9 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 		flow.Set("messages", messages)
 	}
 	flow.Set("messagesOut", messagesOut)
+	flow.Set("usage", usageOut)
 
-	return messagesOut, toolsRequested, toolRoundsOut, nil
+	return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 }
 
 /*
@@ -405,8 +459,8 @@ func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err er
 	graph.SetReducer("messages", workflow.ReducerAppend)
 
 	// Declare inputs and outputs
-	graph.DeclareInputs("messages", "tools")
-	graph.DeclareOutputs("messages")
+	graph.DeclareInputs("provider", "model", "messages", "tools", "options")
+	graph.DeclareOutputs("messages", "usage")
 
 	return graph, nil
 }

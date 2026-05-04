@@ -311,7 +311,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": false
@@ -917,8 +917,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(method, handler) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval]))",
-          "legendFormat": "{{method}} {{handler}}",
+          "expr": "60 * sum by(method, service, name) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval]))",
+          "legendFormat": "{{method}} {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1014,8 +1014,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by(method, handler) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", error=\"ERROR\", code=~\"^5..$\", service=\"$service\"}[$interval]))\n/\nsum by(method, handler) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval]))",
-          "legendFormat": "{{method}} {{handler}}",
+          "expr": "sum by(method, service, name) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", error=\"ERROR\", code=~\"^5..$\", service=\"$service\"}[$interval]))\n/\nsum by(method, service, name) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval]))",
+          "legendFormat": "{{method}} {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1112,8 +1112,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, method, handler) (rate(microbus_server_request_duration_seconds_bucket{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval])))",
-          "legendFormat": "{{method}} {{handler}}",
+          "expr": "histogram_quantile(0.95, sum by(le, method, service, name) (rate(microbus_server_request_duration_seconds_bucket{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval])))",
+          "legendFormat": "{{method}} {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1208,8 +1208,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(code, method, handler) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", error=\"ERROR\", service=\"$service\"}[$interval])) != 0",
-          "legendFormat": "[{{code}}] {{method}} {{handler}}",
+          "expr": "60 * sum by(code, method, service, name) (rate(microbus_server_request_duration_seconds_count{deployment=~\"$deployment\", port!=\"888\", error=\"ERROR\", service=\"$service\"}[$interval])) != 0",
+          "legendFormat": "[{{code}}] {{method}} {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -1306,8 +1306,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, method, handler) (rate(microbus_server_response_body_bytes_bucket{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval])))",
-          "legendFormat": "{{method}} {{handler}}",
+          "expr": "histogram_quantile(0.95, sum by(le, method, service, name) (rate(microbus_server_response_body_bytes_bucket{deployment=~\"$deployment\", port!=\"888\", service=\"$service\"}[$interval])))",
+          "legendFormat": "{{method}} {{name}}",
           "range": true,
           "refId": "A"
         }
@@ -2101,8 +2101,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, handler) (rate(microbus_callback_duration_seconds_bucket{deployment=~\"$deployment\", service=\"$service\"}[$interval])))",
-          "legendFormat": "__auto",
+          "expr": "histogram_quantile(0.95, sum by(le, service, name) (rate(microbus_callback_duration_seconds_bucket{deployment=~\"$deployment\", service=\"$service\"}[$interval])))",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
@@ -2199,8 +2199,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "60 * sum by(handler) (rate(microbus_callback_duration_seconds_count{deployment=~\"$deployment\", error=\"ERROR\", service=\"$service\"}[$__rate_interval])) != 0",
-          "legendFormat": "{{handler}}",
+          "expr": "60 * sum by(service, name) (rate(microbus_callback_duration_seconds_count{deployment=~\"$deployment\", error=\"ERROR\", service=\"$service\"}[$__rate_interval])) != 0",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
@@ -2615,7 +2615,7 @@
   "preload": false,
   "refresh": "",
   "schemaVersion": 41,
-  "tags": [],
+  "tags": ["microbus"],
   "templating": {
     "list": [
       {

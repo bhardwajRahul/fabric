@@ -222,7 +222,6 @@ func (app *Application) RunInTest(t testing.TB) error {
 	cancel()
 	if !assert.NoError(startupErr) {
 		t.FailNow()
-		return errors.Trace(startupErr)
 	}
 	return nil
 }

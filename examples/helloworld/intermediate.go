@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = helloworldapi.Hostname
-	Version  = 81
+	Version  = 82
 )
 
 // ToDo is implemented by the service or mock.

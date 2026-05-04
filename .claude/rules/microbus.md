@@ -6,9 +6,31 @@
 
 **CRITICAL**: Before performing any task, check for pertinent skills in `.claude/skills/` and its subdirectories. Follow the workflow of the most relevant skill.
 
+**CRITICAL**: After completing any change to a microservice, always follow the `housekeeping` skill.
+
 **CRITICAL**: After compaction of the context window, re-read this file.
 
 **CRITICAL**: Comments in the code that include the word `HINT` or `MARKER` in all-caps are there to guide you. Do not remove them.
+
+### Reading Framework Design Notes
+
+When you need to understand *why* a Microbus framework package behaves a certain way (not just *how* to use it), read the `CLAUDE.md` file inside that package in the local Go module cache. These files capture design rationale that godoc does not, and they are not bundled into this project.
+
+The framework lives at the version pinned in `go.mod`. To read a package's design notes:
+
+```bash
+ver=$(go list -m -f '{{.Version}}' github.com/microbus-io/fabric)
+cat "$(go env GOMODCACHE)/github.com/microbus-io/fabric@$ver/<package>/CLAUDE.md"
+```
+
+For example, to read the design notes for the `connector` package:
+
+```bash
+ver=$(go list -m -f '{{.Version}}' github.com/microbus-io/fabric)
+cat "$(go env GOMODCACHE)/github.com/microbus-io/fabric@$ver/connector/CLAUDE.md"
+```
+
+The module cache is read-only; do not attempt to edit those files. If `go list` reports the framework is not in `go.mod`, the project does not depend on Microbus and these notes do not apply.
 
 ## Overview
 
@@ -50,11 +72,13 @@ Start a route with `//` or `https://` to set an absolute path mapped to the root
 Ports provide access isolation. Use port `:0` to accept requests on any port. Conventional port assignments:
 
 - `:443` - default port for standard endpoints (functions and web handlers)
-- `:444` - internal-only endpoints that should not be accessible from outside the bus
-- `:417` - dedicated port for outbound events, blocking external requests from reaching event endpoints
-- `:428` - dedicated port for task endpoints, blocking external requests from reaching workflow tasks
 - `:888` - internal management and control endpoints
-- `:0` - wildcard, accepts requests on any port (used for cross-cutting concerns like OpenAPI)
+- `:444` - internal-only endpoints
+- `:417` - dedicated port for outbound events
+- `:428` - dedicated port for task endpoints
+- `:0` - wildcard, accepts requests on any port
+
+The HTTP ingress proxy always blocks inbound requests on port `:888`. Requests on other internal ports (`:1` to `:1023`) are blocked in a `PROD` deployment but allowed otherwise. Requests on ports `:80` and `:443` are always allowed.
 
 ### Magic HTTP Arguments
 
@@ -164,7 +188,7 @@ downstream:
 
 The `webs` section of the manifest describes the web handler endpoints of the microservice.
 
-- The `method` can be any valid HTTP method, or `ANY` to indicate that the endpoint handles all methods
+- The `method` must be one of the recognized HTTP methods — `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` — or `ANY` to indicate that the endpoint handles all methods. Matching is case-insensitive; the framework rejects unknown method tokens at registration time with `405 Method Not Allowed`
 - The `loadBalancing` indicates how requests to this endpoint are distributed among peers:
   - `default` - load-balanced among peers using the hostname as the queue name
   - `none` - multicast to all peers (no queue)

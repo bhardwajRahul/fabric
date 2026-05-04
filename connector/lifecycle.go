@@ -156,7 +156,8 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 			ctx,
 			"microbus_callback_duration_seconds",
 			time.Since(startTime).Seconds(),
-			"handler", "startup",
+			"name", "OnStartup",
+			"type", "lifecycle",
 			"error", func() string {
 				if err != nil {
 					return "ERROR"
@@ -386,7 +387,8 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		ctx,
 		"microbus_callback_duration_seconds",
 		time.Since(startTime).Seconds(),
-		"handler", "shutdown",
+		"name", "OnShutdown",
+		"type", "lifecycle",
 		"error", func() string {
 			if lastErr != nil {
 				return "ERROR"

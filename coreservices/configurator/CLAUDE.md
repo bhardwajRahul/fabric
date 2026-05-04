@@ -1,2 +1,2 @@
+# configurator.core
 
-**CRITICAL**: Read `AGENTS.md` immediately.

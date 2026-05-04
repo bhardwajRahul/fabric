@@ -32,7 +32,7 @@ import (
 )
 
 func TestConnector_TraceRequestAttributes(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	env.Push("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "nil")
 	defer env.Pop("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 
@@ -163,3 +163,4 @@ func spanStatus(s trc.Span) int {
 	status := reflect.ValueOf(s).FieldByName("internal").Elem().Elem().FieldByName("status")
 	return int(status.FieldByName("Code").Uint())
 }
+

@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
@@ -103,6 +104,7 @@ func (c *Connector) SetConfig(name string, value any) error {
 
 	// Call the callback function, if provided
 	if c.isPhase(startedUp) && config.Value != origValue && c.onConfigChanged != nil {
+		startTime := time.Now()
 		err := errors.CatchPanic(func() error {
 			return c.onConfigChanged(
 				c.Lifetime(),
@@ -111,6 +113,19 @@ func (c *Connector) SetConfig(name string, value any) error {
 				},
 			)
 		})
+		_ = c.RecordHistogram(
+			c.Lifetime(),
+			"microbus_callback_duration_seconds",
+			time.Since(startTime).Seconds(),
+			"name", "OnConfigChanged",
+			"type", "config",
+			"error", func() string {
+				if err != nil {
+					return "ERROR"
+				}
+				return "OK"
+			}(),
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -243,6 +258,7 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 
 	// Call the callback function, if provided
 	if callback && len(changed) > 0 && c.onConfigChanged != nil {
+		startTime := time.Now()
 		err := errors.CatchPanic(func() error {
 			return c.onConfigChanged(
 				ctx,
@@ -251,6 +267,19 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 				},
 			)
 		})
+		_ = c.RecordHistogram(
+			ctx,
+			"microbus_callback_duration_seconds",
+			time.Since(startTime).Seconds(),
+			"name", "OnConfigChanged",
+			"type", "config",
+			"error", func() string {
+				if err != nil {
+					return "ERROR"
+				}
+				return "OK"
+			}(),
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}

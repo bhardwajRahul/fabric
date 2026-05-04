@@ -36,39 +36,39 @@ func (d Def) URL() string {
 
 // ArithmeticIn are the input arguments of Arithmetic.
 type ArithmeticIn struct { // MARKER: Arithmetic
-	X  int    `json:"x,omitzero"`
-	Op string `json:"op,omitzero"`
-	Y  int    `json:"y,omitzero"`
+	X  int    `json:"x,omitzero" jsonschema:"description=X is the left operand"`
+	Op string `json:"op,omitzero" jsonschema:"description=Op is the operator: + - * /"`
+	Y  int    `json:"y,omitzero" jsonschema:"description=Y is the right operand"`
 }
 
 // ArithmeticOut are the output arguments of Arithmetic.
 type ArithmeticOut struct { // MARKER: Arithmetic
-	XEcho  int    `json:"xEcho,omitzero"`
-	OpEcho string `json:"opEcho,omitzero"`
-	YEcho  int    `json:"yEcho,omitzero"`
-	Result int    `json:"result,omitzero"`
+	XEcho  int    `json:"xEcho,omitzero" jsonschema:"description=XEcho echoes the left operand"`
+	OpEcho string `json:"opEcho,omitzero" jsonschema:"description=OpEcho echoes the operator"`
+	YEcho  int    `json:"yEcho,omitzero" jsonschema:"description=YEcho echoes the right operand"`
+	Result int    `json:"result,omitzero" jsonschema:"description=Result is the result of the operation"`
 }
 
 // SquareIn are the input arguments of Square.
 type SquareIn struct { // MARKER: Square
-	X int `json:"x,omitzero"`
+	X int `json:"x,omitzero" jsonschema:"description=X is the integer to square"`
 }
 
 // SquareOut are the output arguments of Square.
 type SquareOut struct { // MARKER: Square
-	XEcho  int `json:"xEcho,omitzero"`
-	Result int `json:"result,omitzero"`
+	XEcho  int `json:"xEcho,omitzero" jsonschema:"description=XEcho echoes the input integer"`
+	Result int `json:"result,omitzero" jsonschema:"description=Result is X squared"`
 }
 
 // DistanceIn are the input arguments of Distance.
 type DistanceIn struct { // MARKER: Distance
-	P1 Point `json:"p1,omitzero"`
-	P2 Point `json:"p2,omitzero"`
+	P1 Point `json:"p1,omitzero" jsonschema:"description=P1 is the first point"`
+	P2 Point `json:"p2,omitzero" jsonschema:"description=P2 is the second point"`
 }
 
 // DistanceOut are the output arguments of Distance.
 type DistanceOut struct { // MARKER: Distance
-	D float64 `json:"d,omitzero"`
+	D float64 `json:"d,omitzero" jsonschema:"description=D is the Euclidean distance between P1 and P2"`
 }
 
 var (

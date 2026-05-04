@@ -24,7 +24,7 @@ Architectural review:
 
 #### Step 1: Build the System Map
 
-Read `main/main.go` to identify all microservices included in the application and their startup group ordering. Read the `manifest.yaml` and `AGENTS.md` of each microservice to understand its features, downstream dependencies, design rationale, and general properties. Read `config.yaml` for runtime configuration context. If `main/topology.mmd` exists, read it to visualize the dependency graph.
+Read `main/main.go` to identify all microservices included in the application and their startup group ordering. Read the `manifest.yaml` and `CLAUDE.md` of each microservice to understand its features, downstream dependencies, design rationale, and general properties. Read `config.yaml` for runtime configuration context. If `main/topology.mmd` exists, read it to visualize the dependency graph.
 
 Produce a written inventory: for each microservice, note its hostname, purpose (from `description`), downstream dependencies, outbound events, inbound event sinks, configs, `db` and `cloud` properties, and startup group. This inventory is the foundation for all subsequent steps.
 
@@ -133,7 +133,7 @@ Evaluate deployment, configuration, and production readiness:
 
 Evaluate whether the system is sufficiently documented for a new developer or agent to understand and safely evolve it:
 
-- **AGENTS.md quality** - does each microservice have an `AGENTS.md` that explains its purpose, design rationale, tradeoffs, and the context needed to evolve it? Flag microservices with missing, empty, or boilerplate-only `AGENTS.md` files. The file should capture *why* decisions were made, not just describe what the code does.
+- **CLAUDE.md quality** - does each microservice have an `CLAUDE.md` that explains its purpose, design rationale, tradeoffs, and the context needed to evolve it? Flag microservices with missing, empty, or boilerplate-only `CLAUDE.md` files. The file should capture *why* decisions were made, not just describe what the code does.
 - **Manifest completeness** - does each `manifest.yaml` have meaningful `description` fields for the service, its endpoints, configs, events, and tickers? Flag entries with missing or placeholder descriptions.
 - **Godoc comments** - are exported types, functions, and methods in `service.go` and `*api/client.go` documented with Godoc comments? Flag exported symbols that lack comments, especially public API surfaces in `*api` packages that downstream consumers rely on.
 - **Complex logic** - are non-obvious algorithms, business rules, or workarounds explained with inline comments? Flag complex code blocks (deeply nested logic, regex patterns, SQL queries with many joins/conditions) that lack explanatory comments.

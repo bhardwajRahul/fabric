@@ -70,18 +70,10 @@ File preparation steps can be performed in parallel.
 
 #### Step 3: Prepare Coding Agent Files
 
-Create `AGENTS.md` with the following content verbatim.
+Create `CLAUDE.md` with the hostname as an H1 heading:
 
 ```md
-**CRITICAL**: This directory contains the codebase of a microservice based on the Microbus framework. Follow all instructions and guidelines in `.claude/rules/microbus.md`.
-
-**CRITICAL**: The instructions and guidelines in this `AGENTS.md` file only apply when working on the microservice in this directory and take precedence over the more general instructions and guidelines of the project.
-```
-
-Create `CLAUDE.md` with the following content verbatim.
-
-```md
-**CRITICAL**: Read `AGENTS.md` immediately.
+# my.service.hostname
 ```
 
 Create `PROMPTS.md` with the prompt used to create this microservice. Rephrase the language to include context that was not made explicit in the original prompt. The intent is to maintain an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.
@@ -192,4 +184,10 @@ Use the context provided by the user and propose a set of features for this micr
 - **Tickers** - recurring operations on a schedule
 - **Metrics** - counters, gauges, and histograms for observability
 
-Save the proposed design to `DESIGN.md`, then show it to the user. Ask the user if they'd like you to implement any of the features. Do not implement without explicit approval from the user.
+Append the proposed design to `CLAUDE.md` under the following heading, then show it to the user. Ask the user if they'd like you to implement any of the features. Do not implement without explicit approval from the user.
+
+```md
+## Agent Design Proposal
+
+*This section is the original pre-development proposal. It reflects the intended design at the time of creation and may not match the current implementation.*
+```

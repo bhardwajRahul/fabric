@@ -1163,7 +1163,7 @@ func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any
 // createSubgraphFlow creates a subgraph flow for a subgraph transition in "created" status.
 // The subgraph flow's surgraph_flow_id and surgraph_step_depth link it back to
 // the surgraph for completion propagation. The caller must call Start to begin execution.
-func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgraphFlowID int, surgraphStepDepth int, subgraphWorkflowName string, subgraphGraph *workflow.Graph, surgraphState map[string]any, actorClaimsJSON string, traceParent string, breakpointsJSON string) (subgraphFlowKey string, err error) {
+func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgraphFlowID int, surgraphStepDepth int, surgraphStepID int, subgraphWorkflowName string, subgraphGraph *workflow.Graph, surgraphState map[string]any, actorClaimsJSON string, traceParent string, breakpointsJSON string) (subgraphFlowKey string, err error) {
 	// Create the subgraph flow via createWithGraph (reuses flow+step INSERT logic)
 	// Filter the parent state through the subgraph's declared inputs.
 	subgraphState := workflow.FilterState(surgraphState, subgraphGraph.Inputs())
@@ -1176,14 +1176,15 @@ func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgra
 		return "", errors.Trace(err)
 	}
 
-	// Set surgraph linkage, override actor claims / trace parent, and copy breakpoints from surgraph
+	// Set surgraph linkage (including step_id for unambiguous lookup in completeSurgraphFlow),
+	// override actor claims / trace parent, and copy breakpoints from surgraph.
 	db, err := svc.shard(shardNum)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	_, err = db.ExecContext(ctx,
-		"UPDATE microbus_flows SET surgraph_flow_id=?, surgraph_step_depth=?, actor_claims=?, trace_parent=?, breakpoints=?, updated_at=NOW_UTC() WHERE flow_id=?",
-		surgraphFlowID, surgraphStepDepth, actorClaimsJSON, traceParent, breakpointsJSON, subgraphFlowID,
+		"UPDATE microbus_flows SET surgraph_flow_id=?, surgraph_step_depth=?, surgraph_step_id=?, actor_claims=?, trace_parent=?, breakpoints=?, updated_at=NOW_UTC() WHERE flow_id=?",
+		surgraphFlowID, surgraphStepDepth, surgraphStepID, actorClaimsJSON, traceParent, breakpointsJSON, subgraphFlowID,
 	)
 	if err != nil {
 		// Edge case. The subgraph flow will remain orphaned and eventually purged
@@ -1931,7 +1932,14 @@ func (svc *Service) workerLoop(ctx context.Context) {
 }
 
 // processStep acquires a step, executes its task, and enqueues the next step if applicable.
-func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) error {
+func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (err error) {
+	defer func() {
+		if sequel.IsLockContentionError(err) {
+			// The step row was not updated; trigger an immediate poll cycle to recover it
+			// rather than waiting up to maxPollInterval for the next scheduled poll.
+			svc.shortenNextPoll(time.Now())
+		}
+	}()
 	db, err := svc.shard(shardNum)
 	if err != nil {
 		return errors.Trace(err)
@@ -2155,20 +2163,22 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 		// If it completed, its final_state was already merged into our changes by completeSurgraphFlow.
 		// Skip to transition evaluation (fall through the subgraph block).
 		// If it is still active, park and wait. If none exists, create one.
+		// Scope by surgraph_step_id so that multiple parallel subgraph siblings (fan-out
+		// to several subgraphs at the same step_depth) don't see each other's child flows.
 		var activeSubgraphCount, completedSubgraphCount int
 		err = svc.Parallel(
 			func() error {
 				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND status IN (?, ?, ?)",
-					flowID, stepDepth,
+					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status IN (?, ?, ?)",
+					flowID, stepDepth, stepID,
 					foremanapi.StatusCreated, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
 				).Scan(&activeSubgraphCount)
 				return errors.Trace(err)
 			},
 			func() error {
 				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND status=?",
-					flowID, stepDepth, foremanapi.StatusCompleted,
+					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status=?",
+					flowID, stepDepth, stepID, foremanapi.StatusCompleted,
 				).Scan(&completedSubgraphCount)
 				return errors.Trace(err)
 			},
@@ -2195,7 +2205,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) e
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 				return errors.Trace(err)
 			}
-			subgraphFlowID, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, taskName, subgraphGraph, mergedState, actorClaimsJSON, traceParent, breakpointsJSON)
+			subgraphFlowID, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, stepID, taskName, subgraphGraph, mergedState, actorClaimsJSON, traceParent, breakpointsJSON)
 			if err != nil {
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 				return errors.Trace(err)
@@ -2449,7 +2459,7 @@ postExecution:
 		}
 
 		// Create and start the child flow
-		subgraphFlowKey, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, subgraphWorkflow, subgraphGraph, childInputState, actorClaimsJSON, traceParent, breakpointsJSON)
+		subgraphFlowKey, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, stepID, subgraphWorkflow, subgraphGraph, childInputState, actorClaimsJSON, traceParent, breakpointsJSON)
 		if err != nil {
 			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 			return errors.Trace(err)
@@ -2839,15 +2849,16 @@ func (svc *Service) completeFlow(ctx context.Context, shardNum int, flowID int, 
 	// Propagate completion back to the surgraph
 	var surgraphFlowID int
 	var surgraphStepDepth int
+	var surgraphStepID int
 	err = db.QueryRowContext(ctx,
-		"SELECT surgraph_flow_id, surgraph_step_depth FROM microbus_flows WHERE flow_id=?",
+		"SELECT surgraph_flow_id, surgraph_step_depth, surgraph_step_id FROM microbus_flows WHERE flow_id=?",
 		flowID,
-	).Scan(&surgraphFlowID, &surgraphStepDepth)
+	).Scan(&surgraphFlowID, &surgraphStepDepth, &surgraphStepID)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
 	if surgraphFlowID != 0 {
-		if err := svc.completeSurgraphFlow(ctx, shardNum, surgraphFlowID, surgraphStepDepth, workflowName, finalStateJSON); err != nil {
+		if err := svc.completeSurgraphFlow(ctx, shardNum, surgraphFlowID, surgraphStepDepth, surgraphStepID, workflowName, finalStateJSON); err != nil {
 			return true, errors.Trace(err)
 		}
 	}
@@ -2857,23 +2868,39 @@ func (svc *Service) completeFlow(ctx context.Context, shardNum int, flowID int, 
 
 // completeSurgraphFlow merges a completed subgraph flow's final state into the surgraph step's
 // changes and re-enqueues the surgraph step for transition evaluation.
-func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surgraphFlowID int, surgraphStepDepth int, subgraphWorkflowName string, subgraphFinalStateJSON string) error {
+// surgraphStepID identifies the parked surgraph step by primary key; pass 0 for legacy subgraph
+// flows created before the surgraph_step_id column was added (then a fallback search is used).
+func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surgraphFlowID int, surgraphStepDepth int, surgraphStepID int, subgraphWorkflowName string, subgraphFinalStateJSON string) error {
 	db, err := svc.shard(shardNum)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Find the surgraph step, parent flow graph (for reducers), and subgraph graph (for output filtering) in parallel.
-	// The step is identified by flow_id + step_depth + running status. We don't match on task_name
-	// because dynamic subgraphs have a different task_name than the child workflow.
-	var surgraphStepID int
+	// Look up the surgraph step (by PK or legacy fallback), parent flow graph (for reducers),
+	// and subgraph graph (for output filtering) in parallel.
 	var surgraphStepChangesJSON string
 	var surgraphGraphJSON string
 	var subgraphGraphJSON string
 	err = svc.Parallel(
 		func() error {
+			if surgraphStepID != 0 {
+				// Deterministic lookup by primary key.
+				err := db.QueryRowContext(ctx,
+					"SELECT changes FROM microbus_steps WHERE step_id=? AND status=?",
+					surgraphStepID, foremanapi.StatusRunning,
+				).Scan(&surgraphStepChangesJSON)
+				if errors.Is(err, sql.ErrNoRows) {
+					surgraphStepID = 0 // Already handled (e.g. cancelled or failed)
+					return nil
+				}
+				return errors.Trace(err)
+			}
+			// Legacy fallback for subgraph flows created before surgraph_step_id existed.
+			// Filter on a parked lease (>= 1 day; far longer than any normal task lease) so
+			// the SELECT cannot match a sibling step that happens to be momentarily running.
+			const surgraphParkedLeaseThresholdMs = 60 * 60 * 1000 // 1 hour
 			err := db.QueryRowContext(ctx,
-				"SELECT step_id, changes FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status=?",
-				surgraphFlowID, surgraphStepDepth, foremanapi.StatusRunning,
+				"SELECT step_id, changes FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status=? AND lease_expires > DATE_ADD_MILLIS(NOW_UTC(), ?)",
+				surgraphFlowID, surgraphStepDepth, foremanapi.StatusRunning, surgraphParkedLeaseThresholdMs,
 			).Scan(&surgraphStepID, &surgraphStepChangesJSON)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil // Another worker already handled this surgraph step
@@ -3317,6 +3344,45 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 			}
 			rows.Close()
 			if err := rows.Err(); err != nil {
+				return errors.Trace(err)
+			}
+
+			// Detect orphaned flows: status=running but no non-terminal steps exist anywhere
+			// in the flow. This should never happen in steady state - it indicates a bug
+			// (e.g. a failure between marking the last step completed and inserting next steps).
+			// We log only; auto-recovery is intentionally not implemented because it would have
+			// to duplicate the fan-in/transition logic and risks double-advancement on a flow
+			// that was actually mid-transaction. The threshold is well past any normal
+			// transient state and avoids log noise during the microsecond windows of fan-in.
+			const orphanFlowThresholdMs = -5 * 60 * 1000 // 5 minutes back
+			orphanRows, err := db.QueryContext(ctx,
+				"SELECT flow_id, workflow_name FROM microbus_flows f"+
+					" WHERE status=? AND updated_at <= DATE_ADD_MILLIS(NOW_UTC(), ?)"+
+					" AND NOT EXISTS ("+
+					"   SELECT 1 FROM microbus_steps s"+
+					"   WHERE s.flow_id = f.flow_id AND s.status IN (?, ?, ?, ?)"+
+					" )",
+				foremanapi.StatusRunning, orphanFlowThresholdMs,
+				foremanapi.StatusPending, foremanapi.StatusRunning, foremanapi.StatusCreated, foremanapi.StatusInterrupted,
+			)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for orphanRows.Next() {
+				var orphanFlowID int
+				var orphanWorkflow string
+				if err := orphanRows.Scan(&orphanFlowID, &orphanWorkflow); err != nil {
+					orphanRows.Close()
+					return errors.Trace(err)
+				}
+				svc.LogError(ctx, "Orphaned flow detected: status=running but no non-terminal steps",
+					"flow", orphanFlowID,
+					"workflow", orphanWorkflow,
+					"shard", shardIdx,
+				)
+			}
+			orphanRows.Close()
+			if err := orphanRows.Err(); err != nil {
 				return errors.Trace(err)
 			}
 

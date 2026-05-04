@@ -17,7 +17,9 @@ limitations under the License.
 package sub
 
 import (
+	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/microbus-io/boolexp"
 	"github.com/microbus-io/errors"
@@ -86,10 +88,17 @@ func Description(text string) Option {
 }
 
 // Method overrides the default "ANY" method for a Listen subscription.
-// The subscription can be set to a single standard HTTP method such as "GET", "POST", etc. or to "ANY" in order to accept any method.
+// Accepts one of the recognized HTTP methods (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS,
+// TRACE, PATCH) or "ANY" to match any method. Matching is case-insensitive; the value is
+// normalized to uppercase. Returns an error at option-application time if the method is
+// not recognized.
 func Method(method string) Option {
 	return func(sub *Subscription) error {
-		sub.Method = method
+		upper := strings.ToUpper(method)
+		if !knownMethods[upper] {
+			return errors.New("unknown HTTP method '%s'", method, http.StatusMethodNotAllowed)
+		}
+		sub.Method = upper
 		return nil
 	}
 }
@@ -124,10 +133,14 @@ func Route(route string) Option {
 }
 
 // At sets both the method and the route of a subscription in a single option.
-// It is shorthand for [Method] followed by [Route].
+// It is shorthand for [Method] followed by [Route]. Same method validation rules apply.
 func At(method string, route string) Option {
 	return func(sub *Subscription) error {
-		sub.Method = method
+		upper := strings.ToUpper(method)
+		if !knownMethods[upper] {
+			return errors.New("unknown HTTP method '%s'", method, http.StatusMethodNotAllowed)
+		}
+		sub.Method = upper
 		sub.specPath = route
 		return nil
 	}
@@ -220,6 +233,26 @@ func Infra() Option {
 func Ultra() Option {
 	return func(sub *Subscription) error {
 		sub.Infra = false
+		return nil
+	}
+}
+
+// NoTrace suppresses OpenTelemetry span creation for this subscription.
+// Requests handled by this subscription will not appear in distributed traces.
+// Useful for high-frequency or internal subscriptions that would otherwise add noise to traces.
+func NoTrace() Option {
+	return func(sub *Subscription) error {
+		sub.NoTrace = true
+		return nil
+	}
+}
+
+// Trace clears the [NoTrace] flag, restoring the default behavior where each handled request
+// creates an OpenTelemetry server span. It is the symmetric counterpart of [NoTrace]
+// and is provided for API completeness; in practice subscriptions default to tracing enabled.
+func Trace() Option {
+	return func(sub *Subscription) error {
+		sub.NoTrace = false
 		return nil
 	}
 }

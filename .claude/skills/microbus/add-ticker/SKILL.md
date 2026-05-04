@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Creating or modifying a ticker:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Define and implement handler
 - [ ] Step 3: Extend the ToDo interface
 - [ ] Step 4: Bind handler to the microservice
@@ -22,9 +22,9 @@ Creating or modifying a ticker:
 - [ ] Step 7: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Define and Implement Handler
 

@@ -19,7 +19,6 @@ package sub
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -29,7 +28,22 @@ import (
 	"github.com/microbus-io/fabric/utils"
 )
 
-var methodValidator = regexp.MustCompile(`^[A-Z]+$`)
+// knownMethods is the set of HTTP method tokens accepted on subscriptions: the standard
+// methods per RFC 9110 §9 plus the framework-specific "ANY" wildcard meaning "match any method".
+// Lookup expects the caller to have already uppercased the input.
+var knownMethods = map[string]bool{
+	http.MethodGet:     true,
+	http.MethodHead:    true,
+	http.MethodPost:    true,
+	http.MethodPut:     true,
+	http.MethodDelete:  true,
+	http.MethodConnect: true,
+	http.MethodOptions: true,
+	http.MethodTrace:   true,
+	http.MethodPatch:   true,
+	"ANY":              true,
+}
+
 
 // HTTPHandler extends the standard http.Handler to also return an error.
 type HTTPHandler func(w http.ResponseWriter, r *http.Request) (err error)
@@ -61,6 +75,7 @@ type Subscription struct {
 	Inputs         any
 	Outputs        any
 	Infra          bool
+	NoTrace        bool
 }
 
 /*
@@ -96,9 +111,9 @@ func NewSubscription(name string, defaultHost string, handler HTTPHandler, optio
 		s.Method = "ANY"
 	} else {
 		s.Method = strings.ToUpper(s.Method)
-	}
-	if !methodValidator.MatchString(s.Method) {
-		return nil, errors.New("invalid method '%s'", s.Method)
+		if !knownMethods[s.Method] {
+			return nil, errors.New("unknown HTTP method '%s'", s.Method, http.StatusMethodNotAllowed)
+		}
 	}
 	if s.specPath == "" {
 		s.specPath = ":" + defaultPortForType(s.Type) + "/" + utils.ToKebabCase(name)

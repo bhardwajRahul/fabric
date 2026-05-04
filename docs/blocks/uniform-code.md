@@ -10,7 +10,6 @@ myservice/                  # Each microservice has its own directory
 ├── resources/              # Embedded resource files
 │   ├── embed.go            # go:embed directive
 │   └── [your files]        # Static files, configs, etc.
-├── AGENTS.md               # Local instructions to the coding agent
 ├── CLAUDE.md               # Local instructions for Claude
 ├── intermediate.go         # Service infrastructure
 ├── manifest.yaml           # Manifest of [features](../blocks/features.md)
@@ -24,7 +23,7 @@ The `*api` directory (and package) defines the `Client` and `MulticastClient` of
 
 The `resources` directory is a place to put [static files to be embedded](../blocks/embedded-res.md) into the executable of the microservice. Templates, images and scripts are some examples of what can potentially be embedded.
 
-`AGENTS.md` allows setting instructions to coding agents that should be respected in the context of this microservice only. `CLAUDE.md` refers Claude Code to `AGENTS.md`. `PROMPTS.md` keeps an audit trail of the prompts that affected this microservice.
+`CLAUDE.md` allows setting instructions to coding agents that should be respected in the context of this microservice only. `PROMPTS.md` keeps an audit trail of the prompts that affected this microservice.
 
 `intermediate.go` defines the `Intermediate` that serves as the base of the microservice via anonymous inclusion, in turn extending the [`Connector`](../structure/connector.md).
 

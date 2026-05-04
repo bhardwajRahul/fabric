@@ -107,7 +107,7 @@ func TestConfigurator_Mock(t *testing.T) {
 }
 
 func TestConfigurator_ManyMicroservices(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	ctx := t.Context()
 	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))
 	defer env.Pop("MICROBUS_PLANE")

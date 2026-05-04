@@ -97,6 +97,21 @@ func (c *Connector) Unsubscribe(name string) error {
 	return nil
 }
 
+// validRequestMethods is the set of HTTP method tokens accepted on inbound wire-level
+// requests. Per RFC 9110 §9. The framework's "ANY" wildcard is deliberately excluded —
+// it is a subscription-side match-anything sentinel that should never appear on the wire.
+var validRequestMethods = map[string]bool{
+	http.MethodGet:     true,
+	http.MethodHead:    true,
+	http.MethodPost:    true,
+	http.MethodPut:     true,
+	http.MethodDelete:  true,
+	http.MethodConnect: true,
+	http.MethodOptions: true,
+	http.MethodTrace:   true,
+	http.MethodPatch:   true,
+}
+
 // onRequest handles an incoming request. It acks it, then calls the handler to process it and responds to the caller.
 func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 	c.pendingOps.Add(1)
@@ -111,6 +126,16 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 			return
 		}
 		msg.Request = httpReq
+	}
+	if !validRequestMethods[msg.Request.Method] {
+		c.pendingOps.Add(-1)
+		err := errors.New("invalid method",
+			http.StatusMethodNotAllowed,
+			"method", msg.Request.Method,
+			"url", msg.Request.URL.String(),
+		)
+		c.LogError(c.Lifetime(), "Rejecting request", "error", err)
+		return
 	}
 	if msg.Request.Body == nil {
 		msg.Request.Body = http.NoBody
@@ -427,16 +452,21 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	}
 
 	// OpenTelemetry: create a child span
-	spanOptions := []trc.Option{
-		trc.Server(),
-		// Do not record the request attributes yet because they take a lot of memory, they will be added if there's an error
-	}
-	if c.deployment == LOCAL {
-		// Add the request attributes in LOCAL deployment to facilitate debugging
-		spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Route))
-	}
 	ctx = propagation.TraceContext{}.Extract(ctx, propagation.HeaderCarrier(httpReq.Header))
-	ctx, span := c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Route), spanOptions...)
+	var span trc.Span
+	if s.NoTrace {
+		span = trc.NewSpan(nil)
+	} else {
+		spanOptions := []trc.Option{
+			trc.Server(),
+			// Do not record the request attributes yet because they take a lot of memory, they will be added if there's an error
+		}
+		if c.deployment == LOCAL {
+			// Add the request attributes in LOCAL deployment to facilitate debugging
+			spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Route))
+		}
+		ctx, span = c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Route), spanOptions...)
+	}
 	spanEnded := false
 	defer func() {
 		if !spanEnded {
@@ -525,14 +555,18 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	}
 
 	// Meter
+	canonical := s.Canonical()
 	_ = c.RecordHistogram(
 		ctx,
 		"microbus_server_request_duration_seconds",
 		time.Since(handlerStartTime).Seconds(),
-		"handler", s.Canonical(),
+		"name", s.Name,
+		"route", s.Route,
+		"canonical", canonical,
 		"port", s.Port,
 		"method", httpReq.Method,
 		"code", httpRecorder.StatusCode(),
+		"type", s.Type,
 		"error", func() string {
 			if handlerErr != nil {
 				return "ERROR"
@@ -544,10 +578,13 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		ctx,
 		"microbus_server_response_body_bytes",
 		float64(httpRecorder.ContentLength()),
-		"handler", s.Canonical(),
+		"name", s.Name,
+		"route", s.Route,
+		"canonical", canonical,
 		"port", s.Port,
 		"method", httpReq.Method,
 		"code", httpRecorder.StatusCode(),
+		"type", s.Type,
 		"error", func() string {
 			if handlerErr != nil {
 				return "ERROR"

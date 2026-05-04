@@ -19,8 +19,14 @@ package geminillm
 import "encoding/json"
 
 type geminiRequest struct {
-	Contents []geminiContent `json:"contents"`
-	Tools    []geminiToolDec `json:"tools,omitzero"`
+	Contents         []geminiContent  `json:"contents"`
+	Tools            []geminiToolDec  `json:"tools,omitzero"`
+	GenerationConfig *geminiGenConfig `json:"generationConfig,omitzero"`
+}
+
+type geminiGenConfig struct {
+	MaxOutputTokens int     `json:"maxOutputTokens,omitzero"`
+	Temperature     float64 `json:"temperature,omitzero"`
 }
 
 type geminiContent struct {
@@ -58,4 +64,12 @@ type geminiResponse struct {
 	Candidates []struct {
 		Content geminiContent `json:"content"`
 	} `json:"candidates"`
+	ModelVersion  string             `json:"modelVersion"`
+	UsageMetadata geminiUsageMetadata `json:"usageMetadata"`
+}
+
+type geminiUsageMetadata struct {
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount"`
 }

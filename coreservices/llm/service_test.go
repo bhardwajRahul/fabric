@@ -34,9 +34,11 @@ import (
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/chatgptllm"
+	"github.com/microbus-io/fabric/coreservices/chatgptllm/chatgptllmapi"
 	"github.com/microbus-io/fabric/coreservices/claudellm"
 	"github.com/microbus-io/fabric/coreservices/claudellm/claudellmapi"
 	"github.com/microbus-io/fabric/coreservices/geminillm"
+	"github.com/microbus-io/fabric/coreservices/geminillm/geminillmapi"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/examples/calculator"
@@ -93,14 +95,15 @@ func TestLLM_Mock(t *testing.T) {
 		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
 		expectedMessages := []llmapi.Message{{Role: "assistant", Content: "Hi there!"}}
 
-		_, err := mock.Chat(ctx, exampleMessages, nil)
+		_, _, err := mock.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockChat(func(ctx context.Context, messages []llmapi.Message, tools []string) (messagesOut []llmapi.Message, err error) {
-			return expectedMessages, nil
+		mock.MockChat(func(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error) {
+			return expectedMessages, llmapi.Usage{Turns: 1}, nil
 		})
-		result, err := mock.Chat(ctx, exampleMessages, nil)
+		result, usage, err := mock.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
 		assert.Expect(
 			result, expectedMessages,
+			usage.Turns, 1,
 			err, nil,
 		)
 	})
@@ -135,9 +138,10 @@ func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 			assert := testarossa.For(t)
 
 			messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-			result, err := client.Chat(ctx, messages, nil)
+			result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
 			assert.Expect(
 				result, expectedResult,
+				usage.Turns, 1,
 				err, nil,
 			)
 		})
@@ -150,19 +154,15 @@ func TestLLM_ChatLive(t *testing.T) {
 	ctx := t.Context()
 
 	svc := NewService()
-	svc.SetProviderHostname(claudellmapi.Hostname) // Select provider
 
 	claude := claudellm.NewService()
 	claude.SetAPIKey("") // sk-...
-	claude.SetModel("claude-haiku-4-5")
 
 	gemini := geminillm.NewService()
 	gemini.SetAPIKey("") // AI...
-	gemini.SetModel("gemini-2.0-flash")
 
 	chatgpt := chatgptllm.NewService()
 	chatgpt.SetAPIKey("") // sk-...
-	chatgpt.SetModel("gpt-4")
 
 	egressSvc := httpegress.NewService()
 	calcSvc := calculator.NewService()
@@ -174,11 +174,33 @@ func TestLLM_ChatLive(t *testing.T) {
 	app.Add(svc, claude, gemini, chatgpt, egressSvc, calcSvc, tester)
 	app.RunInTest(t)
 
-	t.Run("text_only", func(t *testing.T) {
+	t.Run("text_only_claude", func(t *testing.T) {
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of France? Answer in one word."}}
-		result, err := client.Chat(ctx, messages, nil)
+		result, _, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		if assert.NoError(err) {
+			t.Log("Response:", result)
+			assert.Expect(len(result) > 0, true)
+		}
+	})
+
+	t.Run("text_only_gemini", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of Japan? Answer in one word."}}
+		result, _, err := client.Chat(ctx, geminillmapi.Hostname, geminillmapi.ModelGemini20Flash, messages, nil, nil)
+		if assert.NoError(err) {
+			t.Log("Response:", result)
+			assert.Expect(len(result) > 0, true)
+		}
+	})
+
+	t.Run("text_only_chatgpt", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of Italy? Answer in one word."}}
+		result, _, err := client.Chat(ctx, chatgptllmapi.Hostname, chatgptllmapi.ModelGPT4o, messages, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -189,7 +211,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7? Use the calculator tool."}}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, err := client.Chat(ctx, messages, tools)
+		result, _, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, tools, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -212,51 +234,50 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 	app.Add(svc, providerMock, calcSvc, tester)
 	app.RunInTest(t)
 
-	svc.SetProviderHostname("claude.llm.core")
-
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
-			return &llmapi.TurnCompletion{Content: "Hello from mocked provider!"}, nil
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			return "Hello from mocked provider!", nil, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		result, err := client.Chat(ctx, messages, nil)
+		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result), 1)
 			assert.Expect(result[0].Role, "assistant")
 			assert.Expect(result[0].Content, "Hello from mocked provider!")
+			assert.Expect(usage.Turns, 1)
+			assert.Expect(usage.OutputTokens, 5)
 		}
 	})
 
 	t.Run("tool_calling", func(t *testing.T) {
 		assert := testarossa.For(t)
 		callCount := 0
-		providerMock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
 			callCount++
 			if callCount == 1 {
-				return &llmapi.TurnCompletion{
-					ToolCalls: []llmapi.ToolCall{{
-						ID:        "call_1",
-						Name:      "Arithmetic",
-						Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
-					}},
-				}, nil
+				return "", []llmapi.ToolCall{{
+					ID:        "call_1",
+					Name:      "Arithmetic",
+					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
+				}}, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 			}
-			return &llmapi.TurnCompletion{Content: "3 + 5 = 8"}, nil
+			return "3 + 5 = 8", nil, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, err := client.Chat(ctx, messages, tools)
+		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]
 			assert.Expect(last.Role, "assistant")
 			assert.Expect(last.Content, "3 + 5 = 8")
+			assert.Expect(usage.Turns, 2)
 		}
 	})
 }

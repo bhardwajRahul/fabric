@@ -90,7 +90,7 @@ func TestConnector_Plane(t *testing.T) {
 }
 
 func TestConnector_PlaneEnv(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	ctx := t.Context()
 	assert := testarossa.For(t)
 
@@ -142,7 +142,7 @@ func TestConnector_Deployment(t *testing.T) {
 }
 
 func TestConnector_DeploymentEnv(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	ctx := t.Context()
 	assert := testarossa.For(t)
 
@@ -236,6 +236,10 @@ func TestConnector_ExternalizeURL(t *testing.T) {
 		con.ExternalizeURL(ctx2, "https://other.service/endpoint"),
 	)
 	assert.Equal(
+		"/other.service/endpoint",
+		con.ExternalizeURL(ctx2, "//other.service/endpoint"),
+	)
+	assert.Equal(
 		"/my.service/some/resource",
 		con.ExternalizeURL(ctx2, "/some/resource"),
 	)
@@ -248,6 +252,10 @@ func TestConnector_ExternalizeURL(t *testing.T) {
 	assert.Equal(
 		"http://proxy.local/service.host/api",
 		con.ExternalizeURL(ctx3, "https://service.host/api"),
+	)
+	assert.Equal(
+		"http://proxy.local/service.host/api",
+		con.ExternalizeURL(ctx3, "//service.host/api"),
 	)
 	assert.Equal(
 		"http://proxy.local/my.service/api",
@@ -263,6 +271,14 @@ func TestConnector_ExternalizeURL(t *testing.T) {
 		"//proxy.local/base/service.host/api",
 		con.ExternalizeURL(ctx4, "https://service.host/api"),
 	)
+	assert.Equal(
+		"//proxy.local/base/service.host/api",
+		con.ExternalizeURL(ctx4, "//service.host/api"),
+	)
+	assert.Equal(
+		"//proxy.local/base/my.service/api",
+		con.ExternalizeURL(ctx4, "/api"),
+	)
 
 	// Prefix only, no host or proto
 	h4 := http.Header{}
@@ -271,6 +287,10 @@ func TestConnector_ExternalizeURL(t *testing.T) {
 	assert.Equal(
 		"/base/service.host/api",
 		con.ExternalizeURL(ctx5, "https://service.host/api"),
+	)
+	assert.Equal(
+		"/base/service.host/api",
+		con.ExternalizeURL(ctx5, "//service.host/api"),
 	)
 	assert.Equal(
 		"/base/my.service/api",

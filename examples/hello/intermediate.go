@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = helloapi.Hostname
-	Version  = 325
+	Version  = 326
 )
 
 // ToDo is implemented by the service or mock.
@@ -129,7 +129,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Calculator
 		"Calculator", svc.Calculator,
 		sub.At(helloapi.Calculator.Method, helloapi.Calculator.Route),
-		sub.Description(`Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.`),
+		sub.Description(`Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice in order to demonstrate a call from one microservice to another.`),
 		sub.Web(),
 	)
 	svc.Subscribe( // MARKER: BusPNG

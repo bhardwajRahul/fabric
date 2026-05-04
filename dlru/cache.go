@@ -43,6 +43,7 @@ import (
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
+	"golang.org/x/sync/singleflight"
 )
 
 var brotliMagicWord = []byte{0x91, 0x19, 0x62, 0x66}
@@ -67,6 +68,7 @@ type Cache struct {
 	svc        Service
 	hits       int64
 	misses     int64
+	sf         singleflight.Group
 }
 
 // Service is an interface abstraction of a microservice used by the distributed cache.
@@ -911,4 +913,85 @@ func (c *Cache) Has(ctx context.Context, key string, options ...LoadOption) (fou
 		return false, errors.Trace(err)
 	}
 	return ok, nil
+}
+
+// LoadOrCompute returns the value for key from the cache. On miss, maker is called to
+// produce the value, which is stored in the cache and returned. Concurrent callers in
+// the same process for the same key share a single maker invocation, preventing cache
+// stampede.
+//
+// If maker returns an error, the value is not cached, the error is returned to all
+// waiters, and the next caller will retry. Stampede protection is per-process: with N
+// peers, up to N concurrent maker invocations may occur on a cold key.
+func (c *Cache) LoadOrCompute(ctx context.Context, key string, maker func(ctx context.Context) ([]byte, error), options ...StoreOption) (value []byte, err error) {
+	if key == "" {
+		return nil, errors.New("missing key")
+	}
+	if maker == nil {
+		return nil, errors.New("missing maker")
+	}
+	// Fast path: cache hit without entering the singleflight group.
+	value, ok, err := c.Load(ctx, key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if ok {
+		return value, nil
+	}
+	// Slow path: dedup concurrent makers per key.
+	v, err, _ := c.sf.Do(key, func() (any, error) {
+		// Re-check after acquiring the singleflight slot in case the cache was populated
+		// between our fast-path miss and entering the group.
+		value, ok, err := c.Load(ctx, key)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ok {
+			return value, nil
+		}
+		value, err = maker(ctx)
+		if err != nil {
+			return nil, err // No trace
+		}
+		err = c.Store(ctx, key, value, options...)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return value, nil
+	})
+	if err != nil {
+		return nil, err // No trace
+	}
+	return v.([]byte), nil
+}
+
+// GetOrCompute retrieves the value for key from the cache. On miss, maker is called to
+// produce the value, which is stored in the cache and returned. Concurrent callers in
+// the same process for the same key share a single maker invocation, preventing cache
+// stampede.
+//
+// The value parameter must be a pointer to []byte, string, or an object that can be
+// unmarshaled from JSON. Maker returns the typed value to be marshaled and stored.
+//
+// If maker returns an error, the value is not cached, the error is returned to all
+// waiters, and the next caller will retry.
+func (c *Cache) GetOrCompute(ctx context.Context, key string, value any, maker func(ctx context.Context) (any, error), options ...StoreOption) (err error) {
+	if maker == nil {
+		return errors.New("missing maker")
+	}
+	data, err := c.LoadOrCompute(ctx, key, func(ctx context.Context) ([]byte, error) {
+		v, err := maker(ctx)
+		if err != nil {
+			return nil, err // No trace
+		}
+		return c.valueToData(v)
+	}, options...)
+	if err != nil {
+		return err // No trace
+	}
+	err = c.dataToValue(data, value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

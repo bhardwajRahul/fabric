@@ -68,7 +68,7 @@ Microbus-From-Host: alpha.echo.connector
 Microbus-From-Id: dvm0oofeb5
 Microbus-Msg-Id: 3t0gkasY
 Microbus-Op-Code: Req
-Microbus-Time-Budget: 19999
+Microbus-Time-Budget: 19.999s
 
 Hello]
 [TRC] cid:2 - <<- [MSG microbus.443.connector.echo.beta.|.POST.echo 6 281]

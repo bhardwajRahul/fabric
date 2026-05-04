@@ -82,6 +82,8 @@ github.com/microbus-io/errors v1.0.0 h1:HhCAdr2S42Uk5oix0JGePEmzp7Ht5LdNaULxilzc
 github.com/microbus-io/errors v1.0.0/go.mod h1:+odiUtXEDl9rEV9W5g9P/Bja4b5ShuOMqH0bNj8maSs=
 github.com/microbus-io/sequel v1.5.6 h1:49Rj6JRpyQ/yEv8SCwPWVYCYN6YNep/UfN0HtNGOM7Y=
 github.com/microbus-io/sequel v1.5.6/go.mod h1:Wbc6klmHQdr7COrqgkArhOZ5rTl4biUqSZHjxDwKYRo=
+github.com/microbus-io/sequel v1.5.7 h1:52zXSW0f3QrZSt/l84rdkgLRkEFgthM5wouPSnDTD+A=
+github.com/microbus-io/sequel v1.5.7/go.mod h1:Wbc6klmHQdr7COrqgkArhOZ5rTl4biUqSZHjxDwKYRo=
 github.com/microbus-io/testarossa v0.7.3 h1:CsLpfjFG1/+rl0FqT1jJpjBiXZBydEe7CZOnQWbob9A=
 github.com/microbus-io/testarossa v0.7.3/go.mod h1:VNzOPk+3EQSXb4bmV7ZXC1wOAOPKock3H/eYJqxUqBg=
 github.com/mnako/letters v0.2.8 h1:w4H57g8360ShQ9G+ELUtz1apBBwkYazGYRgr70KF/2c=

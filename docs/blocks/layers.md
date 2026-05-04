@@ -48,7 +48,7 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **Foreman** - The [foreman](../structure/coreservices-foreman.md) is the orchestration engine for agentic workflows, managing the lifecycle of flows that progress through a series of task steps. It persists all state in a SQL database.
 
-**LLM** - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Callers supply `*openapi.Endpoint` values as tools via `llmapi.ToolsOf`; the service drives the tool-calling loop and dispatches calls over the bus. It supports Claude, ChatGPT and Gemini backends via configuration.
+**LLM** - The [LLM](../structure/coreservices-llm.md) microservice bridges LLM tool-calling protocols with Microbus endpoint invocations. Callers pass a provider hostname, a model identifier, and a list of canonical endpoint URLs as tools; the service drives the tool-calling loop and dispatches calls over the bus. It ships with Claude, ChatGPT and Gemini providers, and reports per-call token usage.
 
 **MCP portal** - The [MCP portal](../structure/coreservices-mcpportal.md) microservice exposes the bus's tools to LLM clients via the [Model Context Protocol](../blocks/mcp.md). MCP-aware clients connect to a single endpoint and discover, then invoke, the tools they're authorized to call.
 
@@ -60,7 +60,7 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **Agent skills** - The `.claude/skills/` directory contains a collection of [predefined workflows](../blocks/agent-skills.md) that guide the agent step by step when adding, removing or modifying features of a microservice. Skills make the agent's behavior predictable and its output consistent across microservices and developers.
 
-**Global and local `AGENTS.md`** - A global `AGENTS.md` at the project root provides context applicable to the whole project, while a local [`AGENTS.md`](../blocks/agents-md.md) in each microservice's directory captures design choices, tradeoffs, and rationale specific to that microservice. The local file is maintained by the agent as it works, focusing on the *why* behind decisions so that future agents can safely evolve the code.
+**Global and local `CLAUDE.md`** - A global `CLAUDE.md` at the project root provides context applicable to the whole project, while a local [`CLAUDE.md`](../blocks/claude-md.md) in each microservice's directory captures design choices, tradeoffs, and rationale specific to that microservice. The local file is maintained by the agent as it works, focusing on the *why* behind decisions so that future agents can safely evolve the code.
 
 **Incremental development** - Agents build a microservice one [feature](../blocks/features.md) at a time - an endpoint, a config property, a ticker, a metric. Each prompt results in a focused, incremental change: new code is added without impacting existing code, tests are written or updated, and the manifest is kept in sync. This keeps changes small, reviewable, and easy for the agent to get right.
 
@@ -70,7 +70,7 @@ Microbus comes bundled with a few [core microservices](../structure/coreservices
 
 **OpenAPI** - An [OpenAPI document](../blocks/openapi.md) is automatically created with descriptors for each of the microservice's endpoints.
 
-**Automatic documentation** - As a coding agent works on a microservice, it automatically maintains [documentation](../blocks/auto-doc.md) alongside the code. This includes the `manifest.yaml` that catalogs the microservice's [features](../blocks/features.md), the `PROMPTS.md` audit trail, and the `AGENTS.md` design record. Documentation stays in sync with the implementation because both are produced by the same agent in the same pass.
+**Automatic documentation** - As a coding agent works on a microservice, it automatically maintains [documentation](../blocks/auto-doc.md) alongside the code. This includes the `manifest.yaml` that catalogs the microservice's [features](../blocks/features.md), the `PROMPTS.md` audit trail, and the `CLAUDE.md` design record. Documentation stays in sync with the implementation because both are produced by the same agent in the same pass.
 
 **Uniform code structure** - A [uniform code structure](../blocks/uniform-code.md) is a beneficial byproduct of the way coding agents work in Microbus. A familiar code structure helps agents get oriented quickly.
 

@@ -410,3 +410,23 @@ Note: These milestones are maintained in separate branches in order to demonstra
 - New `mcpportal` core microservice
 - Path parameters no longer carry `style: deepObject` (query-only per OpenAPI 3.1)
 - Evaluate claims of unsigned tokens in `TESTING`
+
+[Milestone 48](https://github.com/microbus-io/fabric/tree/milestone/48):
+
+- Ingress proxy blocks ports `:1` to `:1023` in `PROD`, except for `:80` and `:443`
+- Tool fetcher handles unnamed and greedy path arguments
+- Removed `AGENTS.md`; consolidated all agent guidance into `CLAUDE.md` files
+- Per-package `CLAUDE.md` design-rationale notes for framework packages (`env`, `frame`, `connector`, `sub`, `openapi`, `application`, `workflow`, etc.)
+- `housekeeping` skill enforcement after every microservice change; `PROMPTS.md` rewritten as prose
+- New `review-microservice` skill for design audits
+- Distributed cache stampede protection
+- Foreman fan-out + subgraph bug fix; new `created_at` index on `microbus_flows` and `microbus_steps` for time-window queries
+- Eliminated noisy OTel spans on internal control traffic
+- Revamped Grafana dashboards; new LLM overview dashboard for tokens by direction/provider/model and cache hit ratio
+- LLM service redesign: required `provider` and `model` per call, dropped `ProviderHostname` and `Model` configs, flat return values, `Usage` token tracking, `ChatOptions`/`TurnOptions`
+- `chatbox.example` extended with a provider dropdown supporting the simulated chatbox plus real Claude, ChatGPT, and Gemini providers
+- Anthropic prompt caching via two `cache_control` breakpoints in the `claudellm` provider
+- Subscription method validation restricted to known HTTP verbs plus `ANY`; case-insensitive; rejects unknown methods at registration time
+- `Microbus-Time-Budget` header serialized as a Go duration string (`5ms`, `1h30m`); legacy bare-integer format still accepted on read
+- OTLP exporter resilience: lazy connect (no eager dial), retries disabled, per-export timeout via the spec-standard `OTEL_EXPORTER_OTLP_TIMEOUT` env var
+- `env.yaml` now writes through to the real OS environment at package init (dotenv-style); `env.Push`/`env.Pop` save and restore OS env so test overrides reach third-party libraries

@@ -87,16 +87,17 @@ func TestGeminiLLM_Mock(t *testing.T) {
 		assert := testarossa.For(t)
 
 		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedCompletion := &llmapi.TurnCompletion{Content: "Hi there!"}
+		expectedContent := "Hi there!"
 
-		_, err := mock.Turn(ctx, exampleMessages, nil)
+		_, _, _, err := mock.Turn(ctx, geminillmapi.ModelGemini20Flash, exampleMessages, nil, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
-			return expectedCompletion, nil
+		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			return expectedContent, nil, llmapi.Usage{Turns: 1, Model: model}, nil
 		})
-		result, err := mock.Turn(ctx, exampleMessages, nil)
+		content, _, usage, err := mock.Turn(ctx, geminillmapi.ModelGemini20Flash, exampleMessages, nil, nil)
 		assert.Expect(
-			result, expectedCompletion,
+			content, expectedContent,
+			usage.Turns, 1,
 			err, nil,
 		)
 	})
@@ -125,7 +126,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "generateContent") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello from Gemini!"}]}}]}`))
+				w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello from Gemini!"}]}}],"modelVersion":"gemini-2.0-flash","usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -134,10 +135,12 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Expect(completion.Content, "Hello from Gemini!")
-			assert.Expect(len(completion.ToolCalls), 0)
+		content, toolCalls, usage, err := client.Turn(ctx, geminillmapi.ModelGemini20Flash, messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Expect(content, "Hello from Gemini!")
+			assert.Expect(len(toolCalls), 0)
+			assert.Expect(usage.OutputTokens, 5)
+			assert.Expect(usage.Turns, 1)
 		}
 	})
 
@@ -148,7 +151,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "generateContent") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"Arithmetic","args":{"x":7,"op":"*","y":6}}}]}}]}`))
+				w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"Arithmetic","args":{"x":7,"op":"*","y":6}}}]}}],"modelVersion":"gemini-2.0-flash","usageMetadata":{"promptTokenCount":15,"candidatesTokenCount":8}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -157,10 +160,10 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 7 * 6?"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Expect(len(completion.ToolCalls), 1)
-			assert.Expect(completion.ToolCalls[0].Name, "Arithmetic")
+		_, toolCalls, _, err := client.Turn(ctx, geminillmapi.ModelGemini20Flash, messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Expect(len(toolCalls), 1)
+			assert.Expect(toolCalls[0].Name, "Arithmetic")
 		}
 	})
 }

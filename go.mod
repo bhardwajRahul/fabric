@@ -9,7 +9,7 @@ require (
 	github.com/microbus-io/boolexp v1.1.0
 	github.com/microbus-io/copyrighter v1.3.0
 	github.com/microbus-io/errors v1.0.0
-	github.com/microbus-io/sequel v1.5.6
+	github.com/microbus-io/sequel v1.5.7
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.8
 	github.com/nats-io/nats.go v1.51.0
@@ -29,6 +29,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.opentelemetry.io/proto/otlp v1.10.0
 	go.yaml.in/yaml/v3 v3.0.4
+	golang.org/x/sync v0.20.0
 )
 
 require (
@@ -70,7 +71,6 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect

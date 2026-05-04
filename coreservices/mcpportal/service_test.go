@@ -116,7 +116,7 @@ func TestMcpportal_HandleInitialize(t *testing.T) {
 	assert.True(ok)
 	_, hasTools := caps["tools"]
 	assert.True(hasTools)
-	// `listChanged` is intentionally absent - see AGENTS.md.
+	// `listChanged` is intentionally absent - see CLAUDE.md.
 	if tools, ok := caps["tools"].(map[string]any); ok {
 		_, hasListChanged := tools["listChanged"]
 		assert.False(hasListChanged)

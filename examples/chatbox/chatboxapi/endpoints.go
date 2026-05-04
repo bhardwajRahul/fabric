@@ -37,13 +37,17 @@ func (d Def) URL() string {
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Messages []llmapi.Message `json:"messages,omitzero"`
-	Tools    []llmapi.Tool    `json:"tools,omitzero"`
+	Model    string              `json:"model,omitzero" jsonschema:"description=Model is the model identifier"`
+	Messages []llmapi.Message    `json:"messages,omitzero" jsonschema:"description=Messages is the conversation history"`
+	Tools    []llmapi.Tool       `json:"tools,omitzero" jsonschema:"description=Tools is the list of tools available to the LLM"`
+	Options  *llmapi.TurnOptions `json:"options,omitzero" jsonschema:"description=Options configures the turn"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Completion *llmapi.TurnCompletion `json:"completion,omitzero"`
+	Content   string            `json:"content,omitzero" jsonschema:"description=Content is the LLM text response"`
+	ToolCalls []llmapi.ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls"`
+	Usage     llmapi.Usage      `json:"usage,omitzero" jsonschema:"description=Usage is the token consumption"`
 }
 
 var (

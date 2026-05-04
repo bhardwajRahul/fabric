@@ -37,7 +37,7 @@ The foreman uses a lease-based model for step execution. When a worker picks up 
 
 ### Querying Flows
 
-`List` supports filtering by status or workflow name and returns results in reverse chronological order. It uses cursor-based pagination with a default page size of 100.
+`List` supports filtering by status or workflow name and returns results in reverse chronological order. It uses cursor-based pagination with a default page size of 100. The `microbus_flows` and `microbus_steps` tables carry a `created_at` index so time-window queries (recent flows, retention purges, dashboards) remain efficient as history grows.
 
 ### Data Retention
 

@@ -16,7 +16,8 @@ general:
   hostname: bearer.token.core
   description: BearerToken signs long-lived JWTs with Ed25519 keys for external actor authentication.
   package: github.com/microbus-io/fabric/coreservices/bearertoken
-  frameworkVersion: 1.27.0
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T03:54:51Z"
 
 functions:
   Mint:

@@ -1,11 +1,11 @@
 # Copyright (c) 2023-2026 Microbus LLC and various contributors
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 # 	http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,9 +17,9 @@ general:
   hostname: gemini.llm.core
   description: The Gemini LLM provider microservice implements the Turn endpoint for the Google Gemini API.
   package: github.com/microbus-io/fabric/coreservices/geminillm
-  frameworkVersion: 1.27.0
+  frameworkVersion: 1.28.0
   cloud: generativelanguage.googleapis.com
-  modifiedAt: "2026-04-05T10:00:00Z"
+  modifiedAt: "2026-05-03T00:00:00Z"
 
 downstream:
   - hostname: http.egress.core
@@ -38,16 +38,10 @@ configs:
     description: APIKey is the API key for the Gemini API.
     secret: true
     callback: false
-  Model:
-    signature: Model() (model string)
-    description: Model is the Gemini model identifier to use.
-    default: gemini-2.0-flash
-    secret: false
-    callback: false
 
 functions:
   Turn:
-    signature: Turn(messages []Message, tools []Tool) (completion *TurnCompletion)
+    signature: Turn(model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, usage Usage)
     description: Turn executes a single LLM turn using the Gemini provider.
     method: POST
     route: :444/turn

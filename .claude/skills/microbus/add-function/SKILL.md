@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Creating or modifying a functional endpoint:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Determine signature
 - [ ] Step 3: Extend the ToDo interface
 - [ ] Step 4: Determine the method and route
@@ -30,9 +30,9 @@ Creating or modifying a functional endpoint:
 - [ ] Step 15: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Determine Signature
 

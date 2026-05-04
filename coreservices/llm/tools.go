@@ -19,6 +19,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -154,8 +155,36 @@ func canonicalizeToolURL(raw string) (hostPort, docKey string, err error) {
 	if path == "" {
 		path = "/"
 	}
+	// Reconcile path-arg syntax with what openapi/render.go emits in doc.Paths keys:
+	//   - {name...} (framework's greedy form) is stripped to {name}, since OpenAPI's path
+	//     templating syntax has no notion of greedy matching.
+	//   - {} (anonymous arg) is named {path1}, {path2}, ... in order of appearance, matching
+	//     the implicit naming applied by the renderer.
+	// Without these, a Def with greedy or anonymous path args would canonicalize to a docKey
+	// that no entry in doc.Paths matches.
+	path = canonicalizePathArgs(path)
 	docKey = "/" + hostPort + path
 	return hostPort, docKey, nil
+}
+
+// canonicalizePathArgs rewrites path arguments to match the form used by the OpenAPI renderer.
+// See openapi/render.go for the source of truth.
+func canonicalizePathArgs(path string) string {
+	parts := strings.Split(path, "/")
+	argIndex := 0
+	for i := range parts {
+		if !strings.HasPrefix(parts[i], "{") || !strings.HasSuffix(parts[i], "}") {
+			continue
+		}
+		argIndex++
+		name := strings.TrimSuffix(strings.TrimPrefix(parts[i], "{"), "}")
+		name = strings.TrimSuffix(name, "...")
+		if name == "" {
+			name = fmt.Sprintf("path%d", argIndex)
+		}
+		parts[i] = "{" + name + "}"
+	}
+	return strings.Join(parts, "/")
 }
 
 // operationToTool converts an OpenAPI operation into an LLM-callable tool.

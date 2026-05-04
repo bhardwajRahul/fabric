@@ -63,6 +63,11 @@ app.Add(
 	login.NewService(),
 	creditflow.NewService(),
 	chatbox.NewService(),
+	// LLM core and providers — required by the chatbox demo (Step 13)
+	llm.NewService(),
+	claudellm.NewService(),
+	chatgptllm.NewService(),
+	geminillm.NewService(),
 )
 ```
 
@@ -82,6 +87,10 @@ import (
 	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/llm"
+	"github.com/microbus-io/fabric/coreservices/claudellm"
+	"github.com/microbus-io/fabric/coreservices/chatgptllm"
+	"github.com/microbus-io/fabric/coreservices/geminillm"
 )
 ```
 
@@ -257,23 +266,30 @@ Present the user with these options:
 
 #### Step 13: Chatbox
 
-The `chatbox.example` microservice demonstrates the LLM integration capabilities of Microbus. It implements a demo LLM provider that pattern-matches math questions and uses the Calculator microservice as a tool - all without requiring a real LLM API key. The demo showcases the full tool-calling flow: the LLM service resolves tool schemas from OpenAPI, the demo provider requests a tool call, the LLM service executes it against the Calculator, and the result is fed back to produce the final answer.
+The `chatbox.example` microservice demonstrates the LLM integration capabilities of Microbus. It implements a *simulated* LLM provider that pattern-matches math questions and uses the Calculator microservice as a tool - all without requiring a real LLM API key. The demo showcases the full tool-calling flow: the LLM service resolves tool schemas from OpenAPI, the simulated provider requests a tool call, the LLM service executes it against the Calculator, and the result is fed back to produce the final answer.
 
-Before navigating to the demo, configure the LLM service to use the chatbox as its provider:
+The demo page also includes a provider dropdown so the user can route the same chat through real LLM providers (Claude, ChatGPT, Gemini). The simulated option works out of the box; the real providers each require an `APIKey` to be configured.
 
-Add to `config.yaml`:
+To enable the real provider options, add the relevant API keys to `config.local.yaml` (which is git-ignored):
+
 ```yaml
-llm.core:
-  ProviderHostname: chatbox.example
+claude.llm.core:
+  APIKey: sk-ant-...
+chatgpt.llm.core:
+  APIKey: sk-...
+gemini.llm.core:
+  APIKey: AI...
 ```
 
-Restart the example app for the config change to take effect.
+Skipping this step is fine — the simulated option in the dropdown remains fully functional without any API keys. Mention to the user that real-provider calls are billable.
+
+Restart the example app if any config changes were made.
 
 Explain the microservice to the user and present the following link for them to experiment with in their browser:
 
 - http://localhost:8080/chatbox.example/demo - the interactive chat demo page
 
-Suggest the user try questions like "What is 6 times 7?", "How much is 100 divided by 4?", or "Calculate 15 plus 28". Also try "Hello!" to see how it handles unrecognized questions.
+Suggest the user try questions like "What is 6 times 7?", "How much is 100 divided by 4?", or "Calculate 15 plus 28". Also try "Hello!" to see how it handles unrecognized questions. The provider dropdown lets them swap between the simulated chatbox and any real providers they configured.
 
 Present the user with these options:
 - "Next step" - Proceed to the next step

@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: Run after completing any change to a microservice. Updates manifest.yaml, documentation, version, and topology diagram. Skip if the skill you just followed already includes housekeeping as a final step.
+description: Run after completing any change to a microservice. Vets compilation, updates manifest.yaml, documentation, version, and topology diagram. Skip if the skill you just followed already includes housekeeping as a final step.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
@@ -11,43 +11,40 @@ Copy this checklist and track your progress:
 
 ```
 Post-change housekeeping:
-- [ ] Step 1: Reconcile the manifest
-- [ ] Step 2: Document the microservice
-- [ ] Step 3: Versioning
-- [ ] Step 4: Log the prompts
-- [ ] Step 5: Visualize workflows
-- [ ] Step 6: Chart the topology
+- [ ] Step 1: Vet compilation
+- [ ] Step 2: Reconcile the manifest
+- [ ] Step 3: Document the microservice
+- [ ] Step 4: Versioning
+- [ ] Step 5: Log the prompts
+- [ ] Step 6: Visualize workflows
+- [ ] Step 7: Chart the topology
 ```
 
-#### Step 1: Reconcile the Manifest
+#### Step 1: Vet Compilation
+
+Run `go vet ./main/...` and fix any compilation errors before proceeding.
+
+#### Step 2: Reconcile the Manifest
 
 Update `manifest.yaml` to reflect the changes. Ensure that all sections accurately describe the current state of the microservice's features, including `general`, `functions`, `webs`, `configs`, `tickers`, `metrics`, `outboundEvents`, `inboundEvents`, `tasks`, `workflows`, and `downstream`. Set `modifiedAt` under `general` to the current time in RFC 3339 format.
 
-#### Step 2: Document the Microservice
+#### Step 3: Document the Microservice
 
 Skip this step if instructed to be "quick" or to skip documentation, or if the change introduces no new design rationale or tradeoffs worth capturing.
 
-Update the microservice's local `AGENTS.md` file to reflect the changes. Capture purpose, design rationale, tradeoffs, and the context needed for someone to safely evolve this microservice in the future. Focus on the reasons behind decisions rather than describing what the code does.
+Update the microservice's local `CLAUDE.md` file to reflect the changes. If the file does not exist, create it with the hostname as an H1 heading (from `manifest.yaml`). Capture purpose, design rationale, tradeoffs, and the context needed for someone to safely evolve this microservice in the future. Focus on the reasons behind decisions rather than describing what the code does.
 
-#### Step 3: Versioning
+#### Step 4: Versioning
 
 Increment the `Version` const in `intermediate.go`.
 
-#### Step 4: Log the Prompts
+#### Step 5: Log the Prompts
 
-Skip this step if the microservice's directory does not include `PROMPTS.md`.
+Skip this step if the change is too minor to affect how you'd describe the microservice to a new agent.
 
-Update `PROMPTS.md` in the microservice's directory with the prompt that motivated this change. Rephrase the language to include context that was not made explicit in the original prompt. The intent is to maintain an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.
+Update `PROMPTS.md` to reflect the current capabilities of the microservice — what you would need to prompt to reproduce it from scratch today. Rewrite or extend the existing content as needed. The goal is a concise, up-to-date description a future agent could use to recreate the microservice, not a history of every change.
 
-Append the prompt as follows.
-
-```md
-## Prompt title
-
-Prompt comes here...
-```
-
-#### Step 5: Visualize Workflows
+#### Step 6: Visualize Workflows
 
 Skip this step if the microservice's `manifest.yaml` does not have a `workflows` section, or if instructed to be "quick" or to skip documentation.
 
@@ -69,7 +66,7 @@ classDef term fill:#e5f4f3,color:#434343,stroke:#434343
 
 Add a title node at the top of the graph using the workflow's route name in kebab-case: `_title{{"my-workflow"}}:::term --> _start`. The title connects to the start node.
 
-#### Step 6: Chart the Topology
+#### Step 7: Chart the Topology
 
 This step is required if the `downstream` section of `manifest.yaml` or `main/main.go` were changed. Otherwise, skip it.
 

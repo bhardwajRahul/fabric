@@ -17,7 +17,7 @@ Microbus-Call-Depth: 1
 Microbus-From-Host: http.ingress.core
 Microbus-From-Id: tg190vjj3j
 Microbus-Msg-Id: UQnfaJf4
-Microbus-Time-Budget: 19749
+Microbus-Time-Budget: 19.749s
 Sec-Ch-Ua: "Chromium";v="104", " Not A;Brand";v="99"
 Sec-Ch-Ua-Mobile: ?0
 Sec-Ch-Ua-Platform: "macOS"

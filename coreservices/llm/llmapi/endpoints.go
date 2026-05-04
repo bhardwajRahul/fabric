@@ -36,30 +36,39 @@ func (d Def) URL() string {
 
 // ChatIn are the input arguments of Chat.
 type ChatIn struct { // MARKER: Chat
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []string  `json:"tools,omitzero"`
+	Provider string       `json:"provider,omitzero"`
+	Model    string       `json:"model,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	ToolURLs []string     `json:"toolURLs,omitzero"`
+	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // ChatOut are the output arguments of Chat.
 type ChatOut struct { // MARKER: Chat
 	MessagesOut []Message `json:"messagesOut,omitzero"`
+	Usage       Usage     `json:"usage,omitzero"`
 }
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
+	Model    string       `json:"model,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	Tools    []Tool       `json:"tools,omitzero"`
+	Options  *TurnOptions `json:"options,omitzero"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Completion *TurnCompletion `json:"completion,omitzero"`
+	Content   string     `json:"content,omitzero"`
+	ToolCalls []ToolCall `json:"toolCalls,omitzero"`
+	Usage     Usage      `json:"usage,omitzero"`
 }
 
 // InitChatIn are the input arguments of InitChat.
 type InitChatIn struct { // MARKER: InitChat
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	Tools    []Tool       `json:"tools,omitzero"`
+	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // InitChatOut are the output arguments of InitChat.
@@ -70,6 +79,8 @@ type InitChatOut struct { // MARKER: InitChat
 
 // CallLLMIn are the input arguments of CallLLM.
 type CallLLMIn struct { // MARKER: CallLLM
+	Provider string    `json:"provider,omitzero"`
+	Model    string    `json:"model,omitzero"`
 	Messages []Message `json:"messages,omitzero"`
 }
 
@@ -77,11 +88,13 @@ type CallLLMIn struct { // MARKER: CallLLM
 type CallLLMOut struct { // MARKER: CallLLM
 	LLMContent       string `json:"llmContent,omitzero"`
 	PendingToolCalls any    `json:"pendingToolCalls,omitzero"`
+	TurnUsage        Usage  `json:"turnUsage,omitzero"`
 }
 
 // ProcessResponseIn are the input arguments of ProcessResponse.
 type ProcessResponseIn struct { // MARKER: ProcessResponse
 	LLMContent    string `json:"llmContent,omitzero"`
+	TurnUsage     Usage  `json:"turnUsage,omitzero"`
 	ToolRounds    int    `json:"toolRounds,omitzero"`
 	MaxToolRounds int    `json:"maxToolRounds,omitzero"`
 }
@@ -91,6 +104,7 @@ type ProcessResponseOut struct { // MARKER: ProcessResponse
 	MessagesOut    []Message `json:"messages,omitzero"`
 	ToolsRequested bool      `json:"toolsRequested,omitzero"`
 	ToolRoundsOut  int       `json:"toolRounds,omitzero"`
+	UsageOut       Usage     `json:"usage,omitzero"`
 }
 
 // ExecuteToolIn are the input arguments of ExecuteTool.
@@ -105,13 +119,17 @@ type ExecuteToolOut struct { // MARKER: ExecuteTool
 
 // ChatLoopIn are the input arguments of ChatLoop.
 type ChatLoopIn struct { // MARKER: ChatLoop
-	Messages []Message `json:"messages,omitzero"`
-	Tools    []Tool    `json:"tools,omitzero"`
+	Provider string       `json:"provider,omitzero"`
+	Model    string       `json:"model,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	Tools    []Tool       `json:"tools,omitzero"`
+	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // ChatLoopOut are the output arguments of ChatLoop.
 type ChatLoopOut struct { // MARKER: ChatLoop
 	MessagesOut []Message `json:"messages,omitzero"`
+	Usage       Usage     `json:"usage,omitzero"`
 }
 
 var (

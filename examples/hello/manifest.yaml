@@ -17,7 +17,8 @@ general:
   hostname: hello.example
   description: The Hello microservice demonstrates the various capabilities of a microservice.
   package: github.com/microbus-io/fabric/examples/hello
-  frameworkVersion: 1.26.0
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T14:15:00Z"
 
 downstream:
   - hostname: calculator.example
@@ -37,7 +38,7 @@ webs:
     method: ANY
     route: /ping
   Calculator:
-    description: Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice.
+    description: Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice in order to demonstrate a call from one microservice to another.
     method: ANY
     route: /calculator
   BusPNG:

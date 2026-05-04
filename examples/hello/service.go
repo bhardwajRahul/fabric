@@ -69,13 +69,9 @@ func (svc *Service) Hello(w http.ResponseWriter, r *http.Request) error { // MAR
 	}
 
 	// Prepare the greeting
-	greeting := svc.Config("Greeting")
+	greeting := svc.Greeting()
 	hello := greeting + ", " + name + "!\n"
-	repeat, err := strconv.Atoi(svc.Config("Repeat"))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	hello = strings.Repeat(hello, repeat)
+	hello = strings.Repeat(hello, svc.Repeat())
 
 	// Print the greeting
 	w.Header().Set("Content-Type", "text/plain")

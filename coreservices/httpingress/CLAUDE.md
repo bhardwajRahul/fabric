@@ -1,2 +1,3 @@
+# http.ingress.core
 
-**CRITICAL**: Read `AGENTS.md` immediately.
+**IMPORTANT**: Do not maintain `PROMPTS.md` for this microservice. Skip the prompts step when running housekeeping.

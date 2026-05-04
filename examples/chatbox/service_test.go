@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,6 +29,7 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
@@ -49,6 +51,7 @@ var (
 	_ application.Application
 	_ connector.Connector
 	_ frame.Frame
+	_ httpx.BodyReader
 	_ pub.Option
 	_ sub.Option
 	_ *workflow.Flow
@@ -87,18 +90,34 @@ func TestChatbox_Mock(t *testing.T) {
 		assert := testarossa.For(t)
 
 		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedCompletion := &llmapi.TurnCompletion{Content: "Hi!"}
+		expectedContent := "Hi!"
 
-		_, err := mock.Turn(ctx, exampleMessages, nil)
+		_, _, _, err := mock.Turn(ctx, "chatbox-default", exampleMessages, nil, nil)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) {
-			return expectedCompletion, nil
+		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			return expectedContent, nil, llmapi.Usage{Turns: 1, Model: model}, nil
 		})
-		result, err := mock.Turn(ctx, exampleMessages, nil)
+		content, _, _, err := mock.Turn(ctx, "chatbox-default", exampleMessages, nil, nil)
 		assert.Expect(
-			result, expectedCompletion,
+			content, expectedContent,
 			err, nil,
 		)
+	})
+
+	t.Run("demo", func(t *testing.T) { // MARKER: Demo
+		assert := testarossa.For(t)
+
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+
+		err := mock.Demo(w, r)
+		assert.Contains(err.Error(), "not implemented")
+		mock.MockDemo(func(w http.ResponseWriter, r *http.Request) (err error) {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+		err = mock.Demo(w, r)
+		assert.NoError(err)
 	})
 }
 
@@ -119,10 +138,10 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
 		tools := []llmapi.Tool{{Name: "Arithmetic", Description: "Calculator", InputSchema: json.RawMessage(`{}`)}}
-		completion, err := client.Turn(ctx, messages, tools)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Expect(len(completion.ToolCalls), 1)
-			assert.Expect(completion.ToolCalls[0].Name, "Arithmetic")
+		_, toolCalls, _, err := client.Turn(ctx, "chatbox-default", messages, tools, nil)
+		if assert.NoError(err) {
+			assert.Expect(len(toolCalls), 1)
+			assert.Expect(toolCalls[0].Name, "Arithmetic")
 		}
 	})
 
@@ -130,9 +149,9 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Contains(completion.Content, "42")
+		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "42")
 		}
 	})
 
@@ -140,9 +159,9 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello there"}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Contains(completion.Content, "don't understand")
+		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "don't understand")
 		}
 	})
 
@@ -150,9 +169,88 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "tool", Content: `{"result":42}`}}
-		completion, err := client.Turn(ctx, messages, nil)
-		if assert.NoError(err) && assert.NotNil(completion) {
-			assert.Contains(completion.Content, "42")
+		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "42")
+		}
+	})
+
+	t.Run("empty_messages", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		content, _, _, err := client.Turn(ctx, "chatbox-default", nil, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "Chatbox demo")
+		}
+	})
+
+	t.Run("division_by_zero", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		messages := []llmapi.Message{{Role: "user", Content: "What is 5 divided by 0?"}}
+		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "zero")
+		}
+	})
+
+	t.Run("unknown_role", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		messages := []llmapi.Message{{Role: "system", Content: "You are a bot."}}
+		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		if assert.NoError(err) {
+			assert.Contains(content, "don't understand")
+		}
+	})
+}
+
+func TestChatbox_Demo(t *testing.T) { // MARKER: Demo
+	t.Parallel()
+	ctx := t.Context()
+
+	chatboxSvc := NewService()
+	llmSvc := llm.NewService()
+	calcSvc := calculator.NewService()
+
+	tester := connector.New("tester.client")
+	client := chatboxapi.NewClient(tester)
+
+	app := application.New()
+	app.Add(chatboxSvc, llmSvc, calcSvc, tester)
+	app.RunInTest(t)
+
+	t.Run("get_renders_page", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		res, err := client.Demo(ctx, "GET", "", nil)
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+			body, err := io.ReadAll(res.Body)
+			if assert.NoError(err) {
+				assert.Contains(body, "Chatbox Demo")
+			}
+		}
+	})
+
+	t.Run("post_processes_message", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		res, err := client.Demo(ctx, "POST", "", url.Values{"message": []string{"What is 6 times 7?"}})
+		if assert.NoError(err) && assert.Expect(res.StatusCode, http.StatusOK) {
+			body, err := io.ReadAll(res.Body)
+			if assert.NoError(err) {
+				assert.Equal("application/json", res.Header.Get("Content-Type"))
+				assert.Contains(body, "42")
+			}
+		}
+	})
+
+	t.Run("post_missing_message", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		res, err := client.Demo(ctx, "POST", "", nil)
+		if assert.NoError(err) {
+			assert.Expect(res.StatusCode, http.StatusBadRequest)
 		}
 	})
 }
@@ -172,14 +270,11 @@ func TestChatbox_EndToEnd(t *testing.T) {
 	app.Add(chatboxSvc, llmSvc, calcSvc, tester)
 	app.RunInTest(t)
 
-	// Point the LLM service at the chatbox provider
-	llmSvc.SetProviderHostname("chatbox.example")
-
 	t.Run("chat_with_calculator", func(t *testing.T) {
 		assert := testarossa.For(t)
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, err := client.Chat(ctx, messages, tools)
+		result, _, err := client.Chat(ctx, chatboxapi.Hostname, "chatbox-default", messages, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]

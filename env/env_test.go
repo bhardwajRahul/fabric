@@ -24,27 +24,36 @@ import (
 	"github.com/microbus-io/testarossa"
 )
 
-func TestEnv_FileOverridesOS(t *testing.T) {
-	// No parallel
+func TestEnv_OSOverridesFile(t *testing.T) {
+	// No parallel — mutates process-wide env.
 	assert := testarossa.For(t)
 
 	os.Chdir("testdata/subdir")
 	defer os.Chdir("..")
 	defer os.Chdir("..")
 
-	// File overrides OS
+	// Real OS env wins over yaml (dotenv convention). The file value is loaded
+	// only into keys that are not already set in the OS env.
 	os.Setenv("X5981245X", "InOS")
 	defer os.Unsetenv("X5981245X")
+	Load() // re-run to reflect the new cwd
 	assert.Equal("InOS", os.Getenv("X5981245X"))
+	assert.Equal("InOS", Get("X5981245X"))
+
+	// File value lands when the OS env is unset.
+	os.Unsetenv("X5981245X")
+	Load()
 	assert.Equal("InFile", Get("X5981245X"))
+	assert.Equal("InFile", os.Getenv("X5981245X"))
 
-	// Case sensitive keys
+	// Case sensitive keys.
 	assert.Equal("infile", Get("x5981245x"))
-	assert.NotEqual(Get("X5981245X"), os.Getenv("x5981245x"))
+	assert.NotEqual(Get("X5981245X"), Get("x5981245x"))
 
-	// Push/pop
+	// Push / Pop manipulates the real OS env with save/restore.
 	Push("X5981245X", "Pushed")
 	assert.Equal("Pushed", Get("X5981245X"))
+	assert.Equal("Pushed", os.Getenv("X5981245X")) // visible to third-party libs
 	Pop("X5981245X")
 	assert.Equal("InFile", Get("X5981245X"))
 	err := errors.CatchPanic(func() error {
@@ -53,14 +62,26 @@ func TestEnv_FileOverridesOS(t *testing.T) {
 	})
 	assert.Error(err)
 
-	// Subdirectory over ancestor directory
+	// Push restores correctly when the prior value was unset.
+	os.Unsetenv("YA1B2C3X")
+	Push("YA1B2C3X", "Pushed")
+	assert.Equal("Pushed", Get("YA1B2C3X"))
+	Pop("YA1B2C3X")
+	_, ok := os.LookupEnv("YA1B2C3X")
+	assert.False(ok, "Pop must Unsetenv when the prior was unset")
+
+	// Subdirectory yaml takes priority over ancestor yaml.
 	assert.Equal("Child", Get("X35638125X"))
 	os.Chdir("..")
+	os.Unsetenv("X35638125X") // ensure parent dir's yaml lands fresh
+	Load()
 	assert.Equal("Parent", Get("X35638125X"))
 	os.Chdir("subdir")
+	os.Unsetenv("X35638125X")
+	Load()
 
-	// Lookup
-	_, ok := Lookup("X5981245X")
+	// Lookup forwards to os.LookupEnv.
+	_, ok = Lookup("X5981245X")
 	assert.True(ok)
 	_, ok = Lookup("x5981245x")
 	assert.True(ok)

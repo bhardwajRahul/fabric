@@ -23,7 +23,7 @@ Workflow checklist gives the agent a copy-paste tracking list so it can mark off
 
 ```
 Creating or modifying a functional endpoint:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Determine signature
 - [ ] Step 3: Extend the ToDo interface
 ...
@@ -48,3 +48,11 @@ if example { // MARKER: FeatureName
 **Comprehensive coverage** - A single skill touches every file that needs updating: implementation, API client stubs, mocks, tests, OpenAPI descriptors, the manifest and documentation. Nothing is left for the developer to wire up manually.
 
 **Incremental development** - Each skill adds or modifies a single feature without disrupting existing code. Tests are written or updated in the same pass, and the manifest is kept in sync.
+
+### Skills Beyond Adding Features
+
+Two cross-cutting skills run after the per-feature skills:
+
+- **`housekeeping`** runs automatically after every microservice change. It re-reads the microservice's manifest, refreshes the timestamp, regenerates derived artifacts, and verifies that `MARKER` and `HINT` comments, tests, and the manifest are all in sync. Missing housekeeping is the most common source of structural drift, so it is enforced rather than optional.
+
+- **`review-microservice`** is a design audit. It inspects a single microservice end-to-end - signatures, tests, manifest, generated code, and design notes in `CLAUDE.md` - and reports inconsistencies, missing coverage, or deviations from framework conventions. Run it before merging non-trivial microservice changes.

@@ -42,7 +42,7 @@ Microbus-From-Host: client.example
 Microbus-From-Id: m3mcmiftmd
 Microbus-Msg-Id: P4zpC2Ea
 Microbus-Op-Code: Req
-Microbus-Time-Budget: 19999
+Microbus-Time-Budget: 19.999s
 
 9kHYrhgFdztxSZ00eafjfHoirvROe53j8ooZA14z0CxMV9cMHbjnKeVVHxarmvlyhGqbtiOTGsYfE7eLPImNQgYRKYG01npWZBfqlVbkqw2zxWznetDzD0q5fOr4HKOn
 ```
@@ -71,7 +71,7 @@ Microbus-From-Host: client.example
 Microbus-From-Id: m3mcmiftmd
 Microbus-Msg-Id: P4zpC2Ea
 Microbus-Op-Code: Req
-Microbus-Time-Budget: 19999
+Microbus-Time-Budget: 19.999s
 
 IBtVOBMQPjaBTEdwXTeCij9ZY61OOidkYTnwgUk98tC7mZzAgsDTH2pRxKTav0lD34MYJS0haYgWUr0brT1RENDCoffYIzKQYDcAsp73O7X1HD9VjGv0C3parRDPCCEz
 ```
@@ -88,7 +88,7 @@ Microbus-From-Host: client.example
 Microbus-From-Id: m3mcmiftmd
 Microbus-Msg-Id: P4zpC2Ea
 Microbus-Op-Code: Req
-Microbus-Time-Budget: 19999
+Microbus-Time-Budget: 19.999s
 
 7SLujUrm4W99YLUp
 ```

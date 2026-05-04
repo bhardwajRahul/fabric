@@ -49,28 +49,35 @@ var (
 type ChatResponse multicastResponse // MARKER: Chat
 
 // Get unpacks the return arguments of Chat.
-func (_res *ChatResponse) Get() (messagesOut []Message, err error) { // MARKER: Chat
+func (_res *ChatResponse) Get() (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
 	_d := _res.data.(*ChatOut)
-	return _d.MessagesOut, _res.err
+	return _d.MessagesOut, _d.Usage, _res.err
 }
 
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
-Each tool is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
-"https://calculator.example/arithmetic"). The LLM service fetches the OpenAPI document of
-each distinct host:port to resolve the endpoint into a callable tool. Only
-`FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints can be exposed.
+The provider hostname picks which provider microservice handles the request (e.g.
+"claude.llm.core"). The model identifier is provider-specific; use the typed constants
+exported by each provider's *api package for compile-time checking.
+
+Each entry in toolURLs is the canonical URL of a Microbus endpoint to expose to the LLM
+(e.g. "https://calculator.example/arithmetic"). Only FeatureFunction, FeatureWeb, and
+FeatureWorkflow endpoints can be exposed.
 
 Input:
+  - provider: provider is the hostname of the LLM provider microservice to use
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
+  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
+  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
+  - usage: usage is the aggregate token consumption across all turns
 */
-func (_c MulticastClient) Chat(ctx context.Context, messages []Message, tools []string) iter.Seq[*ChatResponse] { // MARKER: Chat
-	_in := ChatIn{Messages: messages, Tools: tools}
+func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
+	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
 	return func(yield func(*ChatResponse) bool) {
@@ -87,58 +94,76 @@ func (_c MulticastClient) Chat(ctx context.Context, messages []Message, tools []
 /*
 Chat sends messages to an LLM with optional tools and returns the response messages.
 
-Each tool is the canonical URL of a Microbus endpoint to expose to the LLM (e.g.
-"https://calculator.example/arithmetic"). The LLM service fetches the OpenAPI document of
-each distinct host:port to resolve the endpoint into a callable tool. Only
-`FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints can be exposed.
+The provider hostname picks which provider microservice handles the request (e.g.
+"claude.llm.core"). The model identifier is provider-specific; use the typed constants
+exported by each provider's *api package for compile-time checking.
+
+Each entry in toolURLs is the canonical URL of a Microbus endpoint to expose to the LLM
+(e.g. "https://calculator.example/arithmetic"). Only FeatureFunction, FeatureWeb, and
+FeatureWorkflow endpoints can be exposed.
 
 Example:
 
 	messages := []llmapi.Message{
 		{Role: "user", Content: "What is 17 * 23, and what's the weather in Paris?"},
 	}
-	tools := []string{
+	toolURLs := []string{
 		calculatorapi.Arithmetic.URL(),
 		dataapi.Fetch.URL(),
 	}
-	messagesOut, err := llmapi.NewClient(svc).Chat(ctx, messages, tools)
+	messagesOut, usage, err := llmapi.NewClient(svc).Chat(
+		ctx,
+		claudellmapi.Hostname, claudellmapi.ModelHaiku45,
+		messages, toolURLs, nil,
+	)
 
 Input:
+  - provider: provider is the hostname of the LLM provider microservice to use
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is the list of Microbus endpoint URLs exposed to the LLM
+  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
+  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
 
 Output:
   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
+  - usage: usage is the aggregate token consumption across all turns
 */
-func (_c Client) Chat(ctx context.Context, messages []Message, tools []string) (messagesOut []Message, err error) { // MARKER: Chat
-	_in := ChatIn{Messages: messages, Tools: tools}
+func (_c Client) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
+	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
-	return _out.MessagesOut, err // No trace
+	return _out.MessagesOut, _out.Usage, err // No trace
 }
 
 // TurnResponse packs the response of Turn.
 type TurnResponse multicastResponse // MARKER: Turn
 
 // Get unpacks the return arguments of Turn.
-func (_res *TurnResponse) Get() (completion *TurnCompletion, err error) { // MARKER: Turn
+func (_res *TurnResponse) Get() (content string, toolCalls []ToolCall, usage Usage, err error) { // MARKER: Turn
 	_d := _res.data.(*TurnOut)
-	return _d.Completion, _res.err
+	return _d.Content, _d.ToolCalls, _d.Usage, _res.err
 }
 
 /*
-Turn executes a single LLM turn: sends messages and tool definitions to the LLM provider
-and returns the completion (text response and/or tool calls).
+Turn executes a single LLM turn against a provider microservice.
+
+This endpoint defines the interface that provider microservices (claudellm, chatgptllm,
+geminillm) implement. Calling Turn on llm.core itself returns 501 Not Implemented; use
+ForHost(<provider hostname>) to invoke a specific provider directly.
 
 Input:
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
   - tools: tools is the resolved tool definitions with schemas
+  - options: options configures max tokens and temperature (nil = provider defaults)
 
 Output:
-  - completion: completion is the LLM's response including text and tool calls
+  - content: content is the LLM's text response, if any
+  - toolCalls: toolCalls is the list of tool calls requested by the LLM
+  - usage: usage is the token consumption for this single turn (Turns=1)
 */
-func (_c MulticastClient) Turn(ctx context.Context, messages []Message, tools []Tool) iter.Seq[*TurnResponse] { // MARKER: Turn
-	_in := TurnIn{Messages: messages, Tools: tools}
+func (_c MulticastClient) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
+	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
 	return func(yield func(*TurnResponse) bool) {
@@ -153,21 +178,28 @@ func (_c MulticastClient) Turn(ctx context.Context, messages []Message, tools []
 }
 
 /*
-Turn executes a single LLM turn: sends messages and tool definitions to the LLM provider
-and returns the completion (text response and/or tool calls).
+Turn executes a single LLM turn against a provider microservice.
+
+This endpoint defines the interface that provider microservices (claudellm, chatgptllm,
+geminillm) implement. Calling Turn on llm.core itself returns 501 Not Implemented; use
+ForHost(<provider hostname>) to invoke a specific provider directly.
 
 Input:
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
   - tools: tools is the resolved tool definitions with schemas
+  - options: options configures max tokens and temperature (nil = provider defaults)
 
 Output:
-  - completion: completion is the LLM's response including text and tool calls
+  - content: content is the LLM's text response, if any
+  - toolCalls: toolCalls is the list of tool calls requested by the LLM
+  - usage: usage is the token consumption for this single turn (Turns=1)
 */
-func (_c Client) Turn(ctx context.Context, messages []Message, tools []Tool) (completion *TurnCompletion, err error) { // MARKER: Turn
-	_in := TurnIn{Messages: messages, Tools: tools}
+func (_c Client) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, usage Usage, err error) { // MARKER: Turn
+	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
-	return _out.Completion, err // No trace
+	return _out.Content, _out.ToolCalls, _out.Usage, err // No trace
 }
 
 // multicastResponse packs the response of a functional multicast.
@@ -464,10 +496,11 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL str
 /*
 InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
 */
-func (_c Executor) InitChat(ctx context.Context, messages []Message, tools []Tool) (err error) { // MARKER: InitChat
+func (_c Executor) InitChat(ctx context.Context, messages []Message, tools []Tool, options *ChatOptions) (err error) { // MARKER: InitChat
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{
 		Messages: messages,
 		Tools:    tools,
+		Options:  options,
 	}, &InitChatOut{}, _c.inFlow, _c.outFlow)
 	return err // No trace
 }
@@ -475,25 +508,28 @@ func (_c Executor) InitChat(ctx context.Context, messages []Message, tools []Too
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (_c Executor) CallLLM(ctx context.Context, messages []Message) (llmContent string, pendingToolCalls any, err error) { // MARKER: CallLLM
+func (_c Executor) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{
+		Provider: provider,
+		Model:    model,
 		Messages: messages,
 	}, &out, _c.inFlow, _c.outFlow)
-	return out.LLMContent, out.PendingToolCalls, err // No trace
+	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, err // No trace
 }
 
 /*
-ProcessResponse inspects the LLM response and routes to the next step.
+ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
 */
-func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, toolRounds int, maxToolRounds int) (messagesOut []Message, toolsRequested bool, toolRoundsOut int, err error) { // MARKER: ProcessResponse
+func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (messagesOut []Message, toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
 	var out ProcessResponseOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{
 		LLMContent:    llmContent,
+		TurnUsage:     turnUsage,
 		ToolRounds:    toolRounds,
 		MaxToolRounds: maxToolRounds,
 	}, &out, _c.inFlow, _c.outFlow)
-	return out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, err // No trace
+	return out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
 }
 
 /*
@@ -510,14 +546,17 @@ func (_c Executor) ExecuteTool(ctx context.Context, toolExecuted bool) (toolExec
 /*
 ChatLoop creates and runs the ChatLoop workflow, blocking until termination.
 */
-func (_c Executor) ChatLoop(ctx context.Context, messages []Message, tools []Tool) (messagesOut []Message, status string, err error) { // MARKER: ChatLoop
+func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, messages []Message, tools []Tool, options *ChatOptions) (messagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
 	if _c.runner == nil {
-		return nil, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return nil, Usage{}, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out ChatLoopOut
 	status, err = marshalWorkflow(ctx, _c.runner, ChatLoop.URL(), ChatLoopIn{
+		Provider: provider,
+		Model:    model,
 		Messages: messages,
 		Tools:    tools,
+		Options:  options,
 	}, &out)
-	return out.MessagesOut, status, err
+	return out.MessagesOut, out.Usage, status, err
 }

@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = calculatorapi.Hostname
-	Version  = 352
+	Version  = 353
 )
 
 // ToDo is implemented by the service or mock.

@@ -19,9 +19,11 @@ package chatgptllm
 import "encoding/json"
 
 type openaiRequest struct {
-	Model    string          `json:"model"`
-	Messages []openaiMessage `json:"messages"`
-	Tools    []openaiTool    `json:"tools,omitzero"`
+	Model       string          `json:"model"`
+	Messages    []openaiMessage `json:"messages"`
+	Tools       []openaiTool    `json:"tools,omitzero"`
+	MaxTokens   int             `json:"max_tokens,omitzero"`
+	Temperature float64         `json:"temperature,omitzero"`
 }
 
 type openaiMessage struct {
@@ -57,4 +59,14 @@ type openaiResponse struct {
 	Choices []struct {
 		Message openaiMessage `json:"message"`
 	} `json:"choices"`
+	Model string      `json:"model"`
+	Usage openaiUsage `json:"usage"`
+}
+
+type openaiUsage struct {
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
 }

@@ -246,13 +246,15 @@ func (f *Flow) Interrupt(payload any) {
 // Subgraph signals the orchestrator to create and run a child workflow before
 // this step completes. The step is parked until the child finishes - similar to
 // how Interrupt pauses until Resume is called. When the child completes, its
-// output state (filtered through DeclareOutputs) is merged into this step's
-// state and the task is re-executed. On re-entry the task sees the child's
-// output in its state and should return normally without calling Subgraph again.
+// final state is filtered through the child's DeclareOutputs and merged into
+// this step's changes using the parent graph's reducers, then the task is
+// re-executed. On re-entry the task sees the child's output in its state and
+// should return normally without calling Subgraph again.
 //
-// The input map is merged into the parent's current state using the child graph's
-// reducers, then filtered through the child's DeclareInputs - the same semantics
-// as Continue's additionalState.
+// The child's initial state is built from the parent's full state plus the
+// surgraph step's accumulated changes; the explicit input map is then merged on
+// top using the child graph's reducers, and the result is filtered through the
+// child's DeclareInputs.
 func (f *Flow) Subgraph(workflowURL string, input map[string]any) {
 	f.subgraphWorkflow = workflowURL
 	f.subgraphInput = input

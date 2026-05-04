@@ -165,6 +165,60 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bo
 }
 ```
 
+## Time Budgets and Long-Running Work
+
+Each task step has an execution time budget enforced by the foreman as an HTTP call timeout. The default is `2m` (set by the foreman's `DefaultTimeBudget` config) and the maximum allowed value is `15m` — the config validation rejects anything longer. Override the budget per task in the graph definition with `graph.SetTimeBudget(taskURL, duration)`.
+
+If a task exceeds its budget, the foreman cancels the HTTP call and the step's lease eventually expires for `pollPendingSteps` to recover. A task that intrinsically needs more than 15 minutes to finish must not block the worker — instead, use one of the two patterns below to free the worker between work and completion.
+
+### Pattern 1: Interrupt and External Resume
+
+Use when some external signal will indicate completion (a callback from an async service, a webhook arrival, human approval). The task triggers the long-running operation, then calls `flow.Interrupt(payload)` and returns. The worker is freed immediately and the flow parks in `interrupted` status. Some other process (an inbound event sink, a webhook handler, a UI action) calls `foremanapi.Resume(flowID, data)` when the operation completes; the task re-runs with the resume data merged into state.
+
+```go
+func (svc *Service) WaitForApproval(ctx context.Context, flow *workflow.Flow, requestID string, approved bool) (approvedOut bool, err error) {
+    if approved {
+        // Re-entry: Resume was called with approval data merged into state.
+        return true, nil
+    }
+    // First run: kick off the approval request, then park.
+    if err := svc.sendApprovalRequest(ctx, requestID); err != nil {
+        return false, errors.Trace(err)
+    }
+    flow.Interrupt(map[string]any{"requestID": requestID})
+    return false, nil
+}
+```
+
+This pattern assumes another process exists that knows when to call `Resume`. Wait time is unbounded — could be seconds or weeks.
+
+### Pattern 2: Polling with Sleep and Retry
+
+Use when no external trigger exists and the task must check for completion itself (waiting on a job ID, a batch import, a slow third-party API). The polling task checks completion; if not done, it calls `flow.Retry` (with backoff) and returns; if done, it returns the result. Each polling cycle is a fresh task execution, so the worker is freed between checks rather than blocking inside `time.Sleep`.
+
+```go
+func (svc *Service) PollJobStatus(ctx context.Context, flow *workflow.Flow, jobID string) (jobResult string, err error) {
+    status, result, err := svc.checkJobStatus(ctx, jobID)
+    if err != nil {
+        return "", errors.Trace(err)
+    }
+    switch status {
+    case "running":
+        // Not done yet — schedule another poll. Cap attempts to bound total wait.
+        if !flow.Retry(120, 30*time.Second, 1, 30*time.Second) { // 120 × 30s = 1h ceiling
+            return "", errors.New("job did not complete within poll budget")
+        }
+        return "", nil // Retry returned true; foreman will re-run this task after the delay.
+    case "failed":
+        return "", errors.New("job failed")
+    default:
+        return result, nil
+    }
+}
+```
+
+A separate "kick off the job" task should run before the polling task in the graph, writing `jobID` into state for the poller to read. The two patterns can be combined: trigger work in one task, then either interrupt-and-resume or poll in a downstream task to await completion.
+
 ## Running Workflows
 
 The Foreman core service orchestrates workflow execution. Use `foremanapi.NewClient(svc)` to interact with it:

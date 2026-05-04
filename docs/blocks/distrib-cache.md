@@ -21,6 +21,10 @@ The cache is scoped to a single microservice, therefore isolating it from side-e
 
 Operations are synchronized over the network and the cache is not immune to race conditions. To help improve consistency, the `Load` operations checks with peers to ensure there are no multiple versions of the same element. This is still not a 100% guarantee of consistency (e.g. during a network partition) but rather a mechanism to recover from inconsistent state.
 
+### Stampede Protection
+
+When many concurrent requests miss the same cache key at once - a "thundering herd" or cache stampede - a naive cache lets every requester race to recompute the same value, hammering the underlying data source. The cache's `LoadOrCompute` and `GetOrCompute` operations protect against this using singleflight: concurrent callers in the same process for the same key share a single `maker` invocation; only one goroutine computes the value while the rest wait for the result. Stampede protection is per-process, so with N replicas up to N concurrent maker invocations may still occur on a cold key - but the load on the data source is bounded to roughly one regeneration per key per replica rather than one per request. Maker errors are not cached, so a transient failure does not poison the cache for the rest of the TTL.
+
 <img src="./distrib-cache-4.drawio.svg">
 <p></p>
 

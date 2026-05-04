@@ -34,6 +34,7 @@ import (
 )
 
 func TestApplication_StartStop(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -64,6 +65,7 @@ func TestApplication_StartStop(t *testing.T) {
 }
 
 func TestApplication_Interrupt(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -97,6 +99,7 @@ func TestApplication_Interrupt(t *testing.T) {
 }
 
 func TestApplication_NoConflict(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
@@ -168,6 +171,7 @@ func TestApplication_NoConflict(t *testing.T) {
 }
 
 func TestApplication_DependencyStart(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -215,6 +219,7 @@ func TestApplication_DependencyStart(t *testing.T) {
 }
 
 func TestApplication_FailStart(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -256,6 +261,7 @@ func TestApplication_FailStart(t *testing.T) {
 }
 
 func TestApplication_Remove(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -289,6 +295,7 @@ func TestApplication_Remove(t *testing.T) {
 }
 
 func TestApplication_Run(t *testing.T) {
+	// No parallel - Setting envars
 	assert := testarossa.For(t)
 
 	env.Push("MICROBUS_PLANE", utils.RandomIdentifier(12))

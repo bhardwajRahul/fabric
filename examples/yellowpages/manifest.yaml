@@ -17,9 +17,9 @@ general:
   hostname: yellowpages.example
   description: Person persists persons in a SQL database.
   package: github.com/microbus-io/fabric/examples/yellowpages
-  frameworkVersion: 1.27.0
+  frameworkVersion: 1.28.0
   db: SQL
-  modifiedAt: "2026-03-22T13:00:00Z"
+  modifiedAt: "2026-05-02T03:54:31Z"
 
 functions:
   Create:

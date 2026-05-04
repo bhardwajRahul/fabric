@@ -13,7 +13,7 @@ Copy this checklist and track your progress:
 
 ```
 Regenerating boilerplate:
-- [ ] Step 1: Read local AGENTS.md file
+- [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Read manifest.yaml and service.go
 - [ ] Step 3: Read Version const from intermediate.go
 - [ ] Step 4: Delete existing boilerplate files
@@ -32,9 +32,9 @@ Regenerating boilerplate:
 - [ ] Step 17: Build, vet and test
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Read `manifest.yaml` and `service.go`
 
@@ -54,7 +54,7 @@ Before deleting the existing boilerplate, read `intermediate.go` and note the cu
 - `intermediate.go`
 - `mock.go`
 
-**CRITICAL**: Do NOT delete `service.go`, `service_test.go`, `manifest.yaml`, `AGENTS.md`, `CLAUDE.md`, `PROMPTS.md`, or any other files.
+**CRITICAL**: Do NOT delete `service.go`, `service_test.go`, `manifest.yaml`, `CLAUDE.md`, `PROMPTS.md`, or any other files.
 
 #### Step 5: Initialize Boilerplate Files
 

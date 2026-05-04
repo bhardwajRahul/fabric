@@ -28,3 +28,5 @@ con.Subscribe("MyHandler", handler,
 ```
 
 `Connector.Subscribe` takes a unique name (a Go identifier) and a handler as required positional arguments, then a variadic list of options. Exactly one feature option must be applied - `sub.Function`, `sub.Web`, `sub.InboundEvent`, `sub.Task`, or `sub.Workflow` - to declare the kind of endpoint being registered. `Connector.Unsubscribe(name)` removes a registration by name.
+
+The HTTP method passed to `sub.At` (or its method-specific variants) is validated at registration time. Only the standard HTTP verbs - `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` - and the wildcard `ANY` are accepted. Matching is case-insensitive. Unknown methods are rejected when the subscription is registered, so a typo in a method string fails fast at startup rather than producing silently unreachable endpoints.

@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = llmapi.Hostname
-	Version  = 5
+	Version  = 6
 )
 
 // ToDo is implemented by the service or mock.
@@ -60,13 +60,13 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Chat(ctx context.Context, messages []llmapi.Message, tools []string) (messagesOut []llmapi.Message, err error)                                                                                    // MARKER: Chat
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error)                                                                          // MARKER: Turn
-	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool) (maxToolRounds int, toolRounds int, err error)                                                 // MARKER: InitChat
-	CallLLM(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message) (llmContent string, pendingToolCalls any, err error)                                                                 // MARKER: CallLLM
-	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, err error) // MARKER: ProcessResponse
-	ExecuteTool(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error)                                                                                        // MARKER: ExecuteTool
-	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                  // MARKER: ChatLoop
+	Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error)         // MARKER: Chat
+	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error)         // MARKER: Turn
+	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                             // MARKER: InitChat
+	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                   // MARKER: CallLLM
+	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
+	ExecuteTool(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error)                                                                                                 // MARKER: ExecuteTool
+	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                           // MARKER: ChatLoop
 }
 
 // NewService creates a new instance of the microservice.
@@ -108,46 +108,46 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Chat
 		"Chat", svc.doChat,
 		sub.At(llmapi.Chat.Method, llmapi.Chat.Route),
-		sub.Description(`Chat sends messages to an LLM with optional tools and returns the response messages.
-
-Each tool is the canonical URL of a Microbus endpoint. The LLM service fetches the OpenAPI
-document of each distinct host:port to resolve the endpoint into a callable tool.
+		sub.Description(`Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
 
 Input:
+  - provider: provider is the hostname of the LLM provider microservice to use
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
-  - tools: tools is a list of Microbus endpoint URLs to expose to the LLM
+  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
+  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
 
 Output:
-  - messagesOut: messagesOut is the full conversation including new messages produced by the LLM`),
+  - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
+  - usage: usage is the aggregate token consumption across all turns`),
 		sub.Function(llmapi.ChatIn{}, llmapi.ChatOut{}),
 	)
 	svc.Subscribe( // MARKER: Turn
 		"Turn", svc.doTurn,
 		sub.At(llmapi.Turn.Method, llmapi.Turn.Route),
-		sub.Description(`Turn executes a single LLM turn: sends messages and tool definitions to the LLM provider
-and returns the completion (text response and/or tool calls).
+		sub.Description(`Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
 
 Input:
+  - model: model is the provider-specific model identifier
   - messages: messages is the conversation history to send to the LLM
   - tools: tools is the resolved tool definitions with schemas
+  - options: options configures max tokens and temperature (nil = provider defaults)
 
 Output:
-  - completion: completion is the LLM's response including text and tool calls`),
+  - content: content is the LLM's text response, if any
+  - toolCalls: toolCalls is the list of tool calls requested by the LLM
+  - usage: usage is the token consumption for this single turn`),
 		sub.Function(llmapi.TurnIn{}, llmapi.TurnOut{}),
 	)
 
 	// HINT: Add web endpoints here
 
 	// HINT: Add metrics here
+	svc.DescribeCounter("microbus_llm_tokens_total", "LLMTokens counts tokens consumed per LLM turn") // MARKER: LLMTokens
 
 	// HINT: Add tickers here
 
 	// HINT: Add configs here
-	svc.DefineConfig( // MARKER: ProviderHostname
-		"ProviderHostname",
-		cfg.Description(`ProviderHostname is the hostname of the LLM provider microservice that implements the Turn endpoint.`),
-		cfg.DefaultValue("claude.llm.core"),
-	)
 	svc.DefineConfig( // MARKER: MaxToolRounds
 		"MaxToolRounds",
 		cfg.Description(`MaxToolRounds is the maximum number of tool call round-trips per invocation.`),
@@ -173,7 +173,7 @@ Output:
 	svc.Subscribe( // MARKER: ProcessResponse
 		"ProcessResponse", svc.doProcessResponse,
 		sub.At(llmapi.ProcessResponse.Method, llmapi.ProcessResponse.Route),
-		sub.Description(`ProcessResponse inspects the LLM response and routes to the next step.`),
+		sub.Description(`ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.`),
 		sub.Task(llmapi.ProcessResponseIn{}, llmapi.ProcessResponseOut{}),
 	)
 	svc.Subscribe( // MARKER: ExecuteTool
@@ -200,7 +200,7 @@ func (svc *Intermediate) doChat(w http.ResponseWriter, r *http.Request) (err err
 	var in llmapi.ChatIn
 	var out llmapi.ChatOut
 	err = marshalFunction(w, r, llmapi.Chat.Route, &in, &out, func(_ any, _ any) error {
-		out.MessagesOut, err = svc.Chat(r.Context(), in.Messages, in.Tools)
+		out.MessagesOut, out.Usage, err = svc.Chat(r.Context(), in.Provider, in.Model, in.Messages, in.ToolURLs, in.Options)
 		return err // No trace
 	})
 	return err // No trace
@@ -211,7 +211,7 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in llmapi.TurnIn
 	var out llmapi.TurnOut
 	err = marshalFunction(w, r, llmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Completion, err = svc.Turn(r.Context(), in.Messages, in.Tools)
+		out.Content, out.ToolCalls, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace
@@ -241,7 +241,7 @@ func (svc *Intermediate) doInitChat(w http.ResponseWriter, r *http.Request) (err
 	var in llmapi.InitChatIn
 	flow.ParseState(&in)
 	var out llmapi.InitChatOut
-	out.MaxToolRounds, out.ToolRounds, err = svc.InitChat(r.Context(), &flow, in.Messages, in.Tools)
+	out.MaxToolRounds, out.ToolRounds, err = svc.InitChat(r.Context(), &flow, in.Messages, in.Tools, in.Options)
 	if err != nil {
 		return err // No trace
 	}
@@ -262,7 +262,7 @@ func (svc *Intermediate) doCallLLM(w http.ResponseWriter, r *http.Request) (err 
 	var in llmapi.CallLLMIn
 	flow.ParseState(&in)
 	var out llmapi.CallLLMOut
-	out.LLMContent, out.PendingToolCalls, err = svc.CallLLM(r.Context(), &flow, in.Messages)
+	out.LLMContent, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Messages)
 	if err != nil {
 		return err // No trace
 	}
@@ -283,7 +283,7 @@ func (svc *Intermediate) doProcessResponse(w http.ResponseWriter, r *http.Reques
 	var in llmapi.ProcessResponseIn
 	flow.ParseState(&in)
 	var out llmapi.ProcessResponseOut
-	out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, err = svc.ProcessResponse(r.Context(), &flow, in.LLMContent, in.ToolRounds, in.MaxToolRounds)
+	out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.LLMContent, in.TurnUsage, in.ToolRounds, in.MaxToolRounds)
 	if err != nil {
 		return err // No trace
 	}
@@ -326,20 +326,6 @@ func (svc *Intermediate) doChatLoop(w http.ResponseWriter, r *http.Request) (err
 }
 
 /*
-ProviderHostname is the hostname of the LLM provider microservice that implements the Turn endpoint.
-*/
-func (svc *Intermediate) ProviderHostname() (value string) { // MARKER: ProviderHostname
-	return svc.Config("ProviderHostname")
-}
-
-/*
-SetProviderHostname sets the value of the configuration property.
-*/
-func (svc *Intermediate) SetProviderHostname(value string) (err error) { // MARKER: ProviderHostname
-	return svc.SetConfig("ProviderHostname", value)
-}
-
-/*
 MaxToolRounds is the maximum number of tool call round-trips per invocation.
 */
 func (svc *Intermediate) MaxToolRounds() (value int) { // MARKER: MaxToolRounds
@@ -353,6 +339,17 @@ SetMaxToolRounds sets the value of the configuration property.
 */
 func (svc *Intermediate) SetMaxToolRounds(value int) (err error) { // MARKER: MaxToolRounds
 	return svc.SetConfig("MaxToolRounds", strconv.Itoa(value))
+}
+
+/*
+IncrementLLMTokens counts tokens consumed per LLM turn.
+*/
+func (svc *Intermediate) IncrementLLMTokens(ctx context.Context, value int, provider string, model string, direction string) (err error) { // MARKER: LLMTokens
+	return svc.IncrementCounter(ctx, "microbus_llm_tokens_total", float64(value),
+		"provider", utils.AnyToString(provider),
+		"model", utils.AnyToString(model),
+		"direction", utils.AnyToString(direction),
+	)
 }
 
 // marshalFunction handles marshaling for functional endpoints.

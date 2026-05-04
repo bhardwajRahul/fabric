@@ -14,6 +14,8 @@ On one end, the HTTP ingress proxy listens on port `:8080` for real HTTP request
 - Port `:443` is assumed by default when a port is not explicitly specified. Internal ports can be designated in the first segment of the path. For example, `http://localhost:8080/echo.example:1234/echo` is mapped to the bus address `https://echo.example:1234/echo`.
 - The empty root path is transformed to `/root`, therefore `http://localhost:8080/` is mapped to `https://root`.
 
+Internal ports below `:1024` are reserved for endpoints that should not be reachable from outside the bus, such as outbound events on `:417`, task endpoints on `:428`, the `:888` control plane, and other internal-only endpoints on `:444`. The proxy always blocks inbound requests to `:888`, and blocks the rest of the `:0`-`:1023` range in a `PROD` deployment. Ports `:80` and `:443` are exempt and always reachable.
+
 ### Configuration
 
 The HTTP ingress proxy supports several configuration properties that can be set in in `config.yaml`:

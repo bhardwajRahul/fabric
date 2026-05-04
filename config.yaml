@@ -24,7 +24,6 @@ foreman.core:
   # RetentionDays: 0
 
 llm.core:
-  # ProviderHostname: claude.llm.core
   # MaxToolRounds: 10
 
 http.ingress.core:

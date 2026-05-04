@@ -49,16 +49,16 @@ var (
 type TurnResponse multicastResponse // MARKER: Turn
 
 // Get unpacks the return arguments of Turn.
-func (_res *TurnResponse) Get() (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
+func (_res *TurnResponse) Get() (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
 	_d := _res.data.(*TurnOut)
-	return _d.Completion, _res.err
+	return _d.Content, _d.ToolCalls, _d.Usage, _res.err
 }
 
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (_c MulticastClient) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) iter.Seq[*TurnResponse] { // MARKER: Turn
-	_in := TurnIn{Messages: messages, Tools: tools}
+func (_c MulticastClient) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
+	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
 	return func(yield func(*TurnResponse) bool) {
@@ -75,11 +75,11 @@ func (_c MulticastClient) Turn(ctx context.Context, messages []llmapi.Message, t
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (_c Client) Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) { // MARKER: Turn
-	_in := TurnIn{Messages: messages, Tools: tools}
+func (_c Client) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
-	return _out.Completion, err // No trace
+	return _out.Content, _out.ToolCalls, _out.Usage, err // No trace
 }
 
 // multicastResponse packs the response of a functional multicast.

@@ -93,7 +93,7 @@ func TestConnector_DefineMetrics(t *testing.T) {
 }
 
 func TestConnector_ObserveMetrics(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
@@ -168,7 +168,7 @@ func TestConnector_ObserveMetrics(t *testing.T) {
 }
 
 func TestConnector_StandardMetrics(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	ctx := t.Context()
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
@@ -221,7 +221,7 @@ func TestConnector_InferUnit(t *testing.T) {
 }
 
 func TestConnector_MetricExporters(t *testing.T) {
-	// No parallel
+	// No parallel - Setting envars
 	ctx := t.Context()
 	assert := testarossa.For(t)
 	delay := time.Millisecond * 100
@@ -297,3 +297,85 @@ func TestConnector_MetricExporters(t *testing.T) {
 		env.Pop("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
 }
+
+// TestConnector_OTLPMetricsUnreachable verifies that a connector can start up and shut down
+// promptly even when OTEL_EXPORTER_OTLP_ENDPOINT points to an unreachable collector.
+// Companion to TestConnector_OTLPTracesUnreachable; covers the metrics exporter path.
+func TestConnector_OTLPMetricsUnreachable(t *testing.T) {
+	// No parallel - Setting envars
+	ctx := t.Context()
+	assert := testarossa.For(t)
+
+	// 127.0.0.1:1 refuses connections immediately on loopback — simulates a misconfigured
+	// or down collector while keeping the test fast (no TCP connect timeout wait).
+	env.Push("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")
+	defer env.Pop("OTEL_EXPORTER_OTLP_PROTOCOL")
+	defer env.Pop("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+	con := New("otlp.metrics.unreachable.connector")
+
+	startupStart := time.Now()
+	err := con.Startup(ctx)
+	startupElapsed := time.Since(startupStart)
+	if assert.NoError(err) {
+		assert.True(startupElapsed < 5*time.Second, "startup should not block on unreachable OTel collector, took %s", startupElapsed)
+	}
+
+	shutdownStart := time.Now()
+	err = con.Shutdown(ctx)
+	shutdownElapsed := time.Since(shutdownStart)
+	if assert.NoError(err) {
+		// Connector's normal pre-shutdown drain is 8s + 4s = 12s. Allow generous headroom
+		// for OTel exporter cleanup but bound it well under any reasonable hang.
+		assert.True(shutdownElapsed < 20*time.Second, "shutdown should not block on unreachable OTel collector, took %s", shutdownElapsed)
+	}
+}
+
+// TestConnector_OTLPSlowEndpoint covers the production-critical failure mode where the OTel
+// collector endpoint is configured but unreachable in a way that does not produce a fast
+// connection-refused (network partition, blackholed cloud LB, mis-routed IP). Without
+// `WithRetry(disabled)` and a bounded export timeout, the OTLP gRPC client would retry with
+// long internal timeouts and the connector lifecycle would hang for 75+ seconds per export
+// attempt.
+//
+// The export timeout is governed by the OTel spec env var OTEL_EXPORTER_OTLP_TIMEOUT
+// (milliseconds). The connector code does not hard-code WithTimeout, so this env var is
+// authoritative — operators tune to taste. The test sets it to 1s to keep test runtime
+// short; the default in absence of the env var is OTel's spec-defined 10s.
+//
+// 192.0.2.0/24 is RFC 5737 TEST-NET-1, reliably unroutable. Companion to the fast
+// connection-refused tests, which cover the easier failure mode but don't exercise the
+// timeout path.
+func TestConnector_OTLPSlowEndpoint(t *testing.T) {
+	// No parallel - Setting envars
+	ctx := t.Context()
+	assert := testarossa.For(t)
+
+	env.Push("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
+	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://192.0.2.1:4317")
+	env.Push("OTEL_EXPORTER_OTLP_TIMEOUT", "1000") // 1s — keeps test fast
+	defer env.Pop("OTEL_EXPORTER_OTLP_PROTOCOL")
+	defer env.Pop("OTEL_EXPORTER_OTLP_ENDPOINT")
+	defer env.Pop("OTEL_EXPORTER_OTLP_TIMEOUT")
+
+	con := New("otlp.slow.endpoint.connector")
+
+	startupStart := time.Now()
+	err := con.Startup(ctx)
+	startupElapsed := time.Since(startupStart)
+	if assert.NoError(err) {
+		// Lazy-connect default means startup must not wait on the dial — should be near-instant.
+		assert.True(startupElapsed < 2*time.Second, "startup must not block on unreachable OTel collector, took %s", startupElapsed)
+	}
+
+	shutdownStart := time.Now()
+	err = con.Shutdown(ctx)
+	shutdownElapsed := time.Since(shutdownStart)
+	if assert.NoError(err) {
+		// With OTEL_EXPORTER_OTLP_TIMEOUT=1s and WithRetry(disabled), shutdown's final flush
+		// bounds at ~1s per exporter. Allow headroom for connector drain and slow CI.
+		assert.True(shutdownElapsed < 5*time.Second, "shutdown must not hang on slow OTel collector, took %s", shutdownElapsed)
+	}
+}
+

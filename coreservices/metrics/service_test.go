@@ -91,7 +91,7 @@ func TestMetrics_Mock(t *testing.T) {
 }
 
 func TestMetrics_Collect(t *testing.T) {
-	// No t.Parallel: modifying environment
+	// No parallel - Setting envars
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
@@ -186,16 +186,18 @@ func TestMetrics_Collect(t *testing.T) {
 		// The startup callback should take between 100ms and 500ms
 		assert.True(findLine(body, "microbus_callback_duration_seconds_bucket", "0",
 			"error", "OK",
-			"handler", "startup",
 			"id", con1.ID(),
+			"name", "OnStartup",
 			"service", con1.Hostname(),
+			"type", "lifecycle",
 			"le", "0.1",
 		))
 		assert.True(findLine(body, "microbus_callback_duration_seconds_bucket", "1",
 			"error", "OK",
-			"handler", "startup",
 			"id", con1.ID(),
+			"name", "OnStartup",
 			"service", con1.Hostname(),
+			"type", "lifecycle",
 			"le", "0.5",
 		))
 		assert.True(findLine(body, "microbus_log_messages_total", "1",
@@ -237,11 +239,13 @@ func TestMetrics_Collect(t *testing.T) {
 		assert.True(findLine(body, "microbus_server_request_duration_seconds_count", "2",
 			"code", "404",
 			"error", "OK",
-			"handler", con1.Hostname()+":888/dcache/all",
 			"id", con1.ID(),
 			"method", "GET",
+			"name", "DcacheAll",
 			"port", "888",
+			"route", "/dcache/all",
 			"service", con1.Hostname(),
+			"type", "web",
 		))
 	})
 
@@ -252,20 +256,24 @@ func TestMetrics_Collect(t *testing.T) {
 		assert.True(findLine(body, "microbus_server_response_body_bytes_sum", "10",
 			"code", "200",
 			"error", "OK",
-			"handler", con1.Hostname()+":443/ten",
 			"id", con1.ID(),
 			"method", "GET",
+			"name", "Ten",
 			"port", "443",
+			"route", "/ten",
 			"service", con1.Hostname(),
+			"type", "web",
 		))
 		assert.True(findLine(body, "microbus_server_response_body_bytes_count", "1",
 			"code", "200",
 			"error", "OK",
-			"handler", con1.Hostname()+":443/ten",
 			"id", con1.ID(),
 			"method", "GET",
+			"name", "Ten",
 			"port", "443",
+			"route", "/ten",
 			"service", con1.Hostname(),
+			"type", "web",
 		))
 	})
 
@@ -276,21 +284,25 @@ func TestMetrics_Collect(t *testing.T) {
 		assert.True(findLine(body, "microbus_server_request_duration_seconds_bucket", "0",
 			"code", "200",
 			"error", "OK",
-			"handler", con1.Hostname()+":443/ten",
 			"id", con1.ID(),
 			"method", "GET",
+			"name", "Ten",
 			"port", "443",
+			"route", "/ten",
 			"service", con1.Hostname(),
+			"type", "web",
 			"le", "0.1",
 		))
 		assert.True(findLine(body, "microbus_server_request_duration_seconds_bucket", "1",
 			"code", "200",
 			"error", "OK",
-			"handler", con1.Hostname()+":443/ten",
 			"id", con1.ID(),
 			"method", "GET",
+			"name", "Ten",
 			"port", "443",
+			"route", "/ten",
 			"service", con1.Hostname(),
+			"type", "web",
 			"le", "0.5",
 		))
 	})
@@ -304,7 +316,7 @@ func TestMetrics_Collect(t *testing.T) {
 }
 
 func TestMetrics_Gzip(t *testing.T) {
-	// No t.Parallel: modifying environment
+	// No parallel - Setting envars
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 
@@ -345,7 +357,7 @@ func TestMetrics_Gzip(t *testing.T) {
 }
 
 func TestMetrics_SecretKey(t *testing.T) {
-	// No t.Parallel: modifying environment
+	// No parallel - Setting envars
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	defer env.Pop("MICROBUS_PROMETHEUS_EXPORTER")
 

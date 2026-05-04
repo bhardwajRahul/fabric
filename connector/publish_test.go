@@ -258,6 +258,7 @@ func BenchmarkConnector_EchoSerial(b *testing.B) {
 }
 
 func BenchmarkConnector_EchoSerialHTTP(b *testing.B) {
+	// No parallel - starting web server
 	assert := testarossa.For(b)
 
 	// Create the web server
@@ -873,17 +874,19 @@ func TestConnector_CallDepth(t *testing.T) {
 }
 
 func TestConnector_TimeoutDrawdown(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
-	depth := 0
+	// depth is incremented from the handler goroutine and read from the test goroutine.
+	// atomic.Int32 avoids a Go memory model race that would trip -race.
+	var depth atomic.Int32
 
 	// Create the microservice
 	con := New("timeout.drawdown.connector")
 	con.Subscribe("Next",
 		func(w http.ResponseWriter, r *http.Request) error {
-			depth++
+			depth.Add(1)
 			_, err := con.GET(r.Context(), "https://timeout.drawdown.connector/next")
 			return errors.Trace(err)
 		},
@@ -906,11 +909,12 @@ func TestConnector_TimeoutDrawdown(t *testing.T) {
 	)
 	assert.Error(err)
 	assert.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
-	assert.True(depth >= 7 && depth <= 8, "%d", depth)
+	d := int(depth.Load())
+	assert.True(d >= 7 && d <= 8, "%d", d)
 }
 
 func TestConnector_TimeoutContext(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
@@ -944,7 +948,7 @@ func TestConnector_TimeoutContext(t *testing.T) {
 }
 
 func TestConnector_TimeoutNotFound(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
@@ -982,7 +986,7 @@ func TestConnector_TimeoutNotFound(t *testing.T) {
 }
 
 func TestConnector_TimeoutSlow(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 
 	ctx := t.Context()
@@ -1042,17 +1046,20 @@ func TestConnector_TimeoutSlow(t *testing.T) {
 }
 
 func TestConnector_ContextTimeout(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 	ctx := t.Context()
 
 	con := New("context.timeout.connector")
 
-	done := false
+	// done signals the handler observed its context being cancelled and finished.
+	// Synchronizing via a channel avoids the race where the test thread's con.Request
+	// returns (its context timed out) before the handler goroutine has finished.
+	done := make(chan struct{})
 	con.Subscribe("Timeout",
 		func(w http.ResponseWriter, r *http.Request) error {
 			<-r.Context().Done()
-			done = true
+			close(done)
 			return r.Context().Err()
 		},
 		sub.At("GET", "timeout"),
@@ -1070,7 +1077,11 @@ func TestConnector_ContextTimeout(t *testing.T) {
 		pub.GET("https://context.timeout.connector/timeout"),
 	)
 	assert.Error(err)
-	assert.True(done)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not observe context cancellation")
+	}
 }
 
 func TestConnector_Multicast(t *testing.T) {
@@ -1203,7 +1214,7 @@ func TestConnector_Multicast(t *testing.T) {
 }
 
 func TestConnector_MulticastPartialTimeout(t *testing.T) {
-	t.Parallel()
+	// No parallel - Time sensitive
 	assert := testarossa.For(t)
 
 	ctx := t.Context()

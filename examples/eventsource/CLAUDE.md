@@ -1,2 +1,1 @@
-
-**CRITICAL**: Read `AGENTS.md` immediately.
+# eventsource.example

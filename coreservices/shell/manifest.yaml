@@ -17,8 +17,8 @@ general:
   hostname: shell.core
   description: Shell enables running shell commands on a host.
   package: github.com/microbus-io/fabric/coreservices/shell
-  frameworkVersion: 1.27.0
-  modifiedAt: "2026-04-29T12:00:00Z"
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T03:54:31Z"
 functions:
   Execute:
     signature: Execute(cmd string, workDir string, stdin string, envars map[string]string) (exitCode int, stdout string, stderr string)

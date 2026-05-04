@@ -17,7 +17,8 @@ general:
   hostname: eventsink.example
   description: The event sink microservice handles events that are fired by the event source microservice.
   package: github.com/microbus-io/fabric/examples/eventsink
-  frameworkVersion: 1.27.0
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T03:54:51Z"
 
 functions:
   Registered:

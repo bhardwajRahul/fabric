@@ -15,7 +15,7 @@ Copy this checklist and track your progress:
 
 ```
 Adding fields to the object:
-- [ ] Step 1: Read Local AGENTS.md File
+- [ ] Step 1: Read Local CLAUDE.md File
 - [ ] Step 2: Update the Type Definition of the Object
 - [ ] Step 3: Update the Type Definition of the Query
 - [ ] Step 4: Update Database Schema
@@ -25,9 +25,9 @@ Adding fields to the object:
 - [ ] Step 8: Housekeeping
 ```
 
-#### Step 1: Read Local `AGENTS.md` File
+#### Step 1: Read Local `CLAUDE.md` File
 
-Read the local `AGENTS.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
+Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
 #### Step 2: Update the Type Definition of the Object
 
@@ -192,6 +192,8 @@ CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_intege
 -- DRIVER: sqlite
 CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_integer);
 ```
+
+**Production tables on Postgres**: plain `CREATE INDEX` takes an `ACCESS EXCLUSIVE` lock that blocks writes for the duration of the build — fine for small tables, painful for large hot ones. If the target `pgx` table has significant production write traffic, ask the user whether to use `CREATE INDEX CONCURRENTLY IF NOT EXISTS` instead. It builds without blocking writes (sequel runs each migration statement outside a transaction, so `CONCURRENTLY` is allowed), at the cost of: (a) two table scans instead of one, and (b) non-atomic failure mode — if interrupted, Postgres leaves an `INVALID` index that must be `DROP`-ed manually before the migration can be retried. Plain `CREATE INDEX` is the safer default for prototyping and for tables that are still small.
 
 #### Step 5: Map Column Names to Object Fields
 

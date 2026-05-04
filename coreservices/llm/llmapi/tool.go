@@ -36,9 +36,3 @@ type ToolCall struct {
 	Name      string          `json:"name,omitzero" jsonschema:"description=Name is the tool name the LLM wants to invoke"`
 	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema:"description=Arguments is the JSON-encoded arguments for the tool call"`
 }
-
-// TurnCompletion is the response from a single LLM turn.
-type TurnCompletion struct {
-	Content   string     `json:"content,omitzero" jsonschema:"description=Content is the text content of the response"`
-	ToolCalls []ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls requested by the LLM"`
-}

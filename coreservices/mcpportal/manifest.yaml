@@ -17,8 +17,8 @@ general:
   hostname: mcp.core
   description: The MCP portal exposes the bus's tools to LLM clients via the Model Context Protocol. Clients send JSON-RPC 2.0 envelopes to a single wire endpoint (POST //mcp:0); the service dispatches on the JSON-RPC method to handlers for initialize, tools/list, and tools/call.
   package: github.com/microbus-io/fabric/coreservices/mcpportal
-  frameworkVersion: 1.27.0
-  modifiedAt: "2026-04-28T22:00:00Z"
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T03:54:31Z"
 
 downstream:
   - hostname: openapiportal.core

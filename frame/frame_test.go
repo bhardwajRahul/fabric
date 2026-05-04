@@ -120,11 +120,22 @@ func TestFrame_GetSet(t *testing.T) {
 	budget := f.TimeBudget()
 	assert.Equal(time.Duration(0), budget)
 	f.SetTimeBudget(123 * time.Second)
+	assert.Equal("2m3s", f.h.Get(HeaderTimeBudget)) // wire format is duration string
 	budget = f.TimeBudget()
 	assert.Equal(123*time.Second, budget)
+	f.SetTimeBudget(5 * time.Millisecond)
+	assert.Equal("5ms", f.h.Get(HeaderTimeBudget))
+	assert.Equal(5*time.Millisecond, f.TimeBudget())
 	f.SetTimeBudget(0)
 	budget = f.TimeBudget()
 	assert.Equal(time.Duration(0), budget)
+	// Legacy wire format: bare integer interpreted as milliseconds.
+	f.h.Set(HeaderTimeBudget, "12345")
+	assert.Equal(12345*time.Millisecond, f.TimeBudget())
+	// Garbage values yield 0, no panic.
+	f.h.Set(HeaderTimeBudget, "garbage")
+	assert.Equal(time.Duration(0), f.TimeBudget())
+	f.h.Del(HeaderTimeBudget)
 
 	assert.Equal("", f.Queue())
 	f.SetQueue("1234567890")

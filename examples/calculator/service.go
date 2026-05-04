@@ -59,7 +59,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 }
 
 /*
-Arithmetic perform an arithmetic operation between two integers x and y given an operator op.
+Arithmetic performs an arithmetic operation between two integers x and y given an operator op.
 */
 func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) { // MARKER: Arithmetic
 	if op == " " {
@@ -77,7 +77,7 @@ func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xE
 		result = x * y
 		svc.sumMultiply.Add(int64(result))
 	case "/":
-		result = x / y
+		result = x / y // Intentional: division by zero panics; the platform recovers it as a 500 error
 		svc.sumDivide.Add(int64(result))
 	default:
 		return x, op, y, result, errors.New("invalid operator '%s'", op)

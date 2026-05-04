@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
@@ -143,7 +144,7 @@ func (svc *Service) startDaemon(ctx context.Context) (err error) {
 					}()
 
 					err = errors.CatchPanic(func() error {
-						res, err = svc.processEnvelope(p, e, task)
+						res, err = svc.processEnvelope(ctx, p, e, task)
 						return errors.Trace(err)
 					})
 					if err != nil || svc.Deployment() == connector.LOCAL {
@@ -199,24 +200,55 @@ func (svc *Service) restartDaemon(ctx context.Context) (err error) {
 }
 
 // processEnvelope processes an incoming email message
-func (svc *Service) processEnvelope(p backends.Processor, e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
+func (svc *Service) processEnvelope(ctx context.Context, p backends.Processor, e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 	if task == backends.TaskSaveMail {
-		ctx := svc.Lifetime()
+		startTime := time.Now()
+		envelopeSize := e.Data.Len()
+		var processErr error
 		parsed, err := letters.ParseEmail(e.NewReader())
 		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		svc.LogInfo(
-			svc.Lifetime(),
-			"Received email",
-			"messageID", string(parsed.Headers.MessageID),
-			"date", parsed.Headers.Date.UTC(),
-		)
-		for i := range smtpingressapi.NewMulticastTrigger(svc).OnIncomingEmail(ctx, &parsed) {
-			err := i.Get()
-			if err != nil {
-				svc.LogError(ctx, "Dispatching save mail event", "error", err)
+			processErr = errors.Trace(err)
+		} else {
+			svc.LogInfo(
+				ctx,
+				"Received email",
+				"messageID", string(parsed.Headers.MessageID),
+				"date", parsed.Headers.Date.UTC(),
+			)
+			for i := range smtpingressapi.NewMulticastTrigger(svc).OnIncomingEmail(ctx, &parsed) {
+				if dispatchErr := i.Get(); dispatchErr != nil {
+					svc.LogError(ctx, "Dispatching save mail event", "error", dispatchErr)
+					processErr = dispatchErr
+				}
 			}
+		}
+
+		// Meter the inbound message
+		errLabel := "OK"
+		if processErr != nil {
+			errLabel = "ERROR"
+		}
+		port := strconv.Itoa(svc.Port())
+		_ = svc.RecordHistogram(
+			ctx,
+			"microbus_server_request_duration_seconds",
+			time.Since(startTime).Seconds(),
+			"port", port,
+			"name", "ProcessEnvelope",
+			"type", "ingress",
+			"error", errLabel,
+		)
+		_ = svc.RecordHistogram(
+			ctx,
+			"microbus_server_response_body_bytes",
+			float64(envelopeSize),
+			"port", port,
+			"name", "ProcessEnvelope",
+			"type", "ingress",
+			"error", errLabel,
+		)
+		if processErr != nil {
+			return nil, processErr
 		}
 	}
 	return p.Process(e, task)

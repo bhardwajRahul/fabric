@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
@@ -1229,4 +1230,276 @@ func TestForeman_ErrorTransition(t *testing.T) {
 		assert.Equal(foremanapi.StatusCompleted, status)
 		assert.Equal("handled: task-a failed intentionally", state["result"])
 	}
+}
+
+// TestForeman_SubgraphFanInRace exercises the bug where completeSurgraphFlow could
+// match a sibling step (still RUNNING during fan-in processing) instead of the parked
+// surgraph step, because both share the same flow_id and step_depth.
+//
+// Setup:
+//   - The main workflow fans out at one step_depth to a slow sibling task and a subgraph.
+//   - The slow sibling sleeps long enough that it is still status=running when the
+//     subgraph completes and completeSurgraphFlow runs.
+//   - The slow sibling is registered first in the graph so it gets the lower step_id;
+//     completeSurgraphFlow's SELECT (no ORDER BY) will return it before the surgraph step.
+//
+// Without the lease_expires filter in completeSurgraphFlow, the SELECT picks the slow
+// sibling, the surgraph step stays parked forever, and the workflow never completes.
+// With the fix, only the parked surgraph step (lease >> 1 hour) matches.
+func TestForeman_SubgraphFanInRace(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	assert := testarossa.For(t)
+
+	const (
+		host           = "test.race.host"
+		mainWorkflow   = "https://test.race.host:428/main-workflow"
+		subWorkflow    = "https://test.race.host:428/sub-workflow"
+		startTask      = "https://test.race.host:428/start"
+		slowTask       = "https://test.race.host:428/slow-task"
+		finalTask      = "https://test.race.host:428/final-task"
+		subTask        = "https://test.race.host:428/sub-task"
+		slowTaskSleep  = 100 * time.Millisecond
+		expectedResult = "done"
+	)
+
+	graphSvc := connector.New(host)
+
+	// Subgraph: a single instant task -> END.
+	graphSvc.Subscribe("SubWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph(subWorkflow)
+			g.DeclareInputs("*")
+			g.AddTransition(subTask, workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/sub-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("SubTask",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/sub-task"),
+		sub.Web(),
+	)
+
+	// Main workflow: start fans out to {slow-task, sub-workflow}; both fan in to final-task.
+	// slow-task is registered FIRST so it gets the lower step_id.
+	graphSvc.Subscribe("MainWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph(mainWorkflow)
+			g.DeclareInputs("*")
+			g.DeclareOutputs("result")
+			g.AddSubgraph(subWorkflow)
+			g.AddTransition(startTask, slowTask)
+			g.AddTransition(startTask, subWorkflow)
+			g.AddTransition(slowTask, finalTask)
+			g.AddTransition(subWorkflow, finalTask)
+			g.AddTransition(finalTask, workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/main-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("Start",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/start"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("SlowTask",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			// Sleep so the step row stays status=running while the subgraph completes
+			// and completeSurgraphFlow runs its SELECT.
+			time.Sleep(slowTaskSleep)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/slow-task"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("FinalTask",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("result", expectedResult)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/final-task"),
+		sub.Web(),
+	)
+
+	tester := connector.New("tester.race")
+	app := application.New()
+	svc := NewService()
+	app.Add(svc, graphSvc, tester)
+	app.RunInTest(t)
+	client := foremanapi.NewClient(tester)
+
+	// Generous timeout to absorb scheduling jitter when run alongside other parallel tests.
+	// A healthy run completes in well under a second; the bug version hangs indefinitely.
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	status, state, err := client.Run(runCtx, mainWorkflow, nil)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.Expect(
+		status, foremanapi.StatusCompleted,
+		state["result"], expectedResult,
+	)
+}
+
+// TestForeman_MultipleParallelSubgraphs exercises the case where multiple subgraphs are
+// parked at the same flow_id + step_depth (static fan-out to two subgraph children).
+// Each parked surgraph step has a long lease, so the previous lease-threshold filter could
+// still match the wrong one. The PK lookup via surgraph_step_id is required for correctness.
+func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	assert := testarossa.For(t)
+
+	const (
+		host          = "test.parsubs.host"
+		mainWorkflow  = "https://test.parsubs.host:428/main-workflow"
+		subA          = "https://test.parsubs.host:428/sub-a"
+		subB          = "https://test.parsubs.host:428/sub-b"
+		taskA         = "https://test.parsubs.host:428/task-a"
+		taskB         = "https://test.parsubs.host:428/task-b"
+		startTask     = "https://test.parsubs.host:428/start"
+		finalTask     = "https://test.parsubs.host:428/final-task"
+		expectedValue = "ok"
+	)
+
+	graphSvc := connector.New(host)
+
+	// Register each subgraph (workflow definition + its single task).
+	// Asymmetric delays force the second-registered subgraph (lower-priority insert order
+	// in the parent's fan-out) to complete first. Each subgraph writes to a distinct output
+	// field so we can verify both completions reached the parent state correctly - if the
+	// wrong surgraph step is matched on completion, one or both outputs go missing.
+	registerSub := func(name, workflowRoute, taskRoute, workflowURL, taskURL, outputField, outputValue string, delay time.Duration) {
+		graphSvc.Subscribe(name+"Workflow",
+			func(w http.ResponseWriter, r *http.Request) error {
+				g := workflow.NewGraph(workflowURL)
+				g.DeclareInputs("*")
+				g.DeclareOutputs(outputField)
+				g.AddTransition(taskURL, workflow.END)
+				w.Header().Set("Content-Type", "application/json")
+				return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+			},
+			sub.At("GET", workflowRoute),
+			sub.Web(),
+		)
+		graphSvc.Subscribe(name+"Task",
+			func(w http.ResponseWriter, r *http.Request) error {
+				var f workflow.Flow
+				if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+					return err
+				}
+				if delay > 0 {
+					time.Sleep(delay)
+				}
+				f.SetString(outputField, outputValue)
+				w.Header().Set("Content-Type", "application/json")
+				return json.NewEncoder(w).Encode(&f)
+			},
+			sub.At("POST", taskRoute),
+			sub.Web(),
+		)
+	}
+	// SubA inserted first into the parent's fan-out (lower step_id) but slow to complete.
+	// SubB inserted second (higher step_id) but completes immediately.
+	registerSub("SubA", ":428/sub-a", ":428/task-a", subA, taskA, "outA", "from-A", 100*time.Millisecond)
+	registerSub("SubB", ":428/sub-b", ":428/task-b", subB, taskB, "outB", "from-B", 0)
+
+	// Main: start fans out to both subgraphs; both fan in to final-task.
+	graphSvc.Subscribe("MainWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph(mainWorkflow)
+			g.DeclareInputs("*")
+			g.DeclareOutputs("result", "outA", "outB")
+			g.AddSubgraph(subA)
+			g.AddSubgraph(subB)
+			g.AddTransition(startTask, subA)
+			g.AddTransition(startTask, subB)
+			g.AddTransition(subA, finalTask)
+			g.AddTransition(subB, finalTask)
+			g.AddTransition(finalTask, workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/main-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("Start",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/start"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("FinalTask",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("result", expectedValue)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/final-task"),
+		sub.Web(),
+	)
+
+	tester := connector.New("tester.parsubs")
+	app := application.New()
+	svc := NewService()
+	app.Add(svc, graphSvc, tester)
+	app.RunInTest(t)
+	client := foremanapi.NewClient(tester)
+
+	// Generous timeout to absorb scheduling jitter when run alongside other parallel tests.
+	// A healthy run completes in well under a second; the bug version hangs indefinitely.
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	status, state, err := client.Run(runCtx, mainWorkflow, nil)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.Expect(
+		status, foremanapi.StatusCompleted,
+		state["result"], expectedValue,
+		state["outA"], "from-A",
+		state["outB"], "from-B",
+	)
 }

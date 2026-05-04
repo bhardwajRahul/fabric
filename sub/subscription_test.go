@@ -85,6 +85,10 @@ func TestSub_Method(t *testing.T) {
 		"ABC123",
 		"!",
 		"*",
+		"POSTT",     // typo of POST
+		"ANYTHING",  // not a known HTTP method
+		"FOO",
+		"",
 	}
 	for _, s := range badSpecs {
 		_, err := NewSubscription("Test", "www.example.com", noopHandler, Method(s), Route("/"), Web())
@@ -92,10 +96,12 @@ func TestSub_Method(t *testing.T) {
 	}
 
 	okSpecs := []string{
+		"GET", "GET",
 		"POST", "POST",
 		"post", "POST",
-		"ANyThinG", "ANYTHING",
+		"PaTcH", "PATCH",
 		"ANY", "ANY",
+		"any", "ANY",
 	}
 	for i := 0; i < len(okSpecs); i += 2 {
 		s, err := NewSubscription("Test", "www.example.com", noopHandler, Method(okSpecs[i]), Route("/"), Web())

@@ -48,7 +48,7 @@ func (c *Connector) subscribeControl() (err error) {
 		{name: "ConfigRefresh", route: ":888/config-refresh", handler: c.handleControlConfigRefresh, options: []sub.Option{sub.NoQueue()}},
 		{name: "Metrics", route: ":888/metrics", handler: c.handleMetrics, options: []sub.Option{sub.NoQueue()}},
 		{name: "Trace", route: ":888/trace", handler: c.handleTrace, options: []sub.Option{sub.NoQueue()}},
-		{name: "OnNewSubs", route: ":888/on-new-subs", handler: c.handleOnNewSubs, options: []sub.Option{sub.NoQueue()}},
+		{name: "OnNewSubs", route: ":888/on-new-subs", handler: c.handleOnNewSubs, options: []sub.Option{sub.NoQueue(), sub.NoTrace()}},
 		{name: "OpenAPI", route: ":888/openapi.json", handler: c.handleOpenAPI, options: []sub.Option{sub.DefaultQueue(), sub.Method("GET")}},
 	}
 	var registered []string

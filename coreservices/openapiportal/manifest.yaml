@@ -17,8 +17,8 @@ general:
   hostname: openapiportal.core
   description: The OpenAPI portal serves an aggregated OpenAPI 3.1 document covering every microservice on the bus, plus per-service docs proxied from each microservice's :888/openapi.json. Endpoints are filtered by the caller's claims (per-service) and the request's port (consumer-side).
   package: github.com/microbus-io/fabric/coreservices/openapiportal
-  frameworkVersion: 1.27.0
-  modifiedAt: "2026-04-28T22:00:00Z"
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-02T03:54:31Z"
 
 downstream:
   - hostname: control.core

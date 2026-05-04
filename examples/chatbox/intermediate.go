@@ -55,7 +55,7 @@ var (
 
 const (
 	Hostname = chatboxapi.Hostname
-	Version  = 2
+	Version  = 4
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,8 +63,8 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion, err error) // MARKER: Turn
-	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                 // MARKER: Demo
+	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) // MARKER: Turn
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                          // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.
@@ -140,7 +140,7 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in chatboxapi.TurnIn
 	var out chatboxapi.TurnOut
 	err = marshalFunction(w, r, chatboxapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Completion, err = svc.Turn(r.Context(), in.Messages, in.Tools)
+		out.Content, out.ToolCalls, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace

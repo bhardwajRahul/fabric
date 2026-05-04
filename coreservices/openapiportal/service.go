@@ -46,7 +46,7 @@ var (
 /*
 Service implements the openapiportal.core microservice. It exposes two web endpoints -
 `Document` (machine-readable JSON) and `Explorer` (human-readable HTML) - both surfacing
-the bus's OpenAPI documents. See AGENTS.md for design rationale.
+the bus's OpenAPI documents. See CLAUDE.md for design rationale.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove

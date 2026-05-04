@@ -23,7 +23,6 @@ wordly
 │   └── embed.go
 ├── wordlyapi
 │   └── client.go
-├── AGENTS.md
 ├── CLAUDE.md
 ├── PROMPTS.md
 ├── intermediate.go

@@ -115,9 +115,12 @@ func Render(s *Service) *Document {
 				name := parts[i]
 				name = strings.TrimPrefix(name, "{")
 				name = strings.TrimSuffix(name, "}")
-				// {name...} is the framework's greedy form (captures the rest of the path).
-				// The trailing dots are framework syntax, not URL-template notation, so they're
-				// stripped from both the rendered path and the parameter name.
+				// {name...} is the framework's greedy form (captures the rest of the path),
+				// but OpenAPI's path templating syntax is just {name} - there is no spec-level
+				// notation for greedy matching. Emitting {name...} would produce an invalid
+				// OpenAPI document, so the dots are stripped from both the rendered path and
+				// the parameter name. Substitution still works because consumers fill {name}
+				// with a value that may contain slashes.
 				name = strings.TrimSuffix(name, "...")
 				if name == "" {
 					name = fmt.Sprintf("path%d", argIndex)
