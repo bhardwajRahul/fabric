@@ -17,33 +17,33 @@ general:
   description: BearerToken signs long-lived JWTs with Ed25519 keys for external actor authentication.
   package: github.com/microbus-io/fabric/coreservices/bearertoken
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
+  modifiedAt: "2026-05-06T03:01:13Z"
+
+configs:
+  AuthTokenTTL:
+    signature: AuthTokenTTL() (value time.Duration)
+    description: AuthTokenTTL sets the TTL of the JWT.
+    validation: dur [1m,]
+    default: 720h
+  PrivateKey:
+    signature: PrivateKey() (value string)
+    description: PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
+    secret: true
+    callback: true
+  AltPrivateKey:
+    signature: AltPrivateKey() (value string)
+    description: AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.
+    secret: true
+    callback: true
 
 functions:
   Mint:
     signature: Mint(claims any) (token string)
     description: Mint signs a JWT with the given claims.
     method: ANY
-    route: :444/mint
+    route: :666/mint
   JWKS:
     signature: JWKS() (keys []JWK)
     description: JWKS returns the public keys of the token issuer in JWKS format.
     method: ANY
     route: :888/jwks
-
-configs:
-  AuthTokenTTL:
-    signature: AuthTokenTTL() (ttl time.Duration)
-    description: AuthTokenTTL sets the TTL of the JWT.
-    validation: dur [1m,]
-    default: 720h
-  PrivateKey:
-    signature: PrivateKey() (key string)
-    description: PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
-    secret: true
-    callback: true
-  AltPrivateKey:
-    signature: AltPrivateKey() (key string)
-    description: AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.
-    secret: true
-    callback: true

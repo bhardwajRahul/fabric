@@ -78,8 +78,6 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 		if protocol == "" && strings.Contains(endpoint, ":4317") {
 			protocol = "grpc"
 		}
-		// See connector/CLAUDE.md "OTLP exporter resilience" for why retries are disabled
-		// and how export timeout is configured.
 		if protocol == "grpc" {
 			exp, err = otlpmetricgrpc.New(ctx,
 				otlpmetricgrpc.WithEndpointURL(endpoint),

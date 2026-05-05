@@ -64,7 +64,7 @@ type LocalKeysOut struct { // MARKER: LocalKeys
 
 var (
 	// HINT: Insert endpoint definitions here
-	Mint      = Def{Method: "ANY", Route: ":444/mint"}       // MARKER: Mint
+	Mint      = Def{Method: "ANY", Route: ":666/mint"}       // MARKER: Mint
 	JWKS      = Def{Method: "ANY", Route: ":888/jwks"}       // MARKER: JWKS
-	LocalKeys = Def{Method: "ANY", Route: ":444/local-keys"} // MARKER: LocalKeys
+	LocalKeys = Def{Method: "ANY", Route: ":888/local-keys"} // MARKER: LocalKeys
 )

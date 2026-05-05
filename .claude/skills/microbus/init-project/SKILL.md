@@ -18,7 +18,8 @@ Initialize a project to use Microbus:
 - [ ] Step 5: Prepare env files
 - [ ] Step 6: Prepare git ignore
 - [ ] Step 7: Prepare VS Code launch
-- [ ] Step 8: Prepare authentication
+- [ ] Step 8: Prepare Claude Code permissions
+- [ ] Step 9: Prepare authentication
 ```
 
 #### Step 1: Check if a Microbus Project
@@ -117,7 +118,28 @@ Create `.vscode/launch.json` relative to the root of the project with the follow
 }
 ```
 
-#### Step 8: Prepare Authentication
+#### Step 8: Prepare Claude Code Permissions
+
+Create `.claude/settings.json` relative to the root of the project with the following content. If the file already exists, merge the entries below into the existing `permissions.allow` array unless already there.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(go run github.com/microbus-io/fabric/cmd/genmanifest:*)",
+      "Bash(go run github.com/microbus-io/fabric/cmd/gentopology:*)",
+      "Bash(go vet:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(go mod tidy:*)"
+    ]
+  }
+}
+```
+
+This auto-approves the Bash commands invoked by the `housekeeping` and `regenerate-boilerplate` skills, so an agent following them does not get prompted for each invocation. The file is project-shared and should be checked into git.
+
+#### Step 9: Prepare Authentication
 
 **IMPORTANT**: Read `.claude/rules/auth.txt` for authentication conventions before proceeding with this step.
 

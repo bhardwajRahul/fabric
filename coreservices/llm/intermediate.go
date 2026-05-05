@@ -62,9 +62,9 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error)         // MARKER: Chat
 	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error)         // MARKER: Turn
-	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                             // MARKER: InitChat
-	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                   // MARKER: CallLLM
-	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
+	InitChat(ctx context.Context, flow *workflow.Flow, listMessages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                             // MARKER: InitChat
+	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, listMessages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                   // MARKER: CallLLM
+	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (listMessagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
 	ExecuteTool(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error)                                                                                                 // MARKER: ExecuteTool
 	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                           // MARKER: ChatLoop
 }
@@ -241,7 +241,7 @@ func (svc *Intermediate) doInitChat(w http.ResponseWriter, r *http.Request) (err
 	var in llmapi.InitChatIn
 	flow.ParseState(&in)
 	var out llmapi.InitChatOut
-	out.MaxToolRounds, out.ToolRounds, err = svc.InitChat(r.Context(), &flow, in.Messages, in.Tools, in.Options)
+	out.MaxToolRounds, out.ToolRounds, err = svc.InitChat(r.Context(), &flow, in.ListMessages, in.Tools, in.Options)
 	if err != nil {
 		return err // No trace
 	}
@@ -262,7 +262,7 @@ func (svc *Intermediate) doCallLLM(w http.ResponseWriter, r *http.Request) (err 
 	var in llmapi.CallLLMIn
 	flow.ParseState(&in)
 	var out llmapi.CallLLMOut
-	out.LLMContent, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Messages)
+	out.LLMContent, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.ListMessages)
 	if err != nil {
 		return err // No trace
 	}
@@ -283,7 +283,7 @@ func (svc *Intermediate) doProcessResponse(w http.ResponseWriter, r *http.Reques
 	var in llmapi.ProcessResponseIn
 	flow.ParseState(&in)
 	var out llmapi.ProcessResponseOut
-	out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.LLMContent, in.TurnUsage, in.ToolRounds, in.MaxToolRounds)
+	out.ListMessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.LLMContent, in.TurnUsage, in.ToolRounds, in.MaxToolRounds)
 	if err != nil {
 		return err // No trace
 	}

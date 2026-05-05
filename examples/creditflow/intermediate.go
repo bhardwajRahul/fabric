@@ -62,7 +62,7 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
 	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error)                                                                                       // MARKER: VerifyCredit
-	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error)                                                                             // MARKER: VerifyEmployment
+	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)                                                                       // MARKER: VerifyEmployment
 	InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                        // MARKER: InitIdentityVerification
 	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error)                                                                                                  // MARKER: VerifySSN
 	VerifyAddress(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                             // MARKER: VerifyAddress
@@ -72,7 +72,7 @@ type ToDo interface {
 	RequestMoreInfo(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                                      // MARKER: RequestMoreInfo
 	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error)                                           // MARKER: ReviewCredit
 	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                               // MARKER: HandleCreditError
-	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                                     // MARKER: Decision
+	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)                                                                  // MARKER: Decision
 	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                // MARKER: CreditApproval
 	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                                              // MARKER: Demo
 }
@@ -294,7 +294,7 @@ func (svc *Intermediate) doVerifyEmployment(w http.ResponseWriter, r *http.Reque
 	var in creditflowapi.VerifyEmploymentIn
 	flow.ParseState(&in)
 	var out creditflowapi.VerifyEmploymentOut
-	out.EmploymentFailures, err = svc.VerifyEmployment(r.Context(), &flow, in.ApplicantName, in.EmployerName)
+	out.SumEmploymentFailuresOut, err = svc.VerifyEmployment(r.Context(), &flow, in.ApplicantName, in.EmployerName)
 	if err != nil {
 		return err // No trace
 	}
@@ -530,7 +530,7 @@ func (svc *Intermediate) doDecision(w http.ResponseWriter, r *http.Request) (err
 	var in creditflowapi.DecisionIn
 	flow.ParseState(&in)
 	var out creditflowapi.DecisionOut
-	out.Approved, err = svc.Decision(r.Context(), &flow, in.CreditVerified, in.EmploymentFailures, in.IdentityVerified)
+	out.Approved, err = svc.Decision(r.Context(), &flow, in.CreditVerified, in.SumEmploymentFailures, in.IdentityVerified)
 	if err != nil {
 		return err // No trace
 	}

@@ -69,7 +69,7 @@ type VerifyEmploymentIn struct { // MARKER: VerifyEmployment
 
 // VerifyEmploymentOut are the output arguments of VerifyEmployment.
 type VerifyEmploymentOut struct { // MARKER: VerifyEmployment
-	EmploymentFailures int `json:"employmentFailures,omitzero"`
+	SumEmploymentFailuresOut int `json:"sumEmploymentFailures,omitzero"`
 }
 
 // InitIdentityVerificationIn are the input arguments of InitIdentityVerification.
@@ -163,9 +163,9 @@ type HandleCreditErrorOut struct { // MARKER: HandleCreditError
 
 // DecisionIn are the input arguments of Decision.
 type DecisionIn struct { // MARKER: Decision
-	CreditVerified     bool `json:"creditVerified,omitzero"`
-	EmploymentFailures int  `json:"employmentFailures,omitzero"`
-	IdentityVerified   bool `json:"identityVerified,omitzero"`
+	CreditVerified         bool `json:"creditVerified,omitzero"`
+	SumEmploymentFailures  int  `json:"sumEmploymentFailures,omitzero"`
+	IdentityVerified       bool `json:"identityVerified,omitzero"`
 }
 
 // DecisionOut are the output arguments of Decision.
@@ -194,10 +194,10 @@ type CreditApprovalIn struct { // MARKER: CreditApproval
 
 // CreditApprovalOut are the output arguments of CreditApproval.
 type CreditApprovalOut struct { // MARKER: CreditApproval
-	Approved           bool `json:"approved,omitzero"`
-	CreditVerified     bool `json:"creditVerified,omitzero"`
-	EmploymentFailures int  `json:"employmentFailures,omitzero"`
-	IdentityVerified   bool `json:"identityVerified,omitzero"`
+	Approved              bool `json:"approved,omitzero"`
+	CreditVerified        bool `json:"creditVerified,omitzero"`
+	SumEmploymentFailures int  `json:"sumEmploymentFailures,omitzero"`
+	IdentityVerified      bool `json:"identityVerified,omitzero"`
 }
 
 var (

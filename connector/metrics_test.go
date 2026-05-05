@@ -306,7 +306,7 @@ func TestConnector_OTLPMetricsUnreachable(t *testing.T) {
 	ctx := t.Context()
 	assert := testarossa.For(t)
 
-	// 127.0.0.1:1 refuses connections immediately on loopback — simulates a misconfigured
+	// 127.0.0.1:1 refuses connections immediately on loopback - simulates a misconfigured
 	// or down collector while keeping the test fast (no TCP connect timeout wait).
 	env.Push("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1")
@@ -341,7 +341,7 @@ func TestConnector_OTLPMetricsUnreachable(t *testing.T) {
 //
 // The export timeout is governed by the OTel spec env var OTEL_EXPORTER_OTLP_TIMEOUT
 // (milliseconds). The connector code does not hard-code WithTimeout, so this env var is
-// authoritative — operators tune to taste. The test sets it to 1s to keep test runtime
+// authoritative - operators tune to taste. The test sets it to 1s to keep test runtime
 // short; the default in absence of the env var is OTel's spec-defined 10s.
 //
 // 192.0.2.0/24 is RFC 5737 TEST-NET-1, reliably unroutable. Companion to the fast
@@ -354,7 +354,7 @@ func TestConnector_OTLPSlowEndpoint(t *testing.T) {
 
 	env.Push("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://192.0.2.1:4317")
-	env.Push("OTEL_EXPORTER_OTLP_TIMEOUT", "1000") // 1s — keeps test fast
+	env.Push("OTEL_EXPORTER_OTLP_TIMEOUT", "1000") // 1s - keeps test fast
 	defer env.Pop("OTEL_EXPORTER_OTLP_PROTOCOL")
 	defer env.Pop("OTEL_EXPORTER_OTLP_ENDPOINT")
 	defer env.Pop("OTEL_EXPORTER_OTLP_TIMEOUT")
@@ -365,7 +365,7 @@ func TestConnector_OTLPSlowEndpoint(t *testing.T) {
 	err := con.Startup(ctx)
 	startupElapsed := time.Since(startupStart)
 	if assert.NoError(err) {
-		// Lazy-connect default means startup must not wait on the dial — should be near-instant.
+		// Lazy-connect default means startup must not wait on the dial - should be near-instant.
 		assert.True(startupElapsed < 2*time.Second, "startup must not block on unreachable OTel collector, took %s", startupElapsed)
 	}
 
@@ -378,4 +378,3 @@ func TestConnector_OTLPSlowEndpoint(t *testing.T) {
 		assert.True(shutdownElapsed < 5*time.Second, "shutdown must not hang on slow OTel collector, took %s", shutdownElapsed)
 	}
 }
-

@@ -2,26 +2,26 @@
 
 ### Lifecycle phases are an atomic state machine
 
-The connector lives in one of four phases — `shutDown`, `startingUp`, `startedUp`, `shuttingDown` — held in an `atomic.Int32`. Almost every setter (`SetHostname`, `SetPlane`, `SetDeployment`, `SetOnStartup`, `DefineConfig`, ...) refuses to run unless the phase is `shutDown`. This is what makes the connector effectively immutable once started — there is no locking around the configuration fields because the phase guard makes mutation impossible after `Startup`.
+The connector lives in one of four phases - `shutDown`, `startingUp`, `startedUp`, `shuttingDown` - held in an `atomic.Int32`. Almost every setter (`SetHostname`, `SetPlane`, `SetDeployment`, `SetOnStartup`, `DefineConfig`, ...) refuses to run unless the phase is `shutDown`. This is what makes the connector effectively immutable once started - there is no locking around the configuration fields because the phase guard makes mutation impossible after `Startup`.
 
 `captureInitErr` exists to defer pre-start errors. Callers can chain `Init(...)` and similar setup without checking each error; the *first* init error is stashed and re-raised by `Startup`. After `Startup` runs, `initErr` is cleared so a subsequent restart isn't poisoned.
 
-`Startup` uses `defer phase.CompareAndSwap(startingUp, shutDown)` as a fallback so a startup that errors out before reaching `startedUp` returns the connector to a startable state. The error path also calls `Shutdown` to clean up partially-initialized state (transport, dlru, OTel providers) — the deferred CAS only fires if `Shutdown` didn't already advance the phase.
+`Startup` uses `defer phase.CompareAndSwap(startingUp, shutDown)` as a fallback so a startup that errors out before reaching `startedUp` returns the connector to a startable state. The error path also calls `Shutdown` to clean up partially-initialized state (transport, dlru, OTel providers) - the deferred CAS only fires if `Shutdown` didn't already advance the phase.
 
 ### Subscription activation order during Startup
 
 Subscriptions activate in deliberate waves, not all at once:
 
-0. **Response sub.** Immediately after the transport connects, the connector subscribes to its own response subject (`<plane>.r.<reverseHost>.<id>`). This must come before everything else because the connector itself makes outbound requests during the rest of Startup — most obviously to `configurator.core` to fetch config values — and those replies have nowhere to land without the response sub already in place.
+0. **Response sub.** Immediately after the transport connects, the connector subscribes to its own response subject (`<plane>.r.<reverseHost>.<id>`). This must come before everything else because the connector itself makes outbound requests during the rest of Startup - most obviously to `configurator.core` to fetch config values - and those replies have nowhere to land without the response sub already in place.
 1. **Infra subs** (those tagged `sub.Infra`) activate *before* the user's `OnStartup` callback runs, so framework facilities are reachable from inside `OnStartup`.
-2. **Control subs** (`:888/ping`, `/config-refresh`, `/metrics`, `/trace`, `/on-new-subs`, `/openapi.json`) activate *after* `OnStartup` returns — the control plane is not exposed until the service has finished its own init.
+2. **Control subs** (`:888/ping`, `/config-refresh`, `/metrics`, `/trace`, `/on-new-subs`, `/openapi.json`) activate *after* `OnStartup` returns - the control plane is not exposed until the service has finished its own init.
 3. **User business subs** activate after the control subs.
 
 Tickers start only after `phase` reaches `startedUp`. The lifetime context (`lifetimeCtx`) is created between `OnStartup` and the control-sub activation, which is why `OnStartup` must use the `ctx` argument rather than `c.Lifetime()`.
 
 ### `sub.Infra` expresses a lifecycle dependency, not a category
 
-The `Infra` flag exists because of one concrete requirement: the [distributed cache](../dlru) must be reachable from `OnStartup` *and* from `OnShutdown`. The flag therefore drives a stricter activation/deactivation schedule rather than tagging "framework-internal" subscriptions in general. At present only `dlru` uses it. New uses should be considered carefully — if a subscription doesn't need to be live during user lifecycle callbacks, it doesn't need this flag.
+The `Infra` flag exists because of one concrete requirement: the [distributed cache](../dlru) must be reachable from `OnStartup` *and* from `OnShutdown`. The flag therefore drives a stricter activation/deactivation schedule rather than tagging "framework-internal" subscriptions in general. At present only `dlru` uses it. New uses should be considered carefully - if a subscription doesn't need to be live during user lifecycle callbacks, it doesn't need this flag.
 
 ### Shutdown's two-phase drain and the dlru offload window
 
@@ -40,13 +40,13 @@ The plane prefixes every NATS subject this connector subscribes to or publishes 
 - **Multi-tenant prod.** Multiple production apps can share NATS infrastructure by each setting their own plane.
 - **Default development.** Outside of tests the default plane is `microbus`, which is what local dev typically runs on.
 
-`MICROBUS_PLANE` env var or `SetPlane` overrides the default. The plane is otherwise opaque — it has no parsing rules beyond `[0-9a-zA-Z]*`.
+`MICROBUS_PLANE` env var or `SetPlane` overrides the default. The plane is otherwise opaque - it has no parsing rules beyond `[0-9a-zA-Z]*`.
 
 ### Time budget is a duration, depth is a counter
 
-Time budget propagates as a duration header (decremented per hop by `networkRoundtrip`), not a deadline timestamp — clocks across replicas are not assumed to be synchronized. A request whose remaining budget falls below one network round-trip errors out as `408 Request Timeout` rather than being dispatched.
+Time budget propagates as a duration header (decremented per hop by `networkRoundtrip`), not a deadline timestamp - clocks across replicas are not assumed to be synchronized. A request whose remaining budget falls below one network round-trip errors out as `408 Request Timeout` rather than being dispatched.
 
-Call depth is propagated similarly, incremented by `Publish` on each outbound hop. The default cap of 64 is a cycle detector — at depth 64 `Publish` returns `508 Loop Detected` synchronously without touching the bus.
+Call depth is propagated similarly, incremented by `Publish` on each outbound hop. The default cap of 64 is a cycle detector - at depth 64 `Publish` returns `508 Loop Detected` synchronously without touching the bus.
 
 ### Ack-or-fail-fast and the LOCAL escape hatch
 
@@ -55,7 +55,7 @@ Call depth is propagated similarly, incremented by `Publish` on each outbound ho
 - For unicast: synthesize a `404 Not Found` "ack timeout" error.
 - For multicast: assume zero responders matched, drop the known-responders cache entry, return cleanly with no responses.
 
-In LOCAL deployment only, if the ack timer fires after `8 * ackTimeout` of wall time the timer is reset once and a debug log is emitted. This is a safety net for long pauses that aren't reflective of a missing responder — most obviously a developer paused in a debugger. The threshold is not exposed; LOCAL is the gating signal.
+In LOCAL deployment only, if the ack timer fires after `8 * ackTimeout` of wall time the timer is reset once and a debug log is emitted. This is a safety net for long pauses that aren't reflective of a missing responder - most obviously a developer paused in a debugger. The threshold is not exposed; LOCAL is the gating signal.
 
 ### Multicast known-responders cache
 
@@ -65,27 +65,78 @@ The cache is invalidated when any peer announces new subscriptions on `:888/on-n
 
 ### Locality-aware routing is a NATS subscription trick, not a router
 
-A connector with `locality = "1.b.west.us"` subscribes its handlers to *several* NATS subjects derived from the same route: the bare subject, the ID-prefixed subject, and one prefixed subject per locality suffix (`us.`, `west.us.`, `b.west.us.`, `1.b.west.us.`). The NATS queue group then naturally favors the most specific match the publisher addresses.
+A connector with `locality = "us-west-b-1"` subscribes its handlers to *several* NATS subjects derived from the same route: the bare-slot subject, the per-instance subject (`id-<id>` slot), and one slot per locality prefix (`loc-us`, `loc-us-west`, `loc-us-west-b`, `loc-us-west-b-1`). The locality is stored hyphen-joined and broadest-first (the AWS region/AZ shape), and `escapeLocality` simply prepends `loc-`. `SetLocality` also accepts DNS-style dot notation with the most specific identifier first (`1.b.west.us`); when the input contains a dot, the segments are reversed and joined with hyphens before storage, so legacy dot-form values continue to work without behavior change.
 
-`Publish` keeps a `localResponder` LRU keyed by canonical URL (sans query) recording the longest-suffix locality that successfully responded. Subsequent unicasts inject that prefix into the hostname before publishing. If the locality-prefixed request comes back `404`, `Publish` falls back to the original URL once and clears the cache entry.
+NATS itself does not pick the "most specific" slot - it only queue-group-dispatches within whichever slot the publisher addresses. The narrowing happens publisher-side, driven by a response header. Every responder stamps its own locality on the response (`frame.Of(res).Locality()` carries the hyphen-form). `Publish` reads that header, walks segment-by-segment to find the longest common prefix between the caller's locality and the responder's, and caches that prefix in a `localResponder` LRU keyed by canonical URL (sans query). Subsequent unicasts wrap the cached prefix in slot form and inject it as a single hostname segment before publishing (e.g. `https://example.com/foo` becomes `https://loc-us-west.example.com/foo`). If a locality-prefixed request comes back `404` (the slot has no responders), `Publish` falls back to the original URL once and clears the cache entry. Over a few requests the publisher converges on the most specific slot whose subscribers actually answer.
 
-Hostnames addressed by instance ID (`<id>.host`) skip locality optimization — the caller has already pinned a specific replica.
+Hostnames addressed by instance ID (`https://id-<id>.host/...`) skip locality optimization - the caller has already pinned a specific replica.
 
 ### Subject encoding
 
-NATS subjects are derived from `(plane, port, host, method, path)`. Hostnames are reversed segment-by-segment (`com.example.www`) so that NATS's hierarchical wildcards yield suffix-based locality matching. The pipe `.|.` is the fixed delimiter between hostname-side and method/path-side. Path encoding rules:
+NATS subjects are derived from `(plane, trust, port, src, dest, idOrLocality, method, path)`. The trust segment is `safe` for non-`:666` ports, `danger` for `:666`, or `reply` for response subjects. A dedicated `id_or_locality` slot sits between the dest and the method, carrying an instance prefix (`id-XXXX`), a locality slot (`loc-flat-suffix`), or `_` when neither is present. Subject layout:
+
+```
+<plane>.<trust>.<port>.<src_flat>.<dest_flat>.<id_or_locality>.<method>.<path...>
+```
+
+The slot keeps per-instance and locality-aware addressing on a separate axis from the dest hostname so publishers can target without ambiguous segment-level reasoning - the publisher inspects the URL hostname's first segment, and a `id-` or `loc-` prefix becomes the slot value while the rest of the hostname becomes the dest. The reservation is enforced centrally in `httpx.ValidateHostname`, which rejects any hostname matching `^id-` or `^loc-`. Both service identities (via `SetHostname` / `SetLocality`) and subscription route hostnames (via `sub.NewSubscription`'s route-validation helper) flow through the same check, so `id-`/`loc-` first segments cannot enter the system at either registration point.
+
+Hostname encoding (`escapeHostname` / `unescapeHostname`):
+
+- `.` becomes `_` (the legacy flattening - keeps typical service identities readable: `payments.core` → `payments_core`).
+- URL-special characters that the route validator allows (e.g. `$`, `!`, `~`) are percent-encoded as `%xx` (2-digit lowercase hex per byte). So a route hostname `my$.xml` flattens to `my%24_xml`.
+- `[A-Za-z0-9_-]` pass through unchanged.
+
+The asymmetry between `.` (legacy `_`) and other specials (`%xx`) is intentional: the readable flat form is preserved for the common case, and route hostnames with URL specials remain representable. Note that `_` in input is preserved, so a route hostname containing a literal underscore can collide with one whose dot maps to underscore. The framework forbids `_` in service identities to avoid this collision; route hostnames inherit the legacy ambiguity for compatibility.
+
+`unescapeHostname` first reverses `_` → `.` and then percent-decodes `%xx` sequences, recovering the canonical hostname form.
+
+Path encoding rules:
 
 - An empty path becomes `_`.
 - A greedy path argument `{name...}` becomes `>`.
 - Other path arguments and segments equal to `*` become `*`.
-- Characters outside `[A-Za-z0-9-]` are escaped as `%xxxx` (4-digit lowercase hex of the rune).
-- Periods inside path segments become `_` so they don't collide with NATS's segment separator.
+- Each path segment is independently escaped: every byte outside `[A-Za-z0-9-]` becomes `%xx` (2-digit lowercase hex). Includes `.` (`%2e`), `_` (`%5f`), `{` (`%7b`), `}` (`%7d`), and any byte of a multi-byte UTF-8 rune.
 
-Port `0` becomes `*` in subscription subjects (wildcard subscribe), but stays `0` when published — by convention nothing publishes to port `0`.
+Path segments are case-sensitive: uppercase letters pass through unchanged. Hostnames, methods, and the id/locality segment are lowercased before encoding; path segments are not.
+
+Subscription wildcards: port `0` becomes `*` (any port - by convention nothing publishes to port `0`); method `ANY` becomes `*` (any method); the source segment is always `*` (see below).
+
+Reply subjects use `reply._` for the trust+port slots: `<plane>.reply._.<src_flat>.<dest_flat>.<id>`. The trust segment alone identifies the channel; the port slot uses the `_` placeholder for symmetry with request subjects of constant depth. The receiver's response subscription wildcards the source: `<plane>.reply._.*.<own_dest_flat>.<id>`.
+
+The trust segment exists to make "any port except `:666`" expressible as a single ACL pattern (`<plane>.safe.*.<from>.>`) without colliding with trust-root subscriptions on `<plane>.danger.666.*.<dest>.>`. NATS deny-precedence semantics would otherwise make the carve-out impossible.
+
+Subscriptions always wildcard the source segment (`*`). A service does not discriminate at the subscription layer over which peers may call it - that's the publisher's NATS PUB ACL's responsibility. Per-source SUB would also explode the subscription count by allowed-caller and compound with replicas and locality-aware routing.
+
+`splitSubject` parses an inbound subject back into the six slots and unflattens the source and dest hostnames to canonical dot form. Every subject the framework emits has at least six segments by construction (requests have six plus method and path; replies have exactly six), so `splitSubject` does not signal malformed input. A subject with fewer segments produces zero values for the missing fields, which downstream code already treats as unverifiable (an empty source segment fails the `ackRequest` contract).
+
+### Subject encoding is a contract, not an implementation detail
+
+The exact subject layout is **load-bearing for security**, not a private implementation detail of the connector. Three independent things have to agree on it byte-for-byte:
+
+1. **`subjectOf` and helpers in `subjects.go`** - what publishers emit and subscribers match against at runtime.
+2. **This document** - the operator-facing description of the wire format. Operators reading or writing NATS ACLs depend on it being accurate.
+3. **The ACL generator skill** (Phase 5, when it lands) - Markdown + prompt instructions, hardcodes the layout from this doc since it can't call Go at run time. Drift here means generated ACLs don't match runtime traffic, and the failure looks like "ACLs are broken" rather than "the encoding changed."
+
+The pinning mechanism is a regression-test golden table in `subjects_test.go` - `TestConnector_SubjectOfSubscription`, `TestConnector_SubjectOfRequest`, `TestConnector_subjectOfResponseSub`, `TestConnector_subjectOfResponse` cover representative cases (multi-segment hostnames, hyphenated hostnames, root paths, path arguments, greedy paths, wildcard ports, lowercasing). Any change to the layout has to update those tests, and the diff in the test file is what code review catches.
+
+If you change anything in `subjectOf`, `splitSubject`, `flattenHostname`, `extractPosition`, `localitySlot`, or `escapePathPart`:
+
+- Update the regression-test goldens in `subjects_test.go` (the test failure is the contract being enforced).
+- Update the "Subject encoding" section above to reflect the new layout. The doc and the test goldens are the contract, in two forms.
+- Treat it as a release-notes-worthy breaking change. There is no transitional state where mixed-version services interoperate, since the wire formats won't match.
+
+### Verified source on receive
+
+NATS PUB ACLs in production pin each NATS user to publish only under their own `<fromHost>` segment. The segment is therefore an ACL-enforced sender identity by the time a message arrives at a subscriber, in a way the `Microbus-From-Host` header (publisher-set, no broker-side check) is not. `onRequest` (request path) and `handleResponse` (response path) **unconditionally overwrite** `Microbus-From-Host` with the source segment parsed from `msg.Subject` via `splitSubject` before any downstream code reads it.
+
+The overwrite is unconditional even when `splitSubject` returns `ok=false`. A malformed subject or transport bug that fails to populate `Msg.Subject` produces an empty verified source, which the framework propagates as an empty `From-Host`. The downstream `ackRequest` path treats an empty `From-Host` as a hard error - the correct response to an unverifiable inbound message. Falling back to the publisher-set value would defeat the verification contract; if we can't verify, we don't accept.
+
+The short-circuit transport carries `Msg.Subject` the same way the NATS path does (set from the `subject` argument in `deliverWithShortCircuit`), so in-process traffic gets the same overwrite semantics. Cryptographic enforcement of the source segment doesn't apply within a bundle (no broker), but the framework still routes through the verified-source path so observability and per-caller throttle behavior is uniform across transports.
 
 ### Direct addressing for fragmented requests
 
-The first fragment of a multi-fragment request publishes on the normal subject so any replica's queue group can pick it up. Once a replica acks, fragments 2..N are sent to a *direct* subject of the form `<fromID>.<host>` so they all land on the exact replica that took the first fragment. Without direct addressing the queue group would round-robin subsequent fragments across replicas, and the receiving replica would never see a complete request.
+The first fragment of a multi-fragment request publishes on the normal subject so any replica's queue group can pick it up. Once a replica acks, fragments 2..N are published with the responder's `id-XXXX` value as the `id_or_locality` slot, so they all land on the exact replica that took the first fragment. Without direct addressing the queue group would round-robin subsequent fragments across replicas, and the receiving replica would never see a complete request. Any locality slot present in the original URL is stripped at fragment-publish time - once we have an instance ID, locality is no longer relevant.
 
 The ack op-code reflects this: a fragmented request acks with `100 Continue`, an unfragmented one with `202 Accepted`. The defragger times out a partial fragment set after `8 * networkRoundtrip` of inactivity (polled every `networkRoundtrip / 2`).
 
@@ -107,33 +158,33 @@ This is a security boundary, not an oversight. Internal control headers (`Microb
 
 ### `:888` control surface
 
-Control endpoints subscribe twice: once on the connector's own host, once on `//all/<route>` so they are reachable via the broadcast hostname `all`. The OpenAPI handler skips the `//all` mirror entries when rendering the document because they are not separate operations.
+Control endpoints subscribe twice: once on the connector's own host, once mirrored on `//all<route>` (e.g. `//all:888/ping`) so they are reachable via the broadcast hostname `all`. The mirror preserves the port - only the hostname segment is replaced. The OpenAPI handler skips the `//all` mirror entries when rendering the document because they are not separate operations.
 
 The OpenAPI handler is *actor-aware*: operations whose `RequiredClaims` the caller cannot satisfy are omitted from the document. The response is `Cache-Control: private, no-store` because the rendered document varies per caller. Only `function`, `web`, and `workflow` subscription types are included; tasks, events, and infra/control subs are filtered out at this boundary, which is what allows `llm.core` to safely use the document for LLM tool resolution.
 
-### Trace sampling — `selectiveProcessor` is a tail sampler
+### Trace sampling - `selectiveProcessor` is a tail sampler
 
 In `PROD`, spans are not exported eagerly. `selectiveProcessor` buffers ended spans in a ring; when a trace ID is `Select`ed (either by `ForceTrace` locally, or by an inbound `:888/trace?id=...` from a peer that hit an error), the buffer is scanned and matching spans are flushed downstream. Future spans on that trace ID are also flushed.
 
-The selected-trace-IDs map uses a two-generation rotation (`selected1`, `selected2`) primarily as a memory cap — old entries roll out without an explicit TTL sweep. Buffer capacity is fixed at ~8192 spans / ~10MB per microservice.
+The selected-trace-IDs map uses a two-generation rotation (`selected1`, `selected2`) primarily as a memory cap - old entries roll out without an explicit TTL sweep. Buffer capacity is fixed at ~8192 spans / ~10MB per microservice.
 
-`ForceTrace` broadcasts to `https://all:888/trace?id=...` so every microservice with spans on that trace exports its share — without this fan-out only the connector that hit the error would flush.
+`ForceTrace` broadcasts to `https://all:888/trace?id=...` so every microservice with spans on that trace exports its share - without this fan-out only the connector that hit the error would flush.
 
 ### OTLP exporter resilience
 
-Telemetry export is best-effort sideband — its failure must never affect service health. Two specific configuration choices in `tracer.go` and `metrics.go` enforce this:
+Telemetry export is best-effort sideband - its failure must never affect service health. Two specific configuration choices in `tracer.go` and `metrics.go` enforce this:
 
-1. **`WithRetry(RetryConfig{Enabled: false})`.** With retries on, the OTLP gRPC client retries failed exports with internal timeouts that can exceed 75 seconds per call. A flaky or down collector therefore stalls the connector's batch span/metric processor flushes, which in turn stalls `Shutdown` (the SDK contract is to drain before returning). Disabling retries means each export attempt is single-shot — succeed or drop on the floor with a log line.
+1. **`WithRetry(RetryConfig{Enabled: false})`.** With retries on, the OTLP gRPC client retries failed exports with internal timeouts that can exceed 75 seconds per call. A flaky or down collector therefore stalls the connector's batch span/metric processor flushes, which in turn stalls `Shutdown` (the SDK contract is to drain before returning). Disabling retries means each export attempt is single-shot - succeed or drop on the floor with a log line.
 
 2. **No `WithBlock`, no `WithTimeout` option set explicitly.** The SDK's default constructor connects lazily (first export, not at `New(...)`), so `Startup` is never blocked on the dial. The per-export timeout is governed by `OTEL_EXPORTER_OTLP_TIMEOUT` (or the signal-specific `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT` / `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT`) per the OTel spec, in milliseconds. The SDK auto-reads it from `os.Getenv`; values set in `env.yaml` or via `env.Push` (in tests) reach the SDK because the env package writes through to the OS env. The SDK's spec-default 10s applies when unset.
 
-The combined effect: a service with a configured-but-unreachable collector starts up immediately, makes one bounded export attempt per flush (giving up after the configured timeout), and shuts down within `timeout × N` worst case (one final flush per exporter type). Without these settings, the same misconfiguration would hang both startup and shutdown indefinitely — observed pre-fix as orchestrator-killed pods on rolling deploys.
+The combined effect: a service with a configured-but-unreachable collector starts up immediately, makes one bounded export attempt per flush (giving up after the configured timeout), and shuts down within `timeout × N` worst case (one final flush per exporter type). Without these settings, the same misconfiguration would hang both startup and shutdown indefinitely - observed pre-fix as orchestrator-killed pods on rolling deploys.
 
 The regression tests live in `metrics_test.go` (`TestConnector_OTLPMetricsUnreachable` for the fast connection-refused path, `TestConnector_OTLPSlowEndpoint` for the slow timeout path that actually exercises the spec-defined timeout).
 
 ### `alg=none` JWTs in TESTING
 
-`verifyToken` accepts unsigned tokens (`alg=none`) only when `deployment == TESTING`. Required-claim evaluation still runs against the unsigned payload — TESTING relaxes the *signature* check, not the *authorization* check. This is what lets test code use `pub.Actor(claims)` without standing up a signing key.
+`verifyToken` accepts unsigned tokens (`alg=none`) only when `deployment == TESTING`. Required-claim evaluation still runs against the unsigned payload - TESTING relaxes the *signature* check, not the *authorization* check. This is what lets test code use `pub.Actor(claims)` without standing up a signing key.
 
 ### Configurator is disabled in TESTING
 

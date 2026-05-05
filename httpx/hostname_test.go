@@ -29,21 +29,34 @@ func TestHttpx_ValidateHostname(t *testing.T) {
 
 	valid := []string{
 		"hello",
-		"hello.WORLD",
+		"hello.world",
 		"123.456",
 		"1",
-		"hello_world",
 		"hello-world",
+		"a.b.c.d",
+		"my-service.example.com",
 	}
 	invalid := []string{
+		"",
+		" hello",
+		"hello ",
 		"hello world",
 		"hello..world",
 		"hello.",
 		".hello",
 		"~hello",
-		strings.Repeat("x", 256),
 		"$",
-		"",
+		"hello_world",   // underscore is reserved for NATS subject flat-form
+		"Hello",         // uppercase rejected; caller must lowercase
+		"hello.WORLD",   // uppercase rejected
+		"id-foo",        // reserved prefix
+		"id-foo.bar",    // reserved prefix
+		"loc-us",        // reserved prefix
+		"loc-us-west.b", // reserved prefix
+		"all",           // reserved broadcast hostname
+		"foo.all",       // reserved broadcast suffix
+		"foo.bar.all",   // reserved broadcast suffix
+		strings.Repeat("x", 253), // length cap
 	}
 
 	for _, x := range valid {

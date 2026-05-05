@@ -11,7 +11,7 @@ Expose one endpoint:
 1. Extract the `system` role message (if any) into a separate `systemMsg` string; Claude's API takes the system prompt as a top-level field.
 2. Convert `[]llmapi.Message` to `[]claudeMessage`:
    - `system` messages: skip (already extracted).
-   - `assistant` messages with `ToolCalls` JSON: unmarshal the tool calls and emit a `content` array of blocks — a `text` block if there is content, plus one `tool_use` block per tool call (carrying `id`, `name`, and `input` as `json.RawMessage`).
+   - `assistant` messages with `ToolCalls` JSON: unmarshal the tool calls and emit a `content` array of blocks - a `text` block if there is content, plus one `tool_use` block per tool call (carrying `id`, `name`, and `input` as `json.RawMessage`).
    - `assistant` messages without tool calls: emit a simple JSON-encoded string content.
    - `tool` messages: emit a `user` message with a single `tool_result` block, carrying `tool_use_id` and `content`.
    - All other roles: emit as-is with JSON-encoded string content.
@@ -23,6 +23,6 @@ Expose one endpoint:
 
 ### Config Properties
 
-- `BaseURL` — Claude API base URL, default `https://api.anthropic.com`, validated as URL.
-- `APIKey` — Anthropic API key, `secret: true`.
-- `Model` — Claude model identifier, default `claude-haiku-4-5`.
+- `BaseURL` - Claude API base URL, default `https://api.anthropic.com`, validated as URL.
+- `APIKey` - Anthropic API key, `secret: true`.
+- `Model` - Claude model identifier, default `claude-haiku-4-5`.

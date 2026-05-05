@@ -15,14 +15,14 @@ all:
   SharedProp: value
 ```
 
-The `all` key is a wildcard that applies to every hostname. Value lookup is specificity-ordered: an exact hostname match beats a suffix match (`example` matches `hello.example`), which beats `all`. Segments are resolved right-to-left — `core` is less specific than `ingress.core` which is less specific than `http.ingress.core`.
+The `all` key is a wildcard that applies to every hostname. Value lookup is specificity-ordered: an exact hostname match beats a suffix match (`example` matches `hello.example`), which beats `all`. Segments are resolved right-to-left - `core` is less specific than `ingress.core` which is less specific than `http.ingress.core`.
 
 Expose these endpoints:
 
-- `Values` on `:888/values` — takes `names []string`, reads `frame.Of(ctx).FromHost()` to identify the caller, and returns the map of matching values from the repository. Read-locked.
-- `Refresh` on `:444/refresh` — coalesces concurrent callers, then delegates to `PeriodicRefresh`.
-- `SyncRepo` on `:888/sync-repo` (multicast, no queue) — accepts a `timestamp time.Time` and `values map[string]map[string]string` from a peer. Ignores requests from self (same `FromID()`). If repos differ, the newer timestamp wins: if incoming is newer, replace the local repo; if local is newer, re-broadcast the local repo to peers.
-- `PeriodicRefresh` ticker at 20-minute intervals — multicasts `ConfigRefresh` to all microservices via `controlapi.NewMulticastClient(svc).ForHost("all").ConfigRefresh(ctx)`. Ignores `http.StatusNotFound` errors (microservices that don't have a config endpoint). Returns the last non-404 error encountered.
+- `Values` on `:888/values` - takes `names []string`, reads `frame.Of(ctx).FromHost()` to identify the caller, and returns the map of matching values from the repository. Read-locked.
+- `Refresh` on `:444/refresh` - coalesces concurrent callers, then delegates to `PeriodicRefresh`.
+- `SyncRepo` on `:888/sync-repo` (multicast, no queue) - accepts a `timestamp time.Time` and `values map[string]map[string]string` from a peer. Ignores requests from self (same `FromID()`). If repos differ, the newer timestamp wins: if incoming is newer, replace the local repo; if local is newer, re-broadcast the local repo to peers.
+- `PeriodicRefresh` ticker at 20-minute intervals - multicasts `ConfigRefresh` to all microservices via `controlapi.NewMulticastClient(svc).ForHost("all").ConfigRefresh(ctx)`. Ignores `http.StatusNotFound` errors (microservices that don't have a config endpoint). Returns the last non-404 error encountered.
 
 Deprecated endpoints `Values443` (`:443/values`), `Refresh443` (`:443/refresh`), and `Sync443` (`:443/sync`) forward to the current implementations but reject requests arriving from outside the bus (check `frame.Of(ctx).XForwardedBaseURL() != ""`).
 

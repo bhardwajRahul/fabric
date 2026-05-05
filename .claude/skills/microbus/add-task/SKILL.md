@@ -36,6 +36,18 @@ Creating or modifying a task endpoint:
 
 Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
+Ensure the local `CLAUDE.md` advertises that this microservice implements agentic workflows. The Agent Instructions block holds one short paragraph per instruction so multiple instructions (workflows, SQL, auth) can coexist as separate paragraphs. The paragraph to add is:
+
+```markdown
+This microservice implements agentic workflows. See `.claude/rules/workflows.txt` for the conventions.
+```
+
+How to apply:
+
+- If the file does not exist, create it with the hostname as an H1 heading, then add an `## Agent Instructions` section containing the paragraph above.
+- If the file exists and already has an `## Agent Instructions` section, append the paragraph (separated by a blank line) after the existing instructions; skip if a workflows-related paragraph is already present.
+- If the file exists but has no `## Agent Instructions` section, insert one as the first section after the H1 hostname heading and add the paragraph.
+
 #### Step 2: Determine Signature
 
 Determine the Go signature of the task endpoint. A task always receives `ctx context.Context` and `flow *workflow.Flow` as its first two arguments, followed by state fields it reads as input. It returns state fields it writes as output, plus `err error`.
@@ -56,6 +68,14 @@ Constraints:
 - Arguments must not be named `t` or `svc`
 - Argument names must start with a lowercase letter
 - The function name must start with an uppercase letter
+
+Naming for fan-in: when an argument represents a state field that will be merged across parallel branches, name it with one of these prefixes so the foreman picks the reducer automatically (no `graph.SetReducer` call needed):
+
+- `sum*` - numeric add (e.g. `sumFailures`, `sumScore`)
+- `list*` - array append, duplicates kept (e.g. `listMessages`, `listEvents`)
+- `set*` - set-style: array union or object merge depending on the value (e.g. `setUsers`, `setTags`)
+
+The character right after the prefix must be uppercase. Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer should return `sumEmploymentFailuresOut: 0 or 1` (its own count), not the running total.
 
 #### Step 3: Extend the `ToDo` Interface
 

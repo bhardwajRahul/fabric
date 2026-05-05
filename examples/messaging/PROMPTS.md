@@ -6,7 +6,7 @@ Create an example microservice at hostname `messaging.example` that demonstrates
 
 Five web handler endpoints:
 
-- `Home` on `GET /home` — the showcase endpoint that exercises all four request patterns in sequence and returns the results as `text/plain`:
+- `Home` on `GET /home` - the showcase endpoint that exercises all four request patterns in sequence and returns the results as `text/plain`:
   1. Logs which instance processed the current request using `svc.ID()`.
   2. Unicast `GET https://messaging.example/default-queue` via `svc.Request(...)`. Extracts the responder's ID from `frame.Of(res).FromID()`.
   3. Direct-addressing unicast to the same responder: `GET https://<responderID>.messaging.example/default-queue`, bypassing load balancing.
@@ -14,13 +14,13 @@ Five web handler endpoints:
   5. Direct-addressing multicast to that specific instance only.
   Appends `"Refresh the page to try again"` at the end.
 
-- `NoQueue` on `GET /no-queue`, `loadBalancing: none` — responds with `"NoQueue <instanceID>"`. Because load balancing is disabled, every running instance responds to each multicast request.
+- `NoQueue` on `GET /no-queue`, `loadBalancing: none` - responds with `"NoQueue <instanceID>"`. Because load balancing is disabled, every running instance responds to each multicast request.
 
-- `DefaultQueue` on `GET /default-queue` — responds with `"DefaultQueue <instanceID>"`. Standard load-balanced subscription; only one instance responds per request.
+- `DefaultQueue` on `GET /default-queue` - responds with `"DefaultQueue <instanceID>"`. Standard load-balanced subscription; only one instance responds per request.
 
-- `CacheLoad` on `GET /cache-load` — reads `?key=` from the query string (returns error if missing), looks up the key in `svc.DistribCache()` using `Get(ctx, key, &value)`, and returns a plain-text report indicating whether the key was found, its value, and which instance served the request.
+- `CacheLoad` on `GET /cache-load` - reads `?key=` from the query string (returns error if missing), looks up the key in `svc.DistribCache()` using `Get(ctx, key, &value)`, and returns a plain-text report indicating whether the key was found, its value, and which instance served the request.
 
-- `CacheStore` on `GET /cache-store` — reads `?key=` and `?value=` from the query string (returns error if either is missing), stores the value via `svc.DistribCache().Set(ctx, key, []byte(value))`, and returns a plain-text confirmation with the storing instance's ID.
+- `CacheStore` on `GET /cache-store` - reads `?key=` and `?value=` from the query string (returns error if either is missing), stores the value via `svc.DistribCache().Set(ctx, key, []byte(value))`, and returns a plain-text confirmation with the storing instance's ID.
 
 ## Non-obvious Details
 

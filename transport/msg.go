@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2023-2025 Microbus LLC and various contributors
+Copyright (c) 2023-2026 Microbus LLC and various contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ type MsgHandler = func(msg *Msg)
 
 // Msg is the data packet that is transmitted over the transport.
 type Msg struct {
+	// Subject is the NATS subject the message was delivered on.
+	Subject  string
 	Data     []byte
 	Request  *http.Request
 	Response *http.Response

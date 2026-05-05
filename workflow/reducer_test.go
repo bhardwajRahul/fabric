@@ -109,6 +109,166 @@ func TestReducer_Unknown(t *testing.T) {
 	assert.Error(err)
 }
 
+func TestReducer_Merge(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// New keys win on collision; all keys retained.
+	result, err := ReducerMerge.Reduce(
+		json.RawMessage(`{"a":1,"b":2}`),
+		json.RawMessage(`{"b":3,"c":4}`),
+	)
+	assert.NoError(err)
+	var got map[string]any
+	_ = json.Unmarshal(result.(json.RawMessage), &got)
+	assert.Expect(got["a"], float64(1))
+	assert.Expect(got["b"], float64(3))
+	assert.Expect(got["c"], float64(4))
+
+	// Error on non-object
+	_, err = ReducerMerge.Reduce(json.RawMessage(`[1,2]`), json.RawMessage(`{"a":1}`))
+	assert.Error(err)
+	assert.Contains(err.Error(), "merge reducer requires object")
+	assert.Contains(err.Error(), "array")
+}
+
+func TestReducer_TypeMismatchErrors(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	_, err := ReducerAdd.Reduce(json.RawMessage(`"hi"`), json.RawMessage(`1`))
+	assert.Error(err)
+	assert.Contains(err.Error(), "add reducer requires number")
+	assert.Contains(err.Error(), "string")
+
+	_, err = ReducerAppend.Reduce(json.RawMessage(`{"a":1}`), json.RawMessage(`[1]`))
+	assert.Error(err)
+	assert.Contains(err.Error(), "append reducer requires array")
+	assert.Contains(err.Error(), "object")
+
+	_, err = ReducerUnion.Reduce(json.RawMessage(`42`), json.RawMessage(`[1]`))
+	assert.Error(err)
+	assert.Contains(err.Error(), "union reducer requires array")
+	assert.Contains(err.Error(), "number")
+}
+
+func TestReducerForFieldName(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	cases := []struct {
+		name string
+		want Reducer
+	}{
+		// Matches: prefix followed by uppercase letter.
+		{"sumScore", ReducerAdd},
+		{"sumX", ReducerAdd},
+		{"listMessages", ReducerAppend},
+		{"listItems", ReducerAppend},
+		{"setUsers", ReducerUnion},
+		{"setRoles", ReducerUnion},
+		// English words: prefix followed by lowercase letter.
+		{"summary", ""},
+		{"summer", ""},
+		{"listening", ""},
+		{"listed", ""},
+		{"setup", ""},
+		{"setupTime", ""},
+		{"settings", ""},
+		// Bare prefix (no boundary).
+		{"sum", ""},
+		{"list", ""},
+		{"set", ""},
+		// No prefix.
+		{"messages", ""},
+		{"score", ""},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := ReducerForFieldName(tc.name)
+		if got != tc.want {
+			t.Errorf("ReducerForFieldName(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	_ = assert
+}
+
+func TestMergeState_PrefixDispatch(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	state := map[string]any{
+		"sumScore":     json.RawMessage(`10`),
+		"listMessages": json.RawMessage(`["a","b"]`),
+		"setRoles":     json.RawMessage(`["admin"]`),
+		"messages":     json.RawMessage(`"old"`),
+	}
+	changes := map[string]any{
+		"sumScore":     json.RawMessage(`5`),
+		"listMessages": json.RawMessage(`["c"]`),
+		"setRoles":     json.RawMessage(`["admin","user"]`),
+		"messages":     json.RawMessage(`"new"`),
+	}
+	merged, err := MergeState(state, changes, nil)
+	if assert.NoError(err) {
+		data, _ := marshalAny(merged["sumScore"])
+		assert.Expect(string(data), "15")
+		data, _ = marshalAny(merged["listMessages"])
+		assert.Expect(string(data), `["a","b","c"]`)
+		data, _ = marshalAny(merged["setRoles"])
+		assert.Expect(string(data), `["admin","user"]`)
+		// Non-prefix field falls through to replace.
+		data, _ = marshalAny(merged["messages"])
+		assert.Expect(string(data), `"new"`)
+	}
+}
+
+func TestMergeState_PolymorphicSet(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// set* with array value -> union behavior.
+	mergedArr, err := MergeState(
+		map[string]any{"setItems": json.RawMessage(`[1,2]`)},
+		map[string]any{"setItems": json.RawMessage(`[2,3]`)},
+		nil,
+	)
+	if assert.NoError(err) {
+		data, _ := marshalAny(mergedArr["setItems"])
+		assert.Expect(string(data), `[1,2,3]`)
+	}
+
+	// set* with object value -> merge behavior.
+	mergedObj, err := MergeState(
+		map[string]any{"setUsers": json.RawMessage(`{"alice":1,"bob":2}`)},
+		map[string]any{"setUsers": json.RawMessage(`{"bob":3,"carol":4}`)},
+		nil,
+	)
+	if assert.NoError(err) {
+		var got map[string]any
+		_ = json.Unmarshal(mergedObj["setUsers"].(json.RawMessage), &got)
+		assert.Expect(got["alice"], float64(1))
+		assert.Expect(got["bob"], float64(3))
+		assert.Expect(got["carol"], float64(4))
+	}
+}
+
+func TestMergeState_ExplicitOverridesPrefix(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// Explicit ReducerReplace on a set* field disables polymorphism.
+	merged, err := MergeState(
+		map[string]any{"setItems": json.RawMessage(`[1,2]`)},
+		map[string]any{"setItems": json.RawMessage(`[3]`)},
+		map[string]Reducer{"setItems": ReducerReplace},
+	)
+	if assert.NoError(err) {
+		data, _ := marshalAny(merged["setItems"])
+		assert.Expect(string(data), `[3]`)
+	}
+}
+
 func TestMergeState_Replace(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)

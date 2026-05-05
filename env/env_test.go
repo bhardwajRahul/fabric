@@ -25,7 +25,7 @@ import (
 )
 
 func TestEnv_OSOverridesFile(t *testing.T) {
-	// No parallel — mutates process-wide env.
+	// No parallel - mutates process-wide env.
 	assert := testarossa.For(t)
 
 	os.Chdir("testdata/subdir")

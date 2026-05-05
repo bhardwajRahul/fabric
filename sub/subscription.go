@@ -44,7 +44,6 @@ var knownMethods = map[string]bool{
 	"ANY":              true,
 }
 
-
 // HTTPHandler extends the standard http.Handler to also return an error.
 type HTTPHandler func(w http.ResponseWriter, r *http.Request) (err error)
 
@@ -123,16 +122,66 @@ func NewSubscription(name string, defaultHost string, handler HTTPHandler, optio
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	canonicalHost, err := validateRouteHostname(u.Hostname())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	if _, err := strconv.Atoi(u.Port()); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err := validatePathArgs(u.Path); err != nil {
 		return nil, errors.Trace(err)
 	}
-	s.Host = u.Hostname()
+	s.Host = canonicalHost
 	s.Port = u.Port()
 	s.Route = u.Path
 	return s, nil
+}
+
+// validateRouteHostname normalizes a subscription's route hostname to canonical
+// lowercase form and validates it. Returns the canonical hostname for the caller
+// to store, or an error if the hostname doesn't conform to Microbus rules.
+//
+// Routes are accepted in mixed case (e.g. "//UPPERCASE.xml/path") and lowercased
+// here so they match request URLs after equivalent normalization. Underscores and
+// other URL special characters are translated to the placeholder 'x' before the
+// strict identity check, so a route on hostname "my_.xml" passes through to a
+// base hostname of "myx.xml" and validates. The bare broadcast hostname "all" is
+// accepted as a special case (the framework registers control endpoints on
+// //all<route>).
+//
+// The 'x' translation is a hack contained to this package - it lets us reuse the
+// single strict validator in httpx for both identity and route hostnames without
+// exposing a generic "translate URL specials" helper to the rest of the codebase.
+func validateRouteHostname(host string) (string, error) {
+	canonical := strings.ToLower(host)
+	if canonical == "all" {
+		return canonical, nil
+	}
+	if err := httpx.ValidateHostname(translateHostnameSpecials(canonical)); err != nil {
+		return "", err
+	}
+	return canonical, nil
+}
+
+// translateHostnameSpecials replaces any character outside [a-zA-Z0-9.-] with the
+// placeholder 'x'. Uppercase letters are preserved so they fail the strict identity
+// check downstream.
+func translateHostnameSpecials(host string) string {
+	var b strings.Builder
+	b.Grow(len(host))
+	for _, r := range host {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '.', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('x')
+		}
+	}
+	return b.String()
 }
 
 func defaultPortForType(t string) string {
@@ -195,11 +244,16 @@ func (sub *Subscription) Canonical() string {
 
 // RefreshHostname refreshes the subscription for a different hostname.
 func (sub *Subscription) RefreshHostname(defaultHost string) error {
+	defaultHost = strings.ToLower(defaultHost)
 	joined := httpx.JoinHostAndPath(defaultHost, sub.specPath)
 	u, err := httpx.ParseURL(joined)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sub.Host = u.Hostname()
+	canonicalHost, err := validateRouteHostname(u.Hostname())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	sub.Host = canonicalHost
 	return nil
 }

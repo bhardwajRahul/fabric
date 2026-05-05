@@ -1,5 +1,0 @@
-# Package `examples/browser`
-
-The `browser.example` microservice implements a single endpoint, `/browse`, that renders an HTML page with a form that takes in a URL and fetches the source code of the page. This example demonstrates how to use the [HTTP egress core microservice](../structure/coreservices-httpegress.md) as well as how to mock it in tests.
-
-Visit http://localhost:8080/browser.example/browse to play around with the simple UI.

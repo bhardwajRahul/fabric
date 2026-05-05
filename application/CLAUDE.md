@@ -2,7 +2,7 @@
 
 ### Groups *are* the dependency mechanism
 
-Each call to `Add(...)` creates a new group. Within a group, services start in parallel goroutines; between groups, startup is sequential. This is the entire dependency-ordering API — there is no `DependsOn` or topological sort. A service that must come up after another goes in a later `Add` call:
+Each call to `Add(...)` creates a new group. Within a group, services start in parallel goroutines; between groups, startup is sequential. This is the entire dependency-ordering API - there is no `DependsOn` or topological sort. A service that must come up after another goes in a later `Add` call:
 
 ```go
 app.Add(httpingress)            // group 0
@@ -14,7 +14,7 @@ Shutdown reverses this: groups shut down in reverse order, services within each 
 
 ### Startup retries until the deadline, not until first error
 
-`group.Startup` does *not* fail fast. If a service's `Startup` returns an error, the goroutine waits one second and retries — until the context deadline expires. The deadline is the only stopping condition.
+`group.Startup` does *not* fail fast. If a service's `Startup` returns an error, the goroutine waits one second and retries - until the context deadline expires. The deadline is the only stopping condition.
 
 The retry exists for the case where one service is required to be up before another can start. The classic motivator was an anti-pattern in which microservices declared SQL foreign keys against another service's tables, so service B's startup would fail until service A had created its schema. The framework's preferred design is the opposite: a service should start regardless of its peers and fail at runtime when a missing dependency is actually needed, not at startup. The retry behavior is a safety net for the older patterns and for genuine boot-order races (NATS not yet up, etc.), not a feature to lean on.
 
@@ -31,7 +31,7 @@ The override happens before `Startup`, so individual `s.SetPlane(...)` calls a t
 
 ### Cleanup is registered *before* startup in `RunInTest`
 
-`t.Cleanup(shutdown)` is registered *before* `Startup` is called. If startup fails halfway through (some services started, others didn't), the cleanup still runs and `Shutdown` walks the groups in reverse, shutting down whatever managed to come up. `Run` has no equivalent — a failed `Startup` from `Run` leaves any started services running, and the caller is expected to handle that or just exit the process.
+`t.Cleanup(shutdown)` is registered *before* `Startup` is called. If startup fails halfway through (some services started, others didn't), the cleanup still runs and `Shutdown` walks the groups in reverse, shutting down whatever managed to come up. `Run` has no equivalent - a failed `Startup` from `Run` leaves any started services running, and the caller is expected to handle that or just exit the process.
 
 ### `RunInTest`'s 8s budget vs `Run`'s 20s
 
@@ -39,7 +39,7 @@ The override happens before `Startup`, so individual `s.SetPlane(...)` calls a t
 
 ### Plane / deployment are app-level, hostname is service-level
 
-The `Application` itself carries only `plane` and `deployment` — never hostnames. There is no notion of "the app's services" beyond bookkeeping. The plane/deployment fields exist purely to stamp the same value on every service the app manages, so the resulting microservices form a coherent isolated unit on the bus. Add a service to two apps and it sees the second app's plane/deployment writes (last write wins).
+The `Application` itself carries only `plane` and `deployment` - never hostnames. There is no notion of "the app's services" beyond bookkeeping. The plane/deployment fields exist purely to stamp the same value on every service the app manages, so the resulting microservices form a coherent isolated unit on the bus. Add a service to two apps and it sees the second app's plane/deployment writes (last write wins).
 
 ### Stagger on parallel start/shutdown
 
@@ -51,7 +51,7 @@ Each goroutine in a group is launched with an additional 1ms `time.Sleep` (servi
 
 ### Group startup error reporting is lossy
 
-Each group's startup goroutines push into a buffered error channel that the parent drains, but only `lastErr` is returned. If three services in one group fail to start, you see one error, not three. The contract — "if an error is returned, there is no guarantee as to the state of the microservices" — is what makes this acceptable, but if you're debugging a startup failure with multiple suspects, look at the per-service log lines, not the returned error.
+Each group's startup goroutines push into a buffered error channel that the parent drains, but only `lastErr` is returned. If three services in one group fail to start, you see one error, not three. The contract - "if an error is returned, there is no guarantee as to the state of the microservices" - is what makes this acceptable, but if you're debugging a startup failure with multiple suspects, look at the per-service log lines, not the returned error.
 
 ### `AddAndStartup` is for late-binding only
 

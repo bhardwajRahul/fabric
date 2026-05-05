@@ -6,16 +6,16 @@ Create an example microservice at hostname `eventsource.example` that demonstrat
 
 Two outbound events on port `:417`:
 
-- `OnAllowRegister` on `POST :417/on-allow-register` — signature `OnAllowRegister(email string) (allow bool)`. Fired before registering a user to ask all event sinks whether the registration is allowed. Any sink returning `false` blocks registration.
-- `OnRegistered` on `POST :417/on-registered` — signature `OnRegistered(email string)`. Fired after a successful registration to notify all sinks. Fire-and-forget; no return value consumed.
+- `OnAllowRegister` on `POST :417/on-allow-register` - signature `OnAllowRegister(email string) (allow bool)`. Fired before registering a user to ask all event sinks whether the registration is allowed. Any sink returning `false` blocks registration.
+- `OnRegistered` on `POST :417/on-registered` - signature `OnRegistered(email string)`. Fired after a successful registration to notify all sinks. Fire-and-forget; no return value consumed.
 
 ## Endpoint
 
 One functional endpoint:
 
-- `Register` on `ANY :443/register` — accepts `email string`, returns `allowed bool`. Implementation:
+- `Register` on `ANY :443/register` - accepts `email string`, returns `allowed bool`. Implementation:
   1. Fires `OnAllowRegister` synchronously using `eventsourceapi.NewMulticastTrigger(svc).OnAllowRegister(ctx, email)`, iterating all responses. If any response returns `allow == false`, returns `allowed = false` immediately.
-  2. If all sinks allow, proceeds with registration (placeholder comment — no actual persistence).
+  2. If all sinks allow, proceeds with registration (placeholder comment - no actual persistence).
   3. Fires `OnRegistered` asynchronously in a goroutine using `svc.Go(ctx, func(...))` with `eventsourceapi.NewMulticastTrigger(svc).OnRegistered(ctx, email)` (fire-and-forget, responses not iterated).
   4. Returns `allowed = true`.
 

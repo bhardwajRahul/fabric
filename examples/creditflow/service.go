@@ -125,7 +125,7 @@ func (svc *Service) HandleCreditError(ctx context.Context, flow *workflow.Flow, 
 /*
 VerifyEmployment checks the applicant's employment status.
 */
-func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error) { // MARKER: VerifyEmployment
+func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) { // MARKER: VerifyEmployment
 	if applicantName == "" || employerName == "" {
 		return 1, nil
 	}
@@ -259,8 +259,8 @@ func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, credi
 /*
 Decision determines whether to approve the credit application based on verification results.
 */
-func (svc *Service) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
-	approved = creditVerified && employmentFailures == 0 && identityVerified
+func (svc *Service) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
+	approved = creditVerified && sumEmploymentFailures == 0 && identityVerified
 	return approved, nil
 }
 
@@ -367,9 +367,9 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 		Approved           bool
 		CreditVerified     bool
 		IdentityVerified   bool
-		EmploymentFailures int
-		Steps              []demoStep
-		MermaidDiagram     string
+		SumEmploymentFailures int
+		Steps                 []demoStep
+		MermaidDiagram        string
 	}{
 		Name:      r.FormValue("name"),
 		SSN:       r.FormValue("ssn"),
@@ -425,7 +425,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 			data.Approved = result.out.Approved
 			data.CreditVerified = result.out.CreditVerified
 			data.IdentityVerified = result.out.IdentityVerified
-			data.EmploymentFailures = result.out.EmploymentFailures
+			data.SumEmploymentFailures = result.out.SumEmploymentFailures
 			data.Steps = result.steps
 			data.MermaidDiagram = result.mermaid
 		}
@@ -453,7 +453,7 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 
 	graph = workflow.NewGraph(creditflowapi.CreditApproval.URL())
 	graph.DeclareInputs("applicant", "faultInjection")
-	graph.DeclareOutputs("approved", "creditVerified", "employmentFailures", "identityVerified")
+	graph.DeclareOutputs("approved", "creditVerified", "sumEmploymentFailures", "identityVerified")
 	// Identity verification is a subgraph with its own internal steps
 	graph.AddSubgraph(identityVerification)
 	handleCreditError := creditflowapi.HandleCreditError.URL()
@@ -464,8 +464,8 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 	graph.AddTransition(handleCreditError, reviewCredit)
 	graph.AddTransitionForEach(submitCreditApplication, verifyEmployment, "employers", "employerName")
 	graph.AddTransition(submitCreditApplication, identityVerification)
-	// Employment failure counts are summed across all employer verifications
-	graph.SetReducer("employmentFailures", workflow.ReducerAdd)
+	// Employment failure counts are summed across all employer verifications via the
+	// sum* prefix convention; no explicit reducer is needed.
 	// All verifications fan in to review (which passes through for good scores)
 	graph.AddTransition(verifyCredit, reviewCredit)
 	graph.AddTransition(verifyEmployment, reviewCredit)

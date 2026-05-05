@@ -194,8 +194,8 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	}
 	c.LogInfo(ctx, "Startup")
 
-	// Connect to the transport
-	err = c.transportConn.Open(ctx, c)
+	// Connect to the transport.
+	err = c.transportConn.Open(ctx, c.hostname, c)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
@@ -210,7 +210,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	c.LogInfo(ctx, "Transport latency", "latency", c.networkRoundtrip)
 
 	// Subscribe to the response subject
-	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponses(c.plane, c.hostname, c.id), c.id, c.onResponse)
+	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponseSub(c.plane, c.hostname, c.id), c.id, c.onResponse)
 	if err != nil {
 		err = errors.Trace(err)
 		return err
@@ -543,9 +543,5 @@ func determineCloudLocality(cloudProvider string) (locality string, err error) {
 		}
 	}
 
-	parts := strings.Split(az, "-") // [us, east, 1, a]
-	for i := range len(parts) / 2 {
-		parts[i], parts[len(parts)-1-i] = parts[len(parts)-1-i], parts[i]
-	} // [a, 1, east, us]
-	return strings.Join(parts, "."), nil // a.1.east.us
+	return az, nil
 }

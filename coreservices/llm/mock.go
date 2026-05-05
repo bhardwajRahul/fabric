@@ -201,11 +201,11 @@ func (svc *Mock) MockChatLoop(handler func(ctx context.Context, flow *workflow.F
 		snap := f.Snapshot()
 		var in llmapi.ChatLoopIn
 		f.ParseState(&in)
-		messagesOut, usage, err := handler(r.Context(), &f, in.Provider, in.Model, in.Messages, in.Tools, in.Options)
+		messagesOut, usage, err := handler(r.Context(), &f, in.Provider, in.Model, in.ListMessages, in.Tools, in.Options)
 		if err != nil {
 			return err // No trace
 		}
-		out := llmapi.ChatLoopOut{MessagesOut: messagesOut, Usage: usage}
+		out := llmapi.ChatLoopOut{ListMessagesOut: messagesOut, Usage: usage}
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)

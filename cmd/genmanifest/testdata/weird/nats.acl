@@ -1,0 +1,16 @@
+# nats.acl for weird.fixture
+# Test golden for cmd/gencreds. Pinned by code review; regenerate via
+# `go test ./cmd/gencreds/ -update -run TestScan_FixtureGoldens`.
+
+PUB {{plane}}.reply._.weird_fixture.>
+PUB {{plane}}.safe.417.weird_fixture.weird_fixture.*.POST.on-something
+PUB {{plane}}.safe.888.weird_fixture.>
+
+SUB {{plane}}.danger.666.*.weird_fixture.>
+SUB {{plane}}.reply._.*.weird_fixture.*
+SUB {{plane}}.safe.*.*.alt_host.*.GET.alt-path
+SUB {{plane}}.safe.*.*.weird_fixture.>
+SUB {{plane}}.safe.443.*.alt_host.*.GET.items.*
+SUB {{plane}}.safe.443.*.my%24_xml.*.GET.lookup
+SUB {{plane}}.safe.443.*.root.*.*._
+SUB {{plane}}.safe.888.*.all.>

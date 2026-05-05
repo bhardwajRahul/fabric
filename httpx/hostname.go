@@ -24,15 +24,34 @@ import (
 )
 
 var (
-	hostnameValidator = regexp.MustCompile(`^[a-z0-9_\-]+(\.[a-z0-9_\-]+)*$`)
+	hostnameValidator = regexp.MustCompile(`^[a-z0-9-]+(\.[a-z0-9-]+)*$`)
 )
 
-// ValidateHostname indicates if the hostname is a valid microservice hostname.
-// Hostnames must contain only alphanumeric characters, hyphens, underscores and dot separators,
-// and be 252 characters or less.
+// ValidateHostname checks that the string is a canonical Microbus service identity.
+// Rules:
+//   - Length up to 252 characters.
+//   - Only lowercase letters, digits, dot separators, and hyphens. No underscores. No uppercase.
+//   - Segments are separated by single dots; no leading, trailing, or consecutive dots.
+//   - The first segment may not start with the reserved prefixes "id-" or "loc-".
+//   - The hostname is not "all" and does not end in ".all".
+//
+// The caller is responsible for normalization (trim, lowercase). Non-canonical input
+// produces an error rather than being silently coerced.
 func ValidateHostname(hostname string) error {
-	if len(hostname) >= 253 || !hostnameValidator.MatchString(strings.ToLower(hostname)) {
+	if hostname == "" {
 		return errors.New("invalid hostname '%s'", hostname)
+	}
+	if len(hostname) >= 253 {
+		return errors.New("invalid hostname '%s'", hostname)
+	}
+	if !hostnameValidator.MatchString(hostname) {
+		return errors.New("invalid hostname '%s'", hostname)
+	}
+	if strings.HasPrefix(hostname, "id-") || strings.HasPrefix(hostname, "loc-") {
+		return errors.New("invalid hostname '%s' (reserved prefix)", hostname)
+	}
+	if hostname == "all" || strings.HasSuffix(hostname, ".all") {
+		return errors.New("invalid hostname '%s' (reserved)", hostname)
 	}
 	return nil
 }

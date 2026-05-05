@@ -8,7 +8,7 @@ All types (`Message`, `Tool`, `ToolCall`, `TurnCompletion`) are imported from `l
 
 ## Turn Endpoint
 
-- `Turn` on `POST :444/turn` — signature `Turn(messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion)`. This is the LLM provider interface endpoint.
+- `Turn` on `POST :444/turn` - signature `Turn(messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion)`. This is the LLM provider interface endpoint.
 
 Logic:
 1. If `messages` is empty, return a welcome message.
@@ -26,7 +26,7 @@ Logic:
 
 ## Demo Endpoint
 
-- `Demo` on `ANY //chatbox.example/demo` (absolute route mapped to ingress root) — serves an interactive chat UI from `resources/demo.html`.
+- `Demo` on `ANY //chatbox.example/demo` (absolute route mapped to ingress root) - serves an interactive chat UI from `resources/demo.html`.
 
 On GET: render the template with no data.
 On POST: read `message` form value (return `400` if empty), build a single-message conversation `[]llmapi.Message{{Role: "user", Content: userMessage}}`, call `llmapi.NewClient(svc).Chat(r.Context(), messages, tools)` with `tools = []string{calculatorapi.Arithmetic.URL()}`, and return the resulting conversation as JSON (`Content-Type: application/json`).

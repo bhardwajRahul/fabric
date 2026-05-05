@@ -2,11 +2,11 @@
 
 ## Design Rationale
 
-This microservice is the main showcase example for the Microbus framework. It intentionally collects multiple patterns into a single service rather than separating concerns — the goal is to demonstrate breadth, not model production architecture.
+This microservice is the main showcase example for the Microbus framework. It intentionally collects multiple patterns into a single service rather than separating concerns - the goal is to demonstrate breadth, not model production architecture.
 
 The `Greeting` and `Repeat` configs are read via their typed accessors (`svc.Greeting()`, `svc.Repeat()`), which are generated in `intermediate.go`. These accessors hide the raw string-to-type conversion and should always be preferred over `svc.Config("...")` + manual parsing in the service implementation.
 
-The `Ping` handler multicasts to `https://all:888/ping` using `pub.Multicast()` and reads `frame.Of(res).FromHost()` / `FromID()` to extract service identity from response frames. The `:888` port is the management port — requests to it are not routed through the HTTP ingress proxy and are only accessible internally. `all` is the special hostname that broadcasts to every connected microservice.
+The `Ping` handler multicasts to `https://all:888/ping` using `pub.Multicast()` and reads `frame.Of(res).FromHost()` / `FromID()` to extract service identity from response frames. The `:888` port is the management port - requests to it are not routed through the HTTP ingress proxy and are only accessible internally. `all` is the special hostname that broadcasts to every connected microservice.
 
 The `Calculator` handler deliberately calls `calculatorapi.NewClient(svc).Arithmetic(...)` rather than computing the result itself, to demonstrate a service-to-service call. Arithmetic errors are written into the HTML output rather than returned, since this is a UI handler.
 

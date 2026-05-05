@@ -46,7 +46,7 @@ type Mock struct {
 	*Intermediate
 	mockSubmitCreditApplication   func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
 	mockVerifyCredit              func(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error)                                                                            // MARKER: VerifyCredit
-	mockVerifyEmployment          func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error)                                                                      // MARKER: VerifyEmployment
+	mockVerifyEmployment          func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)                                                                // MARKER: VerifyEmployment
 	mockInitIdentityVerification  func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                         // MARKER: InitIdentityVerification
 	mockVerifySSN                 func(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error)                                                                                    // MARKER: VerifySSN
 	mockVerifyAddress             func(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                   // MARKER: VerifyAddress
@@ -57,7 +57,7 @@ type Mock struct {
 	mockRequestMoreInfo           func(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                              // MARKER: RequestMoreInfo
 	mockReviewCredit              func(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error)                                // MARKER: ReviewCredit
 	mockHandleCreditError         func(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                         // MARKER: HandleCreditError
-	mockDecision                  func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                      // MARKER: Decision
+	mockDecision                  func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)                                                   // MARKER: Decision
 	mockCreditApprovalGraph       func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                       // MARKER: CreditApproval
 	unsubMockCreditApproval       func() error                                                                                                                                                                                       // MARKER: CreditApproval
 	mockDemo                      func(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                           // MARKER: Demo
@@ -117,19 +117,19 @@ func (svc *Mock) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditSc
 }
 
 // MockVerifyEmployment sets up a mock handler for VerifyEmployment.
-func (svc *Mock) MockVerifyEmployment(handler func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error)) *Mock { // MARKER: VerifyEmployment
+func (svc *Mock) MockVerifyEmployment(handler func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)) *Mock { // MARKER: VerifyEmployment
 	svc.mockVerifyEmployment = handler
 	return svc
 }
 
 // VerifyEmployment executes the mock handler.
-func (svc *Mock) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error) { // MARKER: VerifyEmployment
+func (svc *Mock) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) { // MARKER: VerifyEmployment
 	if svc.mockVerifyEmployment == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return
 	}
-	employmentFailures, err = svc.mockVerifyEmployment(ctx, flow, applicantName, employerName)
-	return employmentFailures, errors.Trace(err)
+	sumEmploymentFailuresOut, err = svc.mockVerifyEmployment(ctx, flow, applicantName, employerName)
+	return sumEmploymentFailuresOut, errors.Trace(err)
 }
 
 // MockInitIdentityVerification sets up a mock handler for InitIdentityVerification.
@@ -318,25 +318,25 @@ func (svc *Mock) HandleCreditError(ctx context.Context, flow *workflow.Flow, onE
 }
 
 // MockDecision sets up a mock handler for Decision.
-func (svc *Mock) MockDecision(handler func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)) *Mock { // MARKER: Decision
+func (svc *Mock) MockDecision(handler func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)) *Mock { // MARKER: Decision
 	svc.mockDecision = handler
 	return svc
 }
 
 // Decision executes the mock handler.
-func (svc *Mock) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
+func (svc *Mock) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
 	if svc.mockDecision == nil {
 		err = errors.New("mock not implemented", http.StatusNotImplemented)
 		return
 	}
-	approved, err = svc.mockDecision(ctx, flow, creditVerified, employmentFailures, identityVerified)
+	approved, err = svc.mockDecision(ctx, flow, creditVerified, sumEmploymentFailures, identityVerified)
 	return approved, errors.Trace(err)
 }
 
 // MockCreditApproval sets up a mock handler for the CreditApproval workflow.
 // The handler receives typed inputs from the workflow's state and returns typed outputs.
 // A nil handler clears the mock.
-func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, err error)) *Mock { // MARKER: CreditApproval
+func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, err error)) *Mock { // MARKER: CreditApproval
 	if svc.unsubMockCreditApproval != nil {
 		svc.unsubMockCreditApproval()
 		svc.unsubMockCreditApproval = nil
@@ -363,7 +363,7 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 		var in creditflowapi.CreditApprovalIn
 		f.ParseState(&in)
 		var out creditflowapi.CreditApprovalOut
-		out.Approved, out.CreditVerified, out.EmploymentFailures, out.IdentityVerified, err = handler(r.Context(), &f, in.Applicant, in.FaultInjection)
+		out.Approved, out.CreditVerified, out.SumEmploymentFailures, out.IdentityVerified, err = handler(r.Context(), &f, in.Applicant, in.FaultInjection)
 		if err != nil {
 			return err // No trace
 		}

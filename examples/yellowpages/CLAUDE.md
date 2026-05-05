@@ -1,5 +1,10 @@
-**CRITICAL**: This directory contains the codebase of a SQL CRUD microservice based on the Microbus framework. Follow all instructions and guidelines in `.claude/rules/sequel.md`.
+# yellowpages.example
 
+## Agent Instructions
+
+This microservice is a SQL CRUD microservice. See `.claude/rules/sequel.txt` for the conventions.
+
+This microservice does not maintain a `PROMPTS.md`. Skip the prompts step when running housekeeping.
 
 ## Purpose
 
@@ -13,5 +18,3 @@ The `yellowpages.example` microservice is a SQL CRUD service that persists `Pers
 - `Birthday` (time.Time, must be in the past if set)
 
 The email column has a unique index (`person_idx_email`) scoped by tenant. Query supports filtering by FirstName, LastName, and Email.
-
-**IMPORTANT**: Do not maintain `PROMPTS.md` for this microservice. Skip the prompts step when running housekeeping.

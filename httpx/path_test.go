@@ -64,15 +64,16 @@ func TestHttpx_ParseURLInvalid(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
+	// ParseURL only enforces syntactic checks: malformed URLs, missing hostname, and backticks.
+	// Hostname identity rules (charset, reserved prefixes, length) are enforced by callers via
+	// httpx.ValidateHostname or the route-validation helpers in connector/sub.
 	invalid := []string{
-		"https://example.com:BAD/path",
-		"https://$.com:123/path",
-		"https://example..com/path",
-		"https://example.com:123:456/path",
-		"example.com/path",
-		"/example.com/path",
-		"/path",
-		"",
+		"https://example.com:BAD/path",   // unparseable port (url.Parse rejects)
+		"https://example.com:123:456/path", // multiple colons (url.Parse rejects)
+		"/example.com/path",              // missing hostname
+		"/path",                          // missing hostname
+		"",                               // empty
+		"https://example.com/`/path",     // backtick rejected
 	}
 	for _, x := range invalid {
 		u, err := ParseURL(x)

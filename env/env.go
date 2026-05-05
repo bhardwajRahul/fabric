@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 // Package env loads environment variables from env.yaml / env.local.yaml files into the
-// real OS environment at package init time, following dotenv conventions. See CLAUDE.md
-// for design rationale.
+// real OS environment at package init time, following dotenv conventions.
 package env
 
 import (
@@ -48,7 +47,7 @@ func init() {
 // over ancestor; .local over non-local), and writes the merged result into the OS
 // environment via os.Setenv.
 //
-// Real OS environment variables set before the binary launches always win — this matches
+// Real OS environment variables set before the binary launches always win - this matches
 // the dotenv convention used by godotenv, python-dotenv, Node dotenv, and others. Operators
 // who set values via systemd/k8s/docker get those values; yaml is a fallback for keys that
 // are otherwise unset.
@@ -120,7 +119,7 @@ func Get(key string) string {
 }
 
 // Push sets an environment variable and remembers the prior OS env state so Pop can
-// restore it. Push is goroutine-safe but the global env it mutates is not — tests
+// restore it. Push is goroutine-safe but the global env it mutates is not - tests
 // using Push must not run with t.Parallel.
 //
 // Pushed values are visible to any code reading os.Getenv, including third-party

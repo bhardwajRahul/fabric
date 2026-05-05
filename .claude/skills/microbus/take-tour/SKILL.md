@@ -63,7 +63,7 @@ app.Add(
 	login.NewService(),
 	creditflow.NewService(),
 	chatbox.NewService(),
-	// LLM core and providers — required by the chatbox demo (Step 13)
+	// LLM core and providers - required by the chatbox demo (Step 13)
 	llm.NewService(),
 	claudellm.NewService(),
 	chatgptllm.NewService(),
@@ -281,7 +281,7 @@ gemini.llm.core:
   APIKey: AI...
 ```
 
-Skipping this step is fine — the simulated option in the dropdown remains fully functional without any API keys. Mention to the user that real-provider calls are billable.
+Skipping this step is fine - the simulated option in the dropdown remains fully functional without any API keys. Mention to the user that real-provider calls are billable.
 
 Restart the example app if any config changes were made.
 

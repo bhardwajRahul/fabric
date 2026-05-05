@@ -55,9 +55,9 @@ const (
 /*
 Service implements mcpportal.core, an MCP-protocol facade in front of the bus.
 
-The microservice exposes one HTTP wire endpoint (`POST //mcp:0`) that accepts JSON-RPC 2.0
-envelopes and dispatches on the `method` field to handlers for `initialize`, `tools/list`,
-and `tools/call`. See CLAUDE.md for design rationale.
+The microservice exposes one HTTP wire endpoint (POST //mcp:0) that accepts JSON-RPC 2.0
+envelopes and dispatches on the method field to handlers for initialize, tools/list,
+and tools/call.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove

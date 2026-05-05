@@ -18,7 +18,7 @@ general:
   description: The Messaging microservice demonstrates service-to-service communication patterns.
   package: github.com/microbus-io/fabric/examples/messaging
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
+  modifiedAt: "2026-05-08T03:27:47Z"
 
 webs:
   Home:
@@ -26,12 +26,18 @@ webs:
     method: GET
     route: /home
   NoQueue:
-    description: NoQueue demonstrates how the NoQueue subscription option is used to create a multicast request/response communication pattern. All instances respond.
+    description: |-
+      NoQueue demonstrates how the NoQueue subscription option is used to create
+      a multicast request/response communication pattern.
+      All instances of this microservice will respond to each request.
     method: GET
     route: /no-queue
     loadBalancing: none
   DefaultQueue:
-    description: DefaultQueue demonstrates how the DefaultQueue subscription option is used to create a unicast request/response communication pattern. Only one instance responds.
+    description: |-
+      DefaultQueue demonstrates how the DefaultQueue subscription option is used to create
+      a unicast request/response communication pattern.
+      Only one of the instances of this microservice will respond to each request.
     method: GET
     route: /default-queue
   CacheLoad:

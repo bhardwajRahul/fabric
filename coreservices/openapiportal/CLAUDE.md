@@ -1,3 +1,7 @@
+## Agent Instructions
+
+This microservice does not maintain a `PROMPTS.md`. Skip the prompts step when running housekeeping.
+
 ## Design Rationale
 
 ### Two endpoints, one resource
@@ -43,5 +47,3 @@ In Microbus an error is just an error: 4XX and 5XX always share the same `Stream
 ### `assembleAggregate`'s decode-modify-encode pattern
 
 The aggregator stores merged `components.schemas` as `any` (raw passthrough from per-service docs) so it doesn't have to take a typed dependency on `*jsonschema.Schema` in this file. At marshal time, the aggregate is encoded without schemas, then schemas are spliced in via a JSON-level decode/modify/encode. Slightly slower than typed merging, but keeps the schema map agnostic.
-
-**IMPORTANT**: Do not maintain `PROMPTS.md` for this microservice. Skip the prompts step when running housekeeping.

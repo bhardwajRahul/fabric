@@ -1,0 +1,76 @@
+general:
+  name: Weird
+  hostname: weird.fixture
+  description: Weird is a fixture for genmanifest exercising every Def route shape.
+  package: github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-09T18:14:35Z"
+
+outboundEvents:
+  OnSomething:
+    signature: OnSomething(detail string) (ok bool)
+    description: OnSomething is fired when something happens.
+    method: POST
+    route: :417/on-something
+
+functions:
+  Plain:
+    signature: Plain() (result string)
+    description: Plain is a baseline function on the safe trust segment.
+    method: GET
+    route: :443/plain
+  PathArg:
+    signature: PathArg(id string)
+    description: PathArg accepts a path argument.
+    method: GET
+    route: :443/path-arg/{id}
+  GreedyArg:
+    signature: GreedyArg(tail string)
+    description: GreedyArg accepts a greedy tail path argument.
+    method: GET
+    route: :443/greedy/{tail...}
+  PeriodInPath:
+    signature: PeriodInPath()
+    description: PeriodInPath has a period inside its path segment.
+    method: GET
+    route: :888/openapi.json
+  AnyMethod:
+    signature: AnyMethod()
+    description: AnyMethod accepts any HTTP method.
+    method: ANY
+    route: :443/any-method
+  InternalPort:
+    signature: InternalPort()
+    description: InternalPort is on the :444 internal port.
+    method: POST
+    route: :444/internal
+  TrustRoot:
+    signature: TrustRoot(cmd string)
+    description: TrustRoot is the trust-root :666 endpoint.
+    method: POST
+    route: :666/dangerous
+  SlashHostRoot:
+    signature: SlashHostRoot()
+    description: SlashHostRoot has route "//root".
+    method: ANY
+    route: //root
+  SlashHostPort:
+    signature: SlashHostPort()
+    description: SlashHostPort has route "//alt.host:0/alt-path".
+    method: GET
+    route: //alt.host:0/alt-path
+  SlashHostPathArg:
+    signature: SlashHostPathArg(id string)
+    description: SlashHostPathArg has route "//alt.host/items/{id}".
+    method: GET
+    route: //alt.host/items/{id}
+  SpecialHostRoute:
+    signature: SpecialHostRoute()
+    description: SpecialHostRoute has route "//my$.xml/lookup" - URL-special character in the hostname segment.
+    method: GET
+    route: //my$.xml/lookup
+  UpperCasePath:
+    signature: UpperCasePath()
+    description: UpperCasePath has route ":443/UPPERCASE.xml" - uppercase path segment with a period.
+    method: GET
+    route: :443/UPPERCASE.xml

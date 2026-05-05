@@ -93,9 +93,11 @@ func TestConnector_HyphenInHostname(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Create the microservice
+	// Create the microservice. Hyphens are valid in service identity hostnames;
+	// underscores are reserved for the flat-host encoding (period-replacement)
+	// and are no longer allowed in raw hostnames.
 	entered := false
-	con := New("hyphen-in-host_name.connector")
+	con := New("hyphen-in-host-name.connector")
 	con.Subscribe("Path",
 		func(w http.ResponseWriter, r *http.Request) error {
 			entered = true
@@ -110,7 +112,7 @@ func TestConnector_HyphenInHostname(t *testing.T) {
 	assert.NoError(err)
 	defer con.Shutdown(ctx)
 
-	_, err = con.GET(ctx, "https://hyphen-in-host_name.connector/path")
+	_, err = con.GET(ctx, "https://hyphen-in-host-name.connector/path")
 	assert.NoError(err)
 	assert.True(entered)
 }
@@ -805,6 +807,56 @@ func TestConnector_FrameConsistency(t *testing.T) {
 	assert.NoError(err)
 }
 
+// TestConnector_VerifiedSourceOverwrite verifies that the receiver-side
+// connector overwrites the Microbus-From-Host header with the verified source
+// from the subject's <from_host_flat> segment, regardless of any value the
+// publisher set on the header. The receiver also exposes the verified source
+// via VerifiedSource(ctx).
+func TestConnector_VerifiedSourceOverwrite(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	var observedFromHost string
+	receiver := New("receiver.verified.source.connector")
+	receiver.Subscribe("Echo",
+		func(w http.ResponseWriter, r *http.Request) error {
+			observedFromHost = frame.Of(r).FromHost()
+			return nil
+		},
+		sub.At("GET", "echo"),
+		sub.Web(),
+	)
+
+	sender := New("sender.verified.source.connector")
+	err := sender.Startup(ctx)
+	assert.NoError(err)
+	defer sender.Shutdown(ctx)
+	err = receiver.Startup(ctx)
+	assert.NoError(err)
+	defer receiver.Shutdown(ctx)
+
+	// Honest send - From-Host header is set by the framework to the sender's
+	// hostname. Receiver should observe that same hostname.
+	_, err = sender.Request(ctx, pub.GET("https://receiver.verified.source.connector/echo"))
+	assert.NoError(err)
+	assert.Equal("sender.verified.source.connector", observedFromHost)
+
+	// Spoof attempt - set a bogus From-Host header on the outbound request.
+	// In production this would also fail at the NATS PUB ACL boundary, but
+	// even on the short-circuit transport (no NATS in tests) the receiver
+	// must overwrite the header with the verified source from the subject,
+	// which the sender's connector built from its own hostname.
+	_, err = sender.Request(ctx,
+		pub.GET("https://receiver.verified.source.connector/echo"),
+		pub.Header(frame.HeaderFromHost, "attacker.local"),
+	)
+	assert.NoError(err)
+	assert.Equal("sender.verified.source.connector", observedFromHost,
+		"receiver must overwrite spoofed From-Host with verified source from the subject")
+}
+
 func BenchmarkConnection_AckRequest(b *testing.B) {
 	ctx := context.Background()
 	// Startup the microservices
@@ -912,16 +964,16 @@ func TestConnector_SubscriptionLocality(t *testing.T) {
 
 	// Create the microservices
 	alpha := New("alpha.subscription.locality.connector")
-	alpha.SetLocality("az1.dC2.weSt.Us")
+	alpha.SetLocality("az1.dc2.west.us")
 
 	beta1 := New("beta.subscription.locality.connector")
-	beta1.SetLocality("az2.dc2.WEST.us")
+	beta1.SetLocality("az2.dc2.west.us")
 
 	beta2 := New("beta.subscription.locality.connector")
-	beta2.SetLocality("az1.DC3.west.us")
+	beta2.SetLocality("az1.dc3.west.us")
 
 	beta3 := New("beta.subscription.locality.connector")
-	beta3.SetLocality("az1.dc2.east.US")
+	beta3.SetLocality("az1.dc2.east.us")
 
 	beta4 := New("beta.subscription.locality.connector")
 	beta4.SetLocality("az4.dc5.north.eu")
@@ -1019,7 +1071,7 @@ func TestConnector_SubscriptionNoLocalityWithID(t *testing.T) {
 				assert.Equal("beta.subscription.no.locality.with.id.connector:443", r.Host)
 				first = false
 			} else {
-				assert.Equal("az1.dc2.west.us.beta.subscription.no.locality.with.id.connector:443", r.Host)
+				assert.Equal("loc-us-west-dc2-az1.beta.subscription.no.locality.with.id.connector:443", r.Host)
 			}
 			return nil
 		},
@@ -1065,8 +1117,7 @@ func TestConnector_Actor(t *testing.T) {
 	hash := sha256.Sum256(pub25519)
 	kid := base64.RawURLEncoding.EncodeToString(hash[:8])
 	signToken := func(claims jwt.MapClaims) (string, error) {
-		claims["iss"] = "https://issuer.actor.connector"
-		claims["microbus"] = "1"
+		claims["iss"] = "https://access.token.core"
 		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 		token.Header["kid"] = kid
 		signed, err := token.SignedString(priv25519)
@@ -1077,7 +1128,7 @@ func TestConnector_Actor(t *testing.T) {
 	}
 
 	// Create a mock token issuer that serves JWKS
-	issuer := New("issuer.actor.connector")
+	issuer := New("access.token.core")
 	issuer.Subscribe("JWKS",
 		func(w http.ResponseWriter, r *http.Request) error {
 			jwks := struct {
@@ -1106,7 +1157,7 @@ func TestConnector_Actor(t *testing.T) {
 		},
 		sub.At("GET", "student"),
 		sub.Web(),
-		sub.RequiredClaims(`iss=="https://issuer.actor.connector" && (roles.student || roles.professor)`),
+		sub.RequiredClaims(`iss=="https://access.token.core" && (roles.student || roles.professor)`),
 	)
 	con.Subscribe("Professor",
 		func(w http.ResponseWriter, r *http.Request) error {
@@ -1115,7 +1166,7 @@ func TestConnector_Actor(t *testing.T) {
 		},
 		sub.At("GET", "professor"),
 		sub.Web(),
-		sub.RequiredClaims(`iss=="https://issuer.actor.connector" && roles.professor`),
+		sub.RequiredClaims(`iss=="https://access.token.core" && roles.professor`),
 	)
 
 	// Startup both connectors
@@ -1163,6 +1214,112 @@ func TestConnector_Actor(t *testing.T) {
 	_, err = con.Request(ctx, pub.GET("https://con.actor.connector/professor"), pub.Token(dumbledore))
 	assert.NoError(err)
 	assert.Equal(3, entered)
+}
+
+// TestConnector_ActorPinnedIssuer verifies that the JWKS-pinning gate rejects tokens
+// whose iss claim points at a hostname that is not on the framework's pinned-issuer list,
+// even when the token would otherwise be syntactically valid and signed correctly. The
+// rejection must happen before any JWKS fetch is attempted, so an attacker that stands
+// up a fake JWKS endpoint at their hostname cannot influence verification.
+func TestConnector_ActorPinnedIssuer(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	type JWK struct {
+		KTY string `json:"kty"`
+		CRV string `json:"crv"`
+		X   string `json:"x"`
+		KID string `json:"kid"`
+	}
+
+	pub25519, priv25519, err := ed25519.GenerateKey(rand.Reader)
+	assert.NoError(err)
+	hash := sha256.Sum256(pub25519)
+	kid := base64.RawURLEncoding.EncodeToString(hash[:8])
+
+	// Stand up an attacker-controlled "issuer" at a hostname that is NOT pinned. The
+	// attacker serves a JWKS at :888/jwks like a legitimate issuer would. If the
+	// verifier ever fetched JWKS from this hostname, the forged token would verify.
+	jwksFetched := false
+	attacker := New("attacker.local")
+	attacker.Subscribe("JWKS",
+		func(w http.ResponseWriter, r *http.Request) error {
+			jwksFetched = true
+			jwks := struct {
+				Keys []JWK `json:"keys"`
+			}{}
+			jwks.Keys = append(jwks.Keys, JWK{
+				KTY: "OKP",
+				CRV: "Ed25519",
+				X:   base64.RawURLEncoding.EncodeToString(pub25519),
+				KID: kid,
+			})
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(jwks)
+		},
+		sub.At("GET", ":888/jwks"),
+		sub.Web(),
+	)
+
+	// Service under test gates an endpoint behind a roles claim. With pinning, no token
+	// signed by the attacker can satisfy this gate regardless of the claims it carries.
+	entered := 0
+	con := New("con.pinned.issuer.connector")
+	con.Subscribe("Admin",
+		func(w http.ResponseWriter, r *http.Request) error {
+			entered++
+			return nil
+		},
+		sub.At("GET", "admin"),
+		sub.Web(),
+		sub.RequiredClaims(`roles.admin`),
+	)
+
+	ctx := t.Context()
+	err = attacker.Startup(ctx)
+	assert.NoError(err)
+	defer attacker.Shutdown(ctx)
+	err = con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Forge a token claiming iss=attacker.local with an admin role. The signature is
+	// valid against the attacker's published JWKS, so a naive verifier that follows
+	// iss would accept it. The pinned verifier must reject it.
+	forgedClaims := jwt.MapClaims{
+		"iss":   "https://attacker.local",
+		"sub":   "evil@attacker.local",
+		"roles": []string{"admin"},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, forgedClaims)
+	token.Header["kid"] = kid
+	forgedToken, err := token.SignedString(priv25519)
+	assert.NoError(err)
+
+	_, err = con.Request(ctx, pub.GET("https://con.pinned.issuer.connector/admin"), pub.Token(forgedToken))
+	assert.Error(err)
+	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))
+	assert.Equal(0, entered)
+	assert.False(jwksFetched, "verifier must not fetch JWKS from a non-pinned issuer hostname")
+
+	// A token claiming iss=https://access.token.core (a pinned hostname) but signed by
+	// the attacker's key is also rejected - the iss check passes, but the verifier
+	// fetches JWKS from the real access.token.core (which has no JWKS subscription in
+	// this test) and the signature verification fails.
+	wrongIssuerClaims := jwt.MapClaims{
+		"iss":   "https://access.token.core",
+		"sub":   "evil@attacker.local",
+		"roles": []string{"admin"},
+	}
+	token2 := jwt.NewWithClaims(jwt.SigningMethodEdDSA, wrongIssuerClaims)
+	token2.Header["kid"] = kid
+	mismatchedToken, err := token2.SignedString(priv25519)
+	assert.NoError(err)
+
+	_, err = con.Request(ctx, pub.GET("https://con.pinned.issuer.connector/admin"), pub.Token(mismatchedToken))
+	assert.Error(err)
+	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))
+	assert.Equal(0, entered)
 }
 
 func TestConnector_SubscribeDefaults(t *testing.T) {

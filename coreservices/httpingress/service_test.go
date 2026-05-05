@@ -18,6 +18,7 @@ package httpingress
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -354,6 +355,22 @@ func TestHttpingress_Incoming(t *testing.T) {
 			b, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
 				assert.Equal("ok", string(b))
+			}
+		}
+	})
+
+	t.Run("trust_root_and_control_ports_blocked", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Ports :666 (trust-root) and :888 (control plane) are unconditionally
+		// blocked at the ingress regardless of deployment mode or PortMappings.
+		// Even if a service registered an endpoint on these ports, the ingress
+		// must return 404 before routing.
+		for _, blocked := range []int{666, 888} {
+			url := fmt.Sprintf("http://localhost:4040/ports:%d/ok", blocked)
+			res, err := httpClient.Get(url)
+			if assert.NoError(err) {
+				assert.Equal(http.StatusNotFound, res.StatusCode, "port :%d should be blocked at ingress", blocked)
 			}
 		}
 	})
@@ -727,10 +744,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Attempt to impersonate issuer (wrong key, no kid)
 		jwtToken = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"iss":      "https://" + bearertokenapi.Hostname,
-			"microbus": "1",
-			"iat":      now.Unix(),
-			"exp":      now.Add(time.Hour).Unix(),
+			"iss": "https://" + bearertokenapi.Hostname,
+			"iat": now.Unix(),
+			"exp": now.Add(time.Hour).Unix(),
 		})
 		signedJWT, err = jwtToken.SignedString([]byte("wrong-key"))
 		assert.NoError(err)
@@ -742,7 +758,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 
 		// Do not accept incoming Microbus-Actor header
 		req.Header.Del("Authorization")
-		req.Header.Set(frame.HeaderActor, `{"iss":"https://`+bearertokenapi.Hostname+`","microbus":"1"}`)
+		req.Header.Set(frame.HeaderActor, `{"iss":"https://`+bearertokenapi.Hostname+`"}`)
 
 		_, err = httpClient.Do(req)
 		assert.NoError(err)

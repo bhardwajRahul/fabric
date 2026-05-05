@@ -18,16 +18,33 @@ general:
   description: Shell enables running shell commands on a host.
   package: github.com/microbus-io/fabric/coreservices/shell
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:31Z"
+  modifiedAt: "2026-05-06T03:01:13Z"
+
+configs:
+  MaxOutputBytes:
+    signature: MaxOutputBytes() (value int)
+    description: |-
+      MaxOutputBytes caps the number of bytes retained from each of stdout and stderr. When a stream
+      exceeds this cap, the head and tail are kept and the middle is elided with a marker. The command is
+      not killed; excess output is silently discarded so the child can run to completion.
+    validation: int [1024,]
+    default: 262144
+
 functions:
   Execute:
     signature: Execute(cmd string, workDir string, stdin string, envars map[string]string) (exitCode int, stdout string, stderr string)
-    description: Execute runs a shell command on the host and returns the exit code, standard output, and standard error.
+    description: |-
+      Execute runs a shell command on the host and returns the exit code, standard output, and standard error.
+      
+      Input:
+        - cmd: the shell command to execute
+        - workDir: optional working directory for the command
+        - stdin: optional standard input to feed to the command
+        - envars: optional environment variables to set for the command, as key-value pairs
+      
+      Output:
+        - exitCode: the exit code of the command
+        - stdout: the standard output of the command
+        - stderr: the standard error of the command
     method: POST
-    route: :444/execute
-configs:
-  MaxOutputBytes:
-    signature: MaxOutputBytes() (maxOutputBytes int)
-    description: MaxOutputBytes caps the number of bytes retained from each of stdout and stderr. When a stream exceeds this cap, the head and tail are kept and the middle is elided with a marker.
-    validation: int [1024,]
-    default: 262144
+    route: :666/execute

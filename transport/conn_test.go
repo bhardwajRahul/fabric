@@ -19,6 +19,8 @@ package transport
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/microbus-io/fabric/utils"
@@ -77,7 +79,7 @@ func TestTransport_LingeringSubscriptions(t *testing.T) {
 
 	h := func(msg *Msg) {}
 	var c Conn
-	err := c.Open(ctx, nil)
+	err := c.Open(ctx, "", nil)
 	assert.NoError(err)
 
 	s1, err := c.Subscribe("s1.subject", h)
@@ -147,5 +149,53 @@ func TestTransport_LingeringSubscriptions(t *testing.T) {
 	assert.Nil(c.head)
 	if c.shortCircuitEnabled.Load() {
 		assert.True(shortCircuit.IsEmpty())
+	}
+}
+
+// TestTransport_ResolveArtifact pins the per-service-then-bare lookup chain
+// for the four auth artifacts. The temp dir contains both forms of nats.creds
+// and only the bare form of cert.pem; the resolver should pick correctly per
+// hostname and per artifact.
+func TestTransport_ResolveArtifact(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	dir := t.TempDir()
+	prevWD, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevWD) })
+
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("foo.example_nats.creds", "per-service")
+	write("nats.creds", "shared")
+	write("cert.pem", "shared-cert")
+
+	cases := []struct {
+		hostname string
+		artifact string
+		want     string
+	}{
+		// per-service file present → use it
+		{"foo.example", "nats.creds", "foo.example_nats.creds"},
+		// per-service file absent, bare default present → fall back
+		{"bar.example", "nats.creds", "nats.creds"},
+		// only bare file exists, regardless of hostname
+		{"foo.example", "cert.pem", "cert.pem"},
+		{"bar.example", "cert.pem", "cert.pem"},
+		// neither form exists → empty
+		{"foo.example", "key.pem", ""},
+		{"", "key.pem", ""},
+		// empty hostname disables per-service lookup; bare default still wins
+		{"", "nats.creds", "nats.creds"},
+	}
+	for _, c := range cases {
+		got := resolveArtifact(c.hostname, c.artifact)
+		assert.Equal(c.want, got, fmt.Sprintf("hostname=%q artifact=%q", c.hostname, c.artifact))
 	}
 }

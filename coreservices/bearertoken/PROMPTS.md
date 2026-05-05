@@ -6,8 +6,8 @@ The service holds up to two key entries (primary and alternative) to support gra
 
 Expose two endpoints:
 
-- `Mint` on `:444/mint` — accepts arbitrary claims (`any`), converts them to `jwt.MapClaims` via a JSON round-trip, runs any registered `ClaimsTransformer` functions in order, then sets the following non-overridable claims: `iss` (the service hostname as an HTTPS URL), `microbus: "1"`, `iat` (5 minutes in the past to handle clock skew), `exp` (TTL + 5 minutes of grace), and a random `jti`. Signs with EdDSA using the primary key and embeds `kid` in the JWT header. Returns `503` if no primary key is configured.
-- `JWKS` on `:888/jwks` — returns the public keys for both primary and alternative entries (whichever are non-nil) as a `[]JWK` slice in standard JWKS format (`kty: OKP`, `crv: Ed25519`, `alg: EdDSA`, `use: sig`).
+- `Mint` on `:666/mint` - accepts arbitrary claims (`any`), converts them to `jwt.MapClaims` via a JSON round-trip, runs any registered `ClaimsTransformer` functions in order, then sets the following non-overridable claims: `iss` (the service hostname as an HTTPS URL), `iat` (5 minutes in the past to handle clock skew), `exp` (TTL + 5 minutes of grace), and a random `jti`. Signs with EdDSA using the primary key and embeds `kid` in the JWT header. Returns `503` if no primary key is configured. Lives on `:666` because compromise allows minting tokens with arbitrary claims, defeating every `requiredClaims` gate downstream.
+- `JWKS` on `:888/jwks` - returns the public keys for both primary and alternative entries (whichever are non-nil) as a `[]JWK` slice in standard JWKS format (`kty: OKP`, `crv: Ed25519`, `alg: EdDSA`, `use: sig`).
 
 Expose a public `AddClaimsTransformer(ClaimsTransformer)` method on the `Service` struct that allows callers to register claim mutation hooks before the service starts. Return an error if called after startup.
 

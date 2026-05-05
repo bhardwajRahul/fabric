@@ -375,8 +375,9 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	case port <= 0 || port >= 65536:
 		// Not a valid port
 		return errors.New("", http.StatusNotFound)
-	case port == 888:
-		// Control plane port 888 is never allowed
+	case port == 666 || port == 888:
+		// Trust-root and control-plane ports are never reachable via the ingress,
+		// in any deployment mode.
 		return errors.New("", http.StatusNotFound)
 	case port == 80 || port == 443: // HTTP ports are allowed
 		// Allow
@@ -509,19 +510,20 @@ func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) { // 
 
 // resolveInternalURL resolves the NATS URL from the external URL.
 func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (natsURL *url.URL, err error) {
-	uri := externalURL.RequestURI()
-	if !strings.HasPrefix(uri, "/") {
-		uri = "/" + uri
+	externalURI := externalURL.RequestURI()
+	if !strings.HasPrefix(externalURI, "/") {
+		externalURI = "/" + externalURI
 	}
-	u, err := httpx.ParseURL("https:/" + uri) // First part of the URL is the internal host
+	internalURL, err := httpx.ParseURL("https:/" + externalURI) // First part of the URL is the internal host
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	internalURL.Host = strings.ToLower(internalURL.Host)
 	externalPort := externalURL.Port()
 	if externalPort == "" {
 		externalPort = "443"
 	}
-	internalPort := u.Port()
+	internalPort := internalURL.Port()
 	mappedInternalPort := internalPort
 	mappingKeys := []string{
 		externalPort + ":" + internalPort,
@@ -536,14 +538,14 @@ func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (n
 		}
 	}
 	if mappedInternalPort != internalPort {
-		p := strings.Index(u.Host, ":")
+		p := strings.Index(internalURL.Host, ":")
 		if p < 0 {
-			p = len(u.Host)
+			p = len(internalURL.Host)
 		}
-		u.Host = u.Host[:p] + ":" + mappedInternalPort
+		internalURL.Host = internalURL.Host[:p] + ":" + mappedInternalPort
 	}
-	u.Host = strings.TrimSuffix(u.Host, ":443")
-	return u, nil
+	internalURL.Host = strings.TrimSuffix(internalURL.Host, ":443")
+	return internalURL, nil
 }
 
 // OnChangedReadTimeout is triggered when the value of the ReadTimeout config property changes.
@@ -620,17 +622,15 @@ func (svc *Service) exchangeToken(ctx context.Context, bearerToken string) (acce
 		return "", nil
 	}
 
-	// Extract the issuer hostname
+	// Extract the issuer hostname and pin it to the framework's bearer token service.
+	// External IDPs cannot drop tokens directly through the ingress - they must wrap
+	// through bearer.token.core to obtain a framework-issued token.
 	issStr, _ := claims["iss"].(string)
-	_, ok = claims["microbus"].(string)
-	if !ok && !strings.HasPrefix(issStr, "microbus://") { // microbus scheme for backward compatibility
-		return "", nil
-	}
 	_, issuerHost, ok := strings.Cut(issStr, "://")
 	if !ok {
 		issuerHost = issStr
 	}
-	if issuerHost == "" {
+	if issuerHost != bearertokenapi.Hostname {
 		return "", nil
 	}
 

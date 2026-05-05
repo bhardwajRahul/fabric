@@ -5,7 +5,7 @@ Shell is a core microservice that enables running shell commands on a host machi
 ## Design Decisions
 
 - **Single `Execute` endpoint** rather than multiple variants of different complexity. Callers pass zero values for optional arguments (`workDir`, `stdin`, `envars`), and `omitzero` keeps the JSON payload clean.
-- **Port `:444`** (internal-only) to prevent external access through the ingress proxy. This service should never be exposed to untrusted callers.
+- **Port `:666`** (trust-root) - the ingress unconditionally blocks `:666` in every deployment mode, and NATS PUB ACL on `:666.shell.core.>` is granted only to a tiny named set of caller bundles. `Execute` grants RCE on the host, so it is callable only from explicitly allowlisted services.
 - **Cross-platform**: uses `sh -c` on Unix and `cmd /C` on Windows, selected at runtime via `runtime.GOOS`.
 - **`workDir` defaults to the process's current directory** when empty, rather than leaving it unset (which would also default to cwd, but this makes the behavior explicit).
 - **Commented out in `main/main.go`** by default. Must be explicitly uncommented to include in a deployment.

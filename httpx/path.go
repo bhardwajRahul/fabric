@@ -72,7 +72,9 @@ func ResolveURL(base string, relative string) (resolved string, err error) {
 }
 
 // ParseURL returns a canonical version of the parsed URL with the scheme and port filled in if omitted.
-// This method should only be used on internal URLs because it limits the hostname to certain specifications.
+// It performs syntactic checks only - rejecting backticks, malformed URL strings, and URLs that lack
+// a hostname - but does not enforce the Microbus identity rules. Callers that need an identity check
+// must call ValidateHostname (or the route equivalent) explicitly.
 func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	if strings.Contains(rawURL, "`") {
 		return nil, errors.New("backtick not allowed in URL '%s'", rawURL)
@@ -81,8 +83,8 @@ func ParseURL(rawURL string) (canonical *url.URL, err error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := ValidateHostname(parsed.Hostname()); err != nil {
-		return nil, errors.Trace(err)
+	if parsed.Hostname() == "" {
+		return nil, errors.New("missing hostname in URL '%s'", rawURL)
 	}
 	if parsed.Scheme == "" {
 		parsed.Scheme = "https"

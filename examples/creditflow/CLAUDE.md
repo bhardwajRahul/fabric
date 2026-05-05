@@ -1,3 +1,9 @@
+# creditflow.example
+
+## Agent Instructions
+
+This microservice implements agentic workflows. See `.claude/rules/workflows.txt` for the conventions.
+
 ## Overview
 
 The creditflow example implements a multi-step credit approval workflow that exercises most workflow features: fan-out/fan-in, subgraphs, forEach, goto loops, error transitions, interrupts, retries, sleep, and time budgets. It serves as both an example and the foreman's primary integration test fixture.

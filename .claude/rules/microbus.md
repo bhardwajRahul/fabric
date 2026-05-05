@@ -73,12 +73,15 @@ Ports provide access isolation. Use port `:0` to accept requests on any port. Co
 
 - `:443` - default port for standard endpoints (functions and web handlers)
 - `:888` - internal management and control endpoints
+- `:666` - trust-root endpoints (token mint, shell exec, privileged writes); ACL-restricted to a tiny named set of callers
 - `:444` - internal-only endpoints
 - `:417` - dedicated port for outbound events
 - `:428` - dedicated port for task endpoints
 - `:0` - wildcard, accepts requests on any port
 
-The HTTP ingress proxy always blocks inbound requests on port `:888`. Requests on other internal ports (`:1` to `:1023`) are blocked in a `PROD` deployment but allowed otherwise. Requests on ports `:80` and `:443` are always allowed.
+The HTTP ingress proxy always blocks inbound requests on ports `:666` and `:888`, regardless of deployment mode. Requests on other internal ports (`:1` to `:1023`) are blocked in a `PROD` deployment but allowed otherwise. Requests on ports `:80` and `:443` are always allowed.
+
+Endpoints on `:666` are designated trust roots - their compromise undermines the framework's security guarantees (e.g. minting tokens with arbitrary claims, executing shell commands on the host). Operators grant `:666` publish rights only to explicitly trusted caller bundles via NATS ACLs. Do not place an endpoint on `:666` without confirming it meets the trust-root threshold.
 
 ### Magic HTTP Arguments
 
@@ -116,7 +119,7 @@ func (svc *Service) LoadREST(ctx context.Context, key ObjectKey) (httpResponseBo
 
 ### Authentication and Authorization
 
-Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin && iss=~"access.token.core"`). See the manifest sections below for syntax.
+Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin`). See the manifest sections below for syntax.
 
 **IMPORTANT**: If the microservice uses `act.Of(ctx)`, imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
 
@@ -132,7 +135,7 @@ Microbus uses JWT-based authentication. Endpoints can require specific claims us
 - String quotation marks `"` or `'`
 - Dot notation `.` for traversing nested objects. For this purpose, arrays are treated as sets, enabling expressions such as `roles.admin` to check whether the value `"admin"` is present in the claim `"roles": ["admin", "elevated"]`
 
-Best practice: include `iss=~"access.token.core"` to ensure requests carry a properly minted access token. The original identity provider is available in the `idp` claim.
+Issuer verification is enforced at the framework layer: the connector pins JWKS lookup to the framework's token services, and the `iss` claim of every verified token is guaranteed to match a pinned hostname. Adding an `iss=~"access.token.core"` predicate to `requiredClaims` is therefore redundant and should be omitted. The original identity provider is available in the `idp` claim.
 
 ### SQL CRUD Microservices
 
@@ -158,9 +161,9 @@ The `general` section of the manifest describes its general properties.
 
 - The `hostname` must be unique across the application
 - The `frameworkVersion` is the version of the `github.com/microbus-io/fabric` package in `go mod` at the time when the microservice was last edited
-- If the microservice depends on either the `github.com/microbus-io/sequel` or the `database/sql` packages, enter `SQL` for the `db` property
-- If the microservice makes outgoing calls to a web API (likely via the HTTP egress proxy), enter the hostname of the web API for `cloud`. If more than one hostname is contacted, enter `various`
 - The `modifiedAt` timestamp records when the manifest was last updated, in RFC 3339 format with the actual current UTC time (not midnight)
+
+The manifest captures only what this microservice *exposes* - its interface contract. Outbound dependencies (which other services it calls), database usage, and HTTP egress targets are not stored here; they're derived from source by `cmd/gencreds` (for ACL signing) and `cmd/gentopology` (for the topology diagram).
 
 ```yaml
 general:
@@ -169,26 +172,14 @@ general:
   description: MyService does X.
   package: github.com/mycompany/myproject/myservice
   frameworkVersion: 1.23.0
-  db: SQL
-  cloud: api.example.com
   modifiedAt: "2025-01-15T14:30:00Z"
-```
-
-#### Downstream Dependencies
-
-The `downstream` section lists microservices whose `*api` package is imported for `Client` or `MulticastClient` use. `MulticastTrigger` or `Hook` usage does not count.
-
-```yaml
-downstream:
-  - hostname: another.service.hostname
-    package: github.com/mycompany/myproject/anotherservice
 ```
 
 #### Webs
 
 The `webs` section of the manifest describes the web handler endpoints of the microservice.
 
-- The `method` must be one of the recognized HTTP methods — `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` — or `ANY` to indicate that the endpoint handles all methods. Matching is case-insensitive; the framework rejects unknown method tokens at registration time with `405 Method Not Allowed`
+- The `method` must be one of the recognized HTTP methods - `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` - or `ANY` to indicate that the endpoint handles all methods. Matching is case-insensitive; the framework rejects unknown method tokens at registration time with `405 Method Not Allowed`
 - The `loadBalancing` indicates how requests to this endpoint are distributed among peers:
   - `default` - load-balanced among peers using the hostname as the queue name
   - `none` - multicast to all peers (no queue)
@@ -244,7 +235,7 @@ inboundEvents:
     description: OnMyEvent is triggered when X.
     loadBalancing: default
     requiredClaims: admin || manager
-    source: package/path/of/event/source/microservice
+    package: package/path/of/event/source/microservice
 ```
 
 #### Configuration Properties
@@ -332,7 +323,7 @@ tasks:
 
 The `workflows` section of the manifest describes workflow graph endpoints that define the structure of agentic workflows.
 
-- The `signature` lists the workflow's declared input and output fields. Input fields (before the return parens) are what the workflow expects in its initial state. Output fields (inside the return parens) are what the workflow produces in its final state. Field types are informational - the actual state is untyped JSON.
+- The `signature` lists the workflow's declared input and output fields, rendered as a valid Go function signature. Input fields (before the return parens) are what the workflow expects in its initial state. Output fields (inside the return parens) are what the workflow produces in its final state. When an output field shares its underlying state-field name with an input (a read-modify-write field), include the `Out` suffix on the output side - the manifest mirrors the Go field names from the workflow's `In`/`Out` structs. Field types are informational - the actual state is untyped JSON.
 
 ```yaml
 workflows:
@@ -665,6 +656,23 @@ Create a functional endpoint or web handler for each operation of the remote API
 - lowercase for file names: `userservice.go, mytype.go`
 - camelCase for JSON tags: `json:"myProperty,omitzero"`
 
+### Naming-Driven Behavior
+
+Microbus uses a number of naming conventions to drive framework behavior without explicit configuration. These are listed here as a single index; each is documented in detail near the feature it governs.
+
+| Pattern | What it does | Where |
+|---|---|---|
+| `httpRequestBody`, `httpResponseBody`, `httpStatusCode` | Magic HTTP arguments on functional endpoints — the named arg is bound directly to the HTTP request/response body or status code. | Magic HTTP Arguments |
+| `xxxOut` (Go arg suffix) | Read-modify-write for tasks: input arg `foo` and output arg `fooOut` map to the same workflow state field `foo`. The framework strips the `Out` suffix when writing back. | Workflow tasks |
+| `sum*` (state field prefix) | Numeric add reducer at fan-in. The state field's value is summed across parallel branches. Requires uppercase letter right after `sum`. | Workflow reducers |
+| `list*` (state field prefix) | Append reducer at fan-in. Branch arrays are concatenated, duplicates kept, ordered. | Workflow reducers |
+| `set*` (state field prefix) | Polymorphic set-style reducer: union for arrays (dedupe by value), merge for objects (new key wins on collision). | Workflow reducers |
+| Path argument names matching function arg names | A function argument whose name matches a `{argName}` segment in the route is auto-populated from the path. | Reading Path Argument Values |
+
+The boundary rule for prefixes is consistent: the character right after the prefix must be uppercase. `summary`, `listening`, `setup` do not match. `sumScore`, `listMessages`, `setUsers` do.
+
+Explicit configuration (e.g. `graph.SetReducer`) overrides the convention and is reserved for cases where the field name is dictated by an external schema or a pre-existing API surface.
+
 ### OpenAPI Parameter Descriptions
 
 Two complementary conventions enrich the OpenAPI spec with per-field descriptions, improving documentation quality and LLM tool-calling accuracy.
@@ -726,6 +734,8 @@ The available feature skills are:
 | `add-ticker` | Ticker |
 
 The recommended order is configs, metrics, outbound events, functions, webs, inbound events, tasks, workflows, then tickers. This order is not mandatory but it follows the natural dependency chain - for example, a function may reference a configuration property or record a metric, so those should exist first. Workflows reference task endpoints, so tasks should be defined first.
+
+To modify or remove an existing feature, use `modify-feature` or `remove-feature`. Both invoke `housekeeping` at the end. Wire-format-affecting changes (renamed routes, renamed hostnames) don't require regenerating other services' manifests - NATS ACLs are derived from source at deploy time by `cmd/gencreds`, so per-service manifests stay focused on what each service exposes.
 
 ### Building the Project
 

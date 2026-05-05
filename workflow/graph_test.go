@@ -183,8 +183,8 @@ func TestGraph_ValidateFanOutSiblings(t *testing.T) {
 	g2 := NewGraph("divergent-fanout")
 	g2.AddTransition("svc/start", "svc/a")
 	g2.AddTransition("svc/start", "svc/b")
-	g2.AddTransition("svc/a", "svc/x") // a → x
-	g2.AddTransition("svc/b", "svc/y") // b → y (different!)
+	g2.AddTransition("svc/a", "svc/x") // a -> x
+	g2.AddTransition("svc/b", "svc/y") // b -> y (different!)
 	g2.AddTransition("svc/x", END)
 	g2.AddTransition("svc/y", END)
 	err := g2.Validate()
@@ -313,10 +313,10 @@ func TestGraph_GotoTransition(t *testing.T) {
 
 	transitions := g.Transitions()
 	assert.Equal(4, len(transitions))
-	assert.False(transitions[0].WithGoto) // svc/a → svc/b
-	assert.False(transitions[1].WithGoto) // svc/b → END
-	assert.True(transitions[2].WithGoto)  // svc/a → svc/c (goto)
-	assert.False(transitions[3].WithGoto) // svc/c → END
+	assert.False(transitions[0].WithGoto) // svc/a -> svc/b
+	assert.False(transitions[1].WithGoto) // svc/b -> END
+	assert.True(transitions[2].WithGoto)  // svc/a -> svc/c (goto)
+	assert.False(transitions[3].WithGoto) // svc/c -> END
 
 	// Goto transitions should have a "goto" label in Mermaid
 	mmd := g.Mermaid()

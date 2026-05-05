@@ -30,7 +30,6 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 )
 
@@ -82,10 +81,10 @@ func (svc *Service) Collect(w http.ResponseWriter, r *http.Request) (err error) 
 	if host == "" {
 		host = "all"
 	}
-	err = httpx.ValidateHostname(host)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	// Hostname is intentionally not validated here: this endpoint is gated by a
+	// shared secret and forwards the value to Publish, where a malformed hostname
+	// surfaces as a NATS subject error. Notably, "all" (the broadcast hostname) is
+	// a legitimate value here but is rejected by the strict identity validator.
 
 	// Compress, except on local to avoid special characters when running NATS is debug mode
 	var writer io.Writer

@@ -18,7 +18,20 @@ general:
   description: The Calculator microservice performs simple mathematical operations.
   package: github.com/microbus-io/fabric/examples/calculator
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T13:55:00Z"
+  modifiedAt: "2026-05-06T03:01:11Z"
+
+metrics:
+  UsedOperators:
+    signature: UsedOperators(value int, op string)
+    description: UsedOperators tracks the types of the arithmetic operators used.
+    kind: counter
+    otelName: used_operators
+  SumOperations:
+    signature: SumOperations(value int, op string)
+    description: SumOperations tracks the total sum of the results of all operators.
+    kind: gauge
+    otelName: sum_operations
+    observable: true
 
 functions:
   Arithmetic:
@@ -36,16 +49,3 @@ functions:
     description: Distance calculates the distance between two points. It demonstrates the use of the defined type Point.
     method: ANY
     route: :443/distance
-
-metrics:
-  UsedOperators:
-    otelName: used_operators
-    description: UsedOperators tracks the types of the arithmetic operators used.
-    kind: counter
-    signature: UsedOperators(num int, op string)
-  SumOperations:
-    otelName: sum_operations
-    description: SumOperations tracks the total sum of the results of all operators.
-    kind: gauge
-    signature: SumOperations(sum int, op string)
-    observable: true

@@ -17,50 +17,44 @@ general:
   description: AccessToken generates short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation.
   package: github.com/microbus-io/fabric/coreservices/accesstoken
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
+  modifiedAt: "2026-05-08T04:06:18Z"
+
+configs:
+  KeyRotationInterval:
+    signature: KeyRotationInterval() (value time.Duration)
+    description: KeyRotationInterval is the duration between Ed25519 key rotations.
+    validation: dur [2h,]
+    default: 6h
+  DefaultTokenLifetime:
+    signature: DefaultTokenLifetime() (value time.Duration)
+    description: DefaultTokenLifetime is the token lifetime used when no time budget is present in the request.
+    validation: dur [1s,15m]
+    default: 20s
+  MaxTokenLifetime:
+    signature: MaxTokenLifetime() (value time.Duration)
+    description: MaxTokenLifetime is the maximum token lifetime regardless of the request's time budget.
+    validation: dur [1s,15m]
+    default: 15m
 
 functions:
   Mint:
-    signature: Mint(claims MapClaims) (token string)
-    description: Mint signs a JWT with the given claims. The token's lifetime is derived from the request's time budget, falling back to DefaultTokenLifetime if no budget is set, and capped at MaxTokenLifetime.
+    signature: Mint(claims any) (token string)
+    description: |-
+      Mint signs a JWT with the given claims. The token's lifetime is derived from the request's time budget,
+      falling back to DefaultTokenLifetime if no budget is set, and capped at MaxTokenLifetime.
     method: ANY
-    route: :444/mint
-    loadBalancing: default
+    route: :666/mint
   JWKS:
     signature: JWKS() (keys []JWK)
     description: JWKS aggregates public keys from all replicas and returns them in JWKS format.
     method: ANY
     route: :888/jwks
-    loadBalancing: default
   LocalKeys:
     signature: LocalKeys() (keys []JWK)
     description: LocalKeys returns this replica's current and previous public keys in JWKS format.
     method: ANY
-    route: :444/local-keys
+    route: :888/local-keys
     loadBalancing: none
-
-configs:
-  KeyRotationInterval:
-    signature: KeyRotationInterval() (keyRotationInterval time.Duration)
-    description: KeyRotationInterval is the duration between Ed25519 key rotations.
-    validation: dur [2h,]
-    default: 6h
-    secret: false
-    callback: false
-  DefaultTokenLifetime:
-    signature: DefaultTokenLifetime() (defaultTokenLifetime time.Duration)
-    description: DefaultTokenLifetime is the token lifetime used when no time budget is present in the request.
-    validation: dur [1s,15m]
-    default: 20s
-    secret: false
-    callback: false
-  MaxTokenLifetime:
-    signature: MaxTokenLifetime() (maxTokenLifetime time.Duration)
-    description: MaxTokenLifetime is the maximum token lifetime regardless of the request's time budget.
-    validation: dur [1s,15m]
-    default: 15m
-    secret: false
-    callback: false
 
 tickers:
   RotateKey:

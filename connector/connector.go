@@ -129,7 +129,7 @@ type Connector struct {
 // NewConnector constructs a new Connector.
 func NewConnector() *Connector {
 	c := &Connector{
-		id:                strings.ToLower(utils.RandomIdentifier(10)),
+		id:                idPrefix + strings.ToLower(utils.RandomIdentifier(10)),
 		configs:           map[string]*cfg.Config{},
 		networkRoundtrip:  300 * time.Millisecond,
 		defaultTimeBudget: 20 * time.Second,
@@ -170,21 +170,16 @@ func (c *Connector) ID() string {
 }
 
 // SetHostname sets the hostname of the microservice.
-// Hostnames are case-insensitive. Each segment of the hostname may contain letters, numbers, hyphens or underscores only.
-// Segments are separated by dots.
+// The hostname must be a canonical Microbus identity per [httpx.ValidateHostname]:
+// lowercase letters, digits, dots, and hyphens; no underscores, no "id-" or "loc-"
+// first segment, not "all" or "*.all", no leading/trailing whitespace.
 // For example, this.is.a.valid.host-name.123.local
 func (c *Connector) SetHostname(hostname string) error {
 	if !c.isPhase(shutDown) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	hostname = strings.TrimSpace(hostname)
 	if err := httpx.ValidateHostname(hostname); err != nil {
 		return c.captureInitErr(errors.Trace(err))
-	}
-	hn := strings.ToLower(hostname)
-	if hn == "all" || strings.HasSuffix(hn, ".all") {
-		// The hostname "all" is reserved to refer to all microservices
-		return c.captureInitErr(errors.New("disallowed hostname '%s'", hostname))
 	}
 	c.hostname = hostname
 	return nil
@@ -288,19 +283,29 @@ func (c *Connector) SetPlane(plane string) error {
 }
 
 // SetLocality sets the geographic locality of the microservice which is used to optimize routing.
-// Localities are hierarchical with the more specific identifiers first, separated by dots.
-// It can be set to correlate to AWS regions such as "1.b.west.us", or arbitrarily to "rome.italy.europe" for example.
-// Localities are case-insensitive. Each segment of the hostname may contain letters, numbers, hyphens or underscores only.
+// Localities are hierarchical with the broadest identifier first, separated by hyphens, similar to AWS region/AZ
+// identifiers such as "us-west-b-1" or arbitrarily "europe-italy-rome".
+// DNS-style dot notation with the most specific identifier first is also accepted: "1.b.west.us" is equivalent
+// to "us-west-b-1".
+// Localities are case-insensitive. Letters, numbers, hyphens and underscores are allowed.
 // The special values "AWS" or "GCP" can be set to determine the locality automatically from the cloud provider's meta-data servers.
 func (c *Connector) SetLocality(locality string) error {
 	if !c.isPhase(shutDown, startingUp) {
 		return c.captureInitErr(errors.New("already started"))
 	}
-	locality = strings.TrimSpace(locality)
+	if strings.Contains(locality, ".") {
+		// DNS-style dot notation: reverse segment order so the broadest identifier comes first,
+		// then join with hyphens. This is the canonical hyphen-form that gets validated and stored.
+		parts := strings.Split(locality, ".")
+		for i := range len(parts) / 2 {
+			parts[i], parts[len(parts)-1-i] = parts[len(parts)-1-i], parts[i]
+		}
+		locality = strings.Join(parts, "-")
+	}
 	if err := httpx.ValidateHostname(locality); err != nil {
 		return c.captureInitErr(errors.Trace(err))
 	}
-	c.locality = strings.ToLower(locality)
+	c.locality = locality
 	return nil
 }
 

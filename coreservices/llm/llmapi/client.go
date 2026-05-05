@@ -496,11 +496,11 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL str
 /*
 InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
 */
-func (_c Executor) InitChat(ctx context.Context, messages []Message, tools []Tool, options *ChatOptions) (err error) { // MARKER: InitChat
+func (_c Executor) InitChat(ctx context.Context, listMessages []Message, tools []Tool, options *ChatOptions) (err error) { // MARKER: InitChat
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{
-		Messages: messages,
-		Tools:    tools,
-		Options:  options,
+		ListMessages: listMessages,
+		Tools:        tools,
+		Options:      options,
 	}, &InitChatOut{}, _c.inFlow, _c.outFlow)
 	return err // No trace
 }
@@ -508,12 +508,12 @@ func (_c Executor) InitChat(ctx context.Context, messages []Message, tools []Too
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (_c Executor) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
+func (_c Executor) CallLLM(ctx context.Context, provider string, model string, listMessages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{
-		Provider: provider,
-		Model:    model,
-		Messages: messages,
+		Provider:     provider,
+		Model:        model,
+		ListMessages: listMessages,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, err // No trace
 }
@@ -521,7 +521,7 @@ func (_c Executor) CallLLM(ctx context.Context, provider string, model string, m
 /*
 ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
 */
-func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (messagesOut []Message, toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
+func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (listMessagesOut []Message, toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
 	var out ProcessResponseOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{
 		LLMContent:    llmContent,
@@ -529,7 +529,7 @@ func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnU
 		ToolRounds:    toolRounds,
 		MaxToolRounds: maxToolRounds,
 	}, &out, _c.inFlow, _c.outFlow)
-	return out.MessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
+	return out.ListMessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
 }
 
 /*
@@ -546,17 +546,17 @@ func (_c Executor) ExecuteTool(ctx context.Context, toolExecuted bool) (toolExec
 /*
 ChatLoop creates and runs the ChatLoop workflow, blocking until termination.
 */
-func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, messages []Message, tools []Tool, options *ChatOptions) (messagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
+func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, listMessages []Message, tools []Tool, options *ChatOptions) (listMessagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
 	if _c.runner == nil {
 		return nil, Usage{}, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out ChatLoopOut
 	status, err = marshalWorkflow(ctx, _c.runner, ChatLoop.URL(), ChatLoopIn{
-		Provider: provider,
-		Model:    model,
-		Messages: messages,
-		Tools:    tools,
-		Options:  options,
+		Provider:     provider,
+		Model:        model,
+		ListMessages: listMessages,
+		Tools:        tools,
+		Options:      options,
 	}, &out)
-	return out.MessagesOut, out.Usage, status, err
+	return out.ListMessagesOut, out.Usage, status, err
 }

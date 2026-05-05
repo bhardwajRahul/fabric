@@ -220,13 +220,13 @@ func (_c Executor) VerifyCredit(ctx context.Context, creditScore int, faultInjec
 /*
 VerifyEmployment checks the applicant's employment status.
 */
-func (_c Executor) VerifyEmployment(ctx context.Context, applicantName string, employerName string) (employmentFailures int, err error) { // MARKER: VerifyEmployment
+func (_c Executor) VerifyEmployment(ctx context.Context, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) { // MARKER: VerifyEmployment
 	var out VerifyEmploymentOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, VerifyEmployment.Method, VerifyEmployment.Route, VerifyEmploymentIn{
 		ApplicantName: applicantName,
 		EmployerName:  employerName,
 	}, &out, _c.inFlow, _c.outFlow)
-	return out.EmploymentFailures, err // No trace
+	return out.SumEmploymentFailuresOut, err // No trace
 }
 
 /*
@@ -329,12 +329,12 @@ func (_c Executor) HandleCreditError(ctx context.Context, onErr *errors.TracedEr
 /*
 Decision determines whether to approve the credit application based on verification results.
 */
-func (_c Executor) Decision(ctx context.Context, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
+func (_c Executor) Decision(ctx context.Context, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
 	var out DecisionOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, Decision.Method, Decision.Route, DecisionIn{
-		CreditVerified:     creditVerified,
-		EmploymentFailures: employmentFailures,
-		IdentityVerified:   identityVerified,
+		CreditVerified:        creditVerified,
+		SumEmploymentFailures: sumEmploymentFailures,
+		IdentityVerified:      identityVerified,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.Approved, err // No trace
 }
@@ -359,7 +359,7 @@ func (_c Executor) IdentityVerification(ctx context.Context, applicantName strin
 /*
 CreditApproval creates and runs the credit approval workflow, blocking until termination.
 */
-func (_c Executor) CreditApproval(ctx context.Context, applicant Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, status string, err error) { // MARKER: CreditApproval
+func (_c Executor) CreditApproval(ctx context.Context, applicant Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, status string, err error) { // MARKER: CreditApproval
 	if _c.runner == nil {
 		return false, false, 0, false, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
@@ -368,7 +368,7 @@ func (_c Executor) CreditApproval(ctx context.Context, applicant Applicant, faul
 		Applicant:      applicant,
 		FaultInjection: faultInjection,
 	}, &out)
-	return out.Approved, out.CreditVerified, out.EmploymentFailures, out.IdentityVerified, status, err
+	return out.Approved, out.CreditVerified, out.SumEmploymentFailures, out.IdentityVerified, status, err
 }
 
 // marshalTask supports task execution via the Executor.

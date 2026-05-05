@@ -1,0 +1,345 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package weird
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird/resources"
+	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird/weirdapi"
+)
+
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ weirdapi.Client
+	_ *workflow.Flow
+)
+
+const (
+	Hostname = weirdapi.Hostname
+	Version  = 1
+)
+
+// ToDo is implemented by the service or mock.
+type ToDo interface {
+	OnStartup(ctx context.Context) (err error)
+	OnShutdown(ctx context.Context) (err error)
+	Plain(ctx context.Context) (result string, err error)                 // MARKER: Plain
+	PathArg(ctx context.Context, id string) (err error)                   // MARKER: PathArg
+	GreedyArg(ctx context.Context, tail string) (err error)               // MARKER: GreedyArg
+	PeriodInPath(ctx context.Context) (err error)                         // MARKER: PeriodInPath
+	AnyMethod(ctx context.Context) (err error)                            // MARKER: AnyMethod
+	InternalPort(ctx context.Context) (err error)                         // MARKER: InternalPort
+	TrustRoot(ctx context.Context, cmd string) (err error)                // MARKER: TrustRoot
+	SlashHostRoot(ctx context.Context) (err error)                        // MARKER: SlashHostRoot
+	SlashHostPort(ctx context.Context) (err error)                        // MARKER: SlashHostPort
+	SlashHostPathArg(ctx context.Context, id string) (err error)          // MARKER: SlashHostPathArg
+	SpecialHostRoute(ctx context.Context) (err error)                     // MARKER: SpecialHostRoute
+	UpperCasePath(ctx context.Context) (err error)                        // MARKER: UpperCasePath
+}
+
+// NewService creates a new instance of the microservice.
+func NewService() *Service {
+	svc := &Service{}
+	svc.Intermediate = NewIntermediate(svc)
+	return svc
+}
+
+// Init enables a single-statement pattern for initializing the microservice.
+func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
+	svc.Connector.Init(func(_ *connector.Connector) (err error) {
+		return initializer(svc)
+	})
+	return svc
+}
+
+// Intermediate extends and customizes the generic base connector.
+type Intermediate struct {
+	*connector.Connector
+	ToDo
+}
+
+// NewIntermediate creates a new instance of the intermediate.
+func NewIntermediate(impl ToDo) *Intermediate {
+	svc := &Intermediate{
+		Connector: connector.New(Hostname),
+		ToDo:      impl,
+	}
+	svc.SetVersion(Version)
+	svc.SetDescription(`Weird is a fixture for genmanifest exercising every Def route shape.`)
+	svc.SetOnStartup(svc.OnStartup)
+	svc.SetOnShutdown(svc.OnShutdown)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	svc.Subscribe( // MARKER: Plain
+		"Plain", svc.doPlain,
+		sub.At(weirdapi.Plain.Method, weirdapi.Plain.Route),
+		sub.Description(`Plain is a baseline function on the safe trust segment.`),
+		sub.Function(weirdapi.PlainIn{}, weirdapi.PlainOut{}),
+	)
+	svc.Subscribe( // MARKER: PathArg
+		"PathArg", svc.doPathArg,
+		sub.At(weirdapi.PathArg.Method, weirdapi.PathArg.Route),
+		sub.Description(`PathArg accepts a path argument.`),
+		sub.Function(weirdapi.PathArgIn{}, weirdapi.PathArgOut{}),
+	)
+	svc.Subscribe( // MARKER: GreedyArg
+		"GreedyArg", svc.doGreedyArg,
+		sub.At(weirdapi.GreedyArg.Method, weirdapi.GreedyArg.Route),
+		sub.Description(`GreedyArg accepts a greedy tail path argument.`),
+		sub.Function(weirdapi.GreedyArgIn{}, weirdapi.GreedyArgOut{}),
+	)
+	svc.Subscribe( // MARKER: PeriodInPath
+		"PeriodInPath", svc.doPeriodInPath,
+		sub.At(weirdapi.PeriodInPath.Method, weirdapi.PeriodInPath.Route),
+		sub.Description(`PeriodInPath has a period inside its path segment.`),
+		sub.Function(weirdapi.PeriodInPathIn{}, weirdapi.PeriodInPathOut{}),
+	)
+	svc.Subscribe( // MARKER: AnyMethod
+		"AnyMethod", svc.doAnyMethod,
+		sub.At(weirdapi.AnyMethod.Method, weirdapi.AnyMethod.Route),
+		sub.Description(`AnyMethod accepts any HTTP method.`),
+		sub.Function(weirdapi.AnyMethodIn{}, weirdapi.AnyMethodOut{}),
+	)
+	svc.Subscribe( // MARKER: InternalPort
+		"InternalPort", svc.doInternalPort,
+		sub.At(weirdapi.InternalPort.Method, weirdapi.InternalPort.Route),
+		sub.Description(`InternalPort is on the :444 internal port.`),
+		sub.Function(weirdapi.InternalPortIn{}, weirdapi.InternalPortOut{}),
+	)
+	svc.Subscribe( // MARKER: TrustRoot
+		"TrustRoot", svc.doTrustRoot,
+		sub.At(weirdapi.TrustRoot.Method, weirdapi.TrustRoot.Route),
+		sub.Description(`TrustRoot is the trust-root :666 endpoint.`),
+		sub.Function(weirdapi.TrustRootIn{}, weirdapi.TrustRootOut{}),
+	)
+	svc.Subscribe( // MARKER: SlashHostRoot
+		"SlashHostRoot", svc.doSlashHostRoot,
+		sub.At(weirdapi.SlashHostRoot.Method, weirdapi.SlashHostRoot.Route),
+		sub.Description(`SlashHostRoot has route "//root".`),
+		sub.Function(weirdapi.SlashHostRootIn{}, weirdapi.SlashHostRootOut{}),
+	)
+	svc.Subscribe( // MARKER: SlashHostPort
+		"SlashHostPort", svc.doSlashHostPort,
+		sub.At(weirdapi.SlashHostPort.Method, weirdapi.SlashHostPort.Route),
+		sub.Description(`SlashHostPort has route "//alt.host:0/alt-path".`),
+		sub.Function(weirdapi.SlashHostPortIn{}, weirdapi.SlashHostPortOut{}),
+	)
+	svc.Subscribe( // MARKER: SlashHostPathArg
+		"SlashHostPathArg", svc.doSlashHostPathArg,
+		sub.At(weirdapi.SlashHostPathArg.Method, weirdapi.SlashHostPathArg.Route),
+		sub.Description(`SlashHostPathArg has route "//alt.host/items/{id}".`),
+		sub.Function(weirdapi.SlashHostPathArgIn{}, weirdapi.SlashHostPathArgOut{}),
+	)
+	svc.Subscribe( // MARKER: SpecialHostRoute
+		"SpecialHostRoute", svc.doSpecialHostRoute,
+		sub.At(weirdapi.SpecialHostRoute.Method, weirdapi.SpecialHostRoute.Route),
+		sub.Description(`SpecialHostRoute has route "//my$.xml/lookup" - URL-special character in the hostname segment.`),
+		sub.Function(weirdapi.SpecialHostRouteIn{}, weirdapi.SpecialHostRouteOut{}),
+	)
+	svc.Subscribe( // MARKER: UpperCasePath
+		"UpperCasePath", svc.doUpperCasePath,
+		sub.At(weirdapi.UpperCasePath.Method, weirdapi.UpperCasePath.Route),
+		sub.Description(`UpperCasePath has route ":443/UPPERCASE.xml" - uppercase path segment with a period.`),
+		sub.Function(weirdapi.UpperCasePathIn{}, weirdapi.UpperCasePathOut{}),
+	)
+
+	_ = marshalFunction
+	return svc
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel()
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	return nil
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doPlain handles marshaling for Plain.
+func (svc *Intermediate) doPlain(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Plain
+	var in weirdapi.PlainIn
+	var out weirdapi.PlainOut
+	err = marshalFunction(w, r, weirdapi.Plain.Route, &in, &out, func(_ any, _ any) error {
+		out.Result, err = svc.Plain(r.Context())
+		return err
+	})
+	return err
+}
+
+// doPathArg handles marshaling for PathArg.
+func (svc *Intermediate) doPathArg(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: PathArg
+	var in weirdapi.PathArgIn
+	var out weirdapi.PathArgOut
+	err = marshalFunction(w, r, weirdapi.PathArg.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.PathArg(r.Context(), in.ID)
+		return err
+	})
+	return err
+}
+
+// doGreedyArg handles marshaling for GreedyArg.
+func (svc *Intermediate) doGreedyArg(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: GreedyArg
+	var in weirdapi.GreedyArgIn
+	var out weirdapi.GreedyArgOut
+	err = marshalFunction(w, r, weirdapi.GreedyArg.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.GreedyArg(r.Context(), in.Tail)
+		return err
+	})
+	return err
+}
+
+// doPeriodInPath handles marshaling for PeriodInPath.
+func (svc *Intermediate) doPeriodInPath(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: PeriodInPath
+	var in weirdapi.PeriodInPathIn
+	var out weirdapi.PeriodInPathOut
+	err = marshalFunction(w, r, weirdapi.PeriodInPath.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.PeriodInPath(r.Context())
+		return err
+	})
+	return err
+}
+
+// doAnyMethod handles marshaling for AnyMethod.
+func (svc *Intermediate) doAnyMethod(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: AnyMethod
+	var in weirdapi.AnyMethodIn
+	var out weirdapi.AnyMethodOut
+	err = marshalFunction(w, r, weirdapi.AnyMethod.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.AnyMethod(r.Context())
+		return err
+	})
+	return err
+}
+
+// doInternalPort handles marshaling for InternalPort.
+func (svc *Intermediate) doInternalPort(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: InternalPort
+	var in weirdapi.InternalPortIn
+	var out weirdapi.InternalPortOut
+	err = marshalFunction(w, r, weirdapi.InternalPort.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.InternalPort(r.Context())
+		return err
+	})
+	return err
+}
+
+// doTrustRoot handles marshaling for TrustRoot.
+func (svc *Intermediate) doTrustRoot(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: TrustRoot
+	var in weirdapi.TrustRootIn
+	var out weirdapi.TrustRootOut
+	err = marshalFunction(w, r, weirdapi.TrustRoot.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.TrustRoot(r.Context(), in.Cmd)
+		return err
+	})
+	return err
+}
+
+// doSlashHostRoot handles marshaling for SlashHostRoot.
+func (svc *Intermediate) doSlashHostRoot(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: SlashHostRoot
+	var in weirdapi.SlashHostRootIn
+	var out weirdapi.SlashHostRootOut
+	err = marshalFunction(w, r, weirdapi.SlashHostRoot.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.SlashHostRoot(r.Context())
+		return err
+	})
+	return err
+}
+
+// doSlashHostPort handles marshaling for SlashHostPort.
+func (svc *Intermediate) doSlashHostPort(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: SlashHostPort
+	var in weirdapi.SlashHostPortIn
+	var out weirdapi.SlashHostPortOut
+	err = marshalFunction(w, r, weirdapi.SlashHostPort.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.SlashHostPort(r.Context())
+		return err
+	})
+	return err
+}
+
+// doSlashHostPathArg handles marshaling for SlashHostPathArg.
+func (svc *Intermediate) doSlashHostPathArg(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: SlashHostPathArg
+	var in weirdapi.SlashHostPathArgIn
+	var out weirdapi.SlashHostPathArgOut
+	err = marshalFunction(w, r, weirdapi.SlashHostPathArg.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.SlashHostPathArg(r.Context(), in.ID)
+		return err
+	})
+	return err
+}
+
+// doSpecialHostRoute handles marshaling for SpecialHostRoute.
+func (svc *Intermediate) doSpecialHostRoute(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: SpecialHostRoute
+	var in weirdapi.SpecialHostRouteIn
+	var out weirdapi.SpecialHostRouteOut
+	err = marshalFunction(w, r, weirdapi.SpecialHostRoute.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.SpecialHostRoute(r.Context())
+		return err
+	})
+	return err
+}
+
+// doUpperCasePath handles marshaling for UpperCasePath.
+func (svc *Intermediate) doUpperCasePath(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: UpperCasePath
+	var in weirdapi.UpperCasePathIn
+	var out weirdapi.UpperCasePathOut
+	err = marshalFunction(w, r, weirdapi.UpperCasePath.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.UpperCasePath(r.Context())
+		return err
+	})
+	return err
+}

@@ -132,7 +132,7 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) iter.Seq
 		outboundFrame.Set(k, v[0])
 	}
 
-	// Locality-aware routing
+	// Locality-aware routing.
 	optimizeLocality := !req.Multicast && c.locality != ""
 	origURL := req.URL
 	localityCacheKey := ""
@@ -141,9 +141,10 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) iter.Seq
 		localityCacheKey, _, _ = strings.Cut(origURL, "?")
 		lastKnownLocality, _ = c.localResponder.Load(localityCacheKey, lru.Bump(true))
 		if lastKnownLocality != "" {
-			// Adjust the hostname to include the best known locality, e.g. example.com -> west.us.example.com
+			// Adjust the hostname to include the best known locality,
+			// e.g. example.com -> loc-us-west.example.com
 			before, after, _ := strings.Cut(origURL, "://")
-			req.URL = before + "://" + lastKnownLocality + "." + after
+			req.URL = before + "://" + escapeLocality(lastKnownLocality) + "." + after
 		}
 	}
 
@@ -172,18 +173,18 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) iter.Seq
 		if len(responseLocality) > len(lastKnownLocality) {
 			_, after, _ := strings.Cut(origURL, "://")
 			if !strings.HasPrefix(after, frame.Of(res).FromID()+".") { // Do not optimize when addressing a service by its ID
-				longestCommonSuffix := ""
-				parts := strings.Split(responseLocality, ".")
-				for i := len(parts) - 1; i >= 0; i-- {
-					l := strings.Join(parts[i:], ".")
-					if c.locality == l || strings.HasSuffix(c.locality, "."+l) {
-						longestCommonSuffix = l
+				longestCommonPrefix := ""
+				parts := strings.Split(responseLocality, "-")
+				for i := 1; i <= len(parts); i++ {
+					l := strings.Join(parts[:i], "-")
+					if c.locality == l || strings.HasPrefix(c.locality, l+"-") {
+						longestCommonPrefix = l
 					} else {
 						break
 					}
 				}
-				if len(longestCommonSuffix) > len(lastKnownLocality) {
-					c.localResponder.Store(localityCacheKey, longestCommonSuffix)
+				if len(longestCommonPrefix) > len(lastKnownLocality) {
+					c.localResponder.Store(localityCacheKey, longestCommonPrefix)
 				}
 			}
 		}
@@ -266,7 +267,8 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) iter.Seq[
 		port = httpReq.URL.Port()
 	}
 	host := httpReq.URL.Hostname()
-	subject := subjectOfRequest(c.plane, httpReq.Method, host, port, httpReq.URL.Path)
+	host, idOrLocality := cutIDOrLocality(host)
+	subject := SubjectOfRequest(c.plane, port, c.hostname, host, idOrLocality, httpReq.Method, httpReq.URL.Path)
 
 	frame.Of(httpReq).SetMessageID(msgID)
 
@@ -402,8 +404,9 @@ func (c *Connector) makeRequest(ctx context.Context, req *pub.Request) iter.Seq[
 									break
 								}
 
-								// Direct addressing
-								subject := subjectOfRequest(c.plane, fragment.Method, fromID+"."+fragment.URL.Hostname(), port, fragment.URL.Path)
+								// Direct addressing - pin subsequent fragments to the exact replica that ack'd the first fragment.
+								fragmentHost, _ := cutIDOrLocality(fragment.URL.Hostname())
+								subject := SubjectOfRequest(c.plane, port, c.hostname, fragmentHost, fromID, fragment.Method, fragment.URL.Path)
 
 								frame.Of(fragment).SetMessageID(msgID)
 								if req.Multicast {
@@ -602,6 +605,10 @@ func (c *Connector) handleResponse(msg *transport.Msg) error {
 	if br, ok := response.Body.(*httpx.BodyReader); ok {
 		br.Reset()
 	}
+
+	// Overwrite From-Host with the verified source from the subject.
+	_, _, _, src, _, _ := splitSubject(msg.Subject)
+	frame.Of(response).SetFromHost(src)
 
 	// Integrate fragments together
 	response, err = c.defragResponse(response)

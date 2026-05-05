@@ -4,7 +4,7 @@ Create a core microservice at hostname `metrics.core` that aggregates Prometheus
 
 Expose one endpoint:
 
-- `Collect` on `GET /collect` — serves a Prometheus text-format metrics response aggregated from all running microservices.
+- `Collect` on `GET /collect` - serves a Prometheus text-format metrics response aggregated from all running microservices.
 
 ### Collect Logic
 
@@ -22,4 +22,4 @@ Expose one endpoint:
 
 Config:
 
-- `SecretKey` — secret string required as a query parameter for collection. Required in non-local/test deployments. Marked `secret: true`.
+- `SecretKey` - secret string required as a query parameter for collection. Required in non-local/test deployments. Marked `secret: true`.

@@ -235,10 +235,10 @@ grep -rn 'microbus://' --include='manifest.yaml' --include='*.go'
 
 For each match that lives inside a `requiredClaims` field (in `manifest.yaml`) or a `sub.RequiredClaims(...)` argument (in `intermediate.go` or any hand-rolled `Subscribe` calls):
 
-- **Equality form** (`iss=="microbus://access.token.core"`): rewrite to `iss=="https://access.token.core"`, or — preferred — migrate to the scheme-agnostic regex form `iss=~"access.token.core"` recommended by `.claude/rules/microbus.md`.
+- **Equality form** (`iss=="microbus://access.token.core"`): rewrite to `iss=="https://access.token.core"`, or - preferred - migrate to the scheme-agnostic regex form `iss=~"access.token.core"` recommended by `.claude/rules/microbus.md`.
 - **Scheme-pinning regex** (`iss=~"^microbus://"`): rewrite to `iss=~"^https://"`, or drop the scheme and match just the host: `iss=~"access.token.core"`.
 
-Matches outside `requiredClaims` (e.g. comments, fixture tokens that hard-code an `iss` value) usually don't need a change — the verifier still accepts the legacy scheme. Update only if those values feed into a `requiredClaims` evaluation.
+Matches outside `requiredClaims` (e.g. comments, fixture tokens that hard-code an `iss` value) usually don't need a change - the verifier still accepts the legacy scheme. Update only if those values feed into a `requiredClaims` evaluation.
 
 **f. Test fixtures with empty unsigned actor against claim-gated endpoints**: the connector now evaluates claims for unsigned tokens in TESTING. Any test that set a no-claim actor (e.g. `pub.Actor(jwt.MapClaims{})`) against a `RequiredClaims`-gated endpoint and expected success now gets 403. Mint matching claims (e.g. `pub.Actor(jwt.MapClaims{"roles": map[string]any{"admin": true}})`) or relax the gate.
 

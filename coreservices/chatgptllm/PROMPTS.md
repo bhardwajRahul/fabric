@@ -19,6 +19,6 @@ Expose one endpoint:
 
 ### Config Properties
 
-- `BaseURL` — OpenAI API base URL, default `https://api.openai.com`, validated as URL.
-- `APIKey` — OpenAI API key, `secret: true`.
-- `Model` — OpenAI model identifier, default `gpt-4`.
+- `BaseURL` - OpenAI API base URL, default `https://api.openai.com`, validated as URL.
+- `APIKey` - OpenAI API key, `secret: true`.
+- `Model` - OpenAI model identifier, default `gpt-4`.

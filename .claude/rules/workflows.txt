@@ -58,8 +58,6 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 	// Goto transition (taken only when task calls flow.Goto)
 	graph.AddTransitionGoto(finalDecision, submitApp)
 
-	// Reducer for fan-in merge
-	graph.SetReducer("failures", workflow.ReducerAdd)
 	// Per-task time budget
 	graph.SetTimeBudget(verifyCredit, 30*time.Second)
 
@@ -97,18 +95,32 @@ Control signals on `Flow`:
 - `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called
 - `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
 - `AddErrorTransition(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
-- `SetReducer(field, reducer)` - set merge strategy for a state field during fan-in
+- `SetReducer(field, reducer)` - escape hatch to override the prefix-driven reducer for a state field (rarely needed; see Reducers below)
 - `SetTimeBudget(taskURL, duration)` - set execution timeout for a task
 - `DeclareInputs(fields...)` - declare which state fields are passed into this graph; no args = nothing, `"*"` = everything, named = those only
 - `DeclareOutputs(fields...)` - declare which state fields are returned on completion; no args = nothing, `"*"` = everything, named = those only
 - `workflow.END` - pseudo-node indicating workflow termination
 
-**Reducers** control how state fields are merged at fan-in points:
+**Reducers** control how state fields are merged at fan-in points. The reducer is normally chosen by the field name's prefix, with no explicit configuration:
+
+- `sum*` - numeric add (e.g. `sumFailures`, `sumScore`)
+- `list*` - array append, duplicates kept, ordered (e.g. `listMessages`, `listEvents`)
+- `set*` - polymorphic: array union (dedupe) or object merge (new key wins) depending on the value's JSON kind (e.g. `setUsers`, `setRoles`)
+- anything else - replace (last write wins)
+
+The character right after the prefix must be uppercase. `summary`, `listening`, `setup` do not match; `sumScore`, `listMessages`, `setUsers` do. This boundary rule prevents accidental matches against English words.
+
+If a state field's name is dictated by an external schema and cannot follow the prefix convention, attach a reducer explicitly with `graph.SetReducer(field, reducer)`. The supported reducer values are:
 
 - `workflow.ReducerReplace` - last write wins (default)
 - `workflow.ReducerAppend` - concatenate arrays
 - `workflow.ReducerAdd` - sum numeric values
-- `workflow.ReducerUnion` - merge arrays, deduplicate
+- `workflow.ReducerUnion` - merge arrays, deduplicate by JSON value
+- `workflow.ReducerMerge` - merge objects, new key wins on collision
+
+Explicit reducers are strict: `ReducerUnion` rejects object values, `ReducerMerge` rejects array values. Only the prefix-driven `set*` is polymorphic.
+
+Tasks writing to reducer-managed fields must set only the **delta**, not the full accumulated value. For example, with `listMessages` (auto-append), each fan-out branch should set just the new messages it produced - not the full conversation history.
 
 ## Error Transitions
 
@@ -167,9 +179,9 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bo
 
 ## Time Budgets and Long-Running Work
 
-Each task step has an execution time budget enforced by the foreman as an HTTP call timeout. The default is `2m` (set by the foreman's `DefaultTimeBudget` config) and the maximum allowed value is `15m` — the config validation rejects anything longer. Override the budget per task in the graph definition with `graph.SetTimeBudget(taskURL, duration)`.
+Each task step has an execution time budget enforced by the foreman as an HTTP call timeout. The default is `2m` (set by the foreman's `DefaultTimeBudget` config) and the maximum allowed value is `15m` - the config validation rejects anything longer. Override the budget per task in the graph definition with `graph.SetTimeBudget(taskURL, duration)`.
 
-If a task exceeds its budget, the foreman cancels the HTTP call and the step's lease eventually expires for `pollPendingSteps` to recover. A task that intrinsically needs more than 15 minutes to finish must not block the worker — instead, use one of the two patterns below to free the worker between work and completion.
+If a task exceeds its budget, the foreman cancels the HTTP call and the step's lease eventually expires for `pollPendingSteps` to recover. A task that intrinsically needs more than 15 minutes to finish must not block the worker - instead, use one of the two patterns below to free the worker between work and completion.
 
 ### Pattern 1: Interrupt and External Resume
 
@@ -190,7 +202,7 @@ func (svc *Service) WaitForApproval(ctx context.Context, flow *workflow.Flow, re
 }
 ```
 
-This pattern assumes another process exists that knows when to call `Resume`. Wait time is unbounded — could be seconds or weeks.
+This pattern assumes another process exists that knows when to call `Resume`. Wait time is unbounded - could be seconds or weeks.
 
 ### Pattern 2: Polling with Sleep and Retry
 
@@ -204,7 +216,7 @@ func (svc *Service) PollJobStatus(ctx context.Context, flow *workflow.Flow, jobI
     }
     switch status {
     case "running":
-        // Not done yet — schedule another poll. Cap attempts to bound total wait.
+        // Not done yet - schedule another poll. Cap attempts to bound total wait.
         if !flow.Retry(120, 30*time.Second, 1, 30*time.Second) { // 120 × 30s = 1h ceiling
             return "", errors.New("job did not complete within poll budget")
         }

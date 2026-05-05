@@ -22,3 +22,21 @@ These directories contain microservices built using the framework. Treat them th
 - Use the skills in `.claude/skills/` for scaffolding and adding features
 - Respect `MARKER` and `HINT` comments
 - Update `manifest.yaml` when changing microservice code
+
+## Working on code
+
+- **Comments explain the API, not the rationale.** A comment on a function, type, or field should describe what it is and how to use it. Design rationale (the *why*) belongs in the package's `CLAUDE.md`, not in godoc or inline comments.
+- **Keep comments brief.** Default to a single short sentence. Do not restate what well-named identifiers already convey, and do not reference the current task, caller, or recent fix.
+- **Use `//` for short, single-paragraph comments.** Switch to `/* */` block comments only when the comment spans multiple paragraphs or contains an example.
+- **No trailing period on short one-liner inline comments.** A code-block comment that is a label or fragment (e.g. `// Locality-aware routing`) ends without a period. Godoc comments on declarations, and any comment that is a complete sentence, keep their terminal punctuation.
+
+## Writing prose
+
+User-facing documentation lives in the separate [`microbus-io/cloudflarepages`](https://github.com/microbus-io/cloudflarepages) repo, served at [docs.microbus.io](https://docs.microbus.io). When writing prose in this repo - READMEs, `CLAUDE.md` files, code comments - the following conventions apply:
+
+- **Link text is a description, not a path.** A markdown link's display text must describe what the reader will find at the destination. `[../../cmd/gencreds](../../cmd/gencreds)` is wrong because the display text is just the file path. Write `[gencreds](../../cmd/gencreds)` instead, using the tool's name or a short noun phrase. Wrapping a canonical name in code formatting (e.g. `` [`gencreds`](../../cmd/gencreds) ``) is fine when the name is the most natural descriptor.
+- **No link-stuffing.** Cross-references should be woven into sentences that genuinely advance the reader's understanding, not appear as subjects of weak announcement verbs. "For X, see [Y](z)." is the most obvious form, but "[Y](z) covers X" and "[Y](z) walks through X" and "[Y](z) has the details" are the same anti-pattern in disguise: the link title is the subject and the verb is just a filler signal that another doc exists. Either integrate the link as a noun in a substantive sentence ("...which is what makes [interservice ACL](z) work end-to-end"), or remove the cross-reference and trust the reader to follow the load-bearing link in surrounding prose. If a sentence's only function is to announce another doc, delete the sentence.
+- **Prefer "microservice" over "service".** When referring to a Microbus microservice (a unit with its own hostname and code), always use "microservice", not the bare "service". Compounds like `service-to-service`, `cross-service`, `per-service`, `single-service`, `service mesh` are established terms and stay as-is. Standalone references ("this service", "every service", "the service's hostname") should be rewritten to use "microservice".
+- **Use "source code" or "code", not bare "source".** The bare word "source" is ambiguous (it collides with the `<src>` segment in NATS subjects, with "source" as a verb meaning to fetch, and with `git source`). When referring to a microservice's program source, write "source code" or "code". The verb form ("to source claims from a backend") stays as-is.
+- **Quote `PUB` and `SUB` in backticks.** When referring to the NATS ACL verbs, format `PUB` and `SUB` in backticks. They are wire-protocol tokens, not English words. Inside a larger backticked subject pattern (e.g. `` `PUB <plane>.safe...` ``) the surrounding backticks already cover them, so no extra formatting is needed.
+- **Wrap lines at 120 characters, not 80.** Applies to `.go`, `.md`, and other text files in the repo. Long lines are fine when they aid readability (a single godoc sentence, a table row, a URL), but soft-wrap prose and multi-clause expressions at the 120-column boundary rather than the older 80-column convention.

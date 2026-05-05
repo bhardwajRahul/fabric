@@ -283,7 +283,6 @@ func TestAccessToken_Mint(t *testing.T) { // MARKER: Mint
 				assert.Expect(mapClaims["sub"], "user123")
 				assert.Expect(mapClaims["tenant"], "acme")
 				assert.Expect(mapClaims["iss"], "https://"+accesstokenapi.Hostname)
-				assert.Expect(mapClaims["microbus"], "1")
 				assert.NotZero(mapClaims["jti"])
 				assert.NotZero(mapClaims["iat"])
 				assert.NotZero(mapClaims["exp"])

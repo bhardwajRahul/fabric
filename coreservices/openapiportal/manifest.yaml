@@ -14,22 +14,21 @@
 
 general:
   name: OpenAPIPortal
-  hostname: openapiportal.core
-  description: The OpenAPI portal serves an aggregated OpenAPI 3.1 document covering every microservice on the bus, plus per-service docs proxied from each microservice's :888/openapi.json. Endpoints are filtered by the caller's claims (per-service) and the request's port (consumer-side).
+  hostname: openapi.core
+  description: |-
+    The OpenAPI portal serves an aggregated OpenAPI 3.1 document covering every microservice on the bus,
+    plus per-service docs proxied from each microservice's :888/openapi.json. Endpoints are filtered by the caller's claims
+    (per-service) and the request's port (consumer-side).
   package: github.com/microbus-io/fabric/coreservices/openapiportal
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:31Z"
-
-downstream:
-  - hostname: control.core
-    package: github.com/microbus-io/fabric/coreservices/control
+  modifiedAt: "2026-05-08T04:06:17Z"
 
 webs:
   Document:
-    description: Document returns the OpenAPI 3.1 document as JSON. Without a `hostname` query arg, returns an aggregate covering every microservice on the bus, with one tag per service preserving each service's description. With `?hostname=<host>`, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port (with :0 paths treated as wildcard).
+    description: Document returns the OpenAPI 3.1 document as JSON. Without a hostname query arg, returns an aggregate covering every microservice on the bus. With ?hostname=<host>, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port.
     method: GET
     route: //openapi.json:0
   Explorer:
-    description: Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without `?hostname=<host>`, lists every service with its description and endpoint count. With `?hostname=<host>`, shows that service's endpoints. Filtered by the caller's claims and the request's port (consumer-side).
+    description: Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without ?hostname=<host>, lists every service. With ?hostname=<host>, shows that service's endpoints.
     method: GET
     route: //openapi:0

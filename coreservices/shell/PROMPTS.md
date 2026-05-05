@@ -4,9 +4,9 @@ Create a core microservice at hostname `shell.core` that enables running shell c
 
 Expose one endpoint:
 
-- `Execute(cmd string, workDir string, stdin string, envars map[string]string) (exitCode int, stdout string, stderr string)` on `POST :444/execute`
+- `Execute(cmd string, workDir string, stdin string, envars map[string]string) (exitCode int, stdout string, stderr string)` on `POST :666/execute`
 
-Port `:444` is internal-only and inaccessible from outside the bus via the ingress proxy.
+Port `:666` is the trust-root port. It is unconditionally blocked at the HTTP ingress in every deployment mode, and NATS PUB ACL on it is granted only to a tiny named set of caller bundles. Compromise of `Execute` grants RCE on the host process, so it is not callable from non-allowlisted services even on the bus.
 
 ### Execute Logic
 
@@ -26,4 +26,4 @@ Implement a bounded `io.Writer` that retains the first `headCap` bytes and the l
 
 ### Config
 
-- `MaxOutputBytes` — maximum bytes retained from each of stdout and stderr, default `262144` (256 KiB), minimum `1024`.
+- `MaxOutputBytes` - maximum bytes retained from each of stdout and stderr, default `262144` (256 KiB), minimum `1024`.

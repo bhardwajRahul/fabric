@@ -18,14 +18,7 @@ general:
   description: The event source microservice fires events that are caught by the event sink microservice.
   package: github.com/microbus-io/fabric/examples/eventsource
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
-
-functions:
-  Register:
-    signature: Register(email string) (allowed bool)
-    description: Register attempts to register a new user.
-    method: ANY
-    route: :443/register
+  modifiedAt: "2026-05-06T03:01:11Z"
 
 outboundEvents:
   OnAllowRegister:
@@ -38,3 +31,10 @@ outboundEvents:
     description: OnRegistered is triggered after successful registration.
     method: POST
     route: :417/on-registered
+
+functions:
+  Register:
+    signature: Register(email string) (allowed bool)
+    description: Register attempts to register a new user.
+    method: ANY
+    route: :443/register

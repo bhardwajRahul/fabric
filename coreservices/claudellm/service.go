@@ -153,10 +153,10 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	// for small requests and a free win for large ones.
 	//
 	// Breakpoint 1: cache the stable preamble.
-	//   - Last tool when tools are present  → caches "system + tools"
-	//   - Else last system block            → caches "system"
+	//   - Last tool when tools are present  -> caches "system + tools"
+	//   - Else last system block            -> caches "system"
 	// Breakpoint 2: cache the conversation history.
-	//   - Last content block of last message → caches "system + tools + history"
+	//   - Last content block of last message -> caches "system + tools + history"
 	//
 	// This uses 2 of the 4 breakpoints Anthropic allows per request, leaving headroom
 	// for future per-call hints (e.g. an explicit caller-supplied breakpoint).

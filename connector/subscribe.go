@@ -98,7 +98,7 @@ func (c *Connector) Unsubscribe(name string) error {
 }
 
 // validRequestMethods is the set of HTTP method tokens accepted on inbound wire-level
-// requests. Per RFC 9110 §9. The framework's "ANY" wildcard is deliberately excluded —
+// requests. Per RFC 9110 §9. The framework's "ANY" wildcard is deliberately excluded -
 // it is a subscription-side match-anything sentinel that should never appear on the wire.
 var validRequestMethods = map[string]bool{
 	http.MethodGet:     true,
@@ -140,6 +140,10 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 	if msg.Request.Body == nil {
 		msg.Request.Body = http.NoBody
 	}
+
+	// Overwrite From-Host with the verified source from the subject.
+	_, _, _, src, _, _ := splitSubject(msg.Subject)
+	frame.Of(msg.Request).SetFromHost(src)
 
 	err := c.ackRequest(msg, s)
 	if err != nil {
@@ -212,24 +216,21 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 		c.onRequest(msg, s)
 	}
 	prefixes := []string{
-		"",
+		"", // bare - encoded as the `_` placeholder
 		c.id,
 	}
 	if c.locality != "" {
-		loc := strings.Split(c.locality, ".")
-		for i := len(loc) - 1; i >= 0; i-- {
-			prefixes = append(prefixes, strings.Join(loc[i:], "."))
+		loc := strings.Split(c.locality, "-")
+		for i := 1; i <= len(loc); i++ {
+			prefixes = append(prefixes, escapeLocality(strings.Join(loc[:i], "-")))
 		}
 	}
 	for _, prefix := range prefixes {
 		var transportSub *transport.Subscription
-		if prefix != "" {
-			prefix += "."
-		}
 		if s.Queue != "" {
-			transportSub, err = c.transportConn.QueueSubscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Route), s.Queue, handler)
+			transportSub, err = c.transportConn.QueueSubscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Route), s.Queue, handler)
 		} else {
-			transportSub, err = c.transportConn.Subscribe(subjectOfSubscription(c.plane, s.Method, prefix+s.Host, s.Port, s.Route), handler)
+			transportSub, err = c.transportConn.Subscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Route), handler)
 		}
 		if err != nil {
 			break
@@ -389,7 +390,7 @@ func (c *Connector) ackRequest(msg *transport.Msg, s *sub.Subscription) (err err
 		httpRes.StatusCode = http.StatusAccepted
 		httpRes.Status = "202 Accepted"
 	}
-	err = c.transportConn.Response(subjectOfResponses(c.plane, fromHost, fromID), httpRes)
+	err = c.transportConn.Response(subjectOfResponse(c.plane, c.hostname, fromHost, fromID), httpRes)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -624,7 +625,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = c.transportConn.Response(subjectOfResponses(c.plane, fromHost, fromId), fragment)
+		err = c.transportConn.Response(subjectOfResponse(c.plane, c.hostname, fromHost, fromId), fragment)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -711,13 +712,16 @@ func (c *Connector) verifyToken(token string, requiredClaims string) (jwt.MapCla
 		return nil, errors.New("", http.StatusUnauthorized)
 	}
 	issStr, _ := claims["iss"].(string)
-	_, ok = claims["microbus"].(string)
-	if !ok && !strings.HasPrefix(issStr, "microbus://") { // microbus scheme for backward compatibility
-		return nil, errors.New("", http.StatusUnauthorized)
-	}
 	_, issuerHost, ok := strings.Cut(issStr, "://")
 	if !ok {
 		issuerHost = issStr
+	}
+	// Pin issuer to the framework's known token services. The iss claim is a sanity gate,
+	// not a routing hint - keys are only ever fetched from the pinned hostnames.
+	switch issuerHost {
+	case "access.token.core", "bearer.token.core":
+	default:
+		return nil, errors.New("", http.StatusUnauthorized)
 	}
 
 	// Look up the public key, refresh cache if needed
@@ -807,15 +811,17 @@ func (c *Connector) invalidateKnownRespondersCache(hosts []string) error {
 	if len(hosts) == 0 {
 		return nil
 	}
+	hostSet := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		hostSet[host] = true
+	}
 	c.knownResponders.DeletePredicate(func(key string) bool {
-		for _, host := range hosts {
-			revHost := "." + reverseHostname(host) + ".|"
-			if strings.Contains(key, revHost) {
-				c.LogDebug(c.Lifetime(), "Invalidating known responders cache", "host", host)
-				return true
-			}
+		_, _, _, _, dest, _ := splitSubject(key)
+		if !hostSet[dest] {
+			return false
 		}
-		return false
+		c.LogDebug(c.Lifetime(), "Invalidating known responders cache", "host", dest)
+		return true
 	})
 	return nil
 }

@@ -120,12 +120,12 @@ func TestCreditFlow_Mock(t *testing.T) {
 
 		_, err := mock.VerifyEmployment(ctx, nil, "Alice", "Acme Corp")
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifyEmployment(func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailures int, err error) {
+		mock.MockVerifyEmployment(func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) {
 			return 0, nil
 		})
-		employmentFailures, err := mock.VerifyEmployment(ctx, nil, "Alice", "Acme Corp")
+		sumEmploymentFailuresOut, err := mock.VerifyEmployment(ctx, nil, "Alice", "Acme Corp")
 		assert.Expect(
-			employmentFailures, 0,
+			sumEmploymentFailuresOut, 0,
 			err, nil,
 		)
 	})
@@ -210,7 +210,7 @@ func TestCreditFlow_Mock(t *testing.T) {
 
 		_, err := mock.Decision(ctx, nil, true, 0, true)
 		assert.Contains(err.Error(), "not implemented")
-		mock.MockDecision(func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) {
+		mock.MockDecision(func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) {
 			return true, nil
 		})
 		approved, err := mock.Decision(ctx, nil, true, 0, true)
@@ -258,7 +258,7 @@ func TestCreditFlow_Mock(t *testing.T) {
 		assert.Contains(err.Error(), "not implemented")
 
 		// Mock the workflow behavior
-		mock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, err error) {
+		mock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, err error) {
 			return true, true, 0, true, nil
 		})
 		// Graph endpoint should now return a valid graph
@@ -456,9 +456,9 @@ func TestCreditFlow_VerifyEmployment(t *testing.T) { // MARKER: VerifyEmployment
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			employmentFailures, err := exec.WithOutputFlow(&outFlow).VerifyEmployment(ctx, applicantName, employerName)
+			sumEmploymentFailuresOut, err := exec.WithOutputFlow(&outFlow).VerifyEmployment(ctx, applicantName, employerName)
 			if assert.NoError(err) {
-				assert.Expect(employmentFailures, 0)
+				assert.Expect(sumEmploymentFailuresOut, 0)
 			}
 		})
 	*/
@@ -466,18 +466,18 @@ func TestCreditFlow_VerifyEmployment(t *testing.T) { // MARKER: VerifyEmployment
 	t.Run("employed", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		employmentFailures, err := exec.VerifyEmployment(ctx, "Alice", "Acme Corp")
+		sumEmploymentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "Acme Corp")
 		if assert.NoError(err) {
-			assert.Expect(employmentFailures, 0)
+			assert.Expect(sumEmploymentFailuresOut, 0)
 		}
 	})
 
 	t.Run("empty_name", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		employmentFailures, err := exec.VerifyEmployment(ctx, "Alice", "")
+		sumEmploymentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "")
 		if assert.NoError(err) {
-			assert.Expect(employmentFailures, 1)
+			assert.Expect(sumEmploymentFailuresOut, 1)
 		}
 	})
 }
@@ -797,7 +797,7 @@ func TestCreditFlow_Decision(t *testing.T) { // MARKER: Decision
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			approved, err := exec.WithOutputFlow(&outFlow).Decision(ctx, creditVerified, employmentFailures, identityVerified)
+			approved, err := exec.WithOutputFlow(&outFlow).Decision(ctx, creditVerified, sumEmploymentFailures, identityVerified)
 			if assert.NoError(err) {
 				assert.Expect(approved, true)
 			}
@@ -852,7 +852,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			approved, creditVerified, employmentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...}, "")
+			approved, creditVerified, sumEmploymentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...}, "")
 			assert.Expect(
 				err, nil,
 				status, foremanapi.StatusCompleted,

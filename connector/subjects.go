@@ -17,77 +17,212 @@ limitations under the License.
 package connector
 
 import (
-	"fmt"
+	"net/url"
 	"strings"
-
-	"github.com/microbus-io/fabric/utils"
 )
 
-// reverseHostname reverses the order of the segments in the hostname.
-// www.example.com becomes com.example.www
-func reverseHostname(hostname string) string {
-	reverse := func(x []byte) {
-		n := len(x)
-		for i := range n / 2 {
-			x[i], x[n-i-1] = x[n-i-1], x[i]
-		}
-	}
-	hostnameBytes := utils.UnsafeStringToBytes(hostname)
-	buf := make([]byte, len(hostnameBytes))
-	copy(buf, hostnameBytes)
-	s := 0
-	for i := range len(buf) {
-		if buf[i] == '.' {
-			reverse(buf[s:i])
-			s = i + 1
-		}
-	}
-	if s == 0 {
+const (
+	idPrefix       = "id-"
+	localityPrefix = "loc-"
+)
+
+// subjectHexDigits supplies the lowercase hex alphabet used for percent-encoded
+// bytes in NATS subject segments. Lowercase blends with the lowercase hostname
+// segments and the rest of the subject; url.PathUnescape accepts both cases on
+// the decode path so this is a producer-side aesthetic choice, not a contract
+// constraint.
+const subjectHexDigits = "0123456789abcdef"
+
+// escapeHostname encodes a hostname for placement in a single NATS subject segment.
+//
+// Encoding rules:
+//   - '.' becomes '_' (the segment-separator workaround the framework has used since
+//     v1; preserves readability for typical service identities like "payments.core").
+//   - URL-special characters that the route validator allows (e.g. '$', '!', '~')
+//     are percent-encoded as %XX with uppercase hex digits.
+//   - '_' and the canonical alphanumerics + '-' pass through unchanged.
+//
+// The asymmetry between '.' (gets the legacy `_` flattening) and other specials
+// (get `%XX`) is intentional: typical hostnames carry only `.` and stay readable
+// in subjects, while the rare special-char route hostname remains representable.
+//
+// Note: '_' in the input is preserved (no encoding), so a route hostname with a
+// literal underscore can collide with one whose dot maps to underscore. The
+// framework forbids '_' in service identities to avoid this collision; route
+// hostnames inherit the legacy ambiguity for compatibility.
+func escapeHostname(hostname string) string {
+	if !needsHostnameEscape(hostname) {
 		return hostname
 	}
-	reverse(buf[s:])
-	reverse(buf)
-	return utils.UnsafeBytesToString(buf)
-}
-
-// subjectOfResponse is the NATS subject where a microservice subscribes to receive responses.
-// For the host example.com with ID a1b2c3d4 that subject looks like microbus.r.com.example.a1b2c3d4
-func subjectOfResponses(plane string, hostname string, id string) string {
-	return plane + ".r." + strings.ToLower(reverseHostname(hostname)) + "." + strings.ToLower(id)
-}
-
-// subjectOfSubscription is the NATS subject where a microservice subscribes to receive incoming requests for a given path.
-// For GET http://example.com:80/path/file.html the subject is microbus.80.com.example.|.GET.path.file_html .
-// For a URL that ends with a / such as POST https://example.com/dir/ the subject is microbus.443.com.example.|.POST.dir.> .
-func subjectOfSubscription(plane string, method string, hostname string, port string, path string) string {
-	return subjectOf(true, plane, method, hostname, port, path)
-}
-
-// subjectOfRequest is the NATS subject where a microservice published an outgoing requests for a given path.
-// For GET http://example.com:80/path/file.html that subject looks like microbus.80.com.example.|.GET.path.file_html .
-// For a URL that ends with a / such as POST https://example.com/dir/ the subject is microbus.443.com.example.|.POST.dir._
-// so that it is captured by the corresponding subscription microbus.443.com.example.|.POST.dir.>
-func subjectOfRequest(plane string, method string, hostname string, port string, path string) string {
-	return subjectOf(false, plane, method, hostname, port, path)
-}
-
-// subjectOf composes the NATS subject of subscriptions and requests.
-func subjectOf(wildcards bool, plane string, method string, hostname string, port string, path string) string {
 	var sb strings.Builder
-	sb.Grow(len(plane) + len(method) + len(hostname) + len(port) + len(path) + 16)
+	sb.Grow(len(hostname) + 8)
+	appendHostnameEscaped(&sb, hostname)
+	return sb.String()
+}
+
+// unescapeHostname is the inverse of escapeHostname. It first reverses the
+// '_' → '.' substitution, then percent-decodes any %XX sequences. Returns the
+// input as-is on a malformed escape - the framework only consumes its own
+// output, so failure indicates a non-framework subject.
+func unescapeHostname(escaped string) string {
+	if strings.IndexByte(escaped, '_') < 0 && strings.IndexByte(escaped, '%') < 0 {
+		return escaped
+	}
+	s := strings.ReplaceAll(escaped, "_", ".")
+	decoded, err := url.PathUnescape(s)
+	if err != nil {
+		return s
+	}
+	return decoded
+}
+
+// splitSubject parses a NATS subject into its first six segments. srcHostname
+// and hostname are returned percent-decoded; the other strings are sub-slices
+// of subject. A malformed subject (fewer than six segments) produces zero
+// values for the missing fields.
+func splitSubject(subject string) (plane, trust, port, srcHostname, hostname, idOrLocality string) {
+	s := subject
+	var i int
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		return
+	}
+	plane, s = s[:i], s[i+1:]
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		return
+	}
+	trust, s = s[:i], s[i+1:]
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		return
+	}
+	port, s = s[:i], s[i+1:]
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		return
+	}
+	srcHostname, s = unescapeHostname(s[:i]), s[i+1:]
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		return
+	}
+	hostname, s = unescapeHostname(s[:i]), s[i+1:]
+	if i = strings.IndexByte(s, '.'); i < 0 {
+		idOrLocality = s
+	} else {
+		idOrLocality = s[:i]
+	}
+	return
+}
+
+// cutIDOrLocality strips a reserved id- or loc- prefix from the hostname's
+// first segment and returns it as the slot value. Returns the hostname
+// unchanged with an empty slot when no reserved prefix is present.
+func cutIDOrLocality(hostname string) (host, idOrLocality string) {
+	if i := strings.IndexByte(hostname, '.'); i > 0 {
+		first := hostname[:i]
+		lower := strings.ToLower(first)
+		if strings.HasPrefix(lower, idPrefix) || strings.HasPrefix(lower, localityPrefix) {
+			return hostname[i+1:], lower
+		}
+	}
+	return hostname, ""
+}
+
+// escapeLocality wraps a hyphen-form locality prefix (e.g. "us-west") in its
+// slot form (e.g. "loc-us-west"). Returns an empty string for an empty input.
+func escapeLocality(locality string) string {
+	if locality == "" {
+		return ""
+	}
+	return localityPrefix + strings.ToLower(locality)
+}
+
+// subjectOfResponseSub is the subject a microservice subscribes to in order to
+// receive responses to its outgoing requests. Source is wildcarded.
+func subjectOfResponseSub(plane string, hostname string, id string) string {
+	flatHost := escapeHostname(strings.ToLower(hostname))
+	lowID := strings.ToLower(id)
+	var sb strings.Builder
+	sb.Grow(len(plane) + len(flatHost) + len(lowID) + 12)
+	sb.WriteString(plane)
+	sb.WriteString(".reply._.*.")
+	sb.WriteString(flatHost)
+	sb.WriteRune('.')
+	sb.WriteString(lowID)
+	return sb.String()
+}
+
+// subjectOfResponse is the subject a microservice publishes a response to.
+// Argument order mirrors the on-wire segment order.
+func subjectOfResponse(plane, srcHostname, hostname, id string) string {
+	flatSrc := escapeHostname(strings.ToLower(srcHostname))
+	flatHost := escapeHostname(strings.ToLower(hostname))
+	lowID := strings.ToLower(id)
+	var sb strings.Builder
+	sb.Grow(len(plane) + len(flatSrc) + len(flatHost) + len(lowID) + 12)
+	sb.WriteString(plane)
+	sb.WriteString(".reply._.")
+	sb.WriteString(flatSrc)
+	sb.WriteRune('.')
+	sb.WriteString(flatHost)
+	sb.WriteRune('.')
+	sb.WriteString(lowID)
+	return sb.String()
+}
+
+// SubjectOfRequestSub is the subject a microservice subscribes to in order to
+// receive incoming requests for a given route. Source is wildcarded; port 0 and
+// method "ANY" become wildcards. Exposed as the runtime's contract: external
+// tools (notably cmd/genacl) compute their NATS subject patterns to match
+// this exact output.
+func SubjectOfRequestSub(plane, port, hostname, idOrLocality, method, path string) string {
+	return subjectOf(true, plane, port, "", hostname, idOrLocality, method, path)
+}
+
+// SubjectOfRequest is the subject a microservice publishes an outgoing request to.
+// Argument order mirrors the on-wire segment order. Exposed alongside
+// SubjectOfRequestSub for cross-tool wire-format verification.
+func SubjectOfRequest(plane, port, srcHostname, hostname, idOrLocality, method, path string) string {
+	return subjectOf(false, plane, port, srcHostname, hostname, idOrLocality, method, path)
+}
+
+// subjectOf composes the NATS subject of subscriptions and requests. Argument
+// order mirrors the on-wire segment order. The wildcards flag selects between
+// the subscription and publish forms (subscriptions wildcard source, port 0,
+// and method ANY).
+func subjectOf(wildcards bool, plane, port, srcHostname, hostname, idOrLocality, method, path string) string {
+	var sb strings.Builder
+	sb.Grow(len(plane) + len(port) + len(srcHostname) + len(hostname) + len(idOrLocality) + len(method) + len(path) + 24)
 	sb.WriteString(plane)
 	sb.WriteRune('.')
+	if port == "666" {
+		sb.WriteString("danger")
+	} else {
+		sb.WriteString("safe")
+	}
+	sb.WriteRune('.')
 	if wildcards && port == "0" {
-		sb.WriteString("*")
+		sb.WriteRune('*') // Any port
 	} else {
 		sb.WriteString(port)
 	}
 	sb.WriteRune('.')
-	sb.WriteString(strings.ToLower(reverseHostname(hostname)))
-	sb.WriteString(".|.")
+	if wildcards {
+		sb.WriteRune('*') // Any source
+	} else if srcHostname != "" {
+		sb.WriteString(escapeHostname(strings.ToLower(srcHostname)))
+	} else {
+		sb.WriteRune('_')
+	}
+	sb.WriteRune('.')
+	sb.WriteString(escapeHostname(strings.ToLower(hostname)))
+	sb.WriteRune('.')
+	if idOrLocality == "" {
+		sb.WriteRune('_')
+	} else {
+		sb.WriteString(strings.ToLower(idOrLocality))
+	}
+	sb.WriteRune('.')
 	method = strings.ToUpper(method)
 	if wildcards && method == "ANY" {
-		sb.WriteString("*")
+		sb.WriteRune('*') // Any method
 	} else {
 		sb.WriteString(method)
 	}
@@ -125,17 +260,60 @@ func subjectOf(wildcards bool, plane string, method string, hostname string, por
 	return sb.String()
 }
 
-// escapePathPart escapes special characters in the path to make it suitable for inclusion in the subscription subject.
+// escapePathPart percent-encodes a single path segment for inclusion in a NATS
+// subject. Every byte outside [A-Za-z0-9-] becomes %XX with uppercase hex
+// digits, including '.', '_', and any URL-special character. Path segments are
+// case-sensitive: uppercase letters pass through unchanged.
+//
+// Empty segments and wildcards (`{name}`, `{name...}`, bare `*`) are handled
+// by the caller, not here.
 func escapePathPart(b *strings.Builder, part string) {
-	for _, ch := range part {
+	for i := 0; i < len(part); i++ {
+		c := part[i]
 		switch {
-		case ch == '.':
-			b.WriteRune('_')
-		case (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-':
-			b.WriteRune(ch)
+		case c >= 'A' && c <= 'Z',
+			c >= 'a' && c <= 'z',
+			c >= '0' && c <= '9',
+			c == '-':
+			b.WriteByte(c)
 		default:
-			b.WriteRune('%')
-			b.WriteString(fmt.Sprintf("%04x", int(ch)))
+			b.WriteByte('%')
+			b.WriteByte(subjectHexDigits[c>>4])
+			b.WriteByte(subjectHexDigits[c&0xF])
 		}
 	}
 }
+
+// needsHostnameEscape reports whether the hostname requires escaping for use
+// as a NATS subject segment (i.e., contains any byte outside [A-Za-z0-9_-]).
+func needsHostnameEscape(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// appendHostnameEscaped writes the hostname-encoded form of s to b.
+func appendHostnameEscaped(b *strings.Builder, s string) {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '.':
+			b.WriteByte('_')
+		case c >= 'A' && c <= 'Z',
+			c >= 'a' && c <= 'z',
+			c >= '0' && c <= '9',
+			c == '-', c == '_':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('%')
+			b.WriteByte(subjectHexDigits[c>>4])
+			b.WriteByte(subjectHexDigits[c&0xF])
+		}
+	}
+}
+

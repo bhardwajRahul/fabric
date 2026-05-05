@@ -10,6 +10,11 @@ nats-server
 /main/__debug_bin*
 .DS_Store
 
+nats.creds
+*_nats.creds
+
 *.db
 *.sqlite
 *.sqlite3
+
+.claude/scheduled_tasks.lock

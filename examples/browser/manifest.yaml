@@ -18,11 +18,7 @@ general:
   description: The browser microservice implements a simple web browser that utilizes the egress proxy.
   package: github.com/microbus-io/fabric/examples/browser
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
-
-downstream:
-  - hostname: http.egress.core
-    package: github.com/microbus-io/fabric/coreservices/httpegress
+  modifiedAt: "2026-05-08T04:06:20Z"
 
 webs:
   Browse:

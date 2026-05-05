@@ -19,6 +19,9 @@ package workflow
 import (
 	"encoding/json"
 	"maps"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/microbus-io/errors"
 )
@@ -31,6 +34,7 @@ const (
 	ReducerAppend  Reducer = "append"  // Concatenate arrays
 	ReducerAdd     Reducer = "add"     // Sum numeric values
 	ReducerUnion   Reducer = "union"   // Merge arrays, deduplicate
+	ReducerMerge   Reducer = "merge"   // Merge objects, new key wins
 )
 
 // Reduce applies the reducer to merge an incoming value into an existing value.
@@ -46,13 +50,54 @@ func (r Reducer) Reduce(existing, incoming any) (any, error) {
 		return reduceAdd(existing, incoming)
 	case ReducerUnion:
 		return reduceUnion(existing, incoming)
+	case ReducerMerge:
+		return reduceMerge(existing, incoming)
 	default:
 		return nil, errors.New("unknown reducer: %s", string(r))
 	}
 }
 
+// ReducerForFieldName returns the reducer inferred from a state field name.
+// Returns empty (replace) if no convention prefix matches.
+//
+// Conventions:
+//
+//	sum*  - numeric add
+//	list* - array append
+//	set*  - polymorphic: array union, object merge
+//
+// The character right after the prefix must be uppercase to avoid matching
+// English words like "summary", "listening", or "setup".
+func ReducerForFieldName(name string) Reducer {
+	switch {
+	case hasUpperBoundary(name, "sum"):
+		return ReducerAdd
+	case hasUpperBoundary(name, "list"):
+		return ReducerAppend
+	case hasUpperBoundary(name, "set"):
+		return ReducerUnion
+	}
+	return ""
+}
+
+// hasUpperBoundary reports whether name starts with prefix followed by an uppercase letter.
+func hasUpperBoundary(name, prefix string) bool {
+	if !strings.HasPrefix(name, prefix) || len(name) == len(prefix) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(name[len(prefix):])
+	return unicode.IsUpper(r)
+}
+
 // MergeState applies changes on top of state, using the provided reducers for
-// fields that have one. Fields without an explicit reducer use replace semantics.
+// fields that have one. For fields without an explicit reducer, the reducer is
+// inferred from the field name's prefix (sum*, list*, set*); fields not
+// matching a convention prefix use replace semantics.
+//
+// The set* prefix is polymorphic: it dispatches to union when the value is a
+// JSON array and to merge when the value is a JSON object. Explicit reducer
+// configuration via SetReducer is strict and does not polymorph.
+//
 // State, changes and the result are map[string]any or nil.
 func MergeState(state any, changes any, reducers map[string]Reducer) (map[string]any, error) {
 	stateMap, err := toAnyMap(state)
@@ -66,15 +111,22 @@ func MergeState(state any, changes any, reducers map[string]Reducer) (map[string
 	merged := make(map[string]any, len(stateMap)+len(changesMap))
 	maps.Copy(merged, stateMap)
 	for k, v := range changesMap {
-		reducer := reducers[k] // defaults to "" which is replace
 		existing, exists := merged[k]
+		reducer, explicit := reducers[k]
+		if !explicit || reducer == "" {
+			reducer = ReducerForFieldName(k)
+			// set* polymorphism: object value -> merge, array value -> union
+			if reducer == ReducerUnion && (isJSONObject(existing) || isJSONObject(v)) {
+				reducer = ReducerMerge
+			}
+		}
 		if !exists || reducer == "" || reducer == ReducerReplace {
 			merged[k] = v
-		} else {
-			merged[k], err = reducer.Reduce(existing, v)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			continue
+		}
+		merged[k], err = reducer.Reduce(existing, v)
+		if err != nil {
+			return nil, errors.New("reducer '%s' failed on field '%s': %w", string(reducer), k, err)
 		}
 	}
 	return merged, nil
@@ -130,21 +182,52 @@ func toAnyMap(v any) (map[string]any, error) {
 	}
 }
 
+// jsonKind classifies a JSON-compatible value as one of "object", "array",
+// "string", "number", "bool", "null", or "" if undetermined.
+func jsonKind(v any) string {
+	if v == nil {
+		return "null"
+	}
+	raw, err := marshalAny(v)
+	if err != nil {
+		return ""
+	}
+	for _, b := range raw {
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '{':
+			return "object"
+		case '[':
+			return "array"
+		case '"':
+			return "string"
+		case 't', 'f':
+			return "bool"
+		case 'n':
+			return "null"
+		case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			return "number"
+		default:
+			return ""
+		}
+	}
+	return ""
+}
+
+// isJSONObject reports whether v's JSON form is an object (or null, which merges harmlessly).
+func isJSONObject(v any) bool {
+	return jsonKind(v) == "object"
+}
+
 // reduceAppend concatenates two JSON arrays.
 func reduceAppend(existing, incoming any) (any, error) {
-	existingRaw, err := marshalAny(existing)
+	a, err := unmarshalArray(existing, "append")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	incomingRaw, err := marshalAny(incoming)
+	b, err := unmarshalArray(incoming, "append")
 	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var a, b []json.RawMessage
-	if err := json.Unmarshal(existingRaw, &a); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := json.Unmarshal(incomingRaw, &b); err != nil {
 		return nil, errors.Trace(err)
 	}
 	result, err := json.Marshal(append(a, b...))
@@ -153,19 +236,12 @@ func reduceAppend(existing, incoming any) (any, error) {
 
 // reduceAdd sums two JSON numbers.
 func reduceAdd(existing, incoming any) (any, error) {
-	existingRaw, err := marshalAny(existing)
+	a, err := unmarshalNumber(existing, "add")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	incomingRaw, err := marshalAny(incoming)
+	b, err := unmarshalNumber(incoming, "add")
 	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var a, b float64
-	if err := json.Unmarshal(existingRaw, &a); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := json.Unmarshal(incomingRaw, &b); err != nil {
 		return nil, errors.Trace(err)
 	}
 	result, err := json.Marshal(a + b)
@@ -174,19 +250,12 @@ func reduceAdd(existing, incoming any) (any, error) {
 
 // reduceUnion merges two JSON arrays, deduplicating elements by their JSON representation.
 func reduceUnion(existing, incoming any) (any, error) {
-	existingRaw, err := marshalAny(existing)
+	a, err := unmarshalArray(existing, "union")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	incomingRaw, err := marshalAny(incoming)
+	b, err := unmarshalArray(incoming, "union")
 	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	var a, b []json.RawMessage
-	if err := json.Unmarshal(existingRaw, &a); err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := json.Unmarshal(incomingRaw, &b); err != nil {
 		return nil, errors.Trace(err)
 	}
 	seen := make(map[string]bool, len(a))
@@ -201,4 +270,60 @@ func reduceUnion(existing, incoming any) (any, error) {
 	}
 	result, err := json.Marshal(a)
 	return json.RawMessage(result), errors.Trace(err)
+}
+
+// reduceMerge merges two JSON objects key-by-key. New keys win on collision.
+func reduceMerge(existing, incoming any) (any, error) {
+	a, err := unmarshalObject(existing, "merge")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalObject(incoming, "merge")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if a == nil {
+		a = make(map[string]json.RawMessage, len(b))
+	}
+	for k, v := range b {
+		a[k] = v
+	}
+	result, err := json.Marshal(a)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
+func unmarshalArray(v any, reducerName string) ([]json.RawMessage, error) {
+	raw, err := marshalAny(v)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil, errors.New("%s reducer requires array, got %s", reducerName, jsonKind(v))
+	}
+	return arr, nil
+}
+
+func unmarshalObject(v any, reducerName string) (map[string]json.RawMessage, error) {
+	raw, err := marshalAny(v)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, errors.New("%s reducer requires object, got %s", reducerName, jsonKind(v))
+	}
+	return obj, nil
+}
+
+func unmarshalNumber(v any, reducerName string) (float64, error) {
+	raw, err := marshalAny(v)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	var n float64
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0, errors.New("%s reducer requires number, got %s", reducerName, jsonKind(v))
+	}
+	return n, nil
 }

@@ -14,12 +14,12 @@ TLS is enabled automatically if both `smtpingress-<port>-cert.pem` and `smtpingr
 
 Config properties (all with `callback: true`, all restart the daemon on change):
 
-- `Port` — TCP port to listen on, default `25`, range `[1, 65535]`
-- `Enabled` — whether the server starts, default `true`
-- `MaxSize` — maximum message size in megabytes, default `10`, range `[0, 1024]`
-- `MaxClients` — maximum concurrent client connections, default `128`, range `[1, 1024]`
-- `Workers` — number of backend save workers, default `8`, range `[1, 1024]`
+- `Port` - TCP port to listen on, default `25`, range `[1, 65535]`
+- `Enabled` - whether the server starts, default `true`
+- `MaxSize` - maximum message size in megabytes, default `10`, range `[0, 1024]`
+- `MaxClients` - maximum concurrent client connections, default `128`, range `[1, 1024]`
+- `Workers` - number of backend save workers, default `8`, range `[1, 1024]`
 
 Outbound event:
 
-- `OnIncomingEmail` on `:417/on-incoming-email` — fires with a `*letters.Email` payload when a message is received.
+- `OnIncomingEmail` on `:417/on-incoming-email` - fires with a `*letters.Email` payload when a message is received.

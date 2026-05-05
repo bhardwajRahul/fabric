@@ -193,7 +193,7 @@ CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_intege
 CREATE INDEX my_noun_idx_my_field_integer ON my_noun (tenant_id, my_field_integer);
 ```
 
-**Production tables on Postgres**: plain `CREATE INDEX` takes an `ACCESS EXCLUSIVE` lock that blocks writes for the duration of the build — fine for small tables, painful for large hot ones. If the target `pgx` table has significant production write traffic, ask the user whether to use `CREATE INDEX CONCURRENTLY IF NOT EXISTS` instead. It builds without blocking writes (sequel runs each migration statement outside a transaction, so `CONCURRENTLY` is allowed), at the cost of: (a) two table scans instead of one, and (b) non-atomic failure mode — if interrupted, Postgres leaves an `INVALID` index that must be `DROP`-ed manually before the migration can be retried. Plain `CREATE INDEX` is the safer default for prototyping and for tables that are still small.
+**Production tables on Postgres**: plain `CREATE INDEX` takes an `ACCESS EXCLUSIVE` lock that blocks writes for the duration of the build - fine for small tables, painful for large hot ones. If the target `pgx` table has significant production write traffic, ask the user whether to use `CREATE INDEX CONCURRENTLY IF NOT EXISTS` instead. It builds without blocking writes (sequel runs each migration statement outside a transaction, so `CONCURRENTLY` is allowed), at the cost of: (a) two table scans instead of one, and (b) non-atomic failure mode - if interrupted, Postgres leaves an `INVALID` index that must be `DROP`-ed manually before the migration can be retried. Plain `CREATE INDEX` is the safer default for prototyping and for tables that are still small.
 
 #### Step 5: Map Column Names to Object Fields
 

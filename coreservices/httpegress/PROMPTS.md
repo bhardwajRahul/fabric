@@ -4,7 +4,7 @@ Create a core microservice at hostname `http.egress.core` that proxies outbound 
 
 Expose one endpoint:
 
-- `MakeRequest` on `POST :444/make-request` — receives a raw HTTP request serialized in binary RFC 7231 wire format in the POST body, executes it against the target URL, decompresses the response, and writes the decompressed response (headers + body) back to the caller.
+- `MakeRequest` on `POST :444/make-request` - receives a raw HTTP request serialized in binary RFC 7231 wire format in the POST body, executes it against the target URL, decompresses the response, and writes the decompressed response (headers + body) back to the caller.
 
 ### MakeRequest Logic
 
@@ -22,4 +22,4 @@ The service has no config properties and no startup/shutdown logic. It is a pure
 
 ### Usage Pattern
 
-Callers use the generated `httpegressapi.NewClient(svc).Do(ctx, req)` helper, which serializes the `*http.Request` into wire format and posts it to `:444/make-request`. Only use this service for outbound internet requests — Microbus-internal calls should use the bus directly.
+Callers use the generated `httpegressapi.NewClient(svc).Do(ctx, req)` helper, which serializes the `*http.Request` into wire format and posts it to `:444/make-request`. Only use this service for outbound internet requests - Microbus-internal calls should use the bus directly.

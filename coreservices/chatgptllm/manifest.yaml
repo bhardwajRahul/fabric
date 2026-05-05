@@ -18,30 +18,22 @@ general:
   description: The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Chat Completions API.
   package: github.com/microbus-io/fabric/coreservices/chatgptllm
   frameworkVersion: 1.28.0
-  cloud: api.openai.com
-  modifiedAt: "2026-05-03T00:00:00Z"
-
-downstream:
-  - hostname: http.egress.core
-    package: github.com/microbus-io/fabric/coreservices/httpegress
+  modifiedAt: "2026-05-08T04:06:19Z"
 
 configs:
   BaseURL:
-    signature: BaseURL() (baseURL string)
+    signature: BaseURL() (value string)
     description: BaseURL is the base URL of the OpenAI API.
     validation: url
     default: https://api.openai.com
-    secret: false
-    callback: false
   APIKey:
-    signature: APIKey() (apiKey string)
+    signature: APIKey() (value string)
     description: APIKey is the API key for the OpenAI API.
     secret: true
-    callback: false
 
 functions:
   Turn:
-    signature: Turn(model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, usage Usage)
+    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage)
     description: Turn executes a single LLM turn using the ChatGPT provider.
     method: POST
     route: :444/turn

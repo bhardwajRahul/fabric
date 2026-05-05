@@ -1,3 +1,7 @@
+## Agent Instructions
+
+This microservice does not maintain a `PROMPTS.md`. Skip the prompts step when running housekeeping.
+
 ## Overview
 
 The foreman is the orchestrator for agentic workflows in Microbus. It executes workflow graphs by dispatching tasks to microservices, managing state between steps, and handling fan-out/fan-in, interrupts, retries, and failure recovery.
@@ -12,7 +16,7 @@ The foreman is the orchestrator for agentic workflows in Microbus. It executes w
 
 **Step** - A single task execution within a flow. Each step captures an immutable state snapshot (input), the changes produced by the task (output), and metadata like status, error, and timing. Steps are numbered sequentially (`step_depth`); parallel fan-out siblings share the same `step_depth`. Once a step reaches a terminal status (`completed`, `failed`, `retried`, `cancelled`), it is immutable. Retry creates a new step rather than modifying the failed one.
 
-**Reducer** - A merge strategy for state fields during fan-in. When parallel branches converge, each branch's changes are merged using the reducer declared for that field: `replace` (last write wins, default), `append` (concatenate arrays), `add` (sum numbers), or `union` (deduplicate arrays).
+**Reducer** - A merge strategy for state fields during fan-in. When parallel branches converge, each branch's changes are merged using the reducer chosen for that field: `replace` (last write wins, default), `append` (concatenate arrays), `add` (sum numbers), `union` (deduplicate arrays), or `merge` (combine objects, new key wins). Reducers are normally selected by the field name's prefix (`sum*`, `list*`, `set*`); `graph.SetReducer` is the escape hatch for fields whose names don't follow the convention.
 
 **Thread** - A chain of flows linked by `Continue`. Each flow has a `thread_id` column that groups it with other flows in the same multi-turn conversation. By default, `thread_id = flow_id` (each flow is its own thread). When `Continue` creates a new flow, it inherits the thread's `thread_id`. Forked flows and subgraph flows always start their own thread (`thread_id = flow_id`) to avoid contaminating the original thread's continuation chain. The flowKey returned by the initial `Create` doubles as the threadKey - callers can pass it (or any flowKey in the chain) to `Continue` or `List` to address the thread.
 
@@ -131,7 +135,7 @@ The next step's `state` is computed as `merge(currentState, changes)` - the merg
 
 **State mutation on retry and resume:** The `state` column is updated in two cases: (1) on `flow.Retry()`, the foreman merges `state + changes` back into the `state` column so the task sees its own prior output on the next attempt; (2) on `Resume`, the resume data is merged into the leaf step's `state` column so the task sees the caller-provided data via `ParseState`. In both cases, `changes` is preserved as-is.
 
-**Reducer delta convention:** Tasks writing to reducer-managed fields (append, add, union) must set only the **delta**, not the full accumulated value. For example, if `messages` uses the append reducer, the task should set `flow.Set("messages", []string{newMessage})` - not the entire message history. Violating this causes duplicates during fan-in merge.
+**Reducer delta convention:** Tasks writing to reducer-managed fields (append, add, union, merge) must set only the **delta**, not the full accumulated value. For example, if `listMessages` uses the append reducer (auto-selected by the `list*` prefix), the task should set `flow.Set("listMessages", []string{newMessage})` - not the entire message history. Violating this causes duplicates during fan-in merge.
 
 **forEach element injection:** When a `forEach` transition spawns task instances, the current element is injected into `state` only (under the `as` key), not into `changes`. This makes the element available to the task but prevents it from participating in fan-in merge.
 
@@ -177,7 +181,7 @@ So both `DeclareInputs` and `DeclareOutputs` shape the subgraph contract, and th
 
 ### Surgraph Step Identification
 
-Each subgraph flow's `microbus_flows` row stores `surgraph_flow_id`, `surgraph_step_depth`, *and* `surgraph_step_id` — the primary key of the parked surgraph step it belongs to. `completeSurgraphFlow` looks the surgraph step up by primary key, so it can never match a sibling at the same `(flow_id, step_depth)`.
+Each subgraph flow's `microbus_flows` row stores `surgraph_flow_id`, `surgraph_step_depth`, *and* `surgraph_step_id` - the primary key of the parked surgraph step it belongs to. `completeSurgraphFlow` looks the surgraph step up by primary key, so it can never match a sibling at the same `(flow_id, step_depth)`.
 
 This matters in two scenarios that broke earlier (when the lookup was by `flow_id + step_depth + status='running'` only):
 
@@ -186,7 +190,7 @@ This matters in two scenarios that broke earlier (when the lookup was by `flow_i
 
 The `surgraph_step_id` PK lookup eliminates both cases. A lease-threshold fallback (5+ minutes lease remaining = parked) is kept for legacy `microbus_flows` rows created before the column existed (`surgraph_step_id = 0` sentinel). Migration `3.sql` adds the column.
 
-The `IsSubgraph` existence check (`activeSubgraphCount` / `completedSubgraphCount`) in `processStep` is also scoped by `surgraph_step_id`, so parallel subgraph siblings can't see each other's child flows and falsely conclude that "a subgraph already exists" — without this scope, the second sibling would park forever waiting for a subgraph that was never created on its behalf.
+The `IsSubgraph` existence check (`activeSubgraphCount` / `completedSubgraphCount`) in `processStep` is also scoped by `surgraph_step_id`, so parallel subgraph siblings can't see each other's child flows and falsely conclude that "a subgraph already exists" - without this scope, the second sibling would park forever waiting for a subgraph that was never created on its behalf.
 
 ### Interrupt/Resume Propagation Across Subgraphs
 
@@ -379,5 +383,3 @@ The foreman supports distributing flows across multiple database shards to scale
 **Partial failure:** If the process crashes after deleting steps but before deleting the flow, the flow remains as an orphan with no steps. The next purge cycle deletes it.
 
 **Verdict:** Self-healing.
-
-**IMPORTANT**: Do not maintain `PROMPTS.md` for this microservice. Skip the prompts step when running housekeeping.

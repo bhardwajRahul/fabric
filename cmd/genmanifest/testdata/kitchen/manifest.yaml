@@ -1,0 +1,37 @@
+general:
+  name: Kitchen
+  hostname: kitchen.fixture
+  description: Kitchen is a fixture for genmanifest exercising every detected call pattern.
+  package: github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-08T04:06:20Z"
+
+outboundEvents:
+  OnMyEvent:
+    signature: OnMyEvent(note string) (ok bool)
+    description: OnMyEvent is fired when something happens.
+    method: POST
+    route: :417/on-my-event
+
+functions:
+  MyFunc:
+    signature: MyFunc(input string) (output string)
+    description: MyFunc handles the MyFunc endpoint and exercises every call pattern.
+    method: POST
+    route: :443/my-func
+  SelfPing:
+    signature: SelfPing()
+    description: SelfPing handles peer-to-peer self-pings.
+    method: POST
+    route: :444/self-ping
+  AltHostFn:
+    signature: AltHostFn()
+    description: AltHostFn registers on a non-own host via the //host form.
+    method: GET
+    route: //alt.kitchen:0/alt-fn
+
+inboundEvents:
+  OnSomething:
+    signature: OnSomething(detail string) (ok bool)
+    description: OnSomething is the hook handler for weirdapi.OnSomething inbound events.
+    package: github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird

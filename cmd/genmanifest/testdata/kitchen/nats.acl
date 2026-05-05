@@ -1,0 +1,19 @@
+# nats.acl for kitchen.fixture
+# Test golden for cmd/gencreds. Pinned by code review; regenerate via
+# `go test ./cmd/gencreds/ -update -run TestScan_FixtureGoldens`.
+
+PUB {{plane}}.danger.666.kitchen_fixture.weird_fixture.*.POST.dangerous
+PUB {{plane}}.reply._.kitchen_fixture.>
+PUB {{plane}}.safe.*.kitchen_fixture.*.*.POST.>
+PUB {{plane}}.safe.*.kitchen_fixture.*.*.PUT.>
+PUB {{plane}}.safe.443.kitchen_fixture.alt_host.*.GET.greedy.>
+PUB {{plane}}.safe.443.kitchen_fixture.other_host.*.GET.some-path
+PUB {{plane}}.safe.443.kitchen_fixture.weird_fixture.*.GET.path-arg.*
+PUB {{plane}}.safe.443.kitchen_fixture.weird_fixture.*.GET.plain
+PUB {{plane}}.safe.888.kitchen_fixture.>
+
+SUB {{plane}}.reply._.*.kitchen_fixture.*
+SUB {{plane}}.safe.*.*.alt_kitchen.*.GET.alt-fn
+SUB {{plane}}.safe.*.*.kitchen_fixture.>
+SUB {{plane}}.safe.417.*.weird_fixture.*.POST.on-something
+SUB {{plane}}.safe.888.*.all.>

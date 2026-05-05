@@ -16,10 +16,10 @@ Anthropic's prompt cache is opt-in via `cache_control: {"type": "ephemeral"}` ma
 
 Two breakpoints are set unconditionally on every request, using 2 of the 4 markers Anthropic allows:
 
-1. **Last tool** if tools are present, else **last system block** if system is present — caches the stable preamble.
-2. **Last content block of the last message** — caches the conversation history as a prefix that the next turn (which appends new messages) can reuse.
+1. **Last tool** if tools are present, else **last system block** if system is present - caches the stable preamble.
+2. **Last content block of the last message** - caches the conversation history as a prefix that the next turn (which appends new messages) can reuse.
 
-These are set unconditionally because Anthropic silently declines to cache content below the per-model size threshold (~1024 tokens for Sonnet/Opus, ~2048 for Haiku). For small requests the markers are a no-op; for large ones they're a free win. There's no need to gate by an estimated token count — server-side handles the threshold.
+These are set unconditionally because Anthropic silently declines to cache content below the per-model size threshold (~1024 tokens for Sonnet/Opus, ~2048 for Haiku). For small requests the markers are a no-op; for large ones they're a free win. There's no need to gate by an estimated token count - server-side handles the threshold.
 
 ### Why mark the *last* block, not the second-to-last
 
@@ -38,7 +38,7 @@ If you marked the second-to-last block instead, every subsequent turn would only
 `apitypes.go` defines the wire format. Three things matter for caching:
 
 - **`System` is `[]claudeContentBlock`** (not `string`). Anthropic accepts both forms; we always emit the array form so a `cache_control` can be attached uniformly.
-- **`Message.Content` is `[]claudeContentBlock`** (not `json.RawMessage`). Same reason — uniform shape, consistent place to attach `cache_control`.
+- **`Message.Content` is `[]claudeContentBlock`** (not `json.RawMessage`). Same reason - uniform shape, consistent place to attach `cache_control`.
 - **`claudeContentBlock` and `claudeTool` both carry `*claudeCacheControl`** with `omitzero`, so the marker is included only when non-nil.
 
 ### Byte-exact serialization
@@ -46,7 +46,7 @@ If you marked the second-to-last block instead, every subsequent turn would only
 Cache hits depend on the request bytes being identical across calls. Three things keep them deterministic:
 
 1. **Go struct field order is declaration order** (`encoding/json` guarantees this), so as long as the structs in `apitypes.go` aren't reordered, the JSON shape is stable.
-2. **Tools are sorted by name** in `service.go` before being converted to `claudeTool`. This insulates the cache key from caller-side ordering variance — a downstream caller building tool URLs from a Go map iteration would otherwise produce different orderings between calls and defeat the cache.
+2. **Tools are sorted by name** in `service.go` before being converted to `claudeTool`. This insulates the cache key from caller-side ordering variance - a downstream caller building tool URLs from a Go map iteration would otherwise produce different orderings between calls and defeat the cache.
 3. **`json.RawMessage` for `InputSchema` and `Input`** is pass-through, no re-marshaling. The schema bytes come from the OpenAPI document fetched by `llm.core`; see `openapi/CLAUDE.md` for the schema-stability guarantees on that side.
 
 ### What is NOT exposed in `TurnOptions`
@@ -55,6 +55,6 @@ Cache hits depend on the request bytes being identical across calls. Three thing
 
 - Marking the last tool / last message is the canonical pattern that wins for >95% of workloads.
 - Provider-specific cache mechanics (Anthropic's explicit markers vs OpenAI's automatic prefix vs Gemini's implicit caching) don't fit a shared abstraction cleanly.
-- Adding the option speculatively is YAGNI — when a real use case emerges (deterministic-test cache bypass, very long history with a custom history breakpoint, per-tenant cache isolation), the option's shape will be informed by that workload rather than guessed.
+- Adding the option speculatively is YAGNI - when a real use case emerges (deterministic-test cache bypass, very long history with a custom history breakpoint, per-tenant cache isolation), the option's shape will be informed by that workload rather than guessed.
 
-If a caller explicitly needs to bypass caching, the cleanest workaround today is to set `cache_control` to nil at the call site by patching `claudellm/service.go` — we'll add the option when there's actual demand.
+If a caller explicitly needs to bypass caching, the cleanest workaround today is to set `cache_control` to nil at the call site by patching `claudellm/service.go` - we'll add the option when there's actual demand.

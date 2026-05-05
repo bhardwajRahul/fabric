@@ -18,61 +18,124 @@ general:
   description: The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
   package: github.com/microbus-io/fabric/coreservices/httpingress
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
-
-downstream:
-  - hostname: metrics.core
-    package: github.com/microbus-io/fabric/coreservices/metrics
-  - hostname: bearer.token.core
-    package: github.com/microbus-io/fabric/coreservices/bearertoken
-  - hostname: access.token.core
-    package: github.com/microbus-io/fabric/coreservices/accesstoken
+  modifiedAt: "2026-05-08T04:06:16Z"
 
 configs:
   TimeBudget:
-    description: TimeBudget specifies the timeout for handling a request, after it has been read.
     signature: TimeBudget() (budget time.Duration)
+    description: TimeBudget specifies the timeout for handling a request, after it has been read.
     validation: dur [1s,15m]
     default: 20s
   Ports:
-    description: Ports is a comma-separated list of HTTP ports on which to listen for requests.
     signature: Ports() (port string)
-    default: "8080"
+    description: Ports is a comma-separated list of HTTP ports on which to listen for requests.
+    default: 8080
     callback: true
   RequestMemoryLimit:
-    description: RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
     signature: RequestMemoryLimit() (megaBytes int)
+    description: RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
     validation: int [1,]
     default: 4096
   AllowedOrigins:
-    description: AllowedOrigins is a comma-separated list of CORS origins to allow requests from. The * origin can be used to allow CORS request from all origins.
     signature: AllowedOrigins() (origins string)
+    description: |-
+      AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
+      The * origin can be used to allow CORS request from all origins.
     default: "*"
     callback: true
   PortMappings:
-    description: PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound HTTP port, y is the requested NATS port, and z is the port to serve.
     signature: PortMappings() (mappings string)
-    default: "8080:*->*, 443:*->443, 80:*->443"
+    description: |-
+      PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
+      HTTP port, y is the requested NATS port, and z is the port to serve.
+      An HTTP request https://ingresshost:x/servicehost:y/path is mapped to internal NATS
+      request https://servicehost:z/path .
+      Both x and y can be * to indicate all ports. Setting z to * indicates to serve the requested
+      port y without change. Specific rules take precedence over * rules.
+      The default mapping grants access to all internal ports via HTTP port 8080 but restricts
+      HTTP ports 443 and 80 to only internal port 443.
+    default: 8080:*->*, 443:*->443, 80:*->443
     callback: true
   ReadTimeout:
-    description: ReadTimeout specifies the timeout for fully reading a request.
     signature: ReadTimeout() (timeout time.Duration)
+    description: ReadTimeout specifies the timeout for fully reading a request.
     validation: dur [1s,]
     default: 5m
     callback: true
   WriteTimeout:
-    description: WriteTimeout specifies the timeout for fully writing the response to a request.
     signature: WriteTimeout() (timeout time.Duration)
+    description: WriteTimeout specifies the timeout for fully writing the response to a request.
     validation: dur [1s,]
     default: 5m
     callback: true
   ReadHeaderTimeout:
-    description: ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
     signature: ReadHeaderTimeout() (timeout time.Duration)
+    description: ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
     validation: dur [1s,]
     default: 20s
     callback: true
   BlockedPaths:
-    description: A newline-separated list of paths or extensions to block with a 404.
     signature: BlockedPaths() (blockedPaths string)
+    description: |-
+      A newline-separated list of paths or extensions to block with a 404.
+      Paths should not include any arguments and are matched exactly.
+      Extensions are specified with "*.ext" and are matched against the extension of the path only.
+    default: |-
+      /geoserver
+      /console/
+      /.env
+      /.amazon_aws
+      /solr/admin/info/system
+      /remote/login
+      /Autodiscover/Autodiscover.xml
+      /autodiscover/autodiscover.json
+      /api/v2/static/not.found
+      /api/sonicos/tfa
+      /_ignition/execute-solution
+      /admin.html
+      /auth.html
+      /auth1.html
+      /readme.txt
+      /__Additional
+      /Portal0000.htm
+      /docs/cplugError.html/
+      /CSS/Miniweb.css
+      /.git/*
+      /cgi-bin/*
+      /actuator/gateway/routes
+      /actuator/health
+      /Public/home/js/check.js
+      /mifs/.;/services/LogService
+      /dns-query
+      /ecp/Current/exporttool/microsoft.exchange.ediscovery.exporttool.application
+      /owa/auth/x.js
+      /static/admin/javascript/hetong.js
+      /sslvpnLogin.html
+      /vpn/index.html
+      /wsman
+      /geoserver/web
+      /remote/logincheck
+      /epa/scripts/win/nsepa_setup.exe
+      /.well-known/security.txt
+      /cf_scripts/scripts/ajax/ckeditor/ckeditor.js
+      /Temporary_Listen_Addresses/
+      /manager/html
+      /logon/LogonPoint/*
+      /catalog-portal/ui/oauth/verify
+      /error_log/.git/HEAD
+      /containers/json
+      /hello.world
+      *.cfm
+      *.asp
+      *.aspx
+      *.cgi
+      *.jsa
+      *.jsp
+      *.shtml
+      *.php
+      *.jhtml
+      *.mwsl
+      *.dll
+      *.esp
+      *.exe
     callback: true

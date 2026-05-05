@@ -2,7 +2,7 @@
 
 ### One feature option per subscription, enforced at option-application time
 
-Exactly one of `Function`, `Web`, `InboundEvent`, `Task`, `Workflow` must be applied. Each of these options checks `if sub.Type != ""` and returns an error if a type was already set. The check happens *during option application* — not in `NewSubscription`'s post-validation — so the error surfaces at the offending call site (`sub.Function(...)` after `sub.Web()`) rather than as a generic "type already set" later.
+Exactly one of `Function`, `Web`, `InboundEvent`, `Task`, `Workflow` must be applied. Each of these options checks `if sub.Type != ""` and returns an error if a type was already set. The check happens *during option application* - not in `NewSubscription`'s post-validation - so the error surfaces at the offending call site (`sub.Function(...)` after `sub.Web()`) rather than as a generic "type already set" later.
 
 `NewSubscription` separately validates that `sub.Type` is non-empty after applying all options, catching the "no feature option supplied" case.
 
@@ -10,7 +10,21 @@ Exactly one of `Function`, `Web`, `InboundEvent`, `Task`, `Workflow` must be app
 
 A subscription stores the route the user supplied (`specPath`, e.g. `:888/dcache` or `//all/ping`) *separately* from the parsed-out `Host`, `Port`, and `Route` fields. The reason is `RefreshHostname`: when the connector's hostname changes (e.g., testing scenarios that re-host a connector), the parsed triple can be recomputed from `specPath` against the new default host without re-running the user's options.
 
-This is also why the connector calls `RefreshHostname(c.hostname)` in `activateSub` — subs created before `SetHostname` would otherwise hold a stale `Host`.
+This is also why the connector calls `RefreshHostname(c.hostname)` in `activateSub` - subs created before `SetHostname` would otherwise hold a stale `Host`.
+
+### Route hostnames wrap `httpx.ValidateHostname` with a translation pre-pass
+
+`httpx.ValidateHostname` is identity-strict by design (lowercase letters, digits, dots, hyphens; no underscore; no `id-`/`loc-` first segment; not `all` or `*.all`). Subscription routes need to accept a slightly looser shape - cross-host registrations like `//my_.xml/path` or `//my$.xml/path` are legal because the ingress proxy maps URL specials into the hostname segment - so `NewSubscription` and `RefreshHostname` route the parsed hostname through a private helper `validateRouteHostname` before storing it.
+
+The helper does three things, in order:
+
+1. Lowercases the input. Routes are accepted in mixed case (`//UPPERCASE.xml/path`) so they match request URLs after equivalent normalization downstream. The path portion stays case-sensitive because it lives in `u.Path`, separate from `u.Hostname()`.
+2. Short-circuits when the canonical input is exactly `all`. The framework registers control-plane mirror subscriptions on `//all<route>` and needs them to validate; `all` is rejected by `httpx.ValidateHostname` (it's a reserved broadcast hostname for identities), so this carve-out is necessary at the route layer.
+3. Otherwise applies the **`x` translation pre-pass** and hands the result to `httpx.ValidateHostname`. The pre-pass (`translateHostnameSpecials`) replaces every byte outside `[a-zA-Z0-9.-]` with the placeholder `x`. So `my_.xml` becomes `myx.xml`, `my$.xml` becomes `myx.xml`, both pass the strict check, and the *original* hostname is what gets stored on the `Subscription`.
+
+The translation is a hack to reuse the single strict validator for two slightly different shapes. It lives privately inside the `sub` package - exporting it from `httpx` would invite ad-hoc reuse in places that should just call `ValidateHostname` directly. The strict-validator rules still apply to the substituted form, so `id-foo.bar` and `loc-us` are rejected even when registered as routes (the reserved-prefix bytes survive the translation unchanged).
+
+The asymmetry between identity and route hostnames is intentional: identity is the wire-form name that NATS ACLs and the verified-source path pin against; route hostnames are URL patterns where the ingress proxy may need to encode URL-special characters into the hostname segment. The same `Connector` typically owns both - its identity passes the strict check directly, and any additional `//other.host/path` routes pass through the translation pre-pass.
 
 ### `Subscription.Subs` is the connector piggybacking on this struct
 
@@ -32,7 +46,7 @@ The duplication is intentional: `sub` does not import `openapi` (which would be 
 
 ### `Infra` / `Ultra` and `NoTrace` / `Trace` are reset pairs, not toggle pairs
 
-`Infra()` and `NoTrace()` are the meaningful options. `Ultra()` and `Trace()` reset them — they exist to undo a prior `Infra` or `NoTrace` in a programmatically composed option list. In hand-written code you almost never call `Ultra` or `Trace`; the defaults already match.
+`Infra()` and `NoTrace()` are the meaningful options. `Ultra()` and `Trace()` reset them - they exist to undo a prior `Infra` or `NoTrace` in a programmatically composed option list. In hand-written code you almost never call `Ultra` or `Trace`; the defaults already match.
 
 `Infra` is currently used by the distributed cache only. See `connector/CLAUDE.md` for what the flag actually does to the activation/deactivation schedule.
 
@@ -44,9 +58,9 @@ The `RequiredClaims(boolExp)` option calls `boolexp.Eval(boolExp, nil)` at optio
 
 The `knownMethods` map enumerates the methods accepted on a subscription: the nine HTTP methods from RFC 9110 §9 (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH) plus the framework wildcard `ANY` meaning "match any method." Input is normalized to uppercase before lookup, so callers can write `Method("post")` or `Method("Get")` and the stored `Subscription.Method` is always uppercase.
 
-Unknown tokens (typos like `POSTT`, made-up verbs like `INFO`, or empty strings) fail at option-application time with `405 Method Not Allowed` — `Method(...)` and `At(...)` validate inside the option closure, so the error surfaces at the offending call site rather than later in `NewSubscription`. `NewSubscription` re-checks the final `Method` value as a defensive central guard.
+Unknown tokens (typos like `POSTT`, made-up verbs like `INFO`, or empty strings) fail at option-application time with `405 Method Not Allowed` - `Method(...)` and `At(...)` validate inside the option closure, so the error surfaces at the offending call site rather than later in `NewSubscription`. `NewSubscription` re-checks the final `Method` value as a defensive central guard.
 
-The connector enforces a stricter set on the inbound request path (see `connector/subscribe.go` — its own `validRequestMethods` map). That set excludes `ANY` because `ANY` is a subscription-side match-anything sentinel and should never appear on the wire. The two sets are deliberately separate: the sub package owns the registration-time vocabulary; the connector owns the wire-time vocabulary. Keeping them in lockstep is a manual concern — if you add a new method here, mirror it there.
+The connector enforces a stricter set on the inbound request path (see `connector/subscribe.go` - its own `validRequestMethods` map). That set excludes `ANY` because `ANY` is a subscription-side match-anything sentinel and should never appear on the wire. The two sets are deliberately separate: the sub package owns the registration-time vocabulary; the connector owns the wire-time vocabulary. Keeping them in lockstep is a manual concern - if you add a new method here, mirror it there.
 
 ### Path argument validation is strict and fail-fast
 

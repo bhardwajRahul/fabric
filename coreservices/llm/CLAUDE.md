@@ -1,8 +1,14 @@
+# llm.core
+
+## Agent Instructions
+
+This microservice implements agentic workflows. See `.claude/rules/workflows.txt` for the conventions.
+
 ## Design Rationale
 
 ### Caller-Selected Provider and Model
 
-`Chat` takes `provider` and `model` as required arguments. There is no `ProviderHostname` config and providers no longer carry a `Model` config — every call site picks both. This was a deliberate breaking change in v1.28.0:
+`Chat` takes `provider` and `model` as required arguments. There is no `ProviderHostname` config and providers no longer carry a `Model` config - every call site picks both. This was a deliberate breaking change in v1.28.0:
 
 - **Provider** is a *capability* choice (different schemas, tool-calling behavior, rate limits). Caller must know.
 - **Model** is a *cost* choice (Opus is ~100x the cost of Haiku). Hiding it behind a config is dangerous; an operator config edit could silently change a service's spend by orders of magnitude. Forcing it into the signature makes cost visible at every call site.
@@ -11,7 +17,7 @@ Each provider's `*api` package exports typed model constants (e.g. `claudellmapi
 
 ### `Turn` on `llm.core` is a stub
 
-The `Turn` endpoint is part of the contract that provider microservices implement. `llm.core` itself is not a provider — calling its `Turn` endpoint returns 501. Use `llmapi.NewClient(svc).ForHost(<providerHost>).Turn(...)` to invoke a specific provider directly, or use `Chat` for the conversation loop.
+The `Turn` endpoint is part of the contract that provider microservices implement. `llm.core` itself is not a provider - calling its `Turn` endpoint returns 501. Use `llmapi.NewClient(svc).ForHost(<providerHost>).Turn(...)` to invoke a specific provider directly, or use `Chat` for the conversation loop.
 
 The endpoint stub is registered (rather than removed) because `llmapi.Turn.URL()` is referenced elsewhere as the canonical form of the contract.
 
@@ -33,7 +39,7 @@ Each provider's `Turn` populates `llmapi.Usage` with input/output/cache-read/cac
 - The `gen_ai.system` attribute requires a hostname-to-vendor mapping (`claude.llm.core` → `"anthropic"`, etc.) that doesn't exist natively in Microbus and would couple `llm.core` to the set of known providers.
 - The spec doesn't yet standardize cache read/write tokens, which are first-class in `Usage`.
 
-If/when external GenAI dashboard compatibility is needed, the OTel metric can be emitted in parallel as a second metric — both can coexist. The `Usage` struct already carries everything needed; only the attribute key mapping and a histogram emission would be added in `logCompletion`.
+If/when external GenAI dashboard compatibility is needed, the OTel metric can be emitted in parallel as a second metric - both can coexist. The `Usage` struct already carries everything needed; only the attribute key mapping and a histogram emission would be added in `logCompletion`.
 
 `ChatLoop` workflow accumulates usage in flow state via `ProcessResponse` (which `Add`s the per-turn `turnUsage` into the running `usage` key) and exposes `messages` and `usage` as declared workflow outputs.
 

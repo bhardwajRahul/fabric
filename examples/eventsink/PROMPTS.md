@@ -10,8 +10,8 @@ A package-level `map[string][]string` named `registrations`, keyed by deployment
 
 Two inbound event handlers sourced from `github.com/microbus-io/fabric/examples/eventsource`:
 
-- `OnAllowRegister` — signature `OnAllowRegister(email string) (allow bool)`. Blocks registrations matching `@gmail.com`, `.gmail.com`, `@hotmail.com`, or `.hotmail.com` (case-insensitive). Also blocks emails already present in the `registrations` map for the current plane. Uses `mail.ParseAddress` to normalize the email. Returns `false` for any parse error or blocked domain/duplicate; returns `true` otherwise.
-- `OnRegistered` — signature `OnRegistered(email string)`. Appends the lowercased email to the `registrations` slice for the current plane under the mutex.
+- `OnAllowRegister` - signature `OnAllowRegister(email string) (allow bool)`. Blocks registrations matching `@gmail.com`, `.gmail.com`, `@hotmail.com`, or `.hotmail.com` (case-insensitive). Also blocks emails already present in the `registrations` map for the current plane. Uses `mail.ParseAddress` to normalize the email. Returns `false` for any parse error or blocked domain/duplicate; returns `true` otherwise.
+- `OnRegistered` - signature `OnRegistered(email string)`. Appends the lowercased email to the `registrations` slice for the current plane under the mutex.
 
 Both handlers log at `Info` level (`svc.LogInfo`) with the `email` attribute.
 
@@ -19,7 +19,7 @@ Both handlers log at `Info` level (`svc.LogInfo`) with the `email` attribute.
 
 One functional endpoint:
 
-- `Registered` on `ANY :443/registered` — returns `emails []string`. Copies the registrations slice for the current plane under the mutex and returns it. Returns an empty slice (not nil) if no registrations exist.
+- `Registered` on `ANY :443/registered` - returns `emails []string`. Copies the registrations slice for the current plane under the mutex and returns it. Returns an empty slice (not nil) if no registrations exist.
 
 ## Non-obvious Details
 

@@ -209,7 +209,6 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 	}
 	// Set critical claims last so they cannot be overridden by transformers
 	jwtClaims["iss"] = svc.issClaim
-	jwtClaims["microbus"] = "1"
 	jwtClaims["iat"] = now.Add(-5 * time.Minute).Unix()                   // 5 minutes in the past
 	jwtClaims["exp"] = now.Add(svc.AuthTokenTTL() + 5*time.Minute).Unix() // 5 minutes of grace for clock skew
 	jwtClaims["jti"] = utils.RandomIdentifier(24)

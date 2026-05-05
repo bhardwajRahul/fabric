@@ -18,11 +18,7 @@ general:
   description: The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.
   package: github.com/microbus-io/fabric/coreservices/configurator
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
-
-downstream:
-  - hostname: control.core
-    package: github.com/microbus-io/fabric/coreservices/control
+  modifiedAt: "2026-05-08T04:06:18Z"
 
 functions:
   Values:
@@ -32,7 +28,9 @@ functions:
     route: :888/values
   Refresh:
     signature: Refresh()
-    description: Refresh tells all microservices to contact the configurator and refresh their configs. An error is returned if any of the values sent to the microservices fails validation.
+    description: |-
+      Refresh tells all microservices to contact the configurator and refresh their configs.
+      An error is returned if any of the values sent to the microservices fails validation.
     method: ANY
     route: :444/refresh
   SyncRepo:
@@ -60,5 +58,5 @@ functions:
 tickers:
   PeriodicRefresh:
     signature: PeriodicRefresh()
-    description: PeriodicRefresh refreshes all microservice configs every 20 minutes.
+    description: PeriodicRefresh tells all microservices to contact the configurator and refresh their configs.
     interval: 20m

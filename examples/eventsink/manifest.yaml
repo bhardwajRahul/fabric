@@ -18,7 +18,7 @@ general:
   description: The event sink microservice handles events that are fired by the event source microservice.
   package: github.com/microbus-io/fabric/examples/eventsink
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
+  modifiedAt: "2026-05-08T03:27:46Z"
 
 functions:
   Registered:
@@ -31,8 +31,8 @@ inboundEvents:
   OnAllowRegister:
     signature: OnAllowRegister(email string) (allow bool)
     description: OnAllowRegister blocks registrations from gmail and hotmail domains.
-    source: github.com/microbus-io/fabric/examples/eventsource
+    package: github.com/microbus-io/fabric/examples/eventsource
   OnRegistered:
     signature: OnRegistered(email string)
     description: OnRegistered keeps track of registrations.
-    source: github.com/microbus-io/fabric/examples/eventsource
+    package: github.com/microbus-io/fabric/examples/eventsource

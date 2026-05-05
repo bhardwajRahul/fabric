@@ -15,27 +15,36 @@
 general:
   name: Control
   hostname: control.core
-  description: This microservice is created for the sake of generating the client API for the :888 control subscriptions. The microservice itself does nothing and should not be included in applications.
+  description: |-
+    This microservice is created for the sake of generating the client API for the :888 control subscriptions.
+    The microservice itself does nothing and should not be included in applications.
   package: github.com/microbus-io/fabric/coreservices/control
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:31Z"
+  modifiedAt: "2026-05-06T03:01:14Z"
+
+outboundEvents:
+  OnNewSubs:
+    signature: OnNewSubs()
+    description: OnNewSubs informs of new subscriptions.
+    method: POST
+    route: :888/on-new-subs
 
 functions:
   Ping:
     signature: Ping() (pong int)
-    description: Ping responds with a pong.
+    description: Ping responds to the message with a pong.
     method: ANY
     route: :888/ping
     loadBalancing: none
   ConfigRefresh:
     signature: ConfigRefresh()
-    description: ConfigRefresh pulls the latest config values.
+    description: ConfigRefresh pulls the latest config values from the configurator microservice.
     method: ANY
     route: :888/config-refresh
     loadBalancing: none
   Trace:
     signature: Trace(id string)
-    description: Trace forces exporting a tracing span.
+    description: Trace forces exporting the indicated tracing span.
     method: ANY
     route: :888/trace
     loadBalancing: none
@@ -44,18 +53,10 @@ functions:
     description: OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their ingress boundary.
     method: GET
     route: :888/openapi.json
-    loadBalancing: default
 
 webs:
   Metrics:
-    description: Metrics returns Prometheus metrics.
+    description: Metrics returns the Prometheus metrics collected by the microservice.
     method: ANY
     route: :888/metrics
     loadBalancing: none
-
-outboundEvents:
-  OnNewSubs:
-    signature: OnNewSubs()
-    description: OnNewSubs informs of new subscriptions.
-    method: POST
-    route: :888/on-new-subs

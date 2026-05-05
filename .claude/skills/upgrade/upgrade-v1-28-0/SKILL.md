@@ -23,12 +23,12 @@ Upgrade a Microbus project to v1.28.0:
 
 #### Step 1: Find All `CLAUDE.md` Files to Process
 
-Find every `CLAUDE.md` file in the project. Exclude any files located under `.claude/skills/` — those are skill templates maintained separately.
+Find every `CLAUDE.md` file in the project. Exclude any files located under `.claude/skills/` - those are skill templates maintained separately.
 
 For each `CLAUDE.md`, check whether an `AGENTS.md` exists in the same directory. Build two lists:
 
 - **To merge**: directories that contain both `CLAUDE.md` and `AGENTS.md`
-- **Skip**: directories that contain `CLAUDE.md` but no `AGENTS.md` — leave these untouched
+- **Skip**: directories that contain `CLAUDE.md` but no `AGENTS.md` - leave these untouched
 
 #### Step 2: Merge `AGENTS.md` Into `CLAUDE.md`
 
@@ -84,14 +84,14 @@ New signature:
 messagesOut, usage, err := llmapi.NewClient(svc).Chat(ctx, "", "", messages, toolURLs, nil)
 ```
 
-The `provider` and `model` arguments are required and the new `Chat` returns `400 Bad Request` if either is empty. **The skill cannot synthesize correct values for these from the project alone** — they used to come from operator config that has been removed. Pass empty strings `""` for both and add a `// TODO:` comment immediately above the call explaining what the developer must fill in. Empty strings (rather than placeholder identifiers like `"TODO_LLM_PROVIDER"`) are preferred because they fail loudly at runtime with the new validation, and they don't risk slipping past `go vet` into a deploy. After all edits, emit a migration warning to the user listing every call site touched.
+The `provider` and `model` arguments are required and the new `Chat` returns `400 Bad Request` if either is empty. **The skill cannot synthesize correct values for these from the project alone** - they used to come from operator config that has been removed. Pass empty strings `""` for both and add a `// TODO:` comment immediately above the call explaining what the developer must fill in. Empty strings (rather than placeholder identifiers like `"TODO_LLM_PROVIDER"`) are preferred because they fail loudly at runtime with the new validation, and they don't risk slipping past `go vet` into a deploy. After all edits, emit a migration warning to the user listing every call site touched.
 
 If the call site already imports a specific provider's `*api` package, suggest the matching typed model constants:
 - `claudellmapi.Hostname` + `claudellmapi.ModelHaiku45` / `ModelSonnet46` / `ModelOpus47`
 - `chatgptllmapi.Hostname` + `chatgptllmapi.ModelGPT4o` / `ModelGPT4oMini` / `ModelGPT4`
 - `geminillmapi.Hostname` + `geminillmapi.ModelGemini20Flash` / `ModelGemini15Pro`
 
-The result is now a 3-tuple `(messagesOut, usage, err)` — callers that destructure should add a discard for `usage` if they don't care about it.
+The result is now a 3-tuple `(messagesOut, usage, err)` - callers that destructure should add a discard for `usage` if they don't care about it.
 
 **b. Find all callers of `llmapi.Turn` (rare; usually only in test mocks).**
 
@@ -108,7 +108,7 @@ New signature:
 content, toolCalls, usage, err := client.Turn(ctx, "", messages, tools, nil)
 ```
 
-`provider` is NOT a `Turn` argument — `Turn` is invoked on a specific provider via `ForHost`. Pass `""` for the model with a `// TODO:` comment, same convention as Chat.
+`provider` is NOT a `Turn` argument - `Turn` is invoked on a specific provider via `ForHost`. Pass `""` for the model with a `// TODO:` comment, same convention as Chat.
 
 **c. Find all callers of `llmapi.Executor.ChatLoop` (rare; usually only in workflow integration tests).**
 
@@ -123,7 +123,7 @@ New signature:
 messagesOut, usage, status, err := exec.ChatLoop(ctx, "", "", messages, tools, nil)
 ```
 
-Same `""` + `// TODO:` convention as `Chat`. Note the return order changed — `usage` was inserted before `status`. Callers that destructure should update accordingly.
+Same `""` + `// TODO:` convention as `Chat`. Note the return order changed - `usage` was inserted before `status`. Callers that destructure should update accordingly.
 
 If the project triggers the `ChatLoop` workflow indirectly via `foremanapi.Run` or any other workflow runner (passing initial state as a `map[string]any`), the initial state must now include `"provider"` and `"model"` keys. The workflow's declared inputs were extended in v1.28.0 from `("messages", "tools")` to `("provider", "model", "messages", "tools", "options")`.
 
@@ -179,7 +179,7 @@ These configs no longer exist; leaving them produces a runtime warning about unk
 
 **h. Drop `SetProviderHostname` and `SetModel` calls from test setup.**
 
-Search Go test files for `.SetProviderHostname(` or `<llm-service-var>.SetModel(` and delete those lines — the methods no longer exist. Provider/model are now passed to each `Chat` call directly.
+Search Go test files for `.SetProviderHostname(` or `<llm-service-var>.SetModel(` and delete those lines - the methods no longer exist. Provider/model are now passed to each `Chat` call directly.
 
 **i. `TurnCompletion` type removal.**
 
@@ -196,7 +196,7 @@ and grep for the `// TODO:` comments inserted at every migrated `Chat`, `Turn`, 
 
 #### Step 7: Audit `env.yaml` / `env.Push` Semantics Flip
 
-v1.28.0 changed how the `env` package loads YAML files. Pre-1.28 loaded values into an in-memory shadow store that `env.Get` consulted ahead of `os.Getenv` — yaml effectively *overrode* the OS env, and only callers using `env.Get` saw yaml values. v1.28 writes yaml values through to the real OS environment at package init using dotenv conventions: **OS env now wins over yaml**, and yaml values are visible to every consumer of `os.Getenv` (third-party SDKs included).
+v1.28.0 changed how the `env` package loads YAML files. Pre-1.28 loaded values into an in-memory shadow store that `env.Get` consulted ahead of `os.Getenv` - yaml effectively *overrode* the OS env, and only callers using `env.Get` saw yaml values. v1.28 writes yaml values through to the real OS environment at package init using dotenv conventions: **OS env now wins over yaml**, and yaml values are visible to every consumer of `os.Getenv` (third-party SDKs included).
 
 Two specific things can silently break:
 
@@ -206,29 +206,29 @@ If a project's `env.yaml` (or `env.local.yaml`) contains keys that operators *al
 - Pre-1.28: yaml entry won (in-memory store consulted first by `env.Get`).
 - v1.28+: OS entry wins (yaml is only applied when the key is absent from the OS env).
 
-Read every `env.yaml` and `env.local.yaml` in the project. For each key, ask: *is this key also commonly set via the deployment environment?* The high-risk keys to call out explicitly to the user are `MICROBUS_NATS`, `MICROBUS_NATS_USER`, `MICROBUS_NATS_PASSWORD`, `MICROBUS_NATS_TOKEN`, `MICROBUS_DEPLOYMENT`, `MICROBUS_PLANE`, `MICROBUS_LOCALITY`, `MICROBUS_LOG_DEBUG`, anything starting with `OTEL_`, `AWS_`, `GOOGLE_`, or `GCP_`. If any of these appear in a yaml file, emit a warning listing the file, the key, and a one-line note that the deployed value will now win over the yaml value. Do not delete or edit the yaml entries — the developer must decide whether to keep them as fallbacks (the new behavior) or remove them.
+Read every `env.yaml` and `env.local.yaml` in the project. For each key, ask: *is this key also commonly set via the deployment environment?* The high-risk keys to call out explicitly to the user are `MICROBUS_NATS`, `MICROBUS_NATS_USER`, `MICROBUS_NATS_PASSWORD`, `MICROBUS_NATS_TOKEN`, `MICROBUS_DEPLOYMENT`, `MICROBUS_PLANE`, `MICROBUS_LOCALITY`, `MICROBUS_LOG_DEBUG`, anything starting with `OTEL_`, `AWS_`, `GOOGLE_`, or `GCP_`. If any of these appear in a yaml file, emit a warning listing the file, the key, and a one-line note that the deployed value will now win over the yaml value. Do not delete or edit the yaml entries - the developer must decide whether to keep them as fallbacks (the new behavior) or remove them.
 
 **b. `env.Push` + `t.Parallel()`.**
 
-Pre-1.28 `env.Push` mutated only the in-memory shadow store, so concurrent tests using `Push` did not race. v1.28 `env.Push` mutates the real OS env via `os.Setenv` (the whole point — third-party SDKs that read `os.Getenv` must see the test's overrides). The OS env is process-global, so any test that calls `env.Push` *must not* call `t.Parallel()`, and tests in the same package using `Push` must run serially.
+Pre-1.28 `env.Push` mutated only the in-memory shadow store, so concurrent tests using `Push` did not race. v1.28 `env.Push` mutates the real OS env via `os.Setenv` (the whole point - third-party SDKs that read `os.Getenv` must see the test's overrides). The OS env is process-global, so any test that calls `env.Push` *must not* call `t.Parallel()`, and tests in the same package using `Push` must run serially.
 
 Grep across `*_test.go` for files that contain both `env.Push(` and `t.Parallel()`. For each file, check whether any test that calls `env.Push` (directly or indirectly via a helper) is marked parallel. The fix is to remove `t.Parallel()` from those specific test functions. Emit a list of suspect file:line locations to the user; do not auto-edit because the relationship between Push call sites and parallel markers may be indirect (helpers, table-driven tests).
 
 #### Step 8: Validate Subscription HTTP Methods
 
-v1.28.0 validates HTTP method strings at subscription registration time. Only the standard verbs — `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` — and the wildcard `ANY` are accepted. Matching is case-insensitive. Any other method string causes the microservice to fail at startup with a registration error.
+v1.28.0 validates HTTP method strings at subscription registration time. Only the standard verbs - `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` - and the wildcard `ANY` are accepted. Matching is case-insensitive. Any other method string causes the microservice to fail at startup with a registration error.
 
 Audit two surfaces:
 
 **a. Manifest `method:` fields.**
 
-Grep all `manifest.yaml` files for `method:` entries (under `webs:`, `functions:`, `outboundEvents:`). For each value, check that it is one of the accepted tokens (case-insensitive). Common offenders: typos like `Get` vs `GET` (now fine, case-insensitive), and non-standard verbs like `SEARCH`, `LINK`, `MKCOL`, `PROPFIND`, `LOCK`. The value `ANY` is accepted; `*` is *not* — a remnant `*` from a much older Microbus version would now be rejected (it was already deprecated in milestone 24 in favor of `ANY`).
+Grep all `manifest.yaml` files for `method:` entries (under `webs:`, `functions:`, `outboundEvents:`). For each value, check that it is one of the accepted tokens (case-insensitive). Common offenders: typos like `Get` vs `GET` (now fine, case-insensitive), and non-standard verbs like `SEARCH`, `LINK`, `MKCOL`, `PROPFIND`, `LOCK`. The value `ANY` is accepted; `*` is *not* - a remnant `*` from a much older Microbus version would now be rejected (it was already deprecated in milestone 24 in favor of `ANY`).
 
 **b. Hand-rolled `sub.At` / `sub.Method` calls in service code.**
 
 Grep `*.go` files for `sub.At(` and `sub.Method(`. The first argument to each is the HTTP method. Validate the same way.
 
-If anything fails the check, list the file, line, and offending value to the user. Do not auto-edit unless the offending value is `*` — that one has a clear mechanical replacement to `ANY`. Anything else (custom verbs) requires a design call about whether to use `ANY` and dispatch internally, or whether the endpoint should be removed.
+If anything fails the check, list the file, line, and offending value to the user. Do not auto-edit unless the offending value is `*` - that one has a clear mechanical replacement to `ANY`. Anything else (custom verbs) requires a design call about whether to use `ANY` and dispatch internally, or whether the endpoint should be removed.
 
 #### Step 9: Heads-Up Audits
 

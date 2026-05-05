@@ -21,6 +21,6 @@ Expose one endpoint:
 
 ### Config Properties
 
-- `BaseURL` — Gemini API base URL, default `https://generativelanguage.googleapis.com`, validated as URL.
-- `APIKey` — Google API key, `secret: true`.
-- `Model` — Gemini model identifier, default `gemini-2.0-flash`.
+- `BaseURL` - Gemini API base URL, default `https://generativelanguage.googleapis.com`, validated as URL.
+- `APIKey` - Google API key, `secret: true`.
+- `Model` - Gemini model identifier, default `gemini-2.0-flash`.

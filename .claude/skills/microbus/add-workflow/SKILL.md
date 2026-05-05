@@ -34,6 +34,18 @@ Creating or modifying a workflow graph:
 
 Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
+Ensure the local `CLAUDE.md` advertises that this microservice implements agentic workflows. The Agent Instructions block holds one short paragraph per instruction so multiple instructions (workflows, SQL, auth) can coexist as separate paragraphs. The paragraph to add is:
+
+```markdown
+This microservice implements agentic workflows. See `.claude/rules/workflows.txt` for the conventions.
+```
+
+How to apply:
+
+- If the file does not exist, create it with the hostname as an H1 heading, then add an `## Agent Instructions` section containing the paragraph above.
+- If the file exists and already has an `## Agent Instructions` section, append the paragraph (separated by a blank line) after the existing instructions; skip if a workflows-related paragraph is already present.
+- If the file exists but has no `## Agent Instructions` section, insert one as the first section after the H1 hostname heading and add the paragraph.
+
 #### Step 2: Determine Signature
 
 Determine the input and output fields of the workflow. Inputs are the state fields the workflow expects from its caller. Outputs are the state fields the workflow produces as its result. The signature is documentation only - it describes the workflow's expected state contract but does not generate typed code. The actual state is `map[string]any`.
@@ -147,6 +159,16 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 	return graph, nil
 }
 ```
+
+**Reducers for fan-in fields.** When parallel branches converge, state fields whose names start with a recognized prefix get a reducer automatically:
+
+- `sum*` - numeric add
+- `list*` - array append (duplicates kept)
+- `set*` - polymorphic: array union (dedupe) or object merge (new key wins)
+
+The character right after the prefix must be uppercase (e.g. `sumScore`, `listMessages`, `setUsers`). For new graphs, prefer naming fan-in state fields with these prefixes - no explicit reducer configuration is needed.
+
+`graph.SetReducer(field, reducer)` is the escape hatch for fields whose names are dictated by an external schema or pre-existing API surface and cannot follow the convention.
 
 #### Step 9: Define the Marshaler Function
 

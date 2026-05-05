@@ -18,15 +18,14 @@ general:
   description: The Login microservice demonstrates usage of authentication and authorization.
   package: github.com/microbus-io/fabric/examples/login
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T03:54:51Z"
-
-downstream:
-  - hostname: bearer.token.core
-    package: github.com/microbus-io/fabric/coreservices/bearertoken
+  modifiedAt: "2026-05-08T04:06:20Z"
 
 webs:
   Login:
-    description: Login renders a simple login screen that authenticates a user.
+    description: |-
+      Login renders a simple login screen that authenticates a user.
+      Known users are hardcoded as "admin", "manager" and "user".
+      The password is "password".
     method: ANY
     route: /login
   Logout:
@@ -34,7 +33,9 @@ webs:
     method: ANY
     route: /logout
   Welcome:
-    description: Welcome renders a page that is shown to the user after a successful login. Rendering is adjusted based on the user's roles.
+    description: |-
+      Welcome renders a page that is shown to the user after a successful login.
+      Rendering is adjusted based on the user's roles.
     method: ANY
     route: /welcome
     requiredClaims: roles.a || roles.m || roles.u

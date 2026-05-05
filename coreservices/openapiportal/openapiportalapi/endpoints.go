@@ -21,7 +21,7 @@ import (
 )
 
 // Hostname is the default hostname of the microservice.
-const Hostname = "openapiportal.core"
+const Hostname = "openapi.core"
 
 // Def is the routing identity of an endpoint exposed by this microservice.
 type Def struct {

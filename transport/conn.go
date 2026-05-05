@@ -61,9 +61,23 @@ type Conn struct {
 	mux                 sync.Mutex
 }
 
-// Open opens the transport.
-// It optionally connects to the NATS cluster based on settings in the environment variables.
-func (c *Conn) Open(ctx context.Context, logger Logger) error {
+// resolveArtifact returns the path of an auth artifact in CWD: the per-service
+// form {hostname}_{artifact} if it exists, else the bare {artifact}, else "".
+func resolveArtifact(hostname, artifact string) string {
+	stat := func(p string) bool { _, err := os.Stat(p); return err == nil }
+	if hostname != "" {
+		if prefixed := hostname + "_" + artifact; stat(prefixed) {
+			return prefixed
+		}
+	}
+	if stat(artifact) {
+		return artifact
+	}
+	return ""
+}
+
+// Open opens the transport. hostname drives per-service auth-artifact lookup (pass "" to skip).
+func (c *Conn) Open(ctx context.Context, hostname string, logger Logger) error {
 	if v := env.Get("MICROBUS_SHORT_CIRCUIT"); v == "0" || strings.EqualFold(v, "false") {
 		c.shortCircuitEnabled.Store(false)
 	} else {
@@ -87,12 +101,29 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 	hasher.Write([]byte(u))
 	hasher.Write([]byte{'|'})
 
-	// Credentials
+	// Deprecated env-var auth. Kept functional for backward compatibility;
 	user := env.Get("MICROBUS_NATS_USER")
 	pw := env.Get("MICROBUS_NATS_PASSWORD")
 	token := env.Get("MICROBUS_NATS_TOKEN")
 	userJWT := env.Get("MICROBUS_NATS_USER_JWT")
 	seed := env.Get("MICROBUS_NATS_NKEY_SEED")
+	if logger != nil {
+		var deprecated []string
+		for _, name := range []string{
+			"MICROBUS_NATS_USER", "MICROBUS_NATS_PASSWORD", "MICROBUS_NATS_TOKEN",
+			"MICROBUS_NATS_USER_JWT", "MICROBUS_NATS_NKEY_SEED",
+		} {
+			if env.Get(name) != "" {
+				deprecated = append(deprecated, name)
+			}
+		}
+		if len(deprecated) > 0 {
+			logger.LogInfo(ctx,
+				"Deprecated NATS env-var auth in use; switch to <hostname>_nats.creds or nats.creds files",
+				"env", strings.Join(deprecated, ","),
+			)
+		}
+	}
 	if user != "" && pw != "" {
 		hasher.Write([]byte(user))
 		hasher.Write([]byte{'|'})
@@ -113,33 +144,29 @@ func (c *Conn) Open(ctx context.Context, logger Logger) error {
 		opts = append(opts, nats.UserJWTAndSeed(userJWT, seed))
 	}
 
-	// Root CA and client certs
-	exists := func(fileName string) bool {
-		_, err := os.Stat(fileName)
-		return err == nil
+	// Root CA, client cert/key, and NATS user creds.
+	if caPath := resolveArtifact(hostname, "ca.pem"); caPath != "" {
+		content, _ := os.ReadFile(caPath)
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
+		opts = append(opts, nats.RootCAs(caPath))
 	}
-	if exists("ca.pem") {
-		content, _ := os.ReadFile("ca.pem")
+	certPath := resolveArtifact(hostname, "cert.pem")
+	keyPath := resolveArtifact(hostname, "key.pem")
+	if certPath != "" && keyPath != "" {
+		content, _ := os.ReadFile(certPath)
 		hasher.Write(content)
 		hasher.Write([]byte{'|'})
-		opts = append(opts, nats.RootCAs("ca.pem"))
+		content, _ = os.ReadFile(keyPath)
+		hasher.Write(content)
+		hasher.Write([]byte{'|'})
+		opts = append(opts, nats.ClientCert(certPath, keyPath))
 	}
-	if exists("cert.pem") && exists("key.pem") {
-		content, _ := os.ReadFile("cert.pem")
+	if credsPath := resolveArtifact(hostname, "nats.creds"); credsPath != "" {
+		content, _ := os.ReadFile(credsPath)
 		hasher.Write(content)
 		hasher.Write([]byte{'|'})
-		content, _ = os.ReadFile("key.pem")
-		hasher.Write(content)
-		hasher.Write([]byte{'|'})
-		opts = append(opts, nats.ClientCert("cert.pem", "key.pem"))
-	}
-
-	// Creds file
-	if exists("nats.creds") {
-		content, _ := os.ReadFile("nats.creds")
-		hasher.Write(content)
-		hasher.Write([]byte{'|'})
-		opts = append(opts, nats.UserCredentials("nats.creds"))
+		opts = append(opts, nats.UserCredentials(credsPath))
 	}
 
 	// Other options
@@ -282,7 +309,7 @@ func (c *Conn) Publish(subject string, httpReq *http.Request) (err error) {
 
 	// Use short-circuit for multicast only if NATS is disabled, because all subscribers, not just local ones, must be reached
 	if shortCircuitEnabled {
-		_, err = c.deliverWithShortCircuit(subject, &Msg{Request: httpReq})
+		_, err = c.deliverWithShortCircuit(subject, &Msg{Subject: subject, Request: httpReq})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -302,7 +329,7 @@ func (c *Conn) Request(subject string, httpReq *http.Request) (err error) {
 
 	if shortCircuitEnabled {
 		// Try over short circuit
-		ok, err := c.deliverWithShortCircuit(subject, &Msg{Request: httpReq})
+		ok, err := c.deliverWithShortCircuit(subject, &Msg{Subject: subject, Request: httpReq})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -342,7 +369,7 @@ func (c *Conn) Response(subject string, httpRes *http.Response) (err error) {
 
 	if shortCircuitEnabled {
 		// Try over short circuit
-		ok, err := c.deliverWithShortCircuit(subject, &Msg{Response: httpRes})
+		ok, err := c.deliverWithShortCircuit(subject, &Msg{Subject: subject, Response: httpRes})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -407,7 +434,7 @@ func (c *Conn) deliverWithShortCircuit(subject string, msg *Msg) (delivered bool
 	}
 	if msg.Data != nil {
 		for _, h := range handlers {
-			h(&Msg{Data: msg.Data})
+			h(&Msg{Subject: subject, Data: msg.Data})
 		}
 		return true, nil
 	}
@@ -429,7 +456,7 @@ func (c *Conn) QueueSubscribe(subject string, queue string, handler MsgHandler) 
 	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		sub.natsSub, err = natsConn.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
-			handler(&Msg{Data: msg.Data})
+			handler(&Msg{Subject: msg.Subject, Data: msg.Data})
 		})
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -468,7 +495,7 @@ func (c *Conn) Subscribe(subject string, handler MsgHandler) (sub *Subscription,
 	natsConn := c.natsConn.Load()
 	if natsConn != nil {
 		sub.natsSub, err = natsConn.Subscribe(subject, func(msg *nats.Msg) {
-			handler(&Msg{Data: msg.Data})
+			handler(&Msg{Subject: msg.Subject, Data: msg.Data})
 		})
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -556,7 +583,7 @@ func (c *Conn) Latency() time.Duration {
 		}
 	} else if c.shortCircuitEnabled.Load() {
 		// Short circuit only
-		return time.Millisecond * 5
+		return time.Millisecond * 10
 	}
 	// Default to 300ms
 	return time.Millisecond * 300

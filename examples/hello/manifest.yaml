@@ -18,11 +18,18 @@ general:
   description: The Hello microservice demonstrates the various capabilities of a microservice.
   package: github.com/microbus-io/fabric/examples/hello
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-02T14:15:00Z"
+  modifiedAt: "2026-05-08T04:06:20Z"
 
-downstream:
-  - hostname: calculator.example
-    package: github.com/microbus-io/fabric/examples/calculator
+configs:
+  Greeting:
+    signature: Greeting() (value string)
+    description: Greeting to use.
+    default: Hello
+  Repeat:
+    signature: Repeat() (value int)
+    description: Repeat indicates how many times to display the greeting.
+    validation: int [0,100]
+    default: 1
 
 webs:
   Hello:
@@ -53,17 +60,6 @@ webs:
     description: Root is the top-most root page.
     method: ANY
     route: //root
-
-configs:
-  Greeting:
-    description: Greeting to use.
-    signature: Greeting() (value string)
-    default: Hello
-  Repeat:
-    description: Repeat indicates how many times to display the greeting.
-    signature: Repeat() (value int)
-    validation: int [0,100]
-    default: 1
 
 tickers:
   TickTock:

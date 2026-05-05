@@ -1,34 +1,37 @@
 graph TB
-    classDef core fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef svc fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef core fill:#ed2e92,color:#f4f2ef,stroke-width:0px
+    classDef svc fill:#32a7c1,color:#f4f2ef,stroke-width:0px
+    classDef danger fill:#f15922,color:#f4f2ef,stroke-width:0px
     classDef ext fill:#e5f4f3,color:#434343,stroke:#434343
 
     configurator.core[Configurator<br>configurator.core]
-    access.token.core[AccessToken<br>access.token.core]
-    bearer.token.core[BearerToken<br>bearer.token.core]
-    http.ingress.core[HTTP Ingress<br>http.ingress.core] ---> metrics.core[Metrics<br>metrics.core]
-    http.ingress.core ---> bearer.token.core
-    http.ingress.core ---> access.token.core
-    openapiportal.core[OpenAPI Portal<br>openapiportal.core]
-    mcp.core[MCP Portal<br>mcp.core] ---> openapiportal.core
-    foreman.core[Foreman<br>foreman.core] --- foreman.core.db[(SQL)]
-    shell.core[Shell<br>shell.core]
-    llm.core[LLM<br>llm.core] ---> claude.llm.core[Claude LLM<br>claude.llm.core]
-    llm.core ---> openai.llm.core[OpenAI LLM<br>openai.llm.core]
-    llm.core ---> gemini.llm.core[Gemini LLM<br>gemini.llm.core]
-    claude.llm.core ---> http.egress.core
-    openai.llm.core ---> http.egress.core
-    gemini.llm.core ---> http.egress.core
-    chatbox.example[Chatbox<br>chatbox.example]
-    creditflow.example[CreditFlow<br>creditflow.example]
-    browser.example[Browser<br>browser.example] ---> http.egress.core[HTTP Egress<br>http.egress.core]
+    http.egress.core[HTTPEgress<br>http.egress.core] --- http.egress.core.cloud@{shape: cloud, label: "various"}
+    foreman.core[Foreman<br>foreman.core] --->|danger| access.token.core[accesstoken<br>access.token.core]
+    foreman.core --- foreman.core.db[(SQL)]
+    http.ingress.core[HTTPIngress<br>http.ingress.core] --->|danger| access.token.core
+    http.ingress.core --->|danger| bearer.token.core[bearertoken<br>bearer.token.core]
+    llm.core[LLM<br>llm.core]
+    chatgpt.llm.core[ChatGPTLLM<br>chatgpt.llm.core] ---> http.egress.core
+    chatgpt.llm.core --- chatgpt.llm.core.cloud@{shape: cloud, label: "api.openai.com"}
+    claude.llm.core[ClaudeLLM<br>claude.llm.core] ---> http.egress.core
+    claude.llm.core --- claude.llm.core.cloud@{shape: cloud, label: "api.anthropic.com"}
+    gemini.llm.core[GeminiLLM<br>gemini.llm.core] ---> http.egress.core
+    gemini.llm.core --- gemini.llm.core.cloud@{shape: cloud, label: "generativelanguage.googleapis.com"}
+    mcp.core[MCPPortal<br>mcp.core] ---> openapi.core[OpenAPIPortal<br>openapi.core]
+    metrics.core[Metrics<br>metrics.core]
+    browser.example[Browser<br>browser.example] ---> http.egress.core
+    browser.example --- browser.example.cloud@{shape: cloud, label: "various"}
+    calculator.example[Calculator<br>calculator.example]
+    chatbox.example[Chatbox<br>chatbox.example] ---> llm.core
+    creditflow.example[CreditFlow<br>creditflow.example] ---> foreman.core
     eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
-    hello.example[Hello<br>hello.example] ---> calculator.example[Calculator<br>calculator.example]
+    hello.example[Hello<br>hello.example] ---> calculator.example
     helloworld.example[HelloWorld<br>helloworld.example]
-    login.example[Login<br>login.example] ---> bearer.token.core
+    login.example[Login<br>login.example] --->|danger| bearer.token.core
     messaging.example[Messaging<br>messaging.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class hello.example,calculator.example,browser.example,login.example,eventsource.example,eventsink.example,yellowpages.example,helloworld.example,messaging.example,creditflow.example,chatbox.example svc
-    class http.ingress.core,metrics.core,bearer.token.core,access.token.core,http.egress.core,configurator.core,openapiportal.core,mcp.core,foreman.core,llm.core,claude.llm.core,openai.llm.core,gemini.llm.core,shell.core core
-    class yellowpages.example.db,foreman.core.db ext
+    class browser.example,calculator.example,chatbox.example,creditflow.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
+    class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,mcp.core,metrics.core,openapi.core core
+    class access.token.core,bearer.token.core danger
+    class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,browser.example.cloud,yellowpages.example.db ext

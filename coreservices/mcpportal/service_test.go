@@ -116,7 +116,6 @@ func TestMcpportal_HandleInitialize(t *testing.T) {
 	assert.True(ok)
 	_, hasTools := caps["tools"]
 	assert.True(hasTools)
-	// `listChanged` is intentionally absent - see CLAUDE.md.
 	if tools, ok := caps["tools"].(map[string]any); ok {
 		_, hasListChanged := tools["listChanged"]
 		assert.False(hasListChanged)
@@ -130,7 +129,7 @@ func TestMcpportal_HandleInitialize(t *testing.T) {
 func TestMcpportal_InlineSchemaRefs(t *testing.T) {
 	t.Parallel()
 
-	// Build a doc with a chain (Outer → Inner → primitive) and a self-cycle (Loop → Loop).
+	// Build a doc with a chain (Outer -> Inner -> primitive) and a self-cycle (Loop -> Loop).
 	mkObj := func(props map[string]*jsonschema.Schema) *jsonschema.Schema {
 		s := &jsonschema.Schema{Type: "object", Properties: jsonschema.NewProperties()}
 		for k, v := range props {

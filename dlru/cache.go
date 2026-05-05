@@ -149,7 +149,7 @@ func (c *Cache) MaxMemory() int {
 // connector instance (gated upstream by [Connector.distribCache] in the lifecycle code). The
 // subscriptions are tagged with [sub.Infra] so they bracket the user lifecycle: activated
 // before OnStartup runs and deactivated after OnShutdown returns. They also persist in the
-// connector's subscription map across Shutdown→Startup cycles - the connector's normal
+// connector's subscription map across Shutdown->Startup cycles - the connector's normal
 // activate/deactivate flow handles transport state. There is no symmetric stop here: cleanup
 // flows through the connector's infra deactivation pass.
 func (c *Cache) start(ctx context.Context) error {
@@ -179,7 +179,7 @@ func (c *Cache) start(ctx context.Context) error {
 // The cache's basePath is unique per [NewCache] call within a connector, but typical use is
 // one cache per connector keyed off the canonical ":888/dcache" path.
 func (c *Cache) subscriptionName(suffix string) string {
-	// Last path segment, capitalized. e.g. ":888/dcache" → "Dcache" → "DcacheAll".
+	// Last path segment, capitalized. e.g. ":888/dcache" -> "Dcache" -> "DcacheAll".
 	last := c.basePath
 	if i := strings.LastIndex(last, "/"); i >= 0 {
 		last = last[i+1:]
@@ -386,7 +386,7 @@ func (c *Cache) handleRescue(w http.ResponseWriter, r *http.Request) error {
 
 // Close offloads any locally-cached entries to peers and clears the local cache. The
 // underlying subscriptions are owned by the connector and remain in its subscription map
-// across Shutdown→Startup cycles; transport-level cleanup happens via the connector's
+// across Shutdown->Startup cycles; transport-level cleanup happens via the connector's
 // infra deactivation pass.
 func (c *Cache) Close(ctx context.Context) error {
 	c.offload(ctx)

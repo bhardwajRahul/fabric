@@ -238,7 +238,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 /*
 InitChat stores the caller-supplied tools and options in flow state for use by the chat loop.
 */
-func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
+func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, listMessages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
 	if len(tools) > 0 {
 		flow.Set("toolSchemas", tools)
 	}
@@ -259,7 +259,7 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages 
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
+func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, listMessages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
 	// Read tool schemas
 	var tools []llmapi.Tool
 	flow.Get("toolSchemas", &tools)
@@ -269,8 +269,8 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	flow.Get("turnOptions", &turnOpts)
 
 	// Call the LLM
-	svc.logPrompt(ctx, messages)
-	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, messages, tools, turnOpts)
+	svc.logPrompt(ctx, listMessages)
+	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, listMessages, tools, turnOpts)
 	if err != nil {
 		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
@@ -282,13 +282,13 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 /*
 ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
 */
-func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (messagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
+func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (listMessagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// Read internal state
 	var pending []llmapi.ToolCall
 	flow.Get("pendingToolCalls", &pending)
 
 	// Get accumulated response messages and usage
-	flow.Get("messagesOut", &messagesOut)
+	flow.Get("messagesOut", &listMessagesOut)
 	flow.Get("usage", &usageOut)
 	usageOut.Add(turnUsage)
 
@@ -298,12 +298,12 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 		// No tool calls - we're done
 		toolsRequested = false
 		if llmContent != "" {
-			messagesOut = append(messagesOut, llmapi.Message{
+			listMessagesOut = append(listMessagesOut, llmapi.Message{
 				Role:    "assistant",
 				Content: llmContent,
 			})
 		}
-		return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
+		return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
 	// Tool calls present - check round limit
@@ -311,35 +311,35 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 		// Exhausted rounds, return what we have
 		toolsRequested = false
 		if llmContent != "" {
-			messagesOut = append(messagesOut, llmapi.Message{
+			listMessagesOut = append(listMessagesOut, llmapi.Message{
 				Role:    "assistant",
 				Content: llmContent,
 			})
 		}
-		return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
+		return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
 	// Tool calls present - record assistant message and set up forEach
 	toolsRequested = true
 	toolRoundsOut = toolRounds + 1
 	if llmContent != "" {
-		messagesOut = append(messagesOut, llmapi.Message{
+		listMessagesOut = append(listMessagesOut, llmapi.Message{
 			Role:    "assistant",
 			Content: llmContent,
 		})
 		// Also add to conversation history for the LLM
-		var messages []llmapi.Message
-		flow.Get("messages", &messages)
-		messages = append(messages, llmapi.Message{
+		var listMessages []llmapi.Message
+		flow.Get("listMessages", &listMessages)
+		listMessages = append(listMessages, llmapi.Message{
 			Role:    "assistant",
 			Content: llmContent,
 		})
-		flow.Set("messages", messages)
+		flow.Set("listMessages", listMessages)
 	}
-	flow.Set("messagesOut", messagesOut)
+	flow.Set("messagesOut", listMessagesOut)
 	flow.Set("usage", usageOut)
 
-	return messagesOut, toolsRequested, toolRoundsOut, usageOut, nil
+	return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 }
 
 /*
@@ -371,13 +371,13 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 		}
 		resultJSON, _ := json.Marshal(childOutput)
 
-		var messages []llmapi.Message
-		flow.Get("messages", &messages)
-		messages = append(messages, llmapi.Message{
+		var listMessages []llmapi.Message
+		flow.Get("listMessages", &listMessages)
+		listMessages = append(listMessages, llmapi.Message{
 			Role:    "tool",
 			Content: string(resultJSON),
 		})
-		flow.Set("messages", messages)
+		flow.Set("listMessages", listMessages)
 		return true, nil
 	}
 
@@ -423,13 +423,13 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 		return false, errors.Trace(err)
 	}
 
-	var messages []llmapi.Message
-	flow.Get("messages", &messages)
-	messages = append(messages, llmapi.Message{
+	var listMessages []llmapi.Message
+	flow.Get("listMessages", &listMessages)
+	listMessages = append(listMessages, llmapi.Message{
 		Role:    "tool",
 		Content: string(result),
 	})
-	flow.Set("messages", messages)
+	flow.Set("listMessages", listMessages)
 	return true, nil
 }
 
@@ -444,23 +444,22 @@ func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err er
 
 	graph = workflow.NewGraph(llmapi.ChatLoop.URL())
 
-	// InitChat → CallLLM → ProcessResponse
+	// InitChat -> CallLLM -> ProcessResponse
 	graph.AddTransition(initChat, callLLM)
 	graph.AddTransition(callLLM, processResponse)
 
-	// ProcessResponse → END when no tools requested
+	// ProcessResponse -> END when no tools requested
 	graph.AddTransitionWhen(processResponse, workflow.END, "!toolsRequested")
 
-	// ProcessResponse → forEach(pendingToolCalls) → ExecuteTool → CallLLM when tools requested
+	// ProcessResponse -> forEach(pendingToolCalls) -> ExecuteTool -> CallLLM when tools requested
 	graph.AddTransitionForEach(processResponse, executeTool, "pendingToolCalls", "currentTool")
 	graph.AddTransition(executeTool, callLLM)
 
-	// Reducer for messages - fan-in from parallel ExecuteTool branches
-	graph.SetReducer("messages", workflow.ReducerAppend)
+	// listMessages auto-appends at fan-in via the list* prefix convention.
 
 	// Declare inputs and outputs
-	graph.DeclareInputs("provider", "model", "messages", "tools", "options")
-	graph.DeclareOutputs("messages", "usage")
+	graph.DeclareInputs("provider", "model", "listMessages", "tools", "options")
+	graph.DeclareOutputs("listMessages", "usage")
 
 	return graph, nil
 }
