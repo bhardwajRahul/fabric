@@ -34,7 +34,7 @@ cd myproject
 
 Ask your coding agent to bootstrap Microbus:
 
-> Use curl to download the workflow at https://raw.githubusercontent.com/microbus-io/fabric/refs/heads/main/setup/bootstrap.md and follow it
+> curl the workflow at https://microbus.io/bootstrap and follow it
 
 The agent walks through the bootstrap, sets up `.claude/` rules and skills, scaffolds the project, and verifies the build. See [Get Started](https://docs.microbus.io/get-started/) for the full walkthrough.
 
