@@ -1,4 +1,3 @@
-<a id="top"></a>
 <a href="https://www.microbus.io"><img src="./microbus-logo.svg" height="100" alt="Microbus.io logo"></a>
 
 [![License Apache 2](https://img.shields.io/badge/License-Apache2-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
@@ -33,7 +32,7 @@ cd myproject
 
 Ask your coding agent to bootstrap Microbus:
 
-> curl the workflow at https://microbus.io/bootstrap and follow it
+> curl the workflow at microbus.io/bootstrap and follow it
 
 The agent walks through the bootstrap, sets up `.claude/` rules and skills, scaffolds the project, and verifies the build. See [Get Started](https://docs.microbus.io/get-started/) for the full walkthrough.
 
