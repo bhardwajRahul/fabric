@@ -45,16 +45,18 @@ InitIdentityVerification → (fan-out)
   IdentityDecision → END
 ```
 
-## Fault Injection
+## Why no fault injection
 
-The `CreditApproval` workflow accepts a `faultInjection string` as a second input parameter (alongside the `Applicant`). This value is set directly in the workflow state and read by tasks that support special test behaviors. Tasks check `strings.Contains(faultInjection, "...")` to trigger faults:
+Earlier versions of this example carried a `faultInjection string` field on `CreditApprovalIn` that tasks would inspect (`strings.Contains(faultInjection, "Error")`, etc.) to trigger error/retry/sleep/interrupt/timeout/goto behaviors. Those branches were removed: each mechanism now has a focused verification fixture under `verify/`:
 
-- **`"Error"`** - `VerifyCredit` returns an error, triggering the error transition to `HandleCreditError`
-- **`"Retry"`** - `VerifyCredit` retries up to 3 times using `flow.BackoffRetry(3, 0, 0, 0)`
-- **`"Subgraph"`** - `VerifyCredit` dynamically invokes `IdentityVerification` as a child workflow via `flow.Subgraph()`
-- **`"MissingSSN"`** - `VerifySSN` interrupts with `{"request": "ssn"}` to request the SSN from the caller
-- **`"Delay"`** - `VerifyPhoneNumber` sleeps 1.5s to exceed the 1s time budget, causing a timeout failure
-- **`"Sleep"`** - `ReviewCredit` sleeps 200ms before approving, testing the `flow.Sleep` control signal
-- **`"BadGoto"`** - `ReviewCredit` calls `flow.Goto` with a non-existent target, causing the flow to fail
+| Removed fault     | Verifier covering the mechanism                           |
+| ----------------- | --------------------------------------------------------- |
+| `"Error"`         | `verify/errorflow`, `verify/fanouterrorflow`              |
+| `"Retry"`         | `verify/retryflow`                                        |
+| `"Subgraph"`      | `verify/dynamicsubgraphflow`                              |
+| `"MissingSSN"`    | `verify/interruptflow`                                    |
+| `"Delay"`         | `verify/timebudgetflow`                                   |
+| `"Sleep"`         | `verify/sleepflow`                                        |
+| `"BadGoto"`       | `verify/gotoflow` (the `BadGoto` workflow)                |
 
-Multiple faults can be combined in a single string (e.g. `"MissingSSN,Delay"`) since each task uses `strings.Contains`.
+Keeping creditflow a clean example of a *real* workflow shape (without test-only branches) makes it more useful for new readers; the verify microservices stress each mechanism in isolation.

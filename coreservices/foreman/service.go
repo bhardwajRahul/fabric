@@ -1977,6 +1977,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var priorChangesJSON string
 	var breakpointHit bool
 	var attempt int
+	var lineageID int
 	var flowToken string
 	var flowStatus string
 	var workflowName string
@@ -1988,9 +1989,9 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	err = svc.Parallel(
 		func() error {
 			err := db.QueryRowContext(ctx,
-				"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt FROM microbus_steps WHERE step_id=?",
+				"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id FROM microbus_steps WHERE step_id=?",
 				stepID,
-			).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt)
+			).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID)
 			return errors.Trace(err)
 		},
 		func() error {
@@ -2060,7 +2061,15 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 			return errors.Trace(err)
 		}
-		if len(breakpoints) > 0 && breakpoints[taskName] == "b" {
+		// URL fallback fires only when exactly one node uses that URL; aliases must
+		// be addressed by node name.
+		breakpointMatch := breakpoints[taskName] == "b"
+		if !breakpointMatch {
+			if u := graph.URLOf(taskName); u != "" && breakpoints[u] == "b" && len(graph.NamesForURL(u)) == 1 {
+				breakpointMatch = true
+			}
+		}
+		if len(breakpoints) > 0 && breakpointMatch {
 			svc.LogDebug(ctx, "Breakpoint hit", "task", taskName, "step", stepDepth, "flow", workflowName)
 
 			// Build the surgraph chain to interrupt all parent flows atomically
@@ -2152,6 +2161,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var currentFlowStatus string
 	var actorClaims map[string]any
 	errorRouted := false
+	errStatusCode := 0
 	var actorToken string
 
 	// Subgraph handling: if the task is a subgraph, create and start a subgraph flow
@@ -2194,8 +2204,10 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			goto postExecution
 		}
 		if activeSubgraphCount == 0 {
-			// No subgraph flow exists yet - create and start one
-			subgraphGraph, err := svc.fetchGraph(ctx, taskName)
+			// No subgraph flow exists yet - create and start one. The subgraph workflow URL comes from the node's URL,
+			// not its name (these may differ if the node was registered with an explicit name via AddSubgraph(name, url)).
+			subgraphURL := dispatchURLOf(&graph, taskName)
+			subgraphGraph, err := svc.fetchGraph(ctx, subgraphURL)
 			if err != nil {
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 				return errors.Trace(err)
@@ -2205,7 +2217,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 				return errors.Trace(err)
 			}
-			subgraphFlowID, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, stepID, taskName, subgraphGraph, mergedState, actorClaimsJSON, traceParent, breakpointsJSON)
+			subgraphFlowID, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, stepID, subgraphURL, subgraphGraph, mergedState, actorClaimsJSON, traceParent, breakpointsJSON)
 			if err != nil {
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 				return errors.Trace(err)
@@ -2252,9 +2264,11 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		}
 	}
 
-	// Execute the task
+	// Execute the task. taskName is the graph node name; the dispatch URL is resolved
+	// via the graph so a node can address a different URL than its name (used when the
+	// same task is reused at multiple positions in the graph).
 	svc.LogDebug(ctx, "Executing task", "task", taskName, "flow", workflowName)
-	resultFlow, err = svc.executeTask(taskCtx, taskName, flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
+	resultFlow, err = svc.executeTask(taskCtx, dispatchURLOf(&graph, taskName), flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
 	if err != nil {
 		// Record the input state on the span
 		inputState, mergeErr := workflow.MergeState(state, priorChanges, nil)
@@ -2274,6 +2288,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 
 			// Serialize the error as a TracedError into a synthetic result flow
 			tracedErr := errors.Convert(err)
+			errStatusCode = tracedErr.StatusCode
 			resultFlow = workflow.NewRawFlow()
 			resultFlow.SetRawState(state)
 			resultFlow.SetRawChanges(nil)
@@ -2551,55 +2566,33 @@ postExecution:
 		return nil // Step was cancelled concurrently
 	}
 
-	// Error-routed: cancel all siblings at this step depth and skip fan-in.
-	// The error handler runs as a single next step, not as a fan-in merge.
+	// Lineage-based advancement. See workflow/CLAUDE.md "Fan-in is explicit via SetFanIn".
 	if errorRouted {
-		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE flow_id=? AND step_depth=? AND step_id!=? AND status IN (?, ?, ?)",
-			foremanapi.StatusCancelled, flowID, stepDepth, stepID,
+		// Cancel other branches in our cohort. Cancelled members count as cohort
+		// arrivals (no state contribution) so the FanIn isn't blocked waiting for them.
+		res, err := db.ExecContext(ctx,
+			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE flow_id=? AND lineage_id=? AND step_id!=? AND status IN (?, ?, ?)",
+			foremanapi.StatusCancelled, flowID, lineageID, stepID,
 			foremanapi.StatusPending, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
-	} else {
-		// Fan-in check: count unfinished and failed siblings in parallel
-		var unfinishedSiblings int
-		var failedSiblings int
-		err = svc.Parallel(
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND step_depth=? AND step_id!=? AND status IN (?, ?, ?)",
-					flowID, stepDepth, stepID,
-					foremanapi.StatusPending, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
-				).Scan(&unfinishedSiblings)
+		cancelled, _ := res.RowsAffected()
+		if cancelled > 0 {
+			_, err = db.ExecContext(ctx,
+				"UPDATE microbus_steps SET cohort_arrivals = cohort_arrivals + ? WHERE step_id=?",
+				cancelled, lineageID,
+			)
+			if err != nil {
 				return errors.Trace(err)
-			},
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status IN (?, ?)",
-					flowID, stepDepth,
-					foremanapi.StatusFailed, foremanapi.StatusCancelled,
-				).Scan(&failedSiblings)
-				return errors.Trace(err)
-			},
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if unfinishedSiblings > 0 {
-			svc.LogDebug(ctx, "Pending siblings", "task", taskName, "unfinished", unfinishedSiblings, "flow", workflowName)
-			return nil // Other branches still running; the last one to finish will advance the flow
-		}
-		if failedSiblings > 0 {
-			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, errors.New("sibling branch failed or was cancelled"), taskName)
-			return nil
+			}
 		}
 	}
-	// Evaluate transitions
+
 	var nextTasks []nextStep
 	if errorRouted {
-		nextTasks, err = svc.evaluateErrorTransitions(&graph, taskName, resultFlow)
+		nextTasks, err = svc.evaluateErrorTransitions(&graph, taskName, resultFlow, errStatusCode)
 	} else {
 		nextTasks, err = svc.evaluateTransitions(&graph, taskName, resultFlow)
 	}
@@ -2608,7 +2601,6 @@ postExecution:
 		return errors.Trace(err)
 	}
 
-	// Filter out END pseudo-nodes
 	var realTasks []nextStep
 	for _, t := range nextTasks {
 		if t.taskName != "" && t.taskName != workflow.END {
@@ -2616,41 +2608,53 @@ postExecution:
 		}
 	}
 
-	if len(realTasks) == 0 {
-		// Flow complete - no successor.
-		// Set flow to completed first so that if we crash before updating the step,
-		// the step's lease expires, pollPendingSteps enqueues it, and the
-		// terminal flow check in recovery processStep marks it completed.
-		svc.LogDebug(ctx, "Flow completed", "flow", workflowName)
-		if _, err := svc.completeFlow(ctx, shardNum, flowID, flowToken, notifyHostname); err != nil {
-			return errors.Trace(err)
+	// isPushTransition reflects whether THIS dispatch pushes a new lineage frame.
+	// Static fan-out source + normal/forEach evaluation = push; Goto and OnError
+	// transitions stay in the source's scope regardless.
+	isPushTransition := graph.IsFanOutSource(taskName) && !errorRouted && resultFlow.GotoRequested() == ""
+	cohortSize := len(realTasks)
+
+	// Empty cohort: a fan-out source spawned no branches. Fire the FanIn directly.
+	if isPushTransition && cohortSize == 0 {
+		fanInTarget := graph.FanInFor(taskName)
+		if fanInTarget == "" {
+			return svc.completeFlowSequential(ctx, shardNum, db, flowID, flowToken, stepID, notifyHostname, workflowName)
 		}
-		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id=?",
-			foremanapi.StatusCompleted, stepID,
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
+		return svc.fireFanInDirect(ctx, shardNum, db, flowID, flowToken, stepID, stepDepth, lineageID, fanInTarget, &graph, sleepDur)
 	}
 
-	nextStepDepth := stepDepth + 1
-	sleepMs := sleepDur.Milliseconds()
+	if cohortSize == 0 {
+		return svc.completeFlowSequential(ctx, shardNum, db, flowID, flowToken, stepID, notifyHostname, workflowName)
+	}
 
-	// Atomically insert next steps and update the flow within a transaction.
-	// The SELECT FOR UPDATE on the flow row serializes concurrent workers finishing
-	// fan-out siblings, preventing duplicate next steps.
+	// Cohort spawn: ourselves if we're pushing a frame, our lineage_id otherwise.
+	cohortSpawnID := lineageID
+	childLineageID := lineageID
+	if isPushTransition {
+		cohortSpawnID = stepID
+		childLineageID = stepID
+	}
+
+	// Partition into FanIn arrivals and normal next steps.
+	var normalNexts []nextStep
+	var fanInTaskName string
+	fanInArrivals := 0
+	for _, next := range realTasks {
+		if graph.IsFanIn(next.taskName) {
+			fanInTaskName = next.taskName
+			fanInArrivals++
+		} else {
+			normalNexts = append(normalNexts, next)
+		}
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer tx.Rollback()
 
-	// Acquire an exclusive lock on the flow row to serialize fan-in workers.
-	// An UPDATE (rather than SELECT FOR UPDATE) is used to immediately acquire a
-	// write lock, preventing SQLite shared-cache deadlocks where two deferred
-	// transactions both hold read locks and neither can upgrade to write.
+	// Acquire write lock on the flow row to serialize concurrent fan-in arrivals.
 	_, err = tx.ExecContext(ctx,
 		"UPDATE microbus_flows SET updated_at=NOW_UTC() WHERE flow_id=?",
 		flowID,
@@ -2659,48 +2663,41 @@ postExecution:
 		return errors.Trace(err)
 	}
 
-	// Check if another worker already created next steps (fan-in race)
-	var existingCount int
+	// Compute the children's input state from our state+changes.
+	var ourStateJSON, ourChangesJSON string
 	err = tx.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND step_depth=?",
-		flowID, nextStepDepth,
-	).Scan(&existingCount)
+		"SELECT state, changes FROM microbus_steps WHERE step_id=?",
+		stepID,
+	).Scan(&ourStateJSON, &ourChangesJSON)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if existingCount > 0 {
-		return nil // Another worker already created next steps
-	}
-
-	// Compute the merged state for the next step(s) inside the transaction
-	// to avoid SQLite deadlocks from concurrent readers blocking writers.
-	// Loads state and changes from all steps at this step_depth from the database.
-	// In the sequential case, this is just our own state + changes.
-	// In the fan-in case, changes from all siblings are merged.
-	nextState, err := svc.mergeStepDepthState(ctx, tx, flowID, stepDepth, graph.Reducers())
+	var ourState, ourChanges map[string]any
+	json.Unmarshal([]byte(ourStateJSON), &ourState)
+	json.Unmarshal([]byte(ourChangesJSON), &ourChanges)
+	childInputState, err := workflow.MergeState(ourState, ourChanges, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	nextStateJSON, _ := json.Marshal(nextState)
+	childInputJSON, _ := json.Marshal(childInputState)
 
+	nextStepDepth := stepDepth + 1
+	sleepMs := sleepDur.Milliseconds()
 	var newStepIDs []int
-	for _, next := range realTasks {
-		svc.LogDebug(ctx, "Creating next task", "task", next.taskName, "flow", workflowName)
 
-		// For forEach fan-out, inject the item into state (not changes)
-		stepStateJSON := nextStateJSON
+	for _, next := range normalNexts {
+		stepStateJSON := childInputJSON
 		if next.item != nil {
-			perStepState := make(map[string]any, len(nextState)+1)
-			maps.Copy(perStepState, nextState)
+			perStepState := make(map[string]any, len(childInputState)+1)
+			maps.Copy(perStepState, childInputState)
 			perStepState[next.itemKey] = next.item
 			stepStateJSON, _ = json.Marshal(perStepState)
 		}
-
 		nextTimeBudget := svc.taskTimeBudget(&graph, next.taskName)
 		newStepID, err := tx.InsertReturnID(ctx, "step_id",
-			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, not_before)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
-			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), sleepMs,
+			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
+				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, sleepMs,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -2708,10 +2705,46 @@ postExecution:
 		newStepIDs = append(newStepIDs, int(newStepID))
 	}
 
-	// Update flow's step_id: use 0 for fan-out (multiple steps), actual ID for sequential
-	nextFlowStepID := newStepIDs[0]
-	if len(newStepIDs) > 1 {
-		nextFlowStepID = 0
+	// Set cohort_size on the spawn step the first time we fan out from it.
+	if isPushTransition {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET cohort_size=? WHERE step_id=?",
+			cohortSize, stepID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// Increment cohort_arrivals for each direct FanIn arrival from this transition.
+	if fanInArrivals > 0 {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET cohort_arrivals = cohort_arrivals + ? WHERE step_id=?",
+			fanInArrivals, cohortSpawnID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		var arrivals, size int
+		err = tx.QueryRowContext(ctx,
+			"SELECT cohort_arrivals, cohort_size FROM microbus_steps WHERE step_id=?",
+			cohortSpawnID,
+		).Scan(&arrivals, &size)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if size > 0 && arrivals >= size {
+			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, fanInTaskName, &graph, sleepMs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			newStepIDs = append(newStepIDs, fanInStepID)
+		}
+	}
+
+	nextFlowStepID := 0
+	if len(newStepIDs) == 1 {
+		nextFlowStepID = newStepIDs[0]
 	}
 	_, err = tx.ExecContext(ctx,
 		"UPDATE microbus_flows SET step_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
@@ -2720,21 +2753,170 @@ postExecution:
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	err = tx.Commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// Enqueue next step(s) or schedule for later (outside the transaction)
 	if sleepDur > 0 {
 		svc.shortenNextPoll(time.Now().Add(sleepDur))
 	} else {
 		for _, id := range newStepIDs {
-			foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, int(id))
+			foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, id)
 		}
 	}
 	return nil
+}
+
+// fireFanInDirect creates the FanIn step immediately for an empty-cohort case.
+// Used when a fan-out source produces zero branches (e.g. forEach over an empty array).
+func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *sequel.DB, flowID int, flowToken string, stepID int, stepDepth int, lineageID int, fanInTarget string, graph *workflow.Graph, sleepDur time.Duration) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_flows SET updated_at=NOW_UTC() WHERE flow_id=?",
+		flowID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Set our cohort_size to 0 explicitly (it's already the default but be explicit).
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_steps SET cohort_size=0 WHERE step_id=?",
+		stepID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Compute base state from our state+changes (no cohort children to merge).
+	var ourStateJSON, ourChangesJSON string
+	err = tx.QueryRowContext(ctx,
+		"SELECT state, changes FROM microbus_steps WHERE step_id=?",
+		stepID,
+	).Scan(&ourStateJSON, &ourChangesJSON)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var ourState, ourChanges map[string]any
+	json.Unmarshal([]byte(ourStateJSON), &ourState)
+	json.Unmarshal([]byte(ourChangesJSON), &ourChanges)
+	mergedState, err := workflow.MergeState(ourState, ourChanges, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	mergedJSON, _ := json.Marshal(mergedState)
+
+	nextStepDepth := stepDepth + 1
+	sleepMs := sleepDur.Milliseconds()
+	nextTimeBudget := svc.taskTimeBudget(graph, fanInTarget)
+	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), lineageID, sleepMs,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_flows SET step_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
+		int(fanInStepID), flowID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if sleepDur > 0 {
+		svc.shortenNextPoll(time.Now().Add(sleepDur))
+	} else {
+		foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, int(fanInStepID))
+	}
+	return nil
+}
+
+// insertFanInStep creates the fan-in step inside the caller's tx after the cohort completes.
+// Merges state from all cohort members (steps with lineage_id = cohortSpawnID) using reducers.
+// The new step's lineage_id is the spawn's lineage_id (one frame popped).
+func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64) (int, error) {
+	var spawnStateJSON, spawnChangesJSON string
+	var spawnLineageID int
+	err := tx.QueryRowContext(ctx,
+		"SELECT state, changes, lineage_id FROM microbus_steps WHERE step_id=?",
+		cohortSpawnID,
+	).Scan(&spawnStateJSON, &spawnChangesJSON, &spawnLineageID)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	var spawnState, spawnChanges map[string]any
+	json.Unmarshal([]byte(spawnStateJSON), &spawnState)
+	json.Unmarshal([]byte(spawnChangesJSON), &spawnChanges)
+	merged, err := workflow.MergeState(spawnState, spawnChanges, graph.Reducers())
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	rows, err := tx.QueryContext(ctx,
+		"SELECT changes FROM microbus_steps WHERE flow_id=? AND lineage_id=? ORDER BY updated_at, step_id",
+		flowID, cohortSpawnID,
+	)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var changesJSON string
+		err = rows.Scan(&changesJSON)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		var changes map[string]any
+		json.Unmarshal([]byte(changesJSON), &changes)
+		merged, err = workflow.MergeState(merged, changes, graph.Reducers())
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
+	err = rows.Err()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	mergedJSON, _ := json.Marshal(merged)
+	nextTimeBudget := svc.taskTimeBudget(graph, fanInTaskName)
+	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, sleepMs,
+	)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return int(fanInStepID), nil
+}
+
+// completeFlowSequential marks the flow completed and the current step completed when no
+// successor exists (terminal-END path, lineage mode).
+func (svc *Service) completeFlowSequential(ctx context.Context, shardNum int, db *sequel.DB, flowID int, flowToken string, stepID int, notifyHostname, workflowName string) error {
+	svc.LogDebug(ctx, "Flow completed", "flow", workflowName)
+	_, err := svc.completeFlow(ctx, shardNum, flowID, flowToken, notifyHostname)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = db.ExecContext(ctx,
+		"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id=?",
+		foremanapi.StatusCompleted, stepID,
+	)
+	return errors.Trace(err)
 }
 
 // mergeStepDepthState computes the merged state for the next step by loading state and changes
@@ -3062,39 +3244,36 @@ func (svc *Service) surgraphChain(ctx context.Context, shardNum int, flowID int,
 	for {
 		var surgraphFlowID int
 		var surgraphStepDepth int
+		var surgraphStepID int
 		var workflowName string
 		err = db.QueryRowContext(ctx,
-			"SELECT surgraph_flow_id, surgraph_step_depth, workflow_name FROM microbus_flows WHERE flow_id=?",
+			"SELECT surgraph_flow_id, surgraph_step_depth, surgraph_step_id, workflow_name FROM microbus_flows WHERE flow_id=?",
 			currentFlowID,
-		).Scan(&surgraphFlowID, &surgraphStepDepth, &workflowName)
+		).Scan(&surgraphFlowID, &surgraphStepDepth, &surgraphStepID, &workflowName)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 		if surgraphFlowID == 0 {
 			break // Reached the root flow
 		}
-		// Look up the flow token and the step_id of the surgraph step in parallel
 		workflowName = strings.TrimSpace(workflowName)
 		var surgraphFlowToken string
-		var surgraphStepID int
-		err = svc.Parallel(
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT flow_token FROM microbus_flows WHERE flow_id=?",
-					surgraphFlowID,
-				).Scan(&surgraphFlowToken)
-				return errors.Trace(err)
-			},
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT step_id FROM microbus_steps WHERE flow_id=? AND step_depth=? AND task_name=?",
-					surgraphFlowID, surgraphStepDepth, workflowName,
-				).Scan(&surgraphStepID)
-				return errors.Trace(err)
-			},
-		)
+		err = db.QueryRowContext(ctx,
+			"SELECT flow_token FROM microbus_flows WHERE flow_id=?",
+			surgraphFlowID,
+		).Scan(&surgraphFlowToken)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
+		}
+		// Legacy fallback for subgraph flows created before surgraph_step_id existed.
+		if surgraphStepID == 0 {
+			err = db.QueryRowContext(ctx,
+				"SELECT step_id FROM microbus_steps WHERE flow_id=? AND step_depth=? AND task_name=?",
+				surgraphFlowID, surgraphStepDepth, workflowName,
+			).Scan(&surgraphStepID)
+			if err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
 		}
 		flowIDs = append(flowIDs, surgraphFlowID)
 		stepIDs = append(stepIDs, surgraphStepID)
@@ -3437,6 +3616,19 @@ func (svc *Service) shortenNextPoll(tm time.Time) {
 }
 
 // executeTask sends the flow to a task endpoint and returns the resulting flow.
+// dispatchURLOf resolves a graph node name to its dispatch URL. Falls back to the name
+// itself if the node isn't registered (legacy graphs persisted before the name/URL split,
+// where task_name in the DB was the URL). END passes through.
+func dispatchURLOf(graph *workflow.Graph, name string) string {
+	if name == workflow.END {
+		return name
+	}
+	if u := graph.URLOf(name); u != "" {
+		return u
+	}
+	return name
+}
+
 func (svc *Service) executeTask(ctx context.Context, taskName string, flow *workflow.RawFlow, actorToken string, timeBudget time.Duration) (*workflow.RawFlow, error) {
 	body, err := json.Marshal(flow)
 	if err != nil {
@@ -3477,11 +3669,16 @@ type nextStep struct {
 // evaluateTransitions determines the next task(s) to execute based on the graph transitions
 // and the current flow state. Returns multiple candidates for fan-out.
 func (svc *Service) evaluateTransitions(graph *workflow.Graph, currentTask string, flow *workflow.RawFlow) ([]nextStep, error) {
-	// Check for goto override
+	// Check for goto override. The user passes the target as a URL or node name to flow.Goto;
+	// match a withGoto transition whose To either equals the target literally (node name match
+	// or URL-as-name back-compat) or whose target node has that URL.
 	if gotoTarget := flow.GotoRequested(); gotoTarget != "" {
 		for _, tr := range graph.Transitions() {
-			if tr.From == currentTask && tr.To == gotoTarget && tr.WithGoto {
-				return []nextStep{{taskName: gotoTarget}}, nil
+			if tr.From != currentTask || !tr.WithGoto {
+				continue
+			}
+			if tr.To == gotoTarget || graph.URLOf(tr.To) == gotoTarget {
+				return []nextStep{{taskName: tr.To}}, nil
 			}
 		}
 		return nil, errors.New("task '%s' requested goto to '%s' but no WithGoto transition exists from this task", stripProto(currentTask), stripProto(gotoTarget))
@@ -3564,8 +3761,9 @@ func (svc *Service) evaluateTransitions(graph *workflow.Graph, currentTask strin
 
 // evaluateErrorTransitions determines the error handler task to route to when a task fails.
 // It evaluates only OnError transitions from the current task, respecting When conditions.
-// Returns at most one candidate (the first matching error transition).
-func (svc *Service) evaluateErrorTransitions(graph *workflow.Graph, currentTask string, flow *workflow.RawFlow) ([]nextStep, error) {
+// Status-coded transitions (StatusCode != 0) win on a match against errStatusCode; otherwise
+// the first catch-all OnError transition wins. Returns at most one candidate.
+func (svc *Service) evaluateErrorTransitions(graph *workflow.Graph, currentTask string, flow *workflow.RawFlow, errStatusCode int) ([]nextStep, error) {
 	// Build state map for condition evaluation
 	stateMap := make(map[string]any, len(flow.RawState()))
 	for k, v := range flow.RawState() {
@@ -3578,20 +3776,32 @@ func (svc *Service) evaluateErrorTransitions(graph *workflow.Graph, currentTask 
 		}
 	}
 
-	for _, tr := range graph.Transitions() {
-		if tr.From != currentTask || !tr.OnError {
-			continue
-		}
-		taken := true
-		if tr.When != "" {
-			match, err := boolexp.Eval(tr.When, stateMap)
-			if err != nil {
-				return nil, errors.Trace(err)
+	// Two passes: status-coded matches first, catch-all second.
+	for _, statusCoded := range []bool{true, false} {
+		for _, tr := range graph.Transitions() {
+			if tr.From != currentTask || !tr.OnError {
+				continue
 			}
-			taken = match
-		}
-		if taken {
-			return []nextStep{{taskName: tr.To}}, nil
+			if statusCoded {
+				if tr.StatusCode == 0 || tr.StatusCode != errStatusCode {
+					continue
+				}
+			} else {
+				if tr.StatusCode != 0 {
+					continue
+				}
+			}
+			taken := true
+			if tr.When != "" {
+				match, err := boolexp.Eval(tr.When, stateMap)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				taken = match
+			}
+			if taken {
+				return []nextStep{{taskName: tr.To}}, nil
+			}
 		}
 	}
 	return nil, nil

@@ -19,7 +19,7 @@ Creating a new microservice:
 - [ ] Step 6: Prepare embed.go
 - [ ] Step 7: Prepare service.go
 - [ ] Step 8: Prepare intermediate.go
-- [ ] Step 9: Prepare mock.go
+- [ ] Step 9: Generate mock.go
 - [ ] Step 10: Prepare service_test.go
 - [ ] Step 11: Prepare manifest.yaml
 - [ ] Step 12: Add to main app
@@ -123,11 +123,9 @@ Create `intermediate.go` with the content of the template `intermediate.go` loca
 
 - Set the description of the microservice in `svc.SetDescription`
 
-#### Step 9: Prepare `mock.go`
+#### Step 9: Generate `mock.go`
 
-Create `mock.go` with the content of the template `mock.go` located in the directory of this skill.
-
-Note that it is the intention of `Mock` to shadow the functions of `Service`.
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory.
 
 #### Step 10: Prepare `service_test.go`
 

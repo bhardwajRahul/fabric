@@ -46,6 +46,23 @@ import (
 // HTTPHandler extends the standard http.Handler to also return an error
 type HTTPHandler = sub.HTTPHandler
 
+// SubscriptionInfo is a read-only snapshot of one subscription as it appears in the connector.
+type SubscriptionInfo struct {
+	Name           string
+	Description    string
+	Host           string
+	Port           string
+	Method         string
+	Path           string
+	Queue          string
+	Type           string
+	RequiredClaims string
+	Tags           []string
+	Manual         bool
+	NoTrace        bool
+	Active         bool
+}
+
 /*
 Listen subscribes a handler under a typed name. The name must be a Go-style upper-case
 identifier (e.g. "MyEndpoint2") and unique within the connector. Exactly one feature option
@@ -70,12 +87,99 @@ func (c *Connector) Subscribe(name string, handler sub.HTTPHandler, options ...s
 	if _, loaded := c.subs.LoadOrStore(name, newSub); loaded {
 		return c.captureInitErr(errors.New("duplicate subscription name '%s'", name))
 	}
-	if c.isPhase(startedUp) {
+	if c.isPhase(startedUp) && !newSub.Manual {
 		if err := c.activateSub(newSub); err != nil {
 			c.subs.Delete(name)
 			return c.captureInitErr(errors.Trace(err))
 		}
 		c.notifyOnNewSubs(newSub)
+		c.transportConn.WaitForSub()
+	}
+	return nil
+}
+
+// Subscriptions returns a read-only snapshot of every subscription registered with the connector,
+// in registration order. Callers iterate the result and act on names of interest via
+// [Connector.ActivateSubscription] and [Connector.DeactivateSubscription]. Filter by any
+// combination of fields ([SubscriptionInfo.Tags], [SubscriptionInfo.Type], etc.) to express
+// "all Python tasks" or "all manual subs" without a custom query API.
+func (c *Connector) Subscriptions() []SubscriptionInfo {
+	values := c.subs.Values()
+	out := make([]SubscriptionInfo, 0, len(values))
+	for _, s := range values {
+		var tags []string
+		if len(s.Tags) > 0 {
+			tags = append([]string(nil), s.Tags...)
+		}
+		out = append(out, SubscriptionInfo{
+			Name:           s.Name,
+			Description:    s.Description,
+			Host:           s.Host,
+			Port:           s.Port,
+			Method:         s.Method,
+			Path:           s.Path,
+			Queue:          s.Queue,
+			Type:           s.Type,
+			RequiredClaims: s.RequiredClaims,
+			Tags:           tags,
+			Manual:         s.Manual,
+			NoTrace:        s.NoTrace,
+			Active:         len(s.Subs) > 0,
+		})
+	}
+	return out
+}
+
+// ActivateSubscription activates the named subscription if it is currently off-bus. The
+// subscription joins the transport and a peer notification is broadcast so other microservices
+// invalidate their cached known-responders entries. Already-active subscriptions are silently
+// skipped, so the call is idempotent. Valid while the connector is starting up, started, or
+// shutting down - this lets [sub.Manual] subscriptions come on/off bus alongside the lifecycle
+// of their backing resource (e.g. a Python venv allocated inside OnStartup, or a distributed
+// cache torn down inside OnShutdown). Returns an error if no subscription with that name is
+// registered.
+func (c *Connector) ActivateSubscription(name string) error {
+	if !c.isPhase(startingUp, startedUp, shuttingDown) {
+		return errors.New("not started")
+	}
+	s, ok := c.subs.Load(name)
+	if !ok {
+		return errors.New("unknown subscription name '%s'", name)
+	}
+	if len(s.Subs) > 0 {
+		return nil
+	}
+	if err := c.activateSub(s); err != nil {
+		return errors.Trace(err)
+	}
+	if c.isPhase(startedUp) {
+		c.notifyOnNewSubs(s)
+		c.transportConn.WaitForSub()
+	}
+	return nil
+}
+
+// DeactivateSubscription takes the named subscription off the bus while leaving it registered
+// in the connector, so a subsequent [Connector.ActivateSubscription] brings it back online.
+// Unicast callers see a clean 404 ack-timeout while it is deactivated; load-balancing routes
+// around the cold replica. Already-deactivated subscriptions are silently skipped, so the call
+// is idempotent. Valid while the connector is starting up, started, or shutting down. Returns
+// an error if no subscription with that name is registered.
+func (c *Connector) DeactivateSubscription(name string) error {
+	if !c.isPhase(startingUp, startedUp, shuttingDown) {
+		return errors.New("not started")
+	}
+	s, ok := c.subs.Load(name)
+	if !ok {
+		return errors.New("unknown subscription name '%s'", name)
+	}
+	if len(s.Subs) == 0 {
+		return nil
+	}
+	if err := c.deactivateSub(s); err != nil {
+		return errors.Trace(err)
+	}
+	if c.isPhase(startedUp) {
 		c.transportConn.WaitForSub()
 	}
 	return nil
@@ -162,42 +266,32 @@ func (c *Connector) onRequest(msg *transport.Msg, s *sub.Subscription) {
 	}()
 }
 
-// activateSubs subscribes all subscriptions with the transport.
-// It is called during startup. Subscriptions already activated by
-// [Connector.activateInfraSubs] are skipped via the idempotent guard in [Connector.activateSub].
+// activateSubs subscribes all non-[sub.Manual] subscriptions with the transport.
+// It is called during startup after the user's OnStartup callback returns. Manual
+// subscriptions stay off-bus and are brought online by user code (or by a framework
+// activate-by-tag pass) once their backing resource is ready.
+//
+// In TESTING deployment the [sub.Manual] flag is ignored and every registered
+// subscription is activated. Tests typically replace the backing resource with a
+// mock, so the gating that real OnStartup code would do (wait for the resource,
+// then call [Connector.ActivateSubscription]) doesn't run - activating manual
+// subs here keeps mocked endpoints reachable on the bus without per-test setup.
 func (c *Connector) activateSubs() (err error) {
 	subs := c.subs.Values()
-	for _, sub := range subs {
-		err = c.activateSub(sub)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	if c.isPhase(startingUp) {
-		c.notifyOnNewSubs(subs...)
-	}
-	c.transportConn.WaitForSub()
-	return nil
-}
-
-// activateInfraSubs activates only subscriptions tagged with [sub.Infra].
-// It is called during startup before the user's OnStartup callback runs, so
-// framework-internal subscriptions (e.g. the distributed cache) are reachable
-// from inside OnStartup. Peer notification is deferred to [Connector.activateSubs].
-func (c *Connector) activateInfraSubs() error {
-	activated := false
-	for _, s := range c.subs.Values() {
-		if !s.Infra {
+	var activated []*sub.Subscription
+	for _, s := range subs {
+		if s.Manual && c.deployment != TESTING {
 			continue
 		}
-		if err := c.activateSub(s); err != nil {
+		if err = c.activateSub(s); err != nil {
 			return errors.Trace(err)
 		}
-		activated = true
+		activated = append(activated, s)
 	}
-	if activated {
-		c.transportConn.WaitForSub()
+	if c.isPhase(startingUp) && len(activated) > 0 {
+		c.notifyOnNewSubs(activated...)
 	}
+	c.transportConn.WaitForSub()
 	return nil
 }
 
@@ -228,9 +322,9 @@ func (c *Connector) activateSub(s *sub.Subscription) (err error) {
 	for _, prefix := range prefixes {
 		var transportSub *transport.Subscription
 		if s.Queue != "" {
-			transportSub, err = c.transportConn.QueueSubscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Route), s.Queue, handler)
+			transportSub, err = c.transportConn.QueueSubscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Path), s.Queue, handler)
 		} else {
-			transportSub, err = c.transportConn.Subscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Route), handler)
+			transportSub, err = c.transportConn.Subscribe(SubjectOfRequestSub(c.plane, s.Port, s.Host, prefix, s.Method, s.Path), handler)
 		}
 		if err != nil {
 			break
@@ -267,35 +361,20 @@ func (c *Connector) deactivateSubs() error {
 	return lastErr // No trace
 }
 
-// deactivateNonInfraSubs unsubscribes all subscriptions except those tagged with [sub.Infra].
-// It is called during shutdown before OnShutdown runs, so user code stops receiving requests
-// while infra subscriptions (e.g. the distributed cache) remain reachable to OnShutdown.
-func (c *Connector) deactivateNonInfraSubs() error {
+// deactivateAutoSubs unsubscribes all non-[sub.Manual] subscriptions. It is called during
+// shutdown before OnShutdown runs, so user code stops receiving routine traffic while any
+// manual subscriptions (the distributed cache, Python venv handlers, etc.) remain reachable
+// to OnShutdown. Manual subscriptions are the caller's responsibility - either user code
+// deactivates them inside OnShutdown, or the connector deactivates a framework-owned tag
+// group via [Connector.deactivateSubsByTag] after OnShutdown returns.
+//
+// In TESTING deployment the [sub.Manual] flag is ignored, mirroring [Connector.activateSubs]:
+// manual subs were brought online during startup, so they come off the bus here.
+func (c *Connector) deactivateAutoSubs() error {
 	var lastErr error
 	deactivated := false
 	for _, s := range c.subs.Values() {
-		if s.Infra {
-			continue
-		}
-		if err := c.deactivateSub(s); err != nil {
-			lastErr = errors.Trace(err)
-		}
-		deactivated = true
-	}
-	if deactivated {
-		c.transportConn.WaitForSub()
-	}
-	return lastErr // No trace
-}
-
-// deactivateInfraSubs unsubscribes only subscriptions tagged with [sub.Infra].
-// It is called during shutdown after OnShutdown returns, so framework-internal subscriptions
-// (e.g. the distributed cache) remain reachable while user shutdown code runs.
-func (c *Connector) deactivateInfraSubs() error {
-	var lastErr error
-	deactivated := false
-	for _, s := range c.subs.Values() {
-		if !s.Infra {
+		if s.Manual && c.deployment != TESTING {
 			continue
 		}
 		if err := c.deactivateSub(s); err != nil {
@@ -414,7 +493,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		// Remove the default user-agent set by the http package
 		httpReq.Header.Del("User-Agent")
 	}
-	httpx.SetPathValues(httpReq, s.Route)
+	httpx.SetPathValues(httpReq, s.Path)
 	if br, ok := httpReq.Body.(*httpx.BodyReader); ok {
 		br.Reset()
 	}
@@ -464,9 +543,9 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		}
 		if c.deployment == LOCAL {
 			// Add the request attributes in LOCAL deployment to facilitate debugging
-			spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Route))
+			spanOptions = append(spanOptions, trc.Request(httpReq), trc.String("http.route", s.Path))
 		}
-		ctx, span = c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Route), spanOptions...)
+		ctx, span = c.StartSpan(ctx, fmt.Sprintf(":%s%s", s.Port, s.Path), spanOptions...)
 	}
 	spanEnded := false
 	defer func() {
@@ -522,13 +601,13 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		}
 		c.LogError(ctx, "Handling request",
 			"error", convertedErr,
-			"path", s.Route,
+			"path", s.Path,
 			"depth", frame.Of(httpReq).CallDepth(),
 			"code", statusCode,
 		)
 
 		// OpenTelemetry: record the error, adding the request attributes
-		span.SetAttributes("http.route", s.Route)
+		span.SetAttributes("http.route", s.Path)
 		span.SetRequest(httpReq)
 		span.SetError(convertedErr)
 		c.ForceTrace(ctx)
@@ -562,7 +641,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		"microbus_server_request_duration_seconds",
 		time.Since(handlerStartTime).Seconds(),
 		"name", s.Name,
-		"route", s.Route,
+		"route", s.Path,
 		"canonical", canonical,
 		"port", s.Port,
 		"method", httpReq.Method,
@@ -580,7 +659,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		"microbus_server_response_body_bytes",
 		float64(httpRecorder.ContentLength()),
 		"name", s.Name,
-		"route", s.Route,
+		"route", s.Path,
 		"canonical", canonical,
 		"port", s.Port,
 		"method", httpReq.Method,

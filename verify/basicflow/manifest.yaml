@@ -1,0 +1,27 @@
+general:
+  name: basicflow
+  hostname: basicflow.verify
+  description: "basicflow.verify exercises the simplest sequential workflow shape: A -> B -> C."
+  package: github.com/microbus-io/fabric/verify/basicflow
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-14T15:33:22Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (path string)
+    description: TaskA writes "A" to the path.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(path string) (pathOut string)
+    description: TaskB appends "B" to the path.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(path string) (pathOut string)
+    description: TaskC appends "C" to the path.
+    route: :428/task-c
+
+workflows:
+  Basic:
+    signature: Basic() (path string)
+    description: Basic defines the workflow graph for the sequential A -> B -> C chain.
+    route: :428/basic

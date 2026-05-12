@@ -37,6 +37,8 @@ import (
 	"github.com/microbus-io/fabric/coreservices/chatgptllm/chatgptllmapi"
 	"github.com/microbus-io/fabric/coreservices/claudellm"
 	"github.com/microbus-io/fabric/coreservices/claudellm/claudellmapi"
+	"github.com/microbus-io/fabric/coreservices/foreman"
+	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 	"github.com/microbus-io/fabric/coreservices/geminillm"
 	"github.com/microbus-io/fabric/coreservices/geminillm/geminillmapi"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
@@ -65,49 +67,7 @@ var (
 	_ calculator.Service
 )
 
-func TestLLM_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("chat", func(t *testing.T) { // MARKER: Chat
-		assert := testarossa.For(t)
-
-		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedMessages := []llmapi.Message{{Role: "assistant", Content: "Hi there!"}}
-
-		_, _, err := mock.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockChat(func(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error) {
-			return expectedMessages, llmapi.Usage{Turns: 1}, nil
-		})
-		result, usage, err := mock.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, exampleMessages, nil, nil)
-		assert.Expect(
-			result, expectedMessages,
-			usage.Turns, 1,
-			err, nil,
-		)
-	})
-}
+// MARKER: Chat
 
 func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 	t.Parallel()
@@ -278,6 +238,91 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 			assert.Expect(last.Role, "assistant")
 			assert.Expect(last.Content, "3 + 5 = 8")
 			assert.Expect(usage.Turns, 2)
+		}
+	})
+}
+
+func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	providerMock := claudellm.NewMock()
+	calcSvc := calculator.NewService()
+
+	tester := connector.New("tester.client")
+	foremanClient := foremanapi.NewClient(tester)
+	exec := llmapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
+
+	app := application.New()
+	app.Add(svc, providerMock, calcSvc, foreman.NewService(), tester)
+	app.RunInTest(t)
+
+	t.Run("text_response", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			return "Hello from the workflow!", nil, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+		})
+		defer providerMock.MockTurn(nil)
+
+		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
+		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		assert.Expect(
+			err, nil,
+			status, foremanapi.StatusCompleted,
+			usage.Turns, 1,
+			usage.OutputTokens, 5,
+		)
+		// Output listMessages = input history + assistant reply (the list* reducer accumulates).
+		if assert.Expect(len(out) >= 1, true) {
+			last := out[len(out)-1]
+			assert.Expect(last.Role, "assistant")
+			assert.Expect(last.Content, "Hello from the workflow!")
+		}
+	})
+
+	t.Run("tool_calling_loop", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		callCount := 0
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+			callCount++
+			if callCount == 1 {
+				// First turn: ask for a tool call.
+				return "", []llmapi.ToolCall{{
+					ID:        "call_1",
+					Name:      "Arithmetic",
+					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
+				}}, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+			}
+			// Second turn (after fan-in at nextLLM): finalize.
+			return "3 + 5 = 8", nil, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
+		})
+		defer providerMock.MockTurn(nil)
+
+		// ChatLoop's InitChat takes pre-resolved []llmapi.Tool, not URLs. The executeTool
+		// task dispatches to the tool's URL via the bus, so we provide the calculator's
+		// schema directly.
+		toolSchema := []llmapi.Tool{{
+			Name:        "Arithmetic",
+			Description: "Computes x op y",
+			URL:         calculatorapi.Arithmetic.URL(),
+			Method:      calculatorapi.Arithmetic.Method,
+			Type:        "function",
+		}}
+		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
+		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, toolSchema, nil)
+		assert.Expect(
+			err, nil,
+			status, foremanapi.StatusCompleted,
+			usage.Turns, 2,
+		)
+		// After two turns (with a fan-in round in between), the final assistant reply lands.
+		if assert.Expect(len(out) >= 1, true) {
+			last := out[len(out)-1]
+			assert.Expect(last.Role, "assistant")
+			assert.Expect(last.Content, "3 + 5 = 8")
 		}
 	})
 }

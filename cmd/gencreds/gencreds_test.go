@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 	"github.com/microbus-io/testarossa"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
@@ -113,7 +114,7 @@ func TestSplitRules_PlaneSubst(t *testing.T) {
 }
 
 func TestSignService_KitchenDecodesAndPermissionsContainExpected(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, accountPath := newTestAccount(t)
 	accountPub, _ := accountKP.PublicKey()
@@ -122,7 +123,7 @@ func TestSignService_KitchenDecodesAndPermissionsContainExpected(t *testing.T) {
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	cfg := config{plane: "live", signingKey: accountPath}
 
-	creds, err := signService(s, accountKP, cfg)
+	creds, err := signService(s, accountKP, cfg, pkgresolver.New(s.Dir))
 	if err != nil {
 		t.Fatalf("signService: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestSignService_KitchenDecodesAndPermissionsContainExpected(t *testing.T) {
 }
 
 func TestSignService_PersistUserNKeysIsStable(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, _ := newTestAccount(t)
 	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
@@ -167,14 +168,14 @@ func TestSignService_PersistUserNKeysIsStable(t *testing.T) {
 	persistDir := t.TempDir()
 	cfg := config{plane: "p", persist: persistDir, signingKey: "ignored"}
 
-	creds1, err := signService(s, accountKP, cfg)
+	creds1, err := signService(s, accountKP, cfg, pkgresolver.New(s.Dir))
 	if err != nil {
 		t.Fatalf("first sign: %v", err)
 	}
 	tok1, _ := jwt.ParseDecoratedJWT(creds1)
 	uc1, _ := jwt.DecodeUserClaims(tok1)
 
-	creds2, err := signService(s, accountKP, cfg)
+	creds2, err := signService(s, accountKP, cfg, pkgresolver.New(s.Dir))
 	if err != nil {
 		t.Fatalf("second sign: %v", err)
 	}
@@ -185,14 +186,14 @@ func TestSignService_PersistUserNKeysIsStable(t *testing.T) {
 }
 
 func TestSignService_ExpirationOmittedByDefault(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, accountPath := newTestAccount(t)
 	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	cfg := config{plane: "live", signingKey: accountPath}
 
-	creds, err := signService(s, accountKP, cfg)
+	creds, err := signService(s, accountKP, cfg, pkgresolver.New(s.Dir))
 	if err != nil {
 		t.Fatalf("signService: %v", err)
 	}
@@ -202,7 +203,7 @@ func TestSignService_ExpirationOmittedByDefault(t *testing.T) {
 }
 
 func TestSignService_ExpirationSetsExpClaim(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, accountPath := newTestAccount(t)
 	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
@@ -210,7 +211,7 @@ func TestSignService_ExpirationSetsExpClaim(t *testing.T) {
 	cfg := config{plane: "live", signingKey: accountPath, expiration: 24 * time.Hour}
 
 	before := time.Now().Unix()
-	creds, err := signService(s, accountKP, cfg)
+	creds, err := signService(s, accountKP, cfg, pkgresolver.New(s.Dir))
 	if err != nil {
 		t.Fatalf("signService: %v", err)
 	}
@@ -267,7 +268,7 @@ func TestResolveBundle_MainGoFixture(t *testing.T) {
 }
 
 func TestRun_KitchenWeirdEndToEnd(t *testing.T) {
-	t.Parallel()
+	// No parallel - runs the full gencreds pipeline against the kitchen and weird fixtures.
 	assert := testarossa.For(t)
 	_, accountPath := newTestAccount(t)
 	out := t.TempDir()

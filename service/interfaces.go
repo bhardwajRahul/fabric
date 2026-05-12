@@ -40,6 +40,8 @@ type Publisher interface {
 type Subscriber interface {
 	Subscribe(name string, handler sub.HTTPHandler, options ...sub.Option) error
 	Unsubscribe(name string) error
+	ActivateSubscription(name string) error
+	DeactivateSubscription(name string) error
 }
 
 // PublisherSubscriber is both a publisher and a subscriber.

@@ -1,0 +1,77 @@
+package interruptflow
+
+import (
+	"context"
+	"testing"
+
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/testarossa"
+)
+
+func TestInterruptflow_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("task_a", func(t *testing.T) { // MARKER: TaskA
+		assert := testarossa.For(t)
+
+		mock.MockTaskA(func(ctx context.Context, flow *workflow.Flow, prompt string) (promptOut string, err error) {
+			return
+		})
+		var prompt string
+		_, err := mock.TaskA(ctx, nil, prompt)
+		assert.NoError(err)
+	})
+
+	t.Run("await_input", func(t *testing.T) { // MARKER: AwaitInput
+		assert := testarossa.For(t)
+
+		mock.MockAwaitInput(func(ctx context.Context, flow *workflow.Flow, userInput string) (userInputOut string, err error) {
+			return
+		})
+		var userInput string
+		_, err := mock.AwaitInput(ctx, nil, userInput)
+		assert.NoError(err)
+	})
+
+	t.Run("compose", func(t *testing.T) { // MARKER: Compose
+		assert := testarossa.For(t)
+
+		mock.MockCompose(func(ctx context.Context, flow *workflow.Flow, prompt string, userInput string) (result string, err error) {
+			return
+		})
+		var prompt string
+		var userInput string
+		_, err := mock.Compose(ctx, nil, prompt, userInput)
+		assert.NoError(err)
+	})
+
+	t.Run("interruptor", func(t *testing.T) { // MARKER: Interruptor
+		assert := testarossa.For(t)
+
+		mock.MockInterruptor(func(ctx context.Context, flow *workflow.Flow, prompt string) (result string, err error) {
+			return
+		})
+		graph, err := mock.Interruptor(ctx)
+		if assert.NoError(err) {
+			assert.NotNil(graph)
+		}
+	})
+
+}

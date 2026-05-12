@@ -39,11 +39,12 @@ import (
 	"github.com/microbus-io/fabric/coreservices/mcpportal"
 	"github.com/microbus-io/fabric/coreservices/metrics"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
-	// "github.com/microbus-io/fabric/coreservices/shell"
+
 	"github.com/microbus-io/fabric/examples/browser"
 	"github.com/microbus-io/fabric/examples/calculator"
 	"github.com/microbus-io/fabric/examples/chatbox"
 	"github.com/microbus-io/fabric/examples/creditflow"
+	"github.com/microbus-io/fabric/examples/embedder"
 	"github.com/microbus-io/fabric/examples/eventsink"
 	"github.com/microbus-io/fabric/examples/eventsource"
 	"github.com/microbus-io/fabric/examples/hello"
@@ -83,7 +84,6 @@ func main() {
 			return nil
 		}),
 		foreman.NewService(),
-		// shell.NewService(),
 		llm.NewService(),
 		claudellm.NewService(),
 		chatgptllm.NewService(),
@@ -102,11 +102,12 @@ func main() {
 		yellowpages.NewService(),
 		browser.NewService(),
 		login.NewService(),
-	)
-	app.Add(
-		// HINT: Add solution microservices here
+		embedder.NewService(),
 		creditflow.NewService(),
 		chatbox.NewService(),
+	)
+	app.Add(
+	// HINT: Add solution microservices here
 	)
 	app.Add(
 		// When everything is ready, begin to accept external requests

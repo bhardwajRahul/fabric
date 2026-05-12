@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = httpingressapi.Hostname
-	Version  = 376
+	Version  = 377
 )
 
 // ToDo is implemented by the service or mock.
@@ -133,8 +133,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.DefineConfig( // MARKER: AllowedOrigins
 		"AllowedOrigins",
 		cfg.Description(`AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
-The * origin can be used to allow CORS request from all origins.`),
-		cfg.DefaultValue(`*`),
+When empty (the default), Access-Control-Allow-Origin is pinned to the request's own scheme://host,
+which permits only same-origin browser reads. The * origin can be used to reflect any caller's Origin;
+operators must opt into that explicitly because it combines with credentials.`),
+		cfg.DefaultValue(``),
 	)
 	svc.DefineConfig( // MARKER: PortMappings
 		"PortMappings",
@@ -350,7 +352,9 @@ func (svc *Intermediate) SetRequestMemoryLimit(megaBytes int) (err error) { // M
 
 /*
 AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
-The * origin can be used to allow CORS request from all origins.
+When empty (the default), Access-Control-Allow-Origin is pinned to the request's own scheme://host,
+which permits only same-origin browser reads. The * origin can be used to reflect any caller's Origin;
+operators must opt into that explicitly because it combines with credentials.
 */
 func (svc *Intermediate) AllowedOrigins() (origins string) { // MARKER: AllowedOrigins
 	return svc.Config("AllowedOrigins")
@@ -360,7 +364,9 @@ func (svc *Intermediate) AllowedOrigins() (origins string) { // MARKER: AllowedO
 SetAllowedOrigins sets the value of the configuration property.
 
 AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
-The * origin can be used to allow CORS request from all origins.
+When empty (the default), Access-Control-Allow-Origin is pinned to the request's own scheme://host,
+which permits only same-origin browser reads. The * origin can be used to reflect any caller's Origin;
+operators must opt into that explicitly because it combines with credentials.
 */
 func (svc *Intermediate) SetAllowedOrigins(origins string) (err error) { // MARKER: AllowedOrigins
 	return svc.SetConfig("AllowedOrigins", origins)

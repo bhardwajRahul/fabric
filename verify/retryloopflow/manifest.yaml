@@ -1,0 +1,28 @@
+general:
+  hostname: retryloopflow.verify
+  description: retryloopflow.verify is the SKIP-marked OnError retry loop (pending lineage redesign).
+  modifiedAt: "2026-05-14T17:51:17Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(target int) (targetOut int)
+    description: TaskA passes target through.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(attempts int, target int) (succeeded bool)
+    description: TaskB errors if attempts<target.
+    route: :428/task-b
+  Handler:
+    signature: Handler(onErr *errors.TracedError, attempts int) (attemptsOut int)
+    description: Handler increments attempts and routes back to B.
+    route: :428/handler
+  TaskC:
+    signature: TaskC(attempts int) (finalAttempts int)
+    description: TaskC surfaces final attempts.
+    route: :428/task-c
+
+workflows:
+  RetryLoop:
+    signature: RetryLoop(target int) (finalAttempts int)
+    description: RetryLoop defines A -> B -> C with B onError -> Handler -> B.
+    route: :428/retry-loop

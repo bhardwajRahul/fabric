@@ -1,0 +1,4 @@
+# Add pip dependencies, one per line.
+# Example:
+#   sentence-transformers
+#   pandas==2.2.*

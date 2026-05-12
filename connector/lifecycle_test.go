@@ -298,7 +298,7 @@ func TestConnector_Restart(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), shutdownCalled.Load())
-	assert.Equal(subCount, con.subs.Len())
+	assert.Equal(subCount-2, con.subs.Len()) // 2 dlru subs unregistered by Cache.Close
 
 	startupCalled.Store(0)
 	shutdownCalled.Store(0)
@@ -333,7 +333,7 @@ func TestConnector_Restart(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	assert.Equal(int32(1), shutdownCalled.Load())
-	assert.Equal(subCount, con.subs.Len())
+	assert.Equal(subCount-2, con.subs.Len()) // 2 dlru subs unregistered by Cache.Close
 }
 
 func TestConnector_GoGracefulShutdown(t *testing.T) {

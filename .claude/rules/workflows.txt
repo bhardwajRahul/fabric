@@ -80,6 +80,7 @@ Control signals on `Flow`:
 - `flow.Goto(taskURL)` - override transition routing to jump to a specific task
 - `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true if attempts remain, false if exhausted
 - `flow.RetryNow() bool` - re-execute this task immediately with no limit; shorthand for `Retry(math.MaxInt32, 0, 0, 0)`
+- `flow.RetryOnTimeout(err, maxAttempts, initialDelay, multiplier, maxDelay) bool` - retry only when `err` carries HTTP status 408; returns false (so the caller can surface the error) for any other status
 - `flow.Sleep(duration)` - delay the next step by a duration
 - `flow.Interrupt(payload)` - pause the flow for external input (human-in-the-loop)
 - `flow.Subgraph(workflowURL, input)` - dynamically launch a child workflow; the step is parked until the child completes, then re-executed with the child's output merged into state (see [Dynamic Subgraphs](#dynamic-subgraphs))
@@ -94,7 +95,8 @@ Control signals on `Flow`:
 - `AddTransitionWhen(from, to, when)` - conditional transition based on state expression
 - `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called
 - `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
-- `AddErrorTransition(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
+- `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
+- `AddTransitionOnTimeout(from, to)` - error transition taken only when the source task's error carries HTTP status 408 (both foreman-side and task-side timeouts). Wins over a plain OnError when the status matches
 - `SetReducer(field, reducer)` - escape hatch to override the prefix-driven reducer for a state field (rarely needed; see Reducers below)
 - `SetTimeBudget(taskURL, duration)` - set execution timeout for a task
 - `DeclareInputs(fields...)` - declare which state fields are passed into this graph; no args = nothing, `"*"` = everything, named = those only

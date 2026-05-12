@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -51,18 +52,13 @@ var updateGoldens = flag.Bool("update", false, "rewrite committed nats.acl golde
 // If the change is intentional, run with `-update` to refresh the
 // goldens, then review and commit the diff.
 func TestScan_FixtureGoldens(t *testing.T) {
-	if !*updateGoldens {
-		t.Parallel()
-	}
+	// No parallel - scans both kitchen and weird fixtures.
 	for _, name := range []string{"kitchen", "weird"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
-			if !*updateGoldens {
-				t.Parallel()
-			}
 			assert := testarossa.For(t)
 			dir := repoPath(t, "cmd/genmanifest/testdata/"+name)
-			in, err := scanService(dir, dir)
+			in, err := scanService(dir, dir, pkgresolver.New(dir))
 			if err != nil {
 				t.Fatalf("scanService: %v", err)
 			}
@@ -115,13 +111,12 @@ func writeACLGolden(path, hostname string, pub, sub []string) error {
 // (non-empty, within budget). Stronger validation lives in the
 // end-to-end test (real broker) and the fixture-golden test (above).
 func TestScan_AllRealServices(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans every coreservice and example.
 	for _, dir := range allServiceDirs(t) {
 		dir := dir
 		t.Run(filepath.Base(dir), func(t *testing.T) {
-			t.Parallel()
 			assert := testarossa.For(t)
-			in, err := scanService(dir, dir)
+			in, err := scanService(dir, dir, pkgresolver.New(dir))
 			if err != nil {
 				t.Fatalf("scanService: %v", err)
 			}

@@ -17,7 +17,7 @@ Creating or modifying a ticker:
 - [ ] Step 2: Define and implement handler
 - [ ] Step 3: Extend the ToDo interface
 - [ ] Step 4: Bind handler to the microservice
-- [ ] Step 5: Extend the mock
+- [ ] Step 5: Regenerate the mock
 - [ ] Step 6: Test the handler
 - [ ] Step 7: Housekeeping
 ```
@@ -65,53 +65,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 Customize the duration to indicate how often to invoke the ticker.
 
-#### Step 5: Extend the Mock
+#### Step 5: Regenerate the Mock
 
-The `Mock` must satisfy the `ToDo` interface.
-
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockMyTicker func(ctx context.Context) (err error) // MARKER: MyTicker
-}
-```
-
-Add the stubs to the `Mock`:
-
-```go
-// MockMyTicker sets up a mock handler for MyTicker.
-func (svc *Mock) MockMyTicker(handler func(ctx context.Context) (err error)) *Mock { // MARKER: MyTicker
-	svc.mockMyTicker = handler
-	return svc
-}
-
-// MyTicker executes the mock handler.
-func (svc *Mock) MyTicker(ctx context.Context) (err error) { // MARKER: MyTicker
-	if svc.mockMyTicker == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
-	}
-	err = svc.mockMyTicker(ctx)
-	return errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-```go
-t.Run("my_ticker", func(t *testing.T) { // MARKER: MyTicker
-	assert := testarossa.For(t)
-
-	err := mock.MyTicker(ctx)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockMyTicker(func(ctx context.Context) (err error) {
-		return nil
-	})
-	err = mock.MyTicker(ctx)
-	assert.NoError(err)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 6: Test the Handler
 

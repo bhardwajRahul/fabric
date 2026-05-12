@@ -29,7 +29,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/env"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
@@ -48,47 +47,7 @@ var (
 	_ metricsapi.Client
 )
 
-func TestMetrics_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	_ = ctx
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("collect", func(t *testing.T) { // MARKER: Collect
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Collect(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCollect(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Collect(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: Collect
 
 func TestMetrics_Collect(t *testing.T) {
 	// No parallel - Setting envars

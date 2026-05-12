@@ -52,8 +52,7 @@ type SubmitCreditApplicationOut struct { // MARKER: SubmitCreditApplication
 
 // VerifyCreditIn are the input arguments of VerifyCredit.
 type VerifyCreditIn struct { // MARKER: VerifyCredit
-	CreditScore    int    `json:"creditScore,omitzero"`
-	FaultInjection string `json:"faultInjection,omitzero"`
+	CreditScore int `json:"creditScore,omitzero"`
 }
 
 // VerifyCreditOut are the output arguments of VerifyCredit.
@@ -86,8 +85,7 @@ type InitIdentityVerificationOut struct { // MARKER: InitIdentityVerification
 
 // VerifySSNIn are the input arguments of VerifySSN.
 type VerifySSNIn struct { // MARKER: VerifySSN
-	SSN            string `json:"ssn,omitzero"`
-	FaultInjection string `json:"faultInjection,omitzero"`
+	SSN string `json:"ssn,omitzero"`
 }
 
 // VerifySSNOut are the output arguments of VerifySSN.
@@ -107,8 +105,7 @@ type VerifyAddressOut struct { // MARKER: VerifyAddress
 
 // VerifyPhoneNumberIn are the input arguments of VerifyPhoneNumber.
 type VerifyPhoneNumberIn struct { // MARKER: VerifyPhoneNumber
-	Phone          string `json:"phone,omitzero"`
-	FaultInjection string `json:"faultInjection,omitzero"`
+	Phone string `json:"phone,omitzero"`
 }
 
 // VerifyPhoneNumberOut are the output arguments of VerifyPhoneNumber.
@@ -140,10 +137,9 @@ type RequestMoreInfoOut struct { // MARKER: RequestMoreInfo
 
 // ReviewCreditIn are the input arguments of ReviewCredit.
 type ReviewCreditIn struct { // MARKER: ReviewCredit
-	CreditScore    int    `json:"creditScore,omitzero"`
-	CreditVerified bool   `json:"creditVerified,omitzero"`
-	ReviewAttempts int    `json:"reviewAttempts,omitzero"`
-	FaultInjection string `json:"faultInjection,omitzero"`
+	CreditScore    int  `json:"creditScore,omitzero"`
+	CreditVerified bool `json:"creditVerified,omitzero"`
+	ReviewAttempts int  `json:"reviewAttempts,omitzero"`
 }
 
 // ReviewCreditOut are the output arguments of ReviewCredit.
@@ -188,8 +184,7 @@ type IdentityVerificationOut struct { // MARKER: IdentityVerification
 
 // CreditApprovalIn are the input arguments of CreditApproval.
 type CreditApprovalIn struct { // MARKER: CreditApproval
-	Applicant      Applicant `json:"applicant,omitzero"`
-	FaultInjection string    `json:"faultInjection,omitzero"`
+	Applicant Applicant `json:"applicant,omitzero"`
 }
 
 // CreditApprovalOut are the output arguments of CreditApproval.

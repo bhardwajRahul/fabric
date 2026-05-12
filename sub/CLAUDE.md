@@ -44,11 +44,13 @@ The `Inputs` / `Outputs` fields hold zero-value struct instances supplied via th
 
 The duplication is intentional: `sub` does not import `openapi` (which would be the wrong direction), so the constants are mirrored as plain string literals. If you add a new feature type here, mirror it in `openapi/` and grep for the existing constants to find every site that pattern-matches them.
 
-### `Infra` / `Ultra` and `NoTrace` / `Trace` are reset pairs, not toggle pairs
+### `Manual` / `Automatic` and `NoTrace` / `Trace` are reset pairs, not toggle pairs
 
-`Infra()` and `NoTrace()` are the meaningful options. `Ultra()` and `Trace()` reset them - they exist to undo a prior `Infra` or `NoTrace` in a programmatically composed option list. In hand-written code you almost never call `Ultra` or `Trace`; the defaults already match.
+`Manual()` and `NoTrace()` are the meaningful options. `Automatic()` and `Trace()` reset them - they exist to undo a prior `Manual` or `NoTrace` in a programmatically composed option list. In hand-written code you almost never call `Automatic` or `Trace`; the defaults already match.
 
-`Infra` is currently used by the distributed cache only. See `connector/CLAUDE.md` for what the flag actually does to the activation/deactivation schedule.
+`Manual` opts a subscription out of the connector's automatic activation and deactivation passes. User code (or framework infrastructure) is responsible for calling `Connector.ActivateSubscription` once the backing resource is ready, and `Connector.DeactivateSubscription` when it goes away. Typical backing resources: a Python venv, the distributed cache, an ML model load, a database pool — anything not ready by the end of `OnStartup` or that may need to be rebuilt mid-lifecycle (e.g. on a `410 Gone` from an upstream allocator).
+
+Pair with `Tag(...)` to group related subscriptions and operate on them as a set by iterating `Connector.Subscriptions()`. See `connector/CLAUDE.md` for the precise lifecycle window in which activation/deactivation is valid.
 
 ### `RequiredClaims` is parsed at Subscribe-time, evaluated per-request
 

@@ -81,7 +81,7 @@ dependency.
 The mermaid follows the convention the framework was already using:
 
 ```
-graph TB
+graph LR
     classDef core fill:#ed2e92,...
     classDef svc fill:#32a7c1,...
     classDef danger fill:#f15922,...
@@ -106,11 +106,11 @@ mentions use the bare hostname.
 
 ## Trust-root highlighting
 
-A service that exposes any endpoint on port `:666` (the trust-root port — token mint, shell exec, privileged writes; see [`ROOT_TRUST.md`](../../ROOT_TRUST.md)) is rendered with `classDef danger` (orange `#f15922`) instead of `svc`/`core`, and every dep edge pointing at it carries a `|danger|` label. Event edges into a danger service are also labeled.
+A service that exposes any endpoint on port `:666` (the trust-root port — token mint, privileged writes; see [`ROOT_TRUST.md`](../../ROOT_TRUST.md)) is rendered with `classDef danger` (orange `#f15922`) instead of `svc`/`core`, and every dep edge pointing at it carries a `|danger|` label. Event edges into a danger service are also labeled.
 
 Detection is manifest-driven: `serviceFromDir` reads `webs`, `functions`, `tasks`, and `workflows` and flags the service if any route's port is `:666`. Outbound and inbound events are excluded — those are conventionally on `:417`, and the trust-root capability is about caller-reachable RPC/web/task/workflow endpoints, not event subscriptions.
 
-The danger class overrides the `.core` suffix rule, so trust-root core services (e.g. `access.token.core`, `bearer.token.core`, `shell.core`) appear orange rather than pink. This is intentional — a reader scanning the diagram for elevated-privilege services should see them at a glance.
+The danger class overrides the `.core` suffix rule, so trust-root core services (e.g. `access.token.core`, `bearer.token.core`) appear orange rather than pink. This is intentional — a reader scanning the diagram for elevated-privilege services should see them at a glance.
 
 ## `--check` mode
 

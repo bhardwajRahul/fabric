@@ -182,6 +182,52 @@ func TestConnector_OpenAPI(t *testing.T) {
 	})
 }
 
+func TestConnector_OpenAPI_ExcludesManualUntilActivated(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+	ctx := t.Context()
+
+	con := New("openapi.manual.connector")
+	con.SetDeployment(LOCAL) // TESTING auto-activates manual subs; opt out to exercise the gating
+	noopHandler := func(w http.ResponseWriter, r *http.Request) error { return nil }
+	type emptyIn struct{}
+	type emptyOut struct{}
+
+	assert.NoError(con.Subscribe("Active", noopHandler, sub.Function(emptyIn{}, emptyOut{})))
+	assert.NoError(con.Subscribe("ManualFn", noopHandler,
+		sub.Function(emptyIn{}, emptyOut{}),
+		sub.Manual(),
+	))
+
+	assert.NoError(con.Startup(ctx))
+	defer con.Shutdown(ctx)
+
+	fetch := func() map[string]map[string]any {
+		res, err := con.Request(ctx, pub.GET("https://openapi.manual.connector:888/openapi.json"))
+		assert.NoError(err)
+		body, err := io.ReadAll(res.Body)
+		assert.NoError(err)
+		var doc struct {
+			Paths map[string]map[string]any `json:"paths"`
+		}
+		assert.NoError(json.Unmarshal(body, &doc))
+		return doc.Paths
+	}
+
+	// Before activation: Active is in the doc; ManualFn is not.
+	paths := fetch()
+	_, ok := paths["/openapi.manual.connector:443/active"]
+	assert.True(ok)
+	_, ok = paths["/openapi.manual.connector:443/manual-fn"]
+	assert.False(ok)
+
+	// After activation: ManualFn now appears.
+	assert.NoError(con.ActivateSubscription("ManualFn"))
+	paths = fetch()
+	_, ok = paths["/openapi.manual.connector:443/manual-fn"]
+	assert.True(ok)
+}
+
 func TestConnector_Ping(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)

@@ -45,9 +45,16 @@ If/when external GenAI dashboard compatibility is needed, the OTel metric can be
 
 ### ChatLoop Workflow
 
-The ChatLoop uses `AddTransitionForEach` on `pendingToolCalls` to fan out one `ExecuteTool` step per tool call. When the LLM returns no tool calls, `toolsRequested` is false and the conditional transition to END is taken.
+The chat loop is `initChat → initLLM → processResponse → forEach pendingToolCalls → executeTool → loopLLM → processResponse`. Each round, processResponse decides:
+
+- If no tool calls are pending or the round limit is exhausted, it calls `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped.
+- Otherwise the forEach fans out one executeTool per pending tool call. All branches converge at `loopLLM` via `graph.SetFanIn("loopLLM")`. The fan-in merges per-tool messages (auto-appended via the `list*` prefix reducer on `listMessages`) so the LLM sees the full conversation history on the next round.
+
+`initLLM` and `loopLLM` are two graph positions sharing one task URL (`CallLLM`). `initLLM` is the initial sequential call after `initChat`; `loopLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `examples/creditflow` for the same pattern (the `reviewJoin` / `reviewCredit` split).
 
 `ExecuteTool` uses `toolExecuted`/`toolExecutedOut` (Out suffix pattern) for subgraph re-entry detection. On first run (`toolExecuted=false`), it executes the tool. On re-run after a dynamic subgraph completes (`toolExecuted=true`), it collects the child's result.
+
+**The live `Chat` entry point does not use this workflow.** `Chat` implements the loop entirely in Go for the synchronous request/response case. `ChatLoop` is exposed as a workflow so it can be invoked via `foremanapi.Run` (or composed as a subgraph) when the caller wants the foreman's persistence, fork/resume, and observability for an LLM conversation. The graph is part of the API contract whether or not it's exercised by every test.
 
 ### Options Layering
 

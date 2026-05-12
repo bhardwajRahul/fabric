@@ -18,3 +18,5 @@ nats.creds
 *.sqlite3
 
 .claude/scheduled_tasks.lock
+/coreservices/venvpy/venv.py.core
+/main/venv.py.core

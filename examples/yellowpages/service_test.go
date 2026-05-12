@@ -35,7 +35,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
@@ -58,120 +57,15 @@ var (
 	_ yellowpagesapi.Client
 )
 
-func TestPerson_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: TryBulkReserve
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: TryReserve
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: BulkReserve
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
+// MARKER: Reserve
 
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("try_bulk_reserve", func(t *testing.T) { // MARKER: TryBulkReserve
-		assert := testarossa.For(t)
-
-		exampleObjKeys := []yellowpagesapi.PersonKey{{ID: 1}}
-		exampleDur := 5 * time.Minute
-		expectedReservedKeys := []yellowpagesapi.PersonKey{{ID: 1}}
-
-		_, err := mock.TryBulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockTryBulkReserve(func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) {
-			return expectedReservedKeys, nil
-		})
-		reservedKeys, err := mock.TryBulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Expect(
-			reservedKeys, expectedReservedKeys,
-			err, nil,
-		)
-	})
-
-	t.Run("try_reserve", func(t *testing.T) { // MARKER: TryReserve
-		assert := testarossa.For(t)
-
-		exampleObjKey := yellowpagesapi.PersonKey{ID: 1}
-		exampleDur := 5 * time.Minute
-
-		_, err := mock.TryReserve(ctx, exampleObjKey, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockTryReserve(func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) {
-			return true, nil
-		})
-		reserved, err := mock.TryReserve(ctx, exampleObjKey, exampleDur)
-		assert.Expect(
-			reserved, true,
-			err, nil,
-		)
-	})
-
-	t.Run("bulk_reserve", func(t *testing.T) { // MARKER: BulkReserve
-		assert := testarossa.For(t)
-
-		exampleObjKeys := []yellowpagesapi.PersonKey{{ID: 1}}
-		exampleDur := 5 * time.Minute
-		expectedReservedKeys := []yellowpagesapi.PersonKey{{ID: 1}}
-
-		_, err := mock.BulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockBulkReserve(func(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) {
-			return expectedReservedKeys, nil
-		})
-		reservedKeys, err := mock.BulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Expect(
-			reservedKeys, expectedReservedKeys,
-			err, nil,
-		)
-	})
-
-	t.Run("reserve", func(t *testing.T) { // MARKER: Reserve
-		assert := testarossa.For(t)
-
-		exampleObjKey := yellowpagesapi.PersonKey{ID: 1}
-		exampleDur := 5 * time.Minute
-
-		_, err := mock.Reserve(ctx, exampleObjKey, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockReserve(func(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) {
-			return true, nil
-		})
-		reserved, err := mock.Reserve(ctx, exampleObjKey, exampleDur)
-		assert.Expect(
-			reserved, true,
-			err, nil,
-		)
-	})
-
-	t.Run("demo", func(t *testing.T) { // MARKER: Demo
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Demo(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockDemo(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Demo(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: Demo
 
 func TestPerson_Create(t *testing.T) { // MARKER: Create
 	t.Parallel()

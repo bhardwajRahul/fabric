@@ -18,6 +18,7 @@ package httpingress
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -81,8 +82,22 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m.Append(SecureRedirect, middleware.SecureRedirect(func() bool {
 		return svc.secure443
 	}))
-	m.Append(CORS, middleware.Cors(func(origin string) bool {
-		return svc.allowedOrigins["*"] || svc.allowedOrigins[origin]
+	m.Append(CORS, middleware.Cors(func(r *http.Request, origin string) string {
+		if svc.allowedOrigins["*"] {
+			return origin
+		}
+		if svc.allowedOrigins[origin] {
+			return origin
+		}
+		if len(svc.allowedOrigins) == 0 {
+			// No allowlist configured: permit only same-origin reads by pinning
+			// ACAO to the request's own scheme://host. The browser then rejects
+			// cross-origin reads because the reflected ACAO won't match the
+			// caller's Origin. X-Forwarded-* headers are deliberately ignored
+			// since they are attacker-controlled at the edge.
+			return requestSameOrigin(r)
+		}
+		return ""
 	}))
 	m.Append(XForwarded, middleware.XForwarded())
 	m.Append(InternalHeaders, middleware.InternalHeaders())
@@ -100,4 +115,16 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m.Append(DefaultFavIcon, middleware.DefaultFavIcon())
 
 	return m
+}
+
+// requestSameOrigin returns scheme://host derived directly from r, never from
+// X-Forwarded-* headers. r.Host carries host[:port] exactly as the browser
+// uses it when constructing the Origin header, so the returned value matches
+// only same-origin callers.
+func requestSameOrigin(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
 }

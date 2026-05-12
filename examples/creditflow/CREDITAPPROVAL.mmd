@@ -1,19 +1,25 @@
-graph TD
+graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
     classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
     classDef term fill:#e5f4f3,color:#434343,stroke:#434343
 
     _title{{"credit-approval"}}:::term --> _start
-    _start(( )):::term --> t0["submit-credit-application"]:::task
-    t0 --> t1["verify-credit"]:::task
-    t0 -->|"for each in employers"| t2["verify-employment"]:::task
-    t0 --> t3["identity-verification"]:::sub
-    t1 --> t4["review-credit"]:::task
-    t1 -->|"on err"| t5["handle-credit-error"]:::task
-    t5 --> t4
-    t2 --> t4
-    t3 --> t4
-    t4 -->|"goto"| t6["request-more-info"]:::task
-    t6 --> t4
-    t4 --> t7["decision"]:::task
-    t7 --> _end(( )):::term
+    t2@{ shape: st-rect, label: "verifyEmployment" }
+    t5@{ shape: trap-t, label: "reviewJoin" }
+    _start(( )):::term --> t0["submitCreditApplication"]:::task
+    t0 --> t1["verifyCredit"]:::task
+    t1 -->|"onError"| t4["handleCreditError"]:::task
+    t4 -->|"fan-in"| t5
+    t0 -->|"for each in employers"| t2
+    t0 --> t3[["identityVerification"]]:::sub
+    t1 -->|"fan-in"| t5
+    t2 -->|"fan-in"| t5
+    t3 -->|"fan-in"| t5
+    t5 -->|"goto"| t7["requestMoreInfo"]:::task
+    t5 --> t6["reviewCredit"]:::task
+    t6 -->|"goto"| t7
+    t7 --> t6
+    t6 --> t8["decision"]:::task
+    t8 --> _end(( )):::term
+    class t2 task
+    class t5 task

@@ -40,9 +40,11 @@ This is what lets the same cache hold both compressed and uncompressed values wi
 
 ### Subscriptions are owned by the connector, not the cache
 
-`start` registers `/all` and `/rescue` with `sub.Infra()` - the only current use of that flag. `Close` does *not* unsubscribe. The connector owns the subscription lifecycle and tears them down via its infra-deactivation pass during shutdown (see `connector/CLAUDE.md`). Code in this package therefore has no symmetric `stop` for `start`.
+`start` registers `/all` and `/rescue` with `sub.Manual()` so the connector's automatic activation passes skip them, then activates them itself so the cache is reachable from inside `OnStartup`. `Close` symmetrically `Unsubscribe`s the subs (not just deactivates) *before* the offload pass, then offloads to peers. This keeps the lifecycle one-sided: the cache owns its own subs end-to-end, and the connector just calls `NewCache` and `Close` at the right lifecycle moments without needing to know the cache's routes.
 
-This asymmetry is deliberate: the connector knows the precise window in which the dlru's subscriptions must stay alive (through `OnStartup` *and* `OnShutdown`), and that window is enforced by the connector's lifecycle code, not by paired `start`/`stop` calls here.
+Unsubscribing (rather than only deactivating) on `Close` is what makes connector restart safe. The connector resets `c.distribCache = nil` after `Close`, so the next `Startup` calls `dlru.NewCache` again. If the prior `Close` had left the subscription *registered* (deactivated but still in the connector's `subs` map), `NewCache`'s `Subscribe` calls would fail with "duplicate subscription name". The restart-survival contract — verified by `TestDLRU_LifecycleSurvivesRestart` — covers both a clean Shutdown→Startup cycle and the case where the first `Startup` failed inside `OnStartup` (the connector still runs Shutdown to clean up, the cache must be fully reusable on retry).
+
+Unsubscribing before offload is the load-bearing ordering: rescue PUTs must route only to peers, not loop back through this connector's own (about-to-be-discarded) cache.
 
 ### `Close` offloads to peers within a fixed 4-second budget
 
@@ -50,7 +52,7 @@ When the microservice shuts down, `Close` is called by the connector. It pings t
 
 The 4-second budget is sized to fit within the connector's 8-second pre-cancel drain window - the offload must complete before the connector's lifetime context is cancelled. Two enabling conditions:
 
-1. **Local infra subs are already torn down.** The connector deactivates the dlru's `/all` and `/rescue` subs *before* calling `Close`. So outgoing rescue PUTs route only to peers - the sender's own queue group is gone.
+1. **Local dlru subs are torn down first.** `Close` itself deactivates the `/all` and `/rescue` subs before starting the offload, so outgoing rescue PUTs route only to peers — the sender's own queue group is gone.
 2. **Bounded loss is acceptable.** The cache is opt-in lossy by design (the docs warn "cache only what you can afford to lose"). 4 seconds is long enough to evacuate most caches but short enough to keep total shutdown time bounded.
 
 If zero peers are alive, `offload` returns immediately - there is no fallback to disk.

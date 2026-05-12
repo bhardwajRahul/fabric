@@ -22,7 +22,7 @@ Creating or modifying a web endpoint:
 - [ ] Step 7: Extend the clients
 - [ ] Step 8: Implement the logic
 - [ ] Step 9: Bind the handler to the microservice
-- [ ] Step 10: Extend the mock
+- [ ] Step 10: Regenerate the mock
 - [ ] Step 11: Test the handler
 - [ ] Step 12: Housekeeping
 ```
@@ -173,55 +173,9 @@ Add the following options to `svc.Subscribe` as needed:
   - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
 - `sub.RequiredClaims(requiredClaims)` to define the authorization requirements of the endpoint. Omit to allow all requests
 
-#### Step 10: Extend the Mock
+#### Step 10: Regenerate the Mock
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockMyWeb func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: MyWeb
-}
-```
-
-Add the stubs to the `Mock`:
-
-```go
-// MockMyWeb sets up a mock handler for MyWeb.
-func (svc *Mock) MockMyWeb(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: MyWeb
-	svc.mockMyWeb = handler
-	return svc
-}
-
-// MyWeb executes the mock handler.
-func (svc *Mock) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MyWeb
-	if svc.mockMyWeb == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
-	}
-	err = svc.mockMyWeb(w, r)
-	return errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-```go
-t.Run("my_web", func(t *testing.T) { // MARKER: MyWeb
-	assert := testarossa.For(t)
-
-	w := httpx.NewResponseRecorder()
-	r := httpx.MustNewRequest("GET", "/", nil)
-
-	err := mock.MyWeb(w, r)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockMyWeb(func(w http.ResponseWriter, r *http.Request) (err error) {
-		w.WriteHeader(http.StatusOK)
-		return nil
-	})
-	err = mock.MyWeb(w, r)
-	assert.NoError(err)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 11: Test the Handler
 

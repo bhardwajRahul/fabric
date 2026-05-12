@@ -1,4 +1,4 @@
-graph TB
+graph LR
     classDef core fill:#ed2e92,color:#f4f2ef,stroke-width:0px
     classDef svc fill:#32a7c1,color:#f4f2ef,stroke-width:0px
     classDef danger fill:#f15922,color:#f4f2ef,stroke-width:0px
@@ -24,6 +24,7 @@ graph TB
     calculator.example[Calculator<br>calculator.example]
     chatbox.example[Chatbox<br>chatbox.example] ---> llm.core
     creditflow.example[CreditFlow<br>creditflow.example] ---> foreman.core
+    embedder.example[embedder<br>embedder.example] --- embedder.example.py[[Py]]
     eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
     hello.example[Hello<br>hello.example] ---> calculator.example
     helloworld.example[HelloWorld<br>helloworld.example]
@@ -31,7 +32,7 @@ graph TB
     messaging.example[Messaging<br>messaging.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class browser.example,calculator.example,chatbox.example,creditflow.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
+    class browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
     class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,mcp.core,metrics.core,openapi.core core
     class access.token.core,bearer.token.core danger
-    class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,browser.example.cloud,yellowpages.example.db ext
+    class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext

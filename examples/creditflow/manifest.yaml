@@ -18,7 +18,7 @@ general:
   description: CreditFlow is an example microservice that demonstrates agentic workflow features.
   package: github.com/microbus-io/fabric/examples/creditflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-09T14:35:50Z"
+  modifiedAt: "2026-05-14T18:20:34Z"
 
 webs:
   Demo:
@@ -32,7 +32,7 @@ tasks:
     description: SubmitCreditApplication receives a credit application and sets up the workflow state.
     route: :428/submit-credit-application
   VerifyCredit:
-    signature: VerifyCredit(creditScore int, faultInjection string) (creditVerified bool)
+    signature: VerifyCredit(creditScore int) (creditVerified bool)
     description: VerifyCredit checks the applicant's credit score.
     route: :428/verify-credit
   VerifyEmployment:
@@ -44,7 +44,7 @@ tasks:
     description: InitIdentityVerification is the entry point for the identity verification subgraph.
     route: :428/init-identity-verification
   VerifySSN:
-    signature: VerifySSN(ssn string, faultInjection string) (ssnVerified bool)
+    signature: VerifySSN(ssn string) (ssnVerified bool)
     description: VerifySSN checks the applicant's SSN.
     route: :428/verify-ssn
   VerifyAddress:
@@ -52,7 +52,7 @@ tasks:
     description: VerifyAddress checks the applicant's address.
     route: :428/verify-address
   VerifyPhoneNumber:
-    signature: VerifyPhoneNumber(phone string, faultInjection string) (phoneVerified bool)
+    signature: VerifyPhoneNumber(phone string) (phoneVerified bool)
     description: VerifyPhoneNumber checks the applicant's phone number.
     route: :428/verify-phone-number
   IdentityDecision:
@@ -64,7 +64,7 @@ tasks:
     description: RequestMoreInfo requests additional information for the credit review and increments the review attempt counter.
     route: :428/request-more-info
   ReviewCredit:
-    signature: ReviewCredit(creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool)
+    signature: ReviewCredit(creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool)
     description: ReviewCredit performs a manual review of borderline credit scores.
     route: :428/review-credit
   HandleCreditError:
@@ -82,6 +82,6 @@ workflows:
     description: IdentityVerification defines the workflow graph for the identity verification process.
     route: :428/identity-verification
   CreditApproval:
-    signature: CreditApproval(applicant Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool)
+    signature: CreditApproval(applicant Applicant) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool)
     description: CreditApproval defines the workflow graph for the full credit approval process.
     route: :428/credit-approval

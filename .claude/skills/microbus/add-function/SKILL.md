@@ -25,7 +25,7 @@ Creating or modifying a functional endpoint:
 - [ ] Step 10: Implement the logic
 - [ ] Step 11: Define the marshaler function
 - [ ] Step 12: Bind the marshaler function to the microservice
-- [ ] Step 13: Extend the mock
+- [ ] Step 13: Regenerate the mock
 - [ ] Step 14: Test the function
 - [ ] Step 15: Housekeeping
 ```
@@ -296,62 +296,9 @@ Add the following options to `svc.Subscribe` as needed:
   - `sub.Queue(queueName)`: requests are load balanced among peers associated with this queue name. Subscribers associated with other queue names receive the requests separately based on their own queue option
 - `sub.RequiredClaims(requiredClaims)` to define the authorization requirements of the endpoint. Omit to allow all requests
 
-#### Step 13: Extend the Mock
+#### Step 13: Regenerate the Mock
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockMyFunction func(ctx context.Context, input1 string, input2 myserviceapi.ThirdPartyStruct) (output1 map[string]myserviceapi.MyStruct, err error) // MARKER: MyFunction
-}
-```
-
-Add the stubs to the `Mock`.
-
-```go
-// MockMyFunction sets up a mock handler for MyFunction.
-func (svc *Mock) MockMyFunction(handler func(ctx context.Context, input1 string, input2 myserviceapi.ThirdPartyStruct) (output1 map[string]myserviceapi.MyStruct, err error)) *Mock { // MARKER: MyFunction
-	svc.mockMyFunction = handler
-	return svc
-}
-
-// MyFunction executes the mock handler.
-func (svc *Mock) MyFunction(ctx context.Context, input1 string, input2 myserviceapi.ThirdPartyStruct) (output1 map[string]myserviceapi.MyStruct, err error) { // MARKER: MyFunction
-	if svc.mockMyFunction == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	output1, err = svc.mockMyFunction(ctx, input1, input2)
-	return output1, errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-- Set values for the example input arguments
-- Set values for the expected output arguments
-
-```go
-t.Run("my_function", func(t *testing.T) { // MARKER: MyFunction
-	assert := testarossa.For(t)
-
-	exampleParam1 := ""
-	exampleParam2 := myserviceapi.ThirdPartyStruct{}
-	expectedResult1 := map[string]myserviceapi.MyStruct{}
-
-	_, err := mock.MyFunction(ctx, exampleParam1, exampleParam2)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockMyFunction(func(ctx context.Context, input1 string, input2 myserviceapi.ThirdPartyStruct) (output1 map[string]myserviceapi.MyStruct, err error) {
-		return expectedResult1, nil
-	})
-	output1, err := mock.MyFunction(ctx, exampleParam1, exampleParam2)
-	assert.Expect(
-		output1, expectedResult1,
-		err, nil,
-	)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 14: Test the Function
 

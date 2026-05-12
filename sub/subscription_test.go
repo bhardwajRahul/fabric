@@ -57,7 +57,7 @@ func TestSub_NewSubscription(t *testing.T) {
 		assert.NoError(err)
 		assert.Equal(tc.expectedHost, s.Host)
 		assert.Equal(tc.expectedPort, s.Port)
-		assert.Equal(tc.expectedRoute, s.Route)
+		assert.Equal(tc.expectedRoute, s.Path)
 	}
 }
 
@@ -85,8 +85,8 @@ func TestSub_Method(t *testing.T) {
 		"ABC123",
 		"!",
 		"*",
-		"POSTT",     // typo of POST
-		"ANYTHING",  // not a known HTTP method
+		"POSTT",    // typo of POST
+		"ANYTHING", // not a known HTTP method
 		"FOO",
 		"",
 	}

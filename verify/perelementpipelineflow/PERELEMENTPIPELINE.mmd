@@ -1,0 +1,20 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"per-element-pipeline"}}:::term --> _start
+    t1@{ shape: st-rect, label: "taskH" }
+    t4@{ shape: trap-t, label: "taskM" }
+    t5@{ shape: trap-t, label: "taskL" }
+    _start(( )):::term --> t0["taskS"]:::task
+    t0 -->|"for each in items"| t1
+    t1 --> t2["taskA"]:::task
+    t1 --> t3["taskB"]:::task
+    t2 -->|"fan-in"| t4
+    t3 -->|"fan-in"| t4
+    t4 -->|"fan-in"| t5
+    t5 --> _end(( )):::term
+    class t1 task
+    class t4 task
+    class t5 task

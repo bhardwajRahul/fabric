@@ -19,7 +19,7 @@ package main
 import (
 	"strings"
 
-	"github.com/microbus-io/fabric/cmd/schema"
+	"github.com/microbus-io/fabric/cmd/internal/schema"
 )
 
 // encodePath converts a URL path into its NATS subject form. Must produce

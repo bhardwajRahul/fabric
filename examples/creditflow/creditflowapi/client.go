@@ -208,11 +208,10 @@ func (_c Executor) SubmitCreditApplication(ctx context.Context, applicant Applic
 /*
 VerifyCredit checks the applicant's credit score.
 */
-func (_c Executor) VerifyCredit(ctx context.Context, creditScore int, faultInjection string) (creditVerified bool, err error) { // MARKER: VerifyCredit
+func (_c Executor) VerifyCredit(ctx context.Context, creditScore int) (creditVerified bool, err error) { // MARKER: VerifyCredit
 	var out VerifyCreditOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, VerifyCredit.Method, VerifyCredit.Route, VerifyCreditIn{
-		CreditScore:    creditScore,
-		FaultInjection: faultInjection,
+		CreditScore: creditScore,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.CreditVerified, err // No trace
 }
@@ -245,11 +244,10 @@ func (_c Executor) InitIdentityVerification(ctx context.Context, applicantName s
 /*
 VerifySSN checks the applicant's SSN.
 */
-func (_c Executor) VerifySSN(ctx context.Context, ssn string, faultInjection string) (ssnVerified bool, err error) { // MARKER: VerifySSN
+func (_c Executor) VerifySSN(ctx context.Context, ssn string) (ssnVerified bool, err error) { // MARKER: VerifySSN
 	var out VerifySSNOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, VerifySSN.Method, VerifySSN.Route, VerifySSNIn{
-		SSN:            ssn,
-		FaultInjection: faultInjection,
+		SSN: ssn,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.SsnVerified, err // No trace
 }
@@ -268,11 +266,10 @@ func (_c Executor) VerifyAddress(ctx context.Context, address string) (addressVe
 /*
 VerifyPhoneNumber checks the applicant's phone number.
 */
-func (_c Executor) VerifyPhoneNumber(ctx context.Context, phone string, faultInjection string) (phoneVerified bool, err error) { // MARKER: VerifyPhoneNumber
+func (_c Executor) VerifyPhoneNumber(ctx context.Context, phone string) (phoneVerified bool, err error) { // MARKER: VerifyPhoneNumber
 	var out VerifyPhoneNumberOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, VerifyPhoneNumber.Method, VerifyPhoneNumber.Route, VerifyPhoneNumberIn{
-		Phone:          phone,
-		FaultInjection: faultInjection,
+		Phone: phone,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.PhoneVerified, err // No trace
 }
@@ -304,13 +301,12 @@ func (_c Executor) RequestMoreInfo(ctx context.Context, reviewAttempts int) (rev
 /*
 ReviewCredit performs a manual review of borderline credit scores.
 */
-func (_c Executor) ReviewCredit(ctx context.Context, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
+func (_c Executor) ReviewCredit(ctx context.Context, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
 	var out ReviewCreditOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ReviewCredit.Method, ReviewCredit.Route, ReviewCreditIn{
 		CreditScore:    creditScore,
 		CreditVerified: creditVerified,
 		ReviewAttempts: reviewAttempts,
-		FaultInjection: faultInjection,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.CreditVerifiedOut, err // No trace
 }
@@ -359,14 +355,13 @@ func (_c Executor) IdentityVerification(ctx context.Context, applicantName strin
 /*
 CreditApproval creates and runs the credit approval workflow, blocking until termination.
 */
-func (_c Executor) CreditApproval(ctx context.Context, applicant Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, status string, err error) { // MARKER: CreditApproval
+func (_c Executor) CreditApproval(ctx context.Context, applicant Applicant) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, status string, err error) { // MARKER: CreditApproval
 	if _c.runner == nil {
 		return false, false, 0, false, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out CreditApprovalOut
 	status, err = marshalWorkflow(ctx, _c.runner, CreditApproval.URL(), CreditApprovalIn{
-		Applicant:      applicant,
-		FaultInjection: faultInjection,
+		Applicant: applicant,
 	}, &out)
 	return out.Approved, out.CreditVerified, out.SumEmploymentFailures, out.IdentityVerified, status, err
 }

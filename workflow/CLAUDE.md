@@ -84,11 +84,40 @@ Multiple transitions can match from the same task. *All* matching ones fire - th
 
 `OnError` cannot combine with `When`, `ForEach`, or `WithGoto` - the validator rejects it.
 
-### Fan-out siblings must converge to the same successors
+`OnError` transitions carry an optional `StatusCode` discriminator (zero = "match any error"). `AddTransitionOnTimeout` is the only public constructor that sets a non-zero status code today; it sets `StatusCode: http.StatusRequestTimeout` so it fires only when the task's error has status 408. Both foreman-side `pub.Timeout` expiry and subscriber-side handler timeouts surface as 408, so a single transition covers either side timing out first - there's no asymmetry the foreman has to encode separately. When both an `OnTimeout` and a catch-all `OnError` are wired from the same task, the status-coded transition wins on a match and the catch-all wins otherwise (most-specific-wins). The `StatusCode` field is the extension point for future status-keyed transitions (e.g. an `OnConflict` for 409s) without redesigning the `Transition` struct - the validator rejects `StatusCode != 0` paired with `OnError: false`.
 
-`Graph.Validate` rejects graphs where two non-goto, non-error siblings of a fan-out have different outgoing transition targets. The reason is in the foreman's evaluator: when siblings execute at the same `step_num`, the workflow only continues to the next step when the last sibling finishes, and outgoing transitions are evaluated only from that last sibling. If siblings disagreed about where to go next, the chosen successor would depend on a race. Forcing a common successor set makes fan-in deterministic.
+### Error transitions route, they don't retry
 
-This is the most surprising graph constraint. If you find yourself wanting different successors per sibling, you usually want a conditional transition out of a *single* convergence node instead.
+`OnError` and `OnTimeout` are for routing to a *different* handler (a fallback model, a degraded path, an error-logging task). The validator rejects `from == to` on either kind, because a self-loop bypasses every safety property of `flow.Retry`: it creates a new step row per cycle (instead of reusing one), it has no attempt counter, no backoff, and no bound. For "keep retrying this task" semantics, use `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay)` in the task body - or `flow.RetryOnTimeout(err, ...)` for the common case of "retry only when the error is a 408." The two primitives compose: the task retries internally until exhausted, then the surviving error propagates and the graph's `OnTimeout`/`OnError` transition (to a *different* target) takes over.
+
+### Fan-in is explicit via SetFanIn
+
+`Graph.SetFanIn(name)` marks a node as a fan-in nexus. `Graph.Validate` enforces a single invariant: every transition stays in its current lineage scope, or is an edge into a `SetFanIn` node that pops one frame. The validator computes a lineage stack per node by BFS from the entry point — pushing a frame at fan-out sources (any node with 2+ non-goto/non-error outgoing edges, or any forEach edge) and popping at `SetFanIn` nodes. It rejects:
+
+- A `SetFanIn` reached with empty stack (fan-in outside any fan-out scope).
+- END reached with a non-empty stack (a branch that doesn't pop back through every fan-in on its way to END).
+- The same node reached via paths with different stacks. Aliasing is the escape hatch — register the same task URL under two different names so each lives in its own scope.
+- A `Goto`, `OnError`, or `OnTimeout` whose target stack would differ from the source's. These edges don't push or pop, so source and target must share a scope. There is no "bypass" for a fan-in via goto.
+
+A consequence of the END rule: the graph is forced to have a single, single-scope termination point. Branches can do whatever they want internally, but every cohort must converge through its `SetFanIn`. Graphs with no fan-out (and therefore no `SetFanIn`) are trivially accepted — the validator just walks the structure and confirms END is reachable with empty stack.
+
+**Side effect: `fanOutToFanIn` map.** As validation runs, it records, per fan-out source, the `SetFanIn` node that pops its frame. The map is unambiguous because the validator forbids two paths reaching the same node with different stacks. The foreman uses this map to handle the empty-cohort case: when a forEach yields zero elements (no branches spawn), the foreman creates the corresponding fan-in step directly with empty state and the parent scope's lineage so the flow continues past the join.
+
+**Direct fan-out → fan-in edge is allowed.** If a fan-out source has one sibling that goes straight to the `SetFanIn` and another that goes through intermediate work, both arrive in the same scope: the push and pop on the direct edge cancel.
+
+### Lineage runtime accounting
+
+A cohort spawn step records `cohort_size = N` (the number of branches actually spawned at this fan-out evaluation, which can differ between runs for `forEach` and `When`). Each branch step inherits `lineage_id = spawn.step_id` for normal transitions, or `lineage_id = parent.lineage_id` for non-fan-out transitions (Goto and OnError edges do not push, regardless of whether the source is statically a fan-out).
+
+When a step transitions to a `SetFanIn` target the foreman atomically increments `cohort_arrivals` on the spawn row inside the same transaction that completes the step. The last incrementer (the one whose post-update `cohort_arrivals == cohort_size`) creates the fan-in step in the same transaction with state merged from all cohort members (steps with that `lineage_id`, ordered by `updated_at, step_id`, reduced via the graph's reducers).
+
+**Cancelled branches count as arrivals.** When an `OnError` route fires, the foreman cancels other branches in the same cohort and increments `cohort_arrivals` by the number of cancellations. Without this the fan-in would block waiting for branches that never arrive.
+
+**Empty cohort fires the fan-in directly.** A fan-out source that produces zero branches (e.g. `forEach` over an empty array, or a static fan-out where all `When` predicates evaluated false) looks up the destination via `graph.FanInFor(sourceTaskName)` and creates that step immediately with empty state and the parent scope's lineage. This is why the validator records `fanOutToFanIn` as a side effect.
+
+**Aliases for re-entry.** A node marked `SetFanIn` cannot be re-entered via Goto from outside its cohort scope (the goto target stack would differ from the source's, which the validator rejects). The pattern for "fan in, then loop with goto" is to introduce two graph positions sharing one task URL — for example `reviewJoin` (the fan-in nexus) and `reviewCredit` (sequential after the join, hosts the goto loop). Both `AddTask("name", url)` registrations point at the same dispatch URL; the graph treats them as distinct positions and the foreman runs the task once per visit. See `examples/creditflow` for a worked example.
+
+**Loop-back via Goto-to-END.** A node downstream of a fan-in can use `flow.Goto(workflow.END)` to terminate the flow even when other transitions out of that node are normal edges. This is how `coreservices/llm`'s `ProcessResponse` exits the chat loop when no more tool calls are pending — the alternative `forEach pendingToolCalls` transition is skipped (Goto wins) and the flow completes cleanly.
 
 ### `END` is a pseudo-node
 
@@ -96,7 +125,7 @@ This is the most surprising graph constraint. If you find yourself wanting diffe
 
 ### Auto-registration on `AddTransition`
 
-`AddTransition`, `AddTransitionWhen`, `AddTransitionGoto`, `AddTransitionForEach`, `AddErrorTransition` all auto-register both endpoints as tasks. The first node added - by any path - becomes the default `entryPoint` unless `SetEntryPoint` overrides. So a graph can be built from transitions alone, without explicit `AddTask` calls.
+`AddTransition`, `AddTransitionWhen`, `AddTransitionGoto`, `AddTransitionForEach`, `AddTransitionOnError`, `AddTransitionOnTimeout` all auto-register both endpoints as tasks. The first node added - by any path - becomes the default `entryPoint` unless `SetEntryPoint` overrides. So a graph can be built from transitions alone, without explicit `AddTask` calls.
 
 ### `DeclareInputs` / `DeclareOutputs` use a three-state encoding
 
@@ -120,4 +149,8 @@ The split is enforced by Go's package-private fields, not by an interface, becau
 
 ### Empty `forEach` means "no successors via this transition"
 
-`AddTransitionForEach` over an empty state field spawns zero tasks. If it is the *only* outgoing non-`OnError` transition from the source, the flow completes at the source. This is the correct behavior for "fan out over results, none found" cases, but it is also a foot-gun if you forgot a sibling unconditional transition to a default target.
+`AddTransitionForEach` over an empty state field spawns zero tasks.
+
+Under the legacy validator, if it is the *only* outgoing non-`OnError` transition from the source, the flow completes at the source. This is the correct behavior for "fan out over results, none found" cases, but it is also a foot-gun if you forgot a sibling unconditional transition to a default target.
+
+Under the lineage validator (with `SetFanIn`), an empty forEach is not a footgun: the foreman looks up the source's fan-in via `g.FanInFor(source)` and creates that fan-in step directly with empty state. Execution continues past the join naturally.

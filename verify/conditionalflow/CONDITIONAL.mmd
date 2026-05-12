@@ -1,0 +1,14 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"conditional"}}:::term --> _start
+    t3@{ shape: trap-t, label: "taskC" }
+    _start(( )):::term --> t0["taskA"]:::task
+    t0 -->|"if score >= 50"| t1["taskHigh"]:::task
+    t0 -->|"if score < 50"| t2["taskLow"]:::task
+    t1 -->|"fan-in"| t3
+    t2 -->|"fan-in"| t3
+    t3 --> _end(( )):::term
+    class t3 task

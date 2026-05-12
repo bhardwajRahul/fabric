@@ -18,28 +18,11 @@ package chatbox
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
-
-	"github.com/microbus-io/fabric/examples/chatbox/chatboxapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ chatboxapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -78,11 +61,9 @@ func (svc *Mock) MockTurn(handler func(ctx context.Context, model string, messag
 
 // Turn executes the mock handler.
 func (svc *Mock) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
-	if svc.mockTurn == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockTurn != nil {
+		content, toolCalls, usage, err = svc.mockTurn(ctx, model, messages, tools, options)
 	}
-	content, toolCalls, usage, err = svc.mockTurn(ctx, model, messages, tools, options)
 	return content, toolCalls, usage, errors.Trace(err)
 }
 
@@ -94,9 +75,8 @@ func (svc *Mock) MockDemo(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Demo executes the mock handler.
 func (svc *Mock) Demo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Demo
-	if svc.mockDemo == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockDemo != nil {
+		err = svc.mockDemo(w, r)
 	}
-	err = svc.mockDemo(w, r)
 	return errors.Trace(err)
 }

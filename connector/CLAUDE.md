@@ -13,22 +13,26 @@ The connector lives in one of four phases - `shutDown`, `startingUp`, `startedUp
 Subscriptions activate in deliberate waves, not all at once:
 
 0. **Response sub.** Immediately after the transport connects, the connector subscribes to its own response subject (`<plane>.r.<reverseHost>.<id>`). This must come before everything else because the connector itself makes outbound requests during the rest of Startup - most obviously to `configurator.core` to fetch config values - and those replies have nowhere to land without the response sub already in place.
-1. **Infra subs** (those tagged `sub.Infra`) activate *before* the user's `OnStartup` callback runs, so framework facilities are reachable from inside `OnStartup`.
+1. **dlru subs** (registered by `dlru.Cache.start` with `sub.Manual()`) activate *before* the user's `OnStartup` callback runs, so the distributed cache is reachable from inside `OnStartup`. The connector finds them by route - the cache lives at `:888/dcache/...`, so `lifecycle.go` scans for `s.Port == "888"` and a `/dcache/` route prefix. The connector chose the path when it called `dlru.NewCache`, so route-based identification keeps the contract one-sided rather than requiring a tagging convention.
 2. **Control subs** (`:888/ping`, `/config-refresh`, `/metrics`, `/trace`, `/on-new-subs`, `/openapi.json`) activate *after* `OnStartup` returns - the control plane is not exposed until the service has finished its own init.
-3. **User business subs** activate after the control subs.
+3. **User business subs** activate after the control subs, via `activateSubs` which skips any sub marked `sub.Manual`. User-owned manual subs (Python venv handlers, etc.) come on-bus when user code calls `Connector.ActivateSubscription` - typically from inside `OnStartup` once a backing resource is ready, or from a recovery path on `410 Gone`.
 
 Tickers start only after `phase` reaches `startedUp`. The lifetime context (`lifetimeCtx`) is created between `OnStartup` and the control-sub activation, which is why `OnStartup` must use the `ctx` argument rather than `c.Lifetime()`.
 
-### `sub.Infra` expresses a lifecycle dependency, not a category
+### Manual subscriptions and the dlru tag
 
-The `Infra` flag exists because of one concrete requirement: the [distributed cache](../dlru) must be reachable from `OnStartup` *and* from `OnShutdown`. The flag therefore drives a stricter activation/deactivation schedule rather than tagging "framework-internal" subscriptions in general. At present only `dlru` uses it. New uses should be considered carefully - if a subscription doesn't need to be live during user lifecycle callbacks, it doesn't need this flag.
+`sub.Manual()` opts a subscription out of the connector's automatic activate/deactivate passes. The framework uses this for one concrete coordination: the [distributed cache](../dlru) must be reachable from `OnStartup` *and* from `OnShutdown` but must be off-bus during the offload-to-peers pass inside `dlru.Close`. The `dlru` package registers its two subs with `sub.Manual()`; the connector's lifecycle code identifies them by route (`:888/dcache/all`, `:888/dcache/rescue`) and brings them on-bus before `OnStartup` and off-bus after `OnShutdown`. The path is set by the connector itself when it calls `dlru.NewCache`, so route-based detection avoids a separate tagging contract.
+
+User code uses the same `sub.Manual()` mechanism for any subscription whose backing resource is not ready by the end of `OnStartup` (Python venvs, ML model loads, database pools). Those subscriptions stay off-bus through Startup and are activated by user code once the resource is ready - typically by iterating `Connector.Subscriptions()` filtered by a user-chosen tag (e.g. `"python"`).
+
+In `TESTING` deployment the `sub.Manual` flag is ignored: `activateSubs` brings every registered subscription on-bus, and `deactivateAutoSubs` takes them all off-bus on shutdown. This keeps mocks reachable in `application.RunInTest` without per-test setup - tests typically swap the backing resource for a mock, so the "wait for resource ready, then activate" idiom that real `OnStartup` code uses doesn't run. The carve-out is scoped to `TESTING`; `LOCAL`, `LAB`, and `PROD` retain the manual-stay-off-bus behavior.
 
 ### Shutdown's two-phase drain and the dlru offload window
 
 `Shutdown` reverses Startup with two important asymmetries:
 
-- **Infra subs stay active *through* OnShutdown.** User shutdown code can still hit `DistribCache`. Only after `OnShutdown` returns are infra subs torn down.
-- **Infra subs go down *before* `dlru.Close`.** Closing the distributed cache offloads its entries to peers. If this connector's own `:888/dcache` sub were still active, those entries could land back in its own (about-to-be-discarded) cache. Tearing infra subs down first guarantees the offload reaches peers only.
+- **dlru subs stay active *through* OnShutdown.** User shutdown code can still hit `DistribCache`. Other manual subs (user-owned groups) are the user's responsibility to deactivate inside `OnShutdown` if needed.
+- **dlru subs go down inside `dlru.Close` itself, *before* the offload pass.** `Cache.Close` deactivates its own `/all` and `/rescue` subscriptions first and only then offloads to peers, so rescue PUTs route only to peers — the sender's own queue group is already gone and entries can't loop back into this about-to-be-discarded cache. The connector just calls `Close`; the cache owns the ordering.
 
 The 8-second pre-cancel drain plus 4-second post-cancel drain is implemented as two `pendingOps` polling loops. `pendingOps` counts in-flight requests, ticker invocations, and goroutines launched via `Go` / `Parallel`. Anything launched with the bare `go` keyword is invisible to this counter and may be killed mid-flight when the lifetime context cancels.
 

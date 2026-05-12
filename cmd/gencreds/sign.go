@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 )
@@ -73,9 +74,12 @@ func loadAccountKey(path string) (nkeys.KeyPair, error) {
 
 // signService produces the .creds bytes for one service. It scans the
 // service's source for ACL-relevant call patterns, builds the rule set,
-// substitutes {{plane}}, and signs with the account key.
-func signService(s service, accountKP nkeys.KeyPair, cfg config) ([]byte, error) {
-	in, err := scanService(s.Dir, s.Dir)
+// substitutes {{plane}}, and signs with the account key. resolver may
+// be nil; when non-nil it is shared across services to memoize cross-
+// service package lookups and short-circuit in-module paths past
+// `go list`.
+func signService(s service, accountKP nkeys.KeyPair, cfg config, resolver *pkgresolver.Resolver) ([]byte, error) {
+	in, err := scanService(s.Dir, s.Dir, resolver)
 	if err != nil {
 		return nil, fmt.Errorf("scan source: %w", err)
 	}

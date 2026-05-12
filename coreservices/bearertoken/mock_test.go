@@ -1,0 +1,73 @@
+package bearertoken
+
+import (
+	"context"
+	"testing"
+
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/testarossa"
+
+	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
+)
+
+func TestBearertoken_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("mint", func(t *testing.T) { // MARKER: Mint
+		assert := testarossa.For(t)
+
+		mock.MockMint(func(ctx context.Context, claims any) (token string, err error) {
+			return
+		})
+		var claims any
+		_, err := mock.Mint(ctx, claims)
+		assert.NoError(err)
+	})
+
+	t.Run("j_w_k_s", func(t *testing.T) { // MARKER: JWKS
+		assert := testarossa.For(t)
+
+		mock.MockJWKS(func(ctx context.Context) (keys []bearertokenapi.JWK, err error) {
+			return
+		})
+		_, err := mock.JWKS(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_changed_private_key", func(t *testing.T) { // MARKER: PrivateKey
+		assert := testarossa.For(t)
+
+		mock.MockOnChangedPrivateKey(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnChangedPrivateKey(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_changed_alt_private_key", func(t *testing.T) { // MARKER: AltPrivateKey
+		assert := testarossa.For(t)
+
+		mock.MockOnChangedAltPrivateKey(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnChangedAltPrivateKey(ctx)
+		assert.NoError(err)
+	})
+
+}

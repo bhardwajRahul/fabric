@@ -1,0 +1,147 @@
+# Calling Python from a Microbus Microservice
+
+## Instructions for Agents
+
+**CRITICAL**: These instructions pertain to microservices that call Python via the `github.com/microbus-io/pyvenv` module. Do not apply them to microservices that do not use Python.
+
+**CRITICAL**: When scaffolding or extending a Python-backed microservice, prefer the dedicated skills in `.claude/skills/python/` (`add-python-microservice`, `add-python-function`, `add-python-task`). They generate the lifecycle wiring, manual-subscription bookkeeping, and embedded Python source layout correctly. Hand-rolling is error-prone.
+
+## Overview
+
+A Python-backed microservice owns its own in-process Python virtual environment via the `pyvenv` module. The Go side stays the public contract holder and handles all framework concerns (logging, tracing, config, downstream calls, events, cache, resources). Python is invoked as a function: typed inputs in, typed outputs out, JSON on the wire over local pipes to a long-lived `worker.py` subprocess.
+
+Python sees no `ctx`, no span, no client stubs, and no config object. Only plain serializable data crosses the bridge.
+
+The relationship is 1:1 — one microservice replica owns one venv. If multiple microservices need Python, each owns its own subprocess.
+
+## Key Concepts
+
+### Lifecycle
+
+A Python-backed endpoint must not be subscribed on the bus until its venv is ready, otherwise callers arriving during `OnStartup` either block for minutes (while `pip install` runs) or get a confusing 503. Each Python-backed endpoint is registered with `sub.Manual()` plus `sub.Tag("python")` (see `.claude/rules/microbus.md`). The connector skips manual subs during `Startup`, the microservice goes live on the bus for control-plane traffic, and unicast callers see a clean 404 ack-timeout (load-balancing routes around the cold replica) until the `pyvenv.LivenessCallback` fires `StateReady` and the microservice's `activatePythonSubs()` helper iterates `svc.Subscriptions()` to bring every entry tagged `"python"` onto the bus. Tagging keeps Python subs separate from any other manual groups the microservice may own.
+
+The canonical wiring is:
+
+- `OnStartup` calls `pyvenv.New(pyvenv.Config{...})` with the embedded sources, requirements, `MaxWorkers`, the connector as `Logger`, and an `onVenvLiveness` callback. This does **not** spawn the subprocess.
+- `OnStartup` then launches `svc.venv.Start(ctx)` in a background goroutine via `svc.Go`. `OnStartup` returns immediately so the microservice is responsive on the bus for control-plane traffic during the venv provisioning window.
+- `pyvenv.Venv.Start(ctx)` runs the sequence: create the on-disk venv via `python3 -m venv`, run `pip install -r requirements.txt` (skipped if the requirements marker is unchanged from a prior successful install), spawn `worker.py`, load the embedded `*.py` sources via one `define` frame, wait for the worker's initial `ready` frame. Returns when ready or on error.
+- On success, `pyvenv` fires `LivenessCallback(StateReady, nil)` from its own goroutine. The microservice's `onVenvLiveness` handler calls `svc.activatePythonSubs()` to bring every `"python"`-tagged subscription onto the bus.
+- If the subprocess later dies unexpectedly (segfault, OOM-kill, etc.), `pyvenv` fires `LivenessCallback(StateDied, err)`. The microservice's handler deactivates the python-tagged subs and schedules `svc.venv.Start(ctx)` again in the background. Recovery is fast: the on-disk venv is reused and pip install is skipped, so only the worker spawn + define run.
+- `OnShutdown` calls `svc.venv.Close(ctx)`. Close kills the subprocess, drains pending calls with `ErrClosed`, and removes the on-disk venv directory.
+
+Operators can move the `svc.venv.Start(ctx)` call from the background goroutine to a synchronous slot in `OnStartup` (eager allocation, but startup blocks for the full pip install + model download), or to a control endpoint (manual allocation, useful when the venv shouldn't come up until a human triggers it; this is what `examples/embedder` does with its "Initialize Python VM" button). The default of background launch gives fast startup; honest crash-loop semantics come from the goroutine surfacing a failure via the connector's normal error path.
+
+The auto-start in `OnStartup` is gated on `svc.Deployment() != connector.TESTING`. This parallels the framework's existing rule that tickers don't fire in TESTING: anything that touches a long-lived backing resource stays dormant under tests unless the test author opts in. The opt-in is one line — `svc.StartPyVenv(ctx)` — exposed as an exported method so cross-package upstream tests can drive it too.
+
+### Call / Await / Result
+
+The library exposes three primitives:
+
+- `Call(ctx, funcName, args) (callID string, err error)` — enqueues the Python invocation and returns immediately with a callID. The Python work runs in the worker until completion regardless of the caller's ctx lifetime.
+- `Await(ctx, callID, &result) error` — blocks until the call identified by callID completes or ctx expires. Unmarshals the result into `*result` on success. On ctx expiry, returns `ctx.Err()` without consuming the entry, so a later Await on the same callID re-enters the wait. A successful Await consumes the entry; subsequent Awaits return `ErrUnknown`.
+- `Result(ctx, callID, &result) (ready bool, err error)` — the non-blocking peek. Returns `ready=false, nil` while the call is in flight; `ready=true, nil` (with result populated) when terminal; `ready=true, <python error>` if Python failed; `ready=false, ErrUnknown` if the callID is not known.
+
+For the synchronous shape — Call + Await on the same goroutine — `CallAndAwait(ctx, funcName, args, &result)` is the convenience helper. `add-python-function` uses it directly.
+
+The Call/Await split is what lets a Python computation outlive the caller's ctx. A workflow task that hits its 15-minute hop ceiling returns 408; the Foreman retries the task; the retry rejoins the same in-flight Python work via Await on the persisted callID. This is the pattern `add-python-task` generates.
+
+Concurrent calls dispatch to the Python `ThreadPoolExecutor` up to `Config.MaxWorkers` in-flight. Single-delivery semantics: only one successful Await/Result per callID; concurrent Awaits on the same callID would have one win the delivery and the other receive `ErrUnknown`. The framework's workflow primitives don't normally create concurrent Awaits (retries are sequential; Fork starts from committed state), so this is a library-level documented constraint rather than something the workflow author has to think about.
+
+### Choosing `add-python-function` vs `add-python-task`
+
+Pick `add-python-task` when:
+
+- The Python call may exceed the framework's 15-minute ctx ceiling (LLM, training, large batch processing).
+- The call needs workflow-level retry semantics (`flow.RetryOnTimeout`, `AddTransitionOnTimeout`) or composes into a larger graph (fan-out, subgraphs, OnError fallbacks).
+
+Pick `add-python-function` for sub-second to multi-minute calls that fit inside a single RPC.
+
+## Conventions
+
+### File layout
+
+`add-python-microservice` lays out:
+
+```
+myservice/
+  service.py               # default sink for add-python-function / add-python-task
+  requirements.txt         # one package per line; empty by default
+  python.go                # skill-managed: onVenvLiveness, activate/deactivate helpers, embed directives, parseRequirements, readPythonSources
+  service.go               # user code (OnStartup constructs *pyvenv.Venv and starts it; handler methods)
+  ...
+```
+
+- Python source files live at the microservice's root, alongside `service.go`, rather than under `resources/`. `python.go` declares `//go:embed *.py` and `//go:embed requirements.txt` so they're packaged into the binary at build time.
+- `service.py` is the canonical user file. New Python functions added by `add-python-function` and `add-python-task` go here.
+- Other `*.py` files at the root are operator-authored modules (model loaders, utility code). `readPythonSources()` concatenates all `*.py` files in alphabetical order, with `service.py` appended last so it can reference names defined in helper modules.
+- `requirements.txt` follows the standard pip format. One package per line, comments with `#`. Empty by default; the operator adds dependencies as needed.
+
+### Args and results
+
+`args` and `result` cross the bridge as JSON. The In/Out structs generated by `add-function` / `add-task` already carry `json:"..."` tags on every field, so the convention is to pass the typed `MyFuncIn` value as `args` directly and let `Await` (or `CallAndAwait`) unmarshal the response into the typed `MyFuncOut` via `&out`. The In/Out types are the single source of truth for the wire shape; the Python side sees the JSON tag names, the Go side decodes back into the same fields.
+
+Python sees `args` as a `dict` whose keys are the JSON tag names of the In struct's fields. Number fields come back as Go's default JSON types (`float64` for any numeric); the unmarshal converts to the declared field type.
+
+### The Ready guard
+
+Every Python-backed handler starts with:
+
+```go
+if svc.venv == nil || !svc.venv.Ready() {
+    return 0, errors.New("venv not ready", http.StatusServiceUnavailable)
+}
+```
+
+In normal operation the manual subscription is off the bus until the venv reaches Ready, so callers see a clean 404 ack-timeout rather than a 503. The 503 guard is defense-in-depth — if a caller somehow reaches the handler while the venv is starting or recovering, the explicit error is friendlier than a `Call`/`CallAndAwait` returning `ErrNotReady` deeper down.
+
+### Testing scenarios
+
+Tests do not spin up the Python venv by default — the auto-start in `OnStartup` is gated on `svc.Deployment() != connector.TESTING`. Tests opt in by calling `svc.StartPyVenv(ctx)` explicitly. Six scenarios cover what the test author actually has in mind:
+
+| # | Scenario | How to enable | Cost |
+|---|---|---|---|
+| 1 | Mock + direct method call (e.g. `mock.MyFunction(ctx, ...)`) | `mock := myservice.NewMock(); mock.MockMyFunction(...); mock.MyFunction(ctx, ...)`. No `application.RunInTest` needed. | Zero |
+| 2 | Mock + cross-service over the bus | Add `myservice.NewMock()` to the test app. The genmock-generated `Mock.OnStartup` activates every Manual sub on the bus, so callers reach the Mock's handlers without any extra setup. | Zero |
+| 3 | Real service + no Python calls | Add `myservice.NewService()` to the test app. The venv is constructed in `OnStartup` but not started. Handlers that touch `svc.venv.Call` would error with `ErrNotReady`, but tests in this scenario don't call them. | Zero |
+| 4 | Real service + real Python from the service's own package | Add `myservice.NewService()` to the test app. After `app.RunInTest(t)`, call `svc.StartPyVenv(ctx)`. Returns when Ready or errors. | 30s+ on first run, fast on cached venv |
+| 5 | Real service + real Python from an upstream's tests | Same as scenario 4. `StartPyVenv` is exported precisely so cross-package tests can drive it. The upstream's test app adds the real downstream service and calls `downstream.StartPyVenv(ctx)` after `RunInTest`. | Same as 4 |
+| 6 | Production deployment | Auto-start fires from `OnStartup` in the background; the microservice goes live on the bus immediately for control-plane traffic; Python-tagged subs activate when the venv reaches Ready. | Test concern doesn't apply |
+
+The `add-python-function` and `add-python-task` skills drop a commented-out `// svc.StartPyVenv(ctx)` HINT immediately after `app.RunInTest(t)` in every generated test, so a future reader can flip from scenario 1/2/3 to scenario 4/5 without hunting through docs.
+
+End-to-end coverage of the pyvenv runtime itself (subprocess lifecycle, pip install, define, call, recovery, ErrDied semantics) lives in `github.com/microbus-io/pyvenv`'s own integration tests; the microservice's tests don't need to repeat them.
+
+## Errors and retries
+
+- **`pip install` failures** are usually transient (network, mirror flakes, lock contention). Retrying the same packages is safe. If the failure surfaces from `Start`, the microservice can call `Start` again after fixing the underlying issue (network connectivity, mirror availability). The on-disk venv is reused; only pip is re-run.
+- **`define` failures** often leave the Python namespace partially mutated because `exec` aborts mid-script. `pyvenv.Venv.Start` kills the worker on a define failure, so a subsequent `Start` spawns a fresh process with a clean namespace. The on-disk venv is reused but the worker is fresh.
+- **`Call` / `Await` errors** surface as normal Go errors. A 408 means the Await timed out at the framework's 15-minute hop budget; the in-flight Python work is still running. Workflow tasks should use `flow.RetryNowOnTimeout(err)` (retry forever on 408, surface anything else) and persist the callID in flow state so the retry's Await rejoins the same call.
+- **Python exceptions** propagate as Go errors with the Python exception type and message embedded in the error string (e.g. `python call my_func failed: ValueError: expected positive integer`). Programmatic discrimination via `strings.Contains(err.Error(), "ValueError")` is the honest tool; Python exception types don't map cleanly to Go types.
+- **`ErrUnknown`** from Await/Result means the callID is not known to the Venv — the result was already consumed, the cache TTL evicted it, or it was never issued. Workflow tasks treat this as a hard error and let the workflow's OnError transition take over (since the in-flight Python work, if any, is unrecoverable from this replica's perspective).
+- **Subprocess death (`pyvenv.ErrDied`)** indicates the worker exited unexpectedly. The `LivenessCallback` fires `StateDied`, the microservice deactivates Python subs, and recovery via `svc.venv.Start(ctx)` is scheduled in the background. Awaits parked on in-flight calls at the moment of death wake with `ErrDied`; the workflow task / caller is expected to surface the error or retry.
+
+## When not to use this
+
+- **Microsecond-latency hot paths.** Local pipe + JSON round-trip adds hundreds of microseconds, sometimes milliseconds.
+- **Untrusted code (LLM-generated, user-supplied).** That belongs in a sandboxed execution service with containers or Firecracker, separate from this microservice. pyvenv is designed for first-party, version-pinned Python.
+
+## Deployment pattern
+
+Each upstream microservice replica owns its own venv:
+
+- Replica A starts, `OnStartup` constructs the venv, `Start` runs in the background, endpoints activate when the LivenessCallback fires Ready, traffic flows.
+- Replica B starts → same, with its own subprocess.
+- Requests load-balance freely across A and B. Each replica routes its own request to its own subprocess. No stickiness between an inbound request and a specific replica.
+- This works because the affinity that matters is between a replica and its subprocess, not between an inbound request and a specific Python interpreter. Identical seeding (same `requirements.txt`, same `*.py` files) means any replica can serve any request.
+
+When a replica crashes, its subprocess dies with it (the kernel cleans up the pipes and the child process). No external state to reclaim — there's no shared venv pool. The orchestrator restarts the replica, which provisions a fresh subprocess on next `OnStartup`.
+
+## GPU coordination
+
+GPU pinning is operator territory, not framework territory. If a Python-backed microservice needs GPU exclusivity:
+
+- Run one replica per GPU and pin via `CUDA_VISIBLE_DEVICES=N` in the orchestrator's env block (k8s pod spec, docker-compose service env, systemd unit).
+- The Python subprocess inherits the parent's environment, so `worker.py` sees only the assigned GPU.
+- `MaxWorkers` should be 1 for full-VRAM models, higher only when the model is small enough to multiplex.
+
+There is no framework primitive for GPU labeling or capacity-aware routing. If you need cross-replica GPU scheduling, the orchestrator is the right layer.

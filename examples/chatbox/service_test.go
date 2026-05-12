@@ -62,64 +62,9 @@ var (
 	_ calculator.Service
 )
 
-func TestChatbox_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Turn
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("turn", func(t *testing.T) { // MARKER: Turn
-		assert := testarossa.For(t)
-
-		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedContent := "Hi!"
-
-		_, _, _, err := mock.Turn(ctx, "chatbox-default", exampleMessages, nil, nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
-			return expectedContent, nil, llmapi.Usage{Turns: 1, Model: model}, nil
-		})
-		content, _, _, err := mock.Turn(ctx, "chatbox-default", exampleMessages, nil, nil)
-		assert.Expect(
-			content, expectedContent,
-			err, nil,
-		)
-	})
-
-	t.Run("demo", func(t *testing.T) { // MARKER: Demo
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Demo(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockDemo(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Demo(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: Demo
 
 func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Parallel()

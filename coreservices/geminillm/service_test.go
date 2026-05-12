@@ -59,49 +59,7 @@ var (
 	_ httpegress.Mock
 )
 
-func TestGeminiLLM_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("turn", func(t *testing.T) { // MARKER: Turn
-		assert := testarossa.For(t)
-
-		exampleMessages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		expectedContent := "Hi there!"
-
-		_, _, _, err := mock.Turn(ctx, geminillmapi.ModelGemini20Flash, exampleMessages, nil, nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
-			return expectedContent, nil, llmapi.Usage{Turns: 1, Model: model}, nil
-		})
-		content, _, usage, err := mock.Turn(ctx, geminillmapi.ModelGemini20Flash, exampleMessages, nil, nil)
-		assert.Expect(
-			content, expectedContent,
-			usage.Turns, 1,
-			err, nil,
-		)
-	})
-}
+// MARKER: Turn
 
 func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 	t.Parallel()

@@ -27,7 +27,7 @@ Creating or modifying a task endpoint:
 - [ ] Step 10: Implement the logic
 - [ ] Step 11: Define the marshaler function
 - [ ] Step 12: Bind the marshaler function to the microservice
-- [ ] Step 13: Extend the mock
+- [ ] Step 13: Regenerate the mock
 - [ ] Step 14: Test the task
 - [ ] Step 15: Housekeeping
 ```
@@ -254,62 +254,9 @@ Add `sub.RequiredClaims(requiredClaims)` to `svc.Subscribe` to define the author
 
 Tasks are NOT exposed via OpenAPI - the connector's built-in `:888/openapi.json` handler filters them out automatically.
 
-#### Step 13: Extend the Mock
+#### Step 13: Regenerate the Mock
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockMyTask func(ctx context.Context, flow *workflow.Flow, input1 string, input2 float64) (output1 bool, err error) // MARKER: MyTask
-}
-```
-
-Add the stubs to the `Mock`.
-
-```go
-// MockMyTask sets up a mock handler for MyTask.
-func (svc *Mock) MockMyTask(handler func(ctx context.Context, flow *workflow.Flow, input1 string, input2 float64) (output1 bool, err error)) *Mock { // MARKER: MyTask
-	svc.mockMyTask = handler
-	return svc
-}
-
-// MyTask executes the mock handler.
-func (svc *Mock) MyTask(ctx context.Context, flow *workflow.Flow, input1 string, input2 float64) (output1 bool, err error) { // MARKER: MyTask
-	if svc.mockMyTask == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	output1, err = svc.mockMyTask(ctx, flow, input1, input2)
-	return output1, errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-- Set values for the example input arguments
-- Set values for the expected output arguments
-
-```go
-t.Run("my_task", func(t *testing.T) { // MARKER: MyTask
-	assert := testarossa.For(t)
-
-	exampleParam1 := ""
-	exampleParam2 := 0.0
-	expectedResult1 := false
-
-	_, err := mock.MyTask(ctx, nil, exampleParam1, exampleParam2)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockMyTask(func(ctx context.Context, flow *workflow.Flow, input1 string, input2 float64) (output1 bool, err error) {
-		return expectedResult1, nil
-	})
-	output1, err := mock.MyTask(ctx, nil, exampleParam1, exampleParam2)
-	assert.Expect(
-		output1, expectedResult1,
-		err, nil,
-	)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 14: Test the Task
 

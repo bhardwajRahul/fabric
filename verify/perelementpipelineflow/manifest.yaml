@@ -1,0 +1,36 @@
+general:
+  hostname: perelementpipelineflow.verify
+  description: perelementpipelineflow.verify is the SKIP-marked per-element pipeline pattern (lineage redesign required).
+  modifiedAt: "2026-05-14T17:05:54Z"
+
+tasks:
+  TaskS:
+    signature: TaskS(items []string) (itemsOut []string)
+    description: TaskS passes items through.
+    route: :428/task-s
+  TaskH:
+    signature: TaskH(item string) (itemUpper string)
+    description: TaskH uppercases the per-element item.
+    route: :428/task-h
+  TaskA:
+    signature: TaskA(itemUpper string) (aProcessed string)
+    description: TaskA is one parallel branch in the per-element inner pipeline.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(itemUpper string) (bProcessed string)
+    description: TaskB is the other parallel branch.
+    route: :428/task-b
+  TaskM:
+    signature: TaskM(aProcessed string, bProcessed string) (setMerged []string)
+    description: TaskM is the per-element fan-in.
+    route: :428/task-m
+  TaskL:
+    signature: TaskL(setMerged []string) (finalCount int)
+    description: TaskL is the outer fan-in.
+    route: :428/task-l
+
+workflows:
+  PerElementPipeline:
+    signature: PerElementPipeline(items []string) (finalCount int)
+    description: PerElementPipeline defines S -> forEach -> H -> {A, B} -> M -> L.
+    route: :428/per-element-pipeline

@@ -1,0 +1,14 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"alias"}}:::term --> _start
+    _start(( )):::term --> t0["s"]:::task
+    t0 --> t1["a"]:::task
+    t0 -->|"goto"| t4["bPrime"]:::task
+    t1 --> t2["b"]:::task
+    t2 --> t3["c"]:::task
+    t3 --> _end(( )):::term
+    t4 --> t5["d"]:::task
+    t5 --> _end(( )):::term

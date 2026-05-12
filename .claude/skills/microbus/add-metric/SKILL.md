@@ -23,7 +23,7 @@ Creating or modifying a metric:
 - [ ] Step 8: Implement the recorders
 - [ ] Step 9: Use the metric
 - [ ] Step 10: Observe with callback
-- [ ] Step 11: Extend the mock
+- [ ] Step 11: Regenerate the mock
 - [ ] Step 12: Test the callback
 - [ ] Step 13: Housekeeping
 ```
@@ -211,38 +211,11 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 }
 ```
 
-#### Step 11: Extend the Mock
+#### Step 11: Regenerate the Mock
 
 Skip this step if the metric is not observable just in time.
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockOnObserveMyMetric func(ctx context.Context) (err error) // MARKER: MyMetric
-}
-```
-
-Add the stub to the `Mock`.
-
-```go
-// MockOnObserveMyMetric sets up a mock handler for OnObserveMyMetric.
-func (svc *Mock) MockOnObserveMyMetric(handler func(ctx context.Context) (err error)) *Mock { // MARKER: MyMetric
-	svc.mockOnObserveMyMetric = handler
-	return svc
-}
-
-// OnObserveMyMetric executes the mock handler.
-func (svc *Mock) OnObserveMyMetric(ctx context.Context) (err error) { // MARKER: MyMetric
-	if svc.mockOnObserveMyMetric == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	err = svc.mockOnObserveMyMetric(ctx)
-	return errors.Trace(err)
-}
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory.
 
 #### Step 12: Test the Callback
 

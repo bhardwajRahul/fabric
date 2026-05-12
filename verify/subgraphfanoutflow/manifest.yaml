@@ -1,0 +1,40 @@
+general:
+  hostname: subgraphfanoutflow.verify
+  description: subgraphfanoutflow.verify exercises a subgraph as one sibling of an outer fan-out.
+  modifiedAt: "2026-05-14T17:38:55Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (started bool)
+    description: TaskA is the fan-out source.
+    route: :428/task-a
+  NormalB:
+    signature: NormalB() (resultB string)
+    description: NormalB produces resultB.
+    route: :428/normal-b
+  TaskX:
+    signature: TaskX() (xPassed bool)
+    description: TaskX is the subgraph entry.
+    route: :428/task-x
+  TaskY:
+    signature: TaskY(xPassed bool) (subResult string)
+    description: TaskY runs after TaskX in the subgraph.
+    route: :428/task-y
+  NormalD:
+    signature: NormalD() (resultD string)
+    description: NormalD produces resultD.
+    route: :428/normal-d
+  TaskE:
+    signature: TaskE(resultB string, subResult string, resultD string) (finalResult string)
+    description: TaskE is the outer fan-in.
+    route: :428/task-e
+
+workflows:
+  Sub:
+    signature: Sub() (subResult string)
+    description: Sub defines the sequential subgraph X -> Y.
+    route: :428/sub
+  SubFanOut:
+    signature: SubFanOut() (finalResult string)
+    description: SubFanOut defines A -> {NormalB, Sub, NormalD} -> E.
+    route: :428/sub-fan-out

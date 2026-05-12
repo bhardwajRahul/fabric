@@ -25,7 +25,7 @@ import (
 // services.
 func renderMermaid(svcs []scanned) []byte {
 	var sb strings.Builder
-	sb.WriteString("graph TB\n")
+	sb.WriteString("graph LR\n")
 	sb.WriteString("    classDef core fill:#ed2e92,color:#f4f2ef,stroke-width:0px\n")
 	sb.WriteString("    classDef svc fill:#32a7c1,color:#f4f2ef,stroke-width:0px\n")
 	sb.WriteString("    classDef danger fill:#f15922,color:#f4f2ef,stroke-width:0px\n")
@@ -117,6 +117,16 @@ func renderMermaid(svcs []scanned) []byte {
 			sb.WriteString(")]\n")
 			emittedAny = true
 		}
+		if s.Py != "" {
+			sb.WriteString("    ")
+			sb.WriteString(emitNode(s.Hostname, s.Name))
+			sb.WriteString(" --- ")
+			sb.WriteString(s.Hostname)
+			sb.WriteString(".py[[")
+			sb.WriteString(s.Py)
+			sb.WriteString("]]\n")
+			emittedAny = true
+		}
 		if s.Cloud != "" {
 			sb.WriteString("    ")
 			sb.WriteString(emitNode(s.Hostname, s.Name))
@@ -153,6 +163,9 @@ func renderMermaid(svcs []scanned) []byte {
 		}
 		if s.DB != "" {
 			extNodes = append(extNodes, s.Hostname+".db")
+		}
+		if s.Py != "" {
+			extNodes = append(extNodes, s.Hostname+".py")
 		}
 		if s.Cloud != "" {
 			extNodes = append(extNodes, s.Hostname+".cloud")

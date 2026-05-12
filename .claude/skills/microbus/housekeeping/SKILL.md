@@ -60,21 +60,31 @@ Skip this step if the microservice's `manifest.yaml` does not have a `workflows`
 
 For each workflow defined in the `workflows` section of `manifest.yaml`, generate a Mermaid flowchart and save it to a separate `.mmd` file named after the workflow in ALLCAPS, e.g. `MYWORKFLOW.mmd`.
 
-To generate the Mermaid output, read the graph builder function in `service.go`, reproduce its structure, and call `graph.Mermaid()`. After generating the output, strip the `hostname:428/` prefix from node labels where `hostname` matches this microservice's hostname and the port is `:428`. Do not strip hostnames of other microservices or labels using a different port.
+Call `graph.Mermaid()` and write its output verbatim to the `.mmd` file. The function emits a fully-styled diagram including the title node, classDef block, per-node class annotations, forEach (`st-rect`) and fan-in (`trap-t`) shapes, and `"fan-in"` labels on edges into `SetFanIn` nodes. Do not post-process the output.
 
-After generating the diagram, apply the following `classDef` styles and assign classes to each node:
+Use a small throwaway program to invoke it (run from the microservice directory; substitute the workflow function name):
 
+```go
+// /tmp/genmmd.go
+package main
+
+import (
+	"fmt"
+
+	"github.com/microbus-io/fabric/<your/microservice/path>"
+)
+
+func main() {
+	svc := <microservicePackage>.NewService()
+	g, err := svc.<WorkflowFn>(nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Print(g.Mermaid())
+}
 ```
-classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-classDef term fill:#e5f4f3,color:#434343,stroke:#434343
-```
 
-- `:::task` - regular task nodes
-- `:::sub` - nodes registered as subgraphs via `AddSubgraph`
-- `:::term` - title, start `(( ))`, and end `(( ))` nodes
-
-Add a title node at the top of the graph using the workflow's route name in kebab-case: `_title{{"my-workflow"}}:::term --> _start`. The title connects to the start node.
+Then `go run /tmp/genmmd.go > <WORKFLOW>.mmd`.
 
 #### Step 7: Chart the Topology
 

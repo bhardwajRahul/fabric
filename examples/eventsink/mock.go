@@ -18,26 +18,9 @@ package eventsink
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/eventsink/eventsinkapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ eventsinkapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -77,11 +60,9 @@ func (svc *Mock) MockRegistered(handler func(ctx context.Context) (emails []stri
 
 // Registered executes the mock handler.
 func (svc *Mock) Registered(ctx context.Context) (emails []string, err error) { // MARKER: Registered
-	if svc.mockRegistered == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockRegistered != nil {
+		emails, err = svc.mockRegistered(ctx)
 	}
-	emails, err = svc.mockRegistered(ctx)
 	return emails, errors.Trace(err)
 }
 
@@ -93,11 +74,9 @@ func (svc *Mock) MockOnAllowRegister(handler func(ctx context.Context, email str
 
 // OnAllowRegister executes the mock handler.
 func (svc *Mock) OnAllowRegister(ctx context.Context, email string) (allow bool, err error) { // MARKER: OnAllowRegister
-	if svc.mockOnAllowRegister == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOnAllowRegister != nil {
+		allow, err = svc.mockOnAllowRegister(ctx, email)
 	}
-	allow, err = svc.mockOnAllowRegister(ctx, email)
 	return allow, errors.Trace(err)
 }
 
@@ -109,10 +88,8 @@ func (svc *Mock) MockOnRegistered(handler func(ctx context.Context, email string
 
 // OnRegistered executes the mock handler.
 func (svc *Mock) OnRegistered(ctx context.Context, email string) (err error) { // MARKER: OnRegistered
-	if svc.mockOnRegistered == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOnRegistered != nil {
+		err = svc.mockOnRegistered(ctx, email)
 	}
-	err = svc.mockOnRegistered(ctx, email)
 	return errors.Trace(err)
 }

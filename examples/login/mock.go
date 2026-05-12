@@ -18,26 +18,10 @@ package login
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/login/loginapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ loginapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -79,10 +63,9 @@ func (svc *Mock) MockLogin(handler func(w http.ResponseWriter, r *http.Request) 
 
 // Login executes the mock handler.
 func (svc *Mock) Login(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Login
-	if svc.mockLogin == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockLogin != nil {
+		err = svc.mockLogin(w, r)
 	}
-	err = svc.mockLogin(w, r)
 	return errors.Trace(err)
 }
 
@@ -94,10 +77,9 @@ func (svc *Mock) MockLogout(handler func(w http.ResponseWriter, r *http.Request)
 
 // Logout executes the mock handler.
 func (svc *Mock) Logout(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Logout
-	if svc.mockLogout == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockLogout != nil {
+		err = svc.mockLogout(w, r)
 	}
-	err = svc.mockLogout(w, r)
 	return errors.Trace(err)
 }
 
@@ -109,10 +91,9 @@ func (svc *Mock) MockWelcome(handler func(w http.ResponseWriter, r *http.Request
 
 // Welcome executes the mock handler.
 func (svc *Mock) Welcome(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Welcome
-	if svc.mockWelcome == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockWelcome != nil {
+		err = svc.mockWelcome(w, r)
 	}
-	err = svc.mockWelcome(w, r)
 	return errors.Trace(err)
 }
 
@@ -124,10 +105,9 @@ func (svc *Mock) MockAdminOnly(handler func(w http.ResponseWriter, r *http.Reque
 
 // AdminOnly executes the mock handler.
 func (svc *Mock) AdminOnly(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: AdminOnly
-	if svc.mockAdminOnly == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockAdminOnly != nil {
+		err = svc.mockAdminOnly(w, r)
 	}
-	err = svc.mockAdminOnly(w, r)
 	return errors.Trace(err)
 }
 
@@ -139,9 +119,8 @@ func (svc *Mock) MockManagerOnly(handler func(w http.ResponseWriter, r *http.Req
 
 // ManagerOnly executes the mock handler.
 func (svc *Mock) ManagerOnly(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ManagerOnly
-	if svc.mockManagerOnly == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockManagerOnly != nil {
+		err = svc.mockManagerOnly(w, r)
 	}
-	err = svc.mockManagerOnly(w, r)
 	return errors.Trace(err)
 }

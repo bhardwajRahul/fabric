@@ -1,0 +1,229 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package embedder
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/examples/embedder/embedderapi"
+	"github.com/microbus-io/fabric/examples/embedder/resources"
+)
+
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ *workflow.Flow
+	_ embedderapi.Client
+)
+
+const (
+	Hostname = embedderapi.Hostname
+	Version  = 2
+)
+
+// ToDo is implemented by the service or mock.
+// The intermediate delegates handling to this interface.
+type ToDo interface {
+	OnStartup(ctx context.Context) (err error)
+	OnShutdown(ctx context.Context) (err error)
+	Embed(ctx context.Context, text string) (vector []float64, err error)          // MARKER: Embed
+	Similarity(ctx context.Context, a string, b string) (score float64, err error) // MARKER: Similarity
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                       // MARKER: Demo
+	DemoInit(w http.ResponseWriter, r *http.Request) (err error)                   // MARKER: DemoInit
+	DemoStatus(w http.ResponseWriter, r *http.Request) (err error)                 // MARKER: DemoStatus
+}
+
+// NewService creates a new instance of the microservice.
+func NewService() *Service {
+	svc := &Service{}
+	svc.Intermediate = NewIntermediate(svc)
+	return svc
+}
+
+// Init enables a single-statement pattern for initializing the microservice.
+func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
+	svc.Connector.Init(func(_ *connector.Connector) (err error) {
+		return initializer(svc)
+	})
+	return svc
+}
+
+// Intermediate extends and customizes the generic base connector.
+type Intermediate struct {
+	*connector.Connector
+	ToDo
+}
+
+// NewIntermediate creates a new instance of the intermediate.
+func NewIntermediate(impl ToDo) *Intermediate {
+	svc := &Intermediate{
+		Connector: connector.New(Hostname),
+		ToDo:      impl,
+	}
+	svc.SetVersion(Version)
+	svc.SetDescription(`Embedder is a sentence-embedding microservice backed by sentence-transformers running in an in-process Python virtual environment via github.com/microbus-io/pyvenv.`)
+	svc.SetOnStartup(svc.OnStartup)
+	svc.SetOnShutdown(svc.OnShutdown)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+	svc.Subscribe( // MARKER: Embed
+		"Embed", svc.doEmbed,
+		sub.At(embedderapi.Embed.Method, embedderapi.Embed.Route),
+		sub.Description(`Embed returns the sentence-embedding vector for the input text.`),
+		sub.Function(embedderapi.EmbedIn{}, embedderapi.EmbedOut{}),
+		sub.Manual(), sub.Tag("python"),
+	)
+	svc.Subscribe( // MARKER: Similarity
+		"Similarity", svc.doSimilarity,
+		sub.At(embedderapi.Similarity.Method, embedderapi.Similarity.Route),
+		sub.Description(`Similarity returns the cosine similarity between the embeddings of strings a and b.`),
+		sub.Function(embedderapi.SimilarityIn{}, embedderapi.SimilarityOut{}),
+		sub.Manual(), sub.Tag("python"),
+	)
+
+	// HINT: Add web endpoints here
+	svc.Subscribe( // MARKER: Demo
+		"Demo", svc.Demo,
+		sub.At(embedderapi.Demo.Method, embedderapi.Demo.Route),
+		sub.Description(`Demo serves the interactive demo page for the embedder.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: DemoInit
+		"DemoInit", svc.DemoInit,
+		sub.At(embedderapi.DemoInit.Method, embedderapi.DemoInit.Route),
+		sub.Description(`DemoInit kicks off Python venv allocation in the background.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: DemoStatus
+		"DemoStatus", svc.DemoStatus,
+		sub.At(embedderapi.DemoStatus.Method, embedderapi.DemoStatus.Route),
+		sub.Description(`DemoStatus returns the current venv initialization status and tailed logs.`),
+		sub.Web(),
+	)
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
+
+	// HINT: Add configs here
+	svc.DefineConfig( // MARKER: MaxWorkers
+		"MaxWorkers",
+		cfg.Description(`MaxWorkers caps how many calls into the Python venv may run concurrently.`),
+		cfg.DefaultValue("2"),
+		cfg.Validation("int [1,]"),
+	)
+
+	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
+	_ = marshalFunction
+	return svc
+}
+
+// doEmbed handles marshaling for Embed.
+func (svc *Intermediate) doEmbed(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Embed
+	var in embedderapi.EmbedIn
+	var out embedderapi.EmbedOut
+	err = marshalFunction(w, r, embedderapi.Embed.Route, &in, &out, func(_ any, _ any) error {
+		out.Vector, err = svc.Embed(r.Context(), in.Text)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doSimilarity handles marshaling for Similarity.
+func (svc *Intermediate) doSimilarity(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Similarity
+	var in embedderapi.SimilarityIn
+	var out embedderapi.SimilarityOut
+	err = marshalFunction(w, r, embedderapi.Similarity.Route, &in, &out, func(_ any, _ any) error {
+		out.Score, err = svc.Similarity(r.Context(), in.A, in.B)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
+	return nil
+}
+
+/*
+MaxWorkers caps how many calls into the Python venv may run concurrently.
+*/
+func (svc *Intermediate) MaxWorkers() (value int) { // MARKER: MaxWorkers
+	_val := svc.Config("MaxWorkers")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetMaxWorkers sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetMaxWorkers(value int) (err error) { // MARKER: MaxWorkers
+	return svc.SetConfig("MaxWorkers", strconv.Itoa(value))
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}

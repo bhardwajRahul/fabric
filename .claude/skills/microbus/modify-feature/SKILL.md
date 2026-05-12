@@ -19,7 +19,8 @@ Modifying a feature of a microservice:
 - [ ] Step 4: Locate the feature's code
 - [ ] Step 5: Determine the scope of the change
 - [ ] Step 6: Apply the modifications
-- [ ] Step 7: Housekeeping
+- [ ] Step 7: Regenerate the mock
+- [ ] Step 8: Housekeeping
 ```
 
 #### Step 1: Read Local `CLAUDE.md` File
@@ -79,11 +80,14 @@ For **signature changes**, update every marked location. All of the following mu
 - `myserviceapi/client.go` - Response struct, Client method, MulticastClient method (and Hook for outbound events / Executor for tasks/workflows)
 - `myserviceapi/*.go` - Add definitions for new complex types; remove definitions for types no longer used
 - `service.go` - Handler function signature
-- `mock.go` - Mock field type, MockX setter signature, X executor signature, mock test case
-- `service_test.go` - Test cases that call the function with the old signature
+- `service_test.go` - Test cases that call the function with the old signature, plus the mock subtest if its handler signature changed
 
-For **renames**, update every marked location with the new feature name. This includes all identifiers derived from the feature name (e.g., `MyFunction` becomes `NewName`, `doMyFunction` becomes `doNewName`, `MockMyFunction` becomes `MockNewName`, `MyFunctionIn` becomes `NewNameIn`, etc.), the first argument to `svc.Subscribe("MyFunction", ...)` in `intermediate.go`, and all `MARKER` comments. In `service_test.go`, also rename the test function (e.g., `TestMyService_MyFunction` becomes `TestMyService_NewName`) and the mock subtest name.
+For **renames**, update every marked location with the new feature name. This includes identifiers derived from the feature name (e.g., `MyFunction` becomes `NewName`, `doMyFunction` becomes `doNewName`, `MyFunctionIn` becomes `NewNameIn`, etc.), the first argument to `svc.Subscribe("MyFunction", ...)` in `intermediate.go`, and all `MARKER` comments. `mock.go` is regenerated in Step 7 and does not need to be touched here. In `service_test.go`, also rename the test function (e.g., `TestMyService_MyFunction` becomes `TestMyService_NewName`) and the mock subtest name.
 
-#### Step 7: Housekeeping
+#### Step 7: Regenerate the Mock
+
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory.
+
+#### Step 8: Housekeeping
 
 Follow the `housekeeping` skill.

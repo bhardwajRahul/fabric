@@ -72,8 +72,6 @@ func TestBusStop_Mock(t *testing.T) {
 		exampleDur := 5 * time.Minute
 		expectedReservedKeys := []busstopapi.BusStopKey{{ID: 1}}
 
-		_, err := mock.TryBulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
 		mock.MockTryBulkReserve(func(ctx context.Context, objKeys []busstopapi.BusStopKey, dur time.Duration) (reservedKeys []busstopapi.BusStopKey, err error) {
 			return expectedReservedKeys, nil
 		})
@@ -90,8 +88,6 @@ func TestBusStop_Mock(t *testing.T) {
 		exampleObjKey := busstopapi.BusStopKey{ID: 1}
 		exampleDur := 5 * time.Minute
 
-		_, err := mock.TryReserve(ctx, exampleObjKey, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
 		mock.MockTryReserve(func(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error) {
 			return true, nil
 		})
@@ -109,8 +105,6 @@ func TestBusStop_Mock(t *testing.T) {
 		exampleDur := 5 * time.Minute
 		expectedReservedKeys := []busstopapi.BusStopKey{{ID: 1}}
 
-		_, err := mock.BulkReserve(ctx, exampleObjKeys, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
 		mock.MockBulkReserve(func(ctx context.Context, objKeys []busstopapi.BusStopKey, dur time.Duration) (reservedKeys []busstopapi.BusStopKey, err error) {
 			return expectedReservedKeys, nil
 		})
@@ -127,8 +121,6 @@ func TestBusStop_Mock(t *testing.T) {
 		exampleObjKey := busstopapi.BusStopKey{ID: 1}
 		exampleDur := 5 * time.Minute
 
-		_, err := mock.Reserve(ctx, exampleObjKey, exampleDur)
-		assert.Contains(err.Error(), "not implemented")
 		mock.MockReserve(func(ctx context.Context, objKey busstopapi.BusStopKey, dur time.Duration) (reserved bool, err error) {
 			return true, nil
 		})

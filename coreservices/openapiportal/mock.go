@@ -22,16 +22,6 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/openapiportal/openapiportalapi"
-)
-
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ openapiportalapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -70,10 +60,9 @@ func (svc *Mock) MockDocument(handler func(w http.ResponseWriter, r *http.Reques
 
 // Document executes the mock handler.
 func (svc *Mock) Document(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Document
-	if svc.mockDocument == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockDocument != nil {
+		err = svc.mockDocument(w, r)
 	}
-	err = svc.mockDocument(w, r)
 	return errors.Trace(err)
 }
 
@@ -85,10 +74,8 @@ func (svc *Mock) MockExplorer(handler func(w http.ResponseWriter, r *http.Reques
 
 // Explorer executes the mock handler.
 func (svc *Mock) Explorer(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Explorer
-	if svc.mockExplorer == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockExplorer != nil {
+		err = svc.mockExplorer(w, r)
 	}
-	err = svc.mockExplorer(w, r)
 	return errors.Trace(err)
 }
-

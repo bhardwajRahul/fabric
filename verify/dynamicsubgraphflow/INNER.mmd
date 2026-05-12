@@ -1,0 +1,9 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"inner"}}:::term --> _start
+    _start(( )):::term --> t0["innerA"]:::task
+    t0 --> t1["innerB"]:::task
+    t1 --> _end(( )):::term

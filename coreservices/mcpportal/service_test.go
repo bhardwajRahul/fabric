@@ -32,7 +32,6 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
@@ -59,46 +58,7 @@ var (
 	_ mcpportalapi.Client
 )
 
-func TestMcpportal_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("mcp", func(t *testing.T) { // MARKER: MCP
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("POST", "/", nil)
-
-		err := mock.MCP(w, r)
-		assert.Error(err) // Not mocked yet
-		mock.MockMCP(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.MCP(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: MCP
 
 func TestMcpportal_HandleInitialize(t *testing.T) {
 	t.Parallel()

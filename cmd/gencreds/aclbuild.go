@@ -25,7 +25,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/microbus-io/fabric/cmd/schema"
+	"github.com/microbus-io/fabric/cmd/internal/schema"
 	"github.com/microbus-io/fabric/httpx"
 )
 

@@ -20,8 +20,11 @@ import (
 	"encoding/json"
 	"maps"
 	"math"
+	"net/http"
 	"reflect"
 	"time"
+
+	"github.com/microbus-io/errors"
 )
 
 // Flow is the carrier object passed to tasks. It holds the state and control
@@ -293,6 +296,34 @@ func (f *Flow) Retry(maxAttempts int, initialDelay time.Duration, multiplier flo
 // Equivalent to Retry(math.MaxInt32, 0, 0, 0).
 func (f *Flow) RetryNow() bool {
 	return f.Retry(math.MaxInt32, 0, 0, 0)
+}
+
+// RetryOnTimeout retries the task only when err carries HTTP status 408
+// (Request Timeout), and otherwise returns false so the caller can surface
+// the error to the workflow. Returns true exactly when Retry would schedule
+// another attempt; the caller should return nil in that case.
+//
+// Typical usage:
+//
+//	result, err := svc.doWork(ctx)
+//	if err != nil {
+//	    if flow.RetryOnTimeout(err, 5, 2*time.Second, 2.0, time.Minute) {
+//	        return result, nil // retry scheduled, suppress the timeout
+//	    }
+//	    return result, errors.Trace(err) // non-timeout, or attempts exhausted
+//	}
+func (f *Flow) RetryOnTimeout(err error, maxAttempts int, initialDelay time.Duration, multiplier float64, maxDelay time.Duration) bool {
+	if errors.StatusCode(err) != http.StatusRequestTimeout {
+		return false
+	}
+	return f.Retry(maxAttempts, initialDelay, multiplier, maxDelay)
+}
+
+// RetryNowOnTimeout retries the task immediately on HTTP 408 with no attempt limit and no delay,
+// and returns false for any other error so the caller can surface it.
+// Equivalent to RetryOnTimeout(err, math.MaxInt32, 0, 0, 0).
+func (f *Flow) RetryNowOnTimeout(err error) bool {
+	return f.RetryOnTimeout(err, math.MaxInt32, 0, 0, 0)
 }
 
 // Sleep tells the orchestrator to wait for the given duration before the next execution.

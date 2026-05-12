@@ -1,0 +1,32 @@
+general:
+  hostname: gotoflow.verify
+  description: gotoflow.verify exercises flow.Goto and AddTransitionGoto.
+  modifiedAt: "2026-05-14T18:02:20Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(loops int) (loopsOut int)
+    description: TaskA increments the loops counter.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(loops int, target int) (visited bool)
+    description: TaskB calls flow.Goto until loops reaches target.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(loops int) (finalLoops int)
+    description: TaskC surfaces the final loops count.
+    route: :428/task-c
+  BadGotoer:
+    signature: BadGotoer() (stamp bool)
+    description: BadGotoer requests a goto to an unregistered target.
+    route: :428/bad-gotoer
+
+workflows:
+  Goto:
+    signature: Goto(target int) (finalLoops int)
+    description: Goto defines A -> B -> C with B -> withGoto -> A.
+    route: :428/goto
+  BadGoto:
+    signature: BadGoto() (stamp bool)
+    description: BadGoto defines a single-task graph with an unregistered Goto target.
+    route: :428/bad-goto

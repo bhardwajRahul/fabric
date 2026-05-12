@@ -1,0 +1,24 @@
+general:
+  hostname: forkflow.verify
+  description: forkflow.verify exercises Fork lineage from a step.
+  modifiedAt: "2026-05-14T17:44:48Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(value int) (valueOut int)
+    description: TaskA passes value through.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(value int) (valueOut int)
+    description: TaskB doubles value.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(value int) (valueOut int)
+    description: TaskC adds 1 to value.
+    route: :428/task-c
+
+workflows:
+  Pipe:
+    signature: Pipe(value int) (valueOut int)
+    description: Pipe defines A -> B -> C.
+    route: :428/pipe

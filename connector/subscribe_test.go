@@ -1355,7 +1355,7 @@ func TestConnector_SubscribeDefaults(t *testing.T) {
 		assert.Equal(tc.name, s.Name)
 		assert.Equal("ANY", s.Method)
 		assert.Equal(tc.port, s.Port)
-		assert.Equal(tc.route, s.Route)
+		assert.Equal(tc.route, s.Path)
 		assert.Equal("subscribe.defaults.connector", s.Host)
 		assert.Equal("subscribe.defaults.connector", s.Queue)
 	}
@@ -1383,7 +1383,7 @@ func TestConnector_SubscribeOverrides(t *testing.T) {
 	assert.Equal("MyEndpoint", s.Name)
 	assert.Equal("POST", s.Method)
 	assert.Equal("1080", s.Port)
-	assert.Equal("/custom-route", s.Route)
+	assert.Equal("/custom-route", s.Path)
 	assert.Equal("does X", s.Description)
 	assert.Equal(sub.TypeFunction, s.Type)
 	assert.Equal("", s.Queue)
@@ -1485,4 +1485,194 @@ func TestConnector_SubscribeUnsubscribeRoundtrip(t *testing.T) {
 
 	_, err = con.GET(ctx, "https://subscribe.roundtrip.connector/greet")
 	assert.Error(err)
+}
+
+func TestConnector_ManualSubscription(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	calls := 0
+	con := New("manual.subscription.connector")
+	con.SetDeployment(LOCAL) // TESTING auto-activates manual subs; opt out to exercise the gating
+	err := con.Subscribe("ManualEndpoint",
+		func(w http.ResponseWriter, r *http.Request) error {
+			calls++
+			return nil
+		},
+		sub.At("GET", "manual-endpoint"),
+		sub.Web(),
+		sub.Manual(),
+	)
+	assert.NoError(err)
+
+	err = con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Before ActivateSubscription, callers see a 404 ack-timeout because the sub
+	// is registered but not on the bus.
+	_, err = con.GET(ctx, "https://manual.subscription.connector/manual-endpoint")
+	assert.Error(err)
+	assert.Equal(0, calls)
+
+	// Activate and verify traffic now reaches the handler.
+	err = con.ActivateSubscription("ManualEndpoint")
+	assert.NoError(err)
+	_, err = con.GET(ctx, "https://manual.subscription.connector/manual-endpoint")
+	assert.NoError(err)
+	assert.Equal(1, calls)
+
+	// Second call on the same sub is a no-op.
+	err = con.ActivateSubscription("ManualEndpoint")
+	assert.NoError(err)
+	_, err = con.GET(ctx, "https://manual.subscription.connector/manual-endpoint")
+	assert.NoError(err)
+	assert.Equal(2, calls)
+}
+
+func TestConnector_ManualSubscription_RegisteredPostStartup(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	calls := 0
+	con := New("manual.subscription.post.startup.connector")
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Register a manual sub after startup; it should NOT activate immediately.
+	err = con.Subscribe("LateManual",
+		func(w http.ResponseWriter, r *http.Request) error {
+			calls++
+			return nil
+		},
+		sub.At("GET", "late-manual"),
+		sub.Web(),
+		sub.Manual(),
+	)
+	assert.NoError(err)
+
+	_, err = con.GET(ctx, "https://manual.subscription.post.startup.connector/late-manual")
+	assert.Error(err)
+	assert.Equal(0, calls)
+
+	err = con.ActivateSubscription("LateManual")
+	assert.NoError(err)
+	_, err = con.GET(ctx, "https://manual.subscription.post.startup.connector/late-manual")
+	assert.NoError(err)
+	assert.Equal(1, calls)
+}
+
+func TestConnector_ActivateSubscription_UnknownName(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+	con := New("activate.unknown.connector")
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	err = con.ActivateSubscription("NoSuchSub")
+	assert.Error(err)
+	err = con.DeactivateSubscription("NoSuchSub")
+	assert.Error(err)
+}
+
+func TestConnector_ActivateSubscription_IteratesByTag(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+	con := New("activate.by.tag.connector")
+	con.SetDeployment(LOCAL) // TESTING auto-activates manual subs; opt out to exercise the gating
+	callsA, callsB, callsC := 0, 0, 0
+	con.Subscribe("A",
+		func(w http.ResponseWriter, r *http.Request) error { callsA++; return nil },
+		sub.At("GET", "a"), sub.Web(), sub.Manual(), sub.Tag("python"),
+	)
+	con.Subscribe("B",
+		func(w http.ResponseWriter, r *http.Request) error { callsB++; return nil },
+		sub.At("GET", "b"), sub.Web(), sub.Manual(), sub.Tag("python"),
+	)
+	con.Subscribe("C",
+		func(w http.ResponseWriter, r *http.Request) error { callsC++; return nil },
+		sub.At("GET", "c"), sub.Web(), sub.Manual(),
+	)
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Activate only python-tagged subs by iterating Subscriptions().
+	activated := 0
+	for _, s := range con.Subscriptions() {
+		for _, t := range s.Tags {
+			if t == "python" {
+				assert.NoError(con.ActivateSubscription(s.Name))
+				activated++
+				break
+			}
+		}
+	}
+	assert.Equal(2, activated)
+
+	_, err = con.GET(ctx, "https://activate.by.tag.connector/a")
+	assert.NoError(err)
+	_, err = con.GET(ctx, "https://activate.by.tag.connector/b")
+	assert.NoError(err)
+	// C is still manual and off-bus.
+	_, err = con.GET(ctx, "https://activate.by.tag.connector/c")
+	assert.Error(err)
+	assert.Equal(1, callsA)
+	assert.Equal(1, callsB)
+	assert.Equal(0, callsC)
+
+	// Deactivate one by name; the other stays active.
+	assert.NoError(con.DeactivateSubscription("A"))
+	_, err = con.GET(ctx, "https://activate.by.tag.connector/a")
+	assert.Error(err)
+	_, err = con.GET(ctx, "https://activate.by.tag.connector/b")
+	assert.NoError(err)
+}
+
+func TestConnector_Subscriptions_Snapshot(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+	con := New("subscriptions.snapshot.connector")
+	con.SetDeployment(LOCAL) // TESTING auto-activates manual subs; opt out to exercise the gating
+	err := con.Subscribe("Tagged",
+		func(w http.ResponseWriter, r *http.Request) error { return nil },
+		sub.At("GET", "tagged"), sub.Web(), sub.Manual(), sub.Tag("a", "b"),
+	)
+	assert.NoError(err)
+	err = con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	var info SubscriptionInfo
+	for _, s := range con.Subscriptions() {
+		if s.Name == "Tagged" {
+			info = s
+			break
+		}
+	}
+	assert.Equal("Tagged", info.Name)
+	assert.Equal(true, info.Manual)
+	assert.Equal(false, info.Active)
+	assert.Equal([]string{"a", "b"}, info.Tags)
+
+	// Mutating the snapshot doesn't affect the live sub.
+	info.Tags[0] = "mutated"
+	for _, s := range con.Subscriptions() {
+		if s.Name == "Tagged" {
+			assert.Equal([]string{"a", "b"}, s.Tags)
+			break
+		}
+	}
 }

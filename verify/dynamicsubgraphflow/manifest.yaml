@@ -1,0 +1,28 @@
+general:
+  hostname: dynamicsubgraphflow.verify
+  description: dynamicsubgraphflow.verify exercises the flow.Subgraph control signal.
+  modifiedAt: "2026-05-14T18:05:45Z"
+
+tasks:
+  Parent:
+    signature: Parent(value int, innerDone bool, innerResult int) (parentResult string)
+    description: Parent calls flow.Subgraph on first invocation, then re-runs with merged state.
+    route: :428/parent
+  InnerA:
+    signature: InnerA(value int) (innerStage int)
+    description: InnerA doubles value.
+    route: :428/inner-a
+  InnerB:
+    signature: InnerB(innerStage int) (innerResult int, innerDone bool)
+    description: InnerB adds 3 and marks the subgraph done.
+    route: :428/inner-b
+
+workflows:
+  Inner:
+    signature: Inner(value int) (innerResult int, innerDone bool)
+    description: Inner defines the child subgraph InnerA -> InnerB.
+    route: :428/inner
+  DynamicSubgraph:
+    signature: DynamicSubgraph(value int) (parentResult string)
+    description: DynamicSubgraph defines a single-task parent that invokes Inner via flow.Subgraph.
+    route: :428/dynamic-subgraph

@@ -1,0 +1,24 @@
+general:
+  hostname: interruptflow.verify
+  description: interruptflow.verify exercises flow.Interrupt + Resume.
+  modifiedAt: "2026-05-14T17:25:35Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(prompt string) (promptOut string)
+    description: TaskA passes the prompt through.
+    route: :428/task-a
+  AwaitInput:
+    signature: AwaitInput(userInput string) (userInputOut string)
+    description: AwaitInput interrupts until userInput is provided.
+    route: :428/await-input
+  Compose:
+    signature: Compose(prompt string, userInput string) (result string)
+    description: Compose joins prompt and userInput.
+    route: :428/compose
+
+workflows:
+  Interruptor:
+    signature: Interruptor(prompt string) (result string)
+    description: Interruptor defines A -> AwaitInput -> Compose.
+    route: :428/interruptor

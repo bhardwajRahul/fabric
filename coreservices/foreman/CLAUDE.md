@@ -121,6 +121,8 @@ Outside the hot path, `completeSurgraphFlow` and `surgraphChain` also paralleliz
 
 **Fan-in** is implicit. When the last sibling at a `step_depth` completes, the foreman merges all siblings' changes using reducers and creates the next step(s) within a transaction. The transaction prevents duplicate next steps when multiple workers finish siblings simultaneously.
 
+**Fan-in does not escalate on cancelled or failed siblings.** If a sibling at the current depth is in `failed` or `cancelled` status when fan-in evaluates, the flow is already being driven by another path: a sibling's `failStep` has cascaded the flow to failed, an external `Cancel` has cancelled it, or an `OnError` sibling-cancel has handed the depth off to an error handler. The fan-in worker bails out with `return nil` instead of calling `failStep` on its own step. Calling `failStep` here races with the OnError handler and incorrectly fails an otherwise-recoverable flow: the OnError handler's next step (e.g. an error-routed alternative path) is in flight at depth `N+1` while the fan-in worker is still finishing depth `N`, and a redundant `failStep` from the fan-in worker would mark the parent flow failed before the OnError path ever runs.
+
 ### Time Budgets
 
 Each step has a `time_budget_ms` that controls the `pub.Timeout` on the task execution HTTP call. The budget is resolved at step creation: the graph's per-task budget (`graph.SetTimeBudget`) takes precedence; otherwise the foreman's `DefaultTimeBudget` config is used (default 2m).

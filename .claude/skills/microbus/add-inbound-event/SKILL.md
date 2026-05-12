@@ -22,7 +22,7 @@ Creating or modifying a sink endpoint:
 - [ ] Step 5: Extend the ToDo interface
 - [ ] Step 6: Implement the inbound event sink logic
 - [ ] Step 7: Bind the inbound event sink to the microservice
-- [ ] Step 8: Extend the mock
+- [ ] Step 8: Regenerate the mock
 - [ ] Step 9: Test the inbound event sink
 - [ ] Step 10: Housekeeping
 ```
@@ -104,62 +104,9 @@ eventsourceapi.NewHook(svc).WithOptions(sub.RequiredClaims(requiredClaims)).OnMy
 
 Add the appropriate import to `github.com/company/project/eventsource/eventsourceapi`.
 
-#### Step 8: Extend the Mock
+#### Step 8: Regenerate the Mock
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockOnMyEvent func(ctx context.Context, input1 string, input2 eventsourceapi.ThirdPartyStruct) (output1 map[string]eventsourceapi.MyStruct, err error) // MARKER: OnMyEvent
-}
-```
-
-Add the stubs to the `Mock`.
-
-```go
-// MockOnMyEvent sets up a mock handler for OnMyEvent.
-func (svc *Mock) MockOnMyEvent(handler func(ctx context.Context, input1 string, input2 eventsourceapi.ThirdPartyStruct) (output1 map[string]eventsourceapi.MyStruct, err error)) *Mock { // MARKER: OnMyEvent
-	svc.mockOnMyEvent = handler
-	return svc
-}
-
-// OnMyEvent executes the mock handler.
-func (svc *Mock) OnMyEvent(ctx context.Context, input1 string, input2 eventsourceapi.ThirdPartyStruct) (output1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
-	if svc.mockOnMyEvent == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	output1, err = svc.mockOnMyEvent(ctx, input1, input2)
-	return output1, errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-- Set values for the example input arguments
-- Set values for the expected output arguments
-
-```go
-t.Run("on_my_event", func(t *testing.T) { // MARKER: OnMyEvent
-	assert := testarossa.For(t)
-
-	exampleParam1 := ""
-	exampleParam2 := eventsourceapi.ThirdPartyStruct{}
-	expectedResult1 := map[string]eventsourceapi.MyStruct{}
-
-	_, err := mock.OnMyEvent(ctx, exampleParam1, exampleParam2)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockOnMyEvent(func(ctx context.Context, input1 string, input2 eventsourceapi.ThirdPartyStruct) (output1 map[string]eventsourceapi.MyStruct, err error) {
-		return expectedResult1, nil
-	})
-	output1, err := mock.OnMyEvent(ctx, exampleParam1, exampleParam2)
-	assert.Expect(
-		output1, expectedResult1,
-		err, nil,
-	)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 9: Test the Inbound Event Sink
 

@@ -23,8 +23,13 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
           cache-dependency-path: go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Go version
         run: go version
+      - name: Python version
+        run: python3 --version && python3 -c "import venv; print('venv module OK')"
       - name: Run tests (NATS only)
         run: MICROBUS_SHORT_CIRCUIT=0 go test -count 1 -timeout 30s -cover ./...
       - name: Run tests (short-circuit only)

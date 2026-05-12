@@ -61,7 +61,7 @@ The two are inverses but each is standalone - neither knows about the other. If 
 
 ## Why no schema package import
 
-`cmd/schema` is the consumer shape (just enough for `cmd/gencreds` to read hostnames + downstream package paths from a manifest). genmanifest defines its own richer internal types because it needs the full set of fields, including ones gencreds doesn't care about (signatures, metric kinds/buckets, ticker intervals). Don't fold genmanifest's types back into `cmd/schema` - that would force gencreds to depend on the full superset.
+`cmd/internal/schema` is the consumer shape (just enough for `cmd/gencreds` to read hostnames + downstream package paths from a manifest). genmanifest defines its own richer internal types because it needs the full set of fields, including ones gencreds doesn't care about (signatures, metric kinds/buckets, ticker intervals). Don't fold genmanifest's types back into `cmd/internal/schema` - that would force gencreds to depend on the full superset.
 
 ## Custom YAML emitter
 

@@ -22,16 +22,6 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/hello/helloapi"
-)
-
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ helloapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -76,10 +66,9 @@ func (svc *Mock) MockHello(handler func(w http.ResponseWriter, r *http.Request) 
 
 // Hello executes the mock handler.
 func (svc *Mock) Hello(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Hello
-	if svc.mockHello == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockHello != nil {
+		err = svc.mockHello(w, r)
 	}
-	err = svc.mockHello(w, r)
 	return errors.Trace(err)
 }
 
@@ -91,10 +80,9 @@ func (svc *Mock) MockEcho(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Echo executes the mock handler.
 func (svc *Mock) Echo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Echo
-	if svc.mockEcho == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockEcho != nil {
+		err = svc.mockEcho(w, r)
 	}
-	err = svc.mockEcho(w, r)
 	return errors.Trace(err)
 }
 
@@ -106,10 +94,9 @@ func (svc *Mock) MockPing(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Ping executes the mock handler.
 func (svc *Mock) Ping(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Ping
-	if svc.mockPing == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockPing != nil {
+		err = svc.mockPing(w, r)
 	}
-	err = svc.mockPing(w, r)
 	return errors.Trace(err)
 }
 
@@ -121,10 +108,9 @@ func (svc *Mock) MockCalculator(handler func(w http.ResponseWriter, r *http.Requ
 
 // Calculator executes the mock handler.
 func (svc *Mock) Calculator(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Calculator
-	if svc.mockCalculator == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockCalculator != nil {
+		err = svc.mockCalculator(w, r)
 	}
-	err = svc.mockCalculator(w, r)
 	return errors.Trace(err)
 }
 
@@ -136,10 +122,9 @@ func (svc *Mock) MockBusPNG(handler func(w http.ResponseWriter, r *http.Request)
 
 // BusPNG executes the mock handler.
 func (svc *Mock) BusPNG(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: BusPNG
-	if svc.mockBusPNG == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBusPNG != nil {
+		err = svc.mockBusPNG(w, r)
 	}
-	err = svc.mockBusPNG(w, r)
 	return errors.Trace(err)
 }
 
@@ -151,10 +136,9 @@ func (svc *Mock) MockLocalization(handler func(w http.ResponseWriter, r *http.Re
 
 // Localization executes the mock handler.
 func (svc *Mock) Localization(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Localization
-	if svc.mockLocalization == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockLocalization != nil {
+		err = svc.mockLocalization(w, r)
 	}
-	err = svc.mockLocalization(w, r)
 	return errors.Trace(err)
 }
 
@@ -166,10 +150,9 @@ func (svc *Mock) MockRoot(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Root executes the mock handler.
 func (svc *Mock) Root(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Root
-	if svc.mockRoot == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockRoot != nil {
+		err = svc.mockRoot(w, r)
 	}
-	err = svc.mockRoot(w, r)
 	return errors.Trace(err)
 }
 
@@ -181,9 +164,8 @@ func (svc *Mock) MockTickTock(handler func(ctx context.Context) (err error)) *Mo
 
 // TickTock executes the mock handler.
 func (svc *Mock) TickTock(ctx context.Context) (err error) { // MARKER: TickTock
-	if svc.mockTickTock == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockTickTock != nil {
+		err = svc.mockTickTock(ctx)
 	}
-	err = svc.mockTickTock(ctx)
 	return errors.Trace(err)
 }

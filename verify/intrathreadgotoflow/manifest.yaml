@@ -1,0 +1,28 @@
+general:
+  hostname: intrathreadgotoflow.verify
+  description: intrathreadgotoflow.verify is the SKIP-marked intra-thread Goto pattern (pending lineage redesign).
+  modifiedAt: "2026-05-14T17:53:51Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(target int) (targetOut int)
+    description: TaskA passes target through.
+    route: :428/task-a
+  LoopTask:
+    signature: LoopTask(loops int, target int) (loopsOut int)
+    description: LoopTask self-loops via flow.Goto until loops reaches target.
+    route: :428/loop-task
+  NormalC:
+    signature: NormalC() (stamp string)
+    description: NormalC produces a stamp.
+    route: :428/normal-c
+  TaskD:
+    signature: TaskD(loops int, stamp string) (finalResult string)
+    description: TaskD is the outer fan-in.
+    route: :428/task-d
+
+workflows:
+  IntraThreadGoto:
+    signature: IntraThreadGoto(target int) (finalResult string)
+    description: IntraThreadGoto defines A -> {LoopTask (self-Goto), NormalC} -> D.
+    route: :428/intra-thread-goto

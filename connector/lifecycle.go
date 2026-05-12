@@ -143,6 +143,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	startTime := time.Now()
 	ctx = context.Background()
 	defer func() {
+		// err is the named return value
 		if err != nil {
 			c.LogError(ctx, "Starting up", "error", err)
 			// OpenTelemetry: record the error
@@ -174,13 +175,11 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// OpenTelemetry: init
 	err = c.initMeter(ctx)
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 	err = c.initTracer(ctx)
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 
 	// OpenTelemetry: create a span for the callback
@@ -189,21 +188,18 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// Initialize logger
 	err = c.initLogger()
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 	c.LogInfo(ctx, "Startup")
 
 	// Connect to the transport.
 	err = c.transportConn.Open(ctx, c.hostname, c)
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 	c.maxFragmentSize = c.transportConn.MaxPayload() - 64<<10 // Up to 64K for headers
 	if c.maxFragmentSize < 64<<10 {
-		err = errors.New("message size limit is too restrictive")
-		return err
+		return errors.New("message size limit is too restrictive")
 	}
 	c.networkRoundtrip = c.transportConn.Latency()
 	c.ackTimeout = c.networkRoundtrip
@@ -212,15 +208,13 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// Subscribe to the response subject
 	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponseSub(c.plane, c.hostname, c.id), c.id, c.onResponse)
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 
 	// Fetch configs
 	err = c.refreshConfig(ctx, false)
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 	c.logConfigs(ctx)
 
@@ -228,17 +222,8 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	if c.distribCache == nil {
 		c.distribCache, err = dlru.NewCache(ctx, c, ":888/dcache")
 		if err != nil {
-			err = errors.Trace(err)
-			return err
+			return errors.Trace(err)
 		}
-	}
-
-	// Activate infra subscriptions so framework-internal handlers (e.g. the distributed
-	// cache) are reachable from inside the user's OnStartup callback.
-	err = c.activateInfraSubs()
-	if err != nil {
-		err = errors.Trace(err)
-		return err
 	}
 
 	// Call the callback function
@@ -248,8 +233,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 			return c.onStartup(ctx)
 		})
 		if err != nil {
-			err = errors.Trace(err)
-			return err
+			return errors.Trace(err)
 		}
 	}
 
@@ -259,15 +243,13 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// Subscribe to :888 control messages
 	err = c.subscribeControl()
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 
 	// Activate subscriptions
 	err = c.activateSubs()
 	if err != nil {
-		err = errors.Trace(err)
-		return err
+		return errors.Trace(err)
 	}
 
 	c.startupTime = time.Now().UTC()
@@ -297,9 +279,11 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		lastErr = errors.Trace(err)
 	}
 
-	// Deactivate user (non-infra) subscriptions. Infra subscriptions stay active so user
-	// OnShutdown code can still use framework-internal handlers (e.g. the distributed cache).
-	err = c.deactivateNonInfraSubs()
+	// Deactivate the auto subscriptions. Manual subscriptions (the distributed cache plus
+	// anything the user marked sub.Manual) stay active so OnShutdown code can still use
+	// them. The connector tears down its own dlru-tagged group after OnShutdown returns;
+	// user-owned manual groups (Python venv handlers, etc.) are the caller's responsibility.
+	err = c.deactivateAutoSubs()
 	if err != nil {
 		lastErr = errors.Trace(err)
 	}
@@ -346,22 +330,16 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		}
 	}
 
-	// Deactivate infra subscriptions now that OnShutdown has completed. This stops the
-	// connector's own dlru handlers from receiving requests, so the upcoming offload
-	// distributes entries to peers only - not back into this connector's own cache.
-	err = c.deactivateInfraSubs()
-	if err != nil {
-		lastErr = errors.Trace(err)
-	}
-
-	// Close the distributed cache (offload local entries to peers, clear local cache).
-	// Local infra subs are down; peers still have their own dlru subs active and receive
-	// rescue requests normally.
+	// Close the distributed cache; see dlru/CLAUDE.md for the offload window.
+	// Reset to nil so the next Startup creates a fresh cache - otherwise the
+	// "if c.distribCache == nil" guard skips dlru.NewCache and the cache's
+	// manual subs stay off the bus across the restart.
 	if c.distribCache != nil {
 		err = c.distribCache.Close(ctx)
 		if err != nil {
 			lastErr = errors.Trace(err)
 		}
+		c.distribCache = nil
 	}
 
 	// Unsubscribe from the response subject

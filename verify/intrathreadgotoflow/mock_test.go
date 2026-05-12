@@ -1,0 +1,88 @@
+package intrathreadgotoflow
+
+import (
+	"context"
+	"testing"
+
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/testarossa"
+)
+
+func TestIntrathreadgotoflow_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("task_a", func(t *testing.T) { // MARKER: TaskA
+		assert := testarossa.For(t)
+
+		mock.MockTaskA(func(ctx context.Context, flow *workflow.Flow, target int) (targetOut int, err error) {
+			return
+		})
+		var target int
+		_, err := mock.TaskA(ctx, nil, target)
+		assert.NoError(err)
+	})
+
+	t.Run("loop_task", func(t *testing.T) { // MARKER: LoopTask
+		assert := testarossa.For(t)
+
+		mock.MockLoopTask(func(ctx context.Context, flow *workflow.Flow, loops int, target int) (loopsOut int, err error) {
+			return
+		})
+		var loops int
+		var target int
+		_, err := mock.LoopTask(ctx, nil, loops, target)
+		assert.NoError(err)
+	})
+
+	t.Run("normal_c", func(t *testing.T) { // MARKER: NormalC
+		assert := testarossa.For(t)
+
+		mock.MockNormalC(func(ctx context.Context, flow *workflow.Flow) (stamp string, err error) {
+			return
+		})
+		_, err := mock.NormalC(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("task_d", func(t *testing.T) { // MARKER: TaskD
+		assert := testarossa.For(t)
+
+		mock.MockTaskD(func(ctx context.Context, flow *workflow.Flow, loops int, stamp string) (finalResult string, err error) {
+			return
+		})
+		var loops int
+		var stamp string
+		_, err := mock.TaskD(ctx, nil, loops, stamp)
+		assert.NoError(err)
+	})
+
+	t.Run("intra_thread_goto", func(t *testing.T) { // MARKER: IntraThreadGoto
+		assert := testarossa.For(t)
+
+		mock.MockIntraThreadGoto(func(ctx context.Context, flow *workflow.Flow, target int) (finalResult string, err error) {
+			return
+		})
+		graph, err := mock.IntraThreadGoto(ctx)
+		if assert.NoError(err) {
+			assert.NotNil(graph)
+		}
+	})
+
+}

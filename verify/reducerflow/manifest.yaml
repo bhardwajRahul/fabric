@@ -1,0 +1,32 @@
+general:
+  hostname: reducerflow.verify
+  description: reducerflow.verify exercises sum/list/set reducers at fan-in.
+  modifiedAt: "2026-05-14T16:01:50Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (started bool)
+    description: TaskA is the fan-out source.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
+    description: TaskB contributes deltas to sumTotal/listTags/setSeen.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
+    description: TaskC contributes deltas with one overlapping setSeen element.
+    route: :428/task-c
+  TaskD:
+    signature: TaskD() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
+    description: TaskD contributes deltas.
+    route: :428/task-d
+  TaskE:
+    signature: TaskE(sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string)
+    description: TaskE reads the reducer-merged values.
+    route: :428/task-e
+
+workflows:
+  Reducer:
+    signature: Reducer() (finalSum int, finalList []string, finalSet []string)
+    description: Reducer defines the graph A -> {B, C, D} -> E with reducer-managed fan-in.
+    route: :428/reducer

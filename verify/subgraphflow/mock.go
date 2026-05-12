@@ -1,0 +1,218 @@
+package subgraphflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/subgraphflow/subgraphflowapi"
+)
+
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
+type Mock struct {
+	*Intermediate
+	mockTaskA       func(ctx context.Context, flow *workflow.Flow, seed string) (seedOut string, err error)            // MARKER: TaskA
+	mockTaskX       func(ctx context.Context, flow *workflow.Flow, seed string) (innerStage string, err error)         // MARKER: TaskX
+	mockTaskY       func(ctx context.Context, flow *workflow.Flow, innerStage string) (innerResult string, err error)  // MARKER: TaskY
+	mockTaskZ       func(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error) // MARKER: TaskZ
+	mockInnerGraph  func(ctx context.Context) (graph *workflow.Graph, err error)                                       // MARKER: Inner
+	unsubMockInner  func() error                                                                                       // MARKER: Inner
+	mockParentGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                       // MARKER: Parent
+	unsubMockParent func() error                                                                                       // MARKER: Parent
+}
+
+// NewMock creates a new mockable version of the microservice.
+func NewMock() *Mock {
+	svc := &Mock{}
+	svc.Intermediate = NewIntermediate(svc)
+	svc.SetVersion(7357) // Stands for TEST
+	return svc
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Mock) OnStartup(ctx context.Context) (err error) {
+	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
+	}
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+// MockTaskA sets up a mock handler for TaskA.
+func (svc *Mock) MockTaskA(handler func(ctx context.Context, flow *workflow.Flow, seed string) (seedOut string, err error)) *Mock { // MARKER: TaskA
+	svc.mockTaskA = handler
+	return svc
+}
+
+// TaskA executes the mock handler.
+func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow, seed string) (seedOut string, err error) { // MARKER: TaskA
+	if svc.mockTaskA != nil {
+		seedOut, err = svc.mockTaskA(ctx, flow, seed)
+	}
+	return seedOut, errors.Trace(err)
+}
+
+// MockTaskX sets up a mock handler for TaskX.
+func (svc *Mock) MockTaskX(handler func(ctx context.Context, flow *workflow.Flow, seed string) (innerStage string, err error)) *Mock { // MARKER: TaskX
+	svc.mockTaskX = handler
+	return svc
+}
+
+// TaskX executes the mock handler.
+func (svc *Mock) TaskX(ctx context.Context, flow *workflow.Flow, seed string) (innerStage string, err error) { // MARKER: TaskX
+	if svc.mockTaskX != nil {
+		innerStage, err = svc.mockTaskX(ctx, flow, seed)
+	}
+	return innerStage, errors.Trace(err)
+}
+
+// MockTaskY sets up a mock handler for TaskY.
+func (svc *Mock) MockTaskY(handler func(ctx context.Context, flow *workflow.Flow, innerStage string) (innerResult string, err error)) *Mock { // MARKER: TaskY
+	svc.mockTaskY = handler
+	return svc
+}
+
+// TaskY executes the mock handler.
+func (svc *Mock) TaskY(ctx context.Context, flow *workflow.Flow, innerStage string) (innerResult string, err error) { // MARKER: TaskY
+	if svc.mockTaskY != nil {
+		innerResult, err = svc.mockTaskY(ctx, flow, innerStage)
+	}
+	return innerResult, errors.Trace(err)
+}
+
+// MockTaskZ sets up a mock handler for TaskZ.
+func (svc *Mock) MockTaskZ(handler func(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error)) *Mock { // MARKER: TaskZ
+	svc.mockTaskZ = handler
+	return svc
+}
+
+// TaskZ executes the mock handler.
+func (svc *Mock) TaskZ(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error) { // MARKER: TaskZ
+	if svc.mockTaskZ != nil {
+		finalResult, err = svc.mockTaskZ(ctx, flow, innerResult)
+	}
+	return finalResult, errors.Trace(err)
+}
+
+// MockInner sets up a mock handler for the Inner workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockInner(handler func(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error)) *Mock { // MARKER: Inner
+	if svc.unsubMockInner != nil {
+		svc.unsubMockInner()
+		svc.unsubMockInner = nil
+	}
+	if handler == nil {
+		svc.mockInnerGraph = nil
+		return svc
+	}
+	mockName := "MockInner" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-inner-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockInnerGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(subgraphflowapi.Inner.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in subgraphflowapi.InnerIn
+		f.ParseState(&in)
+		innerResult, err := handler(r.Context(), &f, in.Seed)
+		if err != nil {
+			return err // No trace
+		}
+		out := subgraphflowapi.InnerOut{InnerResult: innerResult}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(subgraphflowapi.InnerIn{}, subgraphflowapi.InnerOut{}),
+	)
+	if err == nil {
+		svc.unsubMockInner = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// Inner returns the workflow graph, or a mocked graph if MockInner was called.
+func (svc *Mock) Inner(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Inner
+	if svc.mockInnerGraph != nil {
+		graph, err = svc.mockInnerGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}
+
+// MockParent sets up a mock handler for the Parent workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockParent(handler func(ctx context.Context, flow *workflow.Flow, seed string) (finalResult string, err error)) *Mock { // MARKER: Parent
+	if svc.unsubMockParent != nil {
+		svc.unsubMockParent()
+		svc.unsubMockParent = nil
+	}
+	if handler == nil {
+		svc.mockParentGraph = nil
+		return svc
+	}
+	mockName := "MockParent" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-parent-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockParentGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(subgraphflowapi.Parent.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in subgraphflowapi.ParentIn
+		f.ParseState(&in)
+		finalResult, err := handler(r.Context(), &f, in.Seed)
+		if err != nil {
+			return err // No trace
+		}
+		out := subgraphflowapi.ParentOut{FinalResult: finalResult}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(subgraphflowapi.ParentIn{}, subgraphflowapi.ParentOut{}),
+	)
+	if err == nil {
+		svc.unsubMockParent = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// Parent returns the workflow graph, or a mocked graph if MockParent was called.
+func (svc *Mock) Parent(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Parent
+	if svc.mockParentGraph != nil {
+		graph, err = svc.mockParentGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}

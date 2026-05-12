@@ -24,18 +24,20 @@ import (
 )
 
 // Cors returns a middleware that responds to the CORS origin OPTION request and blocks requests from disallowed origins.
-func Cors(isAllowed func(origin string) bool) Middleware {
+// allowedOrigin returns the value to set in Access-Control-Allow-Origin for the given request and Origin header.
+// An empty return value rejects the request with 403.
+func Cors(allowedOrigin func(r *http.Request, origin string) string) Middleware {
 	return func(next connector.HTTPHandler) connector.HTTPHandler {
 		return func(w http.ResponseWriter, r *http.Request) error {
 			// https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
 			origin := r.Header.Get("Origin")
 			if origin != "" {
-				// Block disallowed origins
-				if !isAllowed(origin) {
+				allowed := allowedOrigin(r, origin)
+				if allowed == "" {
 					return errors.New("disallowed origin '%s'", origin, http.StatusForbidden)
 				}
 				// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
-				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Origin", allowed)
 				w.Header().Set("Access-Control-Allow-Methods", "*")
 				w.Header().Set("Access-Control-Allow-Headers", "*")
 				w.Header().Set("Access-Control-Allow-Credentials", "true")

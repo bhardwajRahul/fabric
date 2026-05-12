@@ -27,7 +27,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/microbus-io/fabric/cmd/schema"
+	"github.com/microbus-io/fabric/cmd/internal/schema"
 )
 
 // service is a single service in a bundle, with everything gencreds needs to

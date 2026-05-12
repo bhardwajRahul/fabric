@@ -1,0 +1,16 @@
+general:
+  hostname: continueflow.verify
+  description: continueflow.verify exercises multi-turn flows via Continue.
+  modifiedAt: "2026-05-14T17:42:15Z"
+
+tasks:
+  Increment:
+    signature: Increment(counter int) (counterOut int)
+    description: Increment reads counter and writes counter+1.
+    route: :428/increment
+
+workflows:
+  Counting:
+    signature: Counting(counter int) (counterOut int)
+    description: Counting defines a single-task workflow that persists counter across turns.
+    route: :428/counting

@@ -25,11 +25,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
@@ -56,262 +54,41 @@ var (
 	_ creditflowapi.Client
 )
 
-func TestCreditFlow_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: SubmitCreditApplication
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: VerifyCredit
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: VerifyEmployment
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
+// MARKER: VerifySSN
 
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
+// MARKER: VerifyAddress
 
-	t.Run("submit_credit_application", func(t *testing.T) { // MARKER: SubmitCreditApplication
-		assert := testarossa.For(t)
+// MARKER: VerifyPhoneNumber
 
-		applicant := creditflowapi.Applicant{
-			ApplicantName: "Alice",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   700,
-		}
-		_, _, _, _, _, _, err := mock.SubmitCreditApplication(ctx, nil, applicant)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockSubmitCreditApplication(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) {
-			return applicant.ApplicantName, applicant.SSN, applicant.Address, applicant.Phone, applicant.Employers, applicant.CreditScore, nil
-		})
-		_, _, _, _, _, _, err = mock.SubmitCreditApplication(ctx, nil, applicant)
-		assert.NoError(err)
-	})
+// MARKER: IdentityDecision
 
-	t.Run("verify_credit", func(t *testing.T) { // MARKER: VerifyCredit
-		assert := testarossa.For(t)
+// MARKER: HandleCreditError
 
-		_, err := mock.VerifyCredit(ctx, nil, 700, "")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifyCredit(func(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error) {
-			return true, nil
-		})
-		creditVerified, err := mock.VerifyCredit(ctx, nil, 700, "")
-		assert.Expect(
-			creditVerified, true,
-			err, nil,
-		)
-	})
+// MARKER: Decision
 
-	t.Run("verify_employment", func(t *testing.T) { // MARKER: VerifyEmployment
-		assert := testarossa.For(t)
+// MARKER: RequestMoreInfo
 
-		_, err := mock.VerifyEmployment(ctx, nil, "Alice", "Acme Corp")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifyEmployment(func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) {
-			return 0, nil
-		})
-		sumEmploymentFailuresOut, err := mock.VerifyEmployment(ctx, nil, "Alice", "Acme Corp")
-		assert.Expect(
-			sumEmploymentFailuresOut, 0,
-			err, nil,
-		)
-	})
+// MARKER: ReviewCredit
 
-	t.Run("verify_ssn", func(t *testing.T) { // MARKER: VerifySSN
-		assert := testarossa.For(t)
+// MARKER: CreditApproval
 
-		_, err := mock.VerifySSN(ctx, nil, "123-45-6789", "")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifySSN(func(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error) {
-			return true, nil
-		})
-		ssnVerified, err := mock.VerifySSN(ctx, nil, "123-45-6789", "")
-		assert.Expect(
-			ssnVerified, true,
-			err, nil,
-		)
-	})
+// Mock the workflow behavior
 
-	t.Run("verify_address", func(t *testing.T) { // MARKER: VerifyAddress
-		assert := testarossa.For(t)
+// Graph endpoint should now return a valid graph
 
-		_, err := mock.VerifyAddress(ctx, nil, "123 Main St")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifyAddress(func(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error) {
-			return true, nil
-		})
-		addressVerified, err := mock.VerifyAddress(ctx, nil, "123 Main St")
-		assert.Expect(
-			addressVerified, true,
-			err, nil,
-		)
-	})
+// MARKER: IdentityVerification
 
-	t.Run("verify_phone_number", func(t *testing.T) { // MARKER: VerifyPhoneNumber
-		assert := testarossa.For(t)
+// Mock the workflow behavior
 
-		_, err := mock.VerifyPhoneNumber(ctx, nil, "555-123-4567", "")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockVerifyPhoneNumber(func(ctx context.Context, flow *workflow.Flow, phone string, faultInjection string) (phoneVerified bool, err error) {
-			return true, nil
-		})
-		phoneVerified, err := mock.VerifyPhoneNumber(ctx, nil, "555-123-4567", "")
-		assert.Expect(
-			phoneVerified, true,
-			err, nil,
-		)
-	})
+// Graph endpoint should now return a valid graph
 
-	t.Run("identity_decision", func(t *testing.T) { // MARKER: IdentityDecision
-		assert := testarossa.For(t)
-
-		_, err := mock.IdentityDecision(ctx, nil, true, true, true)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockIdentityDecision(func(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error) {
-			return ssnVerified && addressVerified && phoneVerified, nil
-		})
-		identityVerified, err := mock.IdentityDecision(ctx, nil, true, true, true)
-		assert.Expect(
-			identityVerified, true,
-			err, nil,
-		)
-	})
-
-	t.Run("handle_credit_error", func(t *testing.T) { // MARKER: HandleCreditError
-		assert := testarossa.For(t)
-
-		_, err := mock.HandleCreditError(ctx, nil, nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockHandleCreditError(func(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error) {
-			return false, nil
-		})
-		creditVerified, err := mock.HandleCreditError(ctx, nil, errors.Convert(errors.New("test error")))
-		assert.Expect(
-			creditVerified, false,
-			err, nil,
-		)
-	})
-
-	t.Run("decision", func(t *testing.T) { // MARKER: Decision
-		assert := testarossa.For(t)
-
-		_, err := mock.Decision(ctx, nil, true, 0, true)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockDecision(func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) {
-			return true, nil
-		})
-		approved, err := mock.Decision(ctx, nil, true, 0, true)
-		assert.Expect(
-			approved, true,
-			err, nil,
-		)
-	})
-
-	t.Run("request_more_info", func(t *testing.T) { // MARKER: RequestMoreInfo
-		assert := testarossa.For(t)
-
-		_, err := mock.RequestMoreInfo(ctx, nil, 0)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockRequestMoreInfo(func(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error) {
-			return reviewAttempts + 1, nil
-		})
-		reviewAttemptsOut, err := mock.RequestMoreInfo(ctx, nil, 0)
-		assert.Expect(
-			reviewAttemptsOut, 1,
-			err, nil,
-		)
-	})
-
-	t.Run("review_credit", func(t *testing.T) { // MARKER: ReviewCredit
-		assert := testarossa.For(t)
-
-		_, err := mock.ReviewCredit(ctx, nil, 580, false, 0, "")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockReviewCredit(func(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error) {
-			return true, nil
-		})
-		creditVerifiedOut, err := mock.ReviewCredit(ctx, nil, 580, false, 0, "")
-		assert.Expect(
-			creditVerifiedOut, true,
-			err, nil,
-		)
-	})
-
-	t.Run("credit_approval", func(t *testing.T) { // MARKER: CreditApproval
-		assert := testarossa.For(t)
-
-		// Before mocking, graph endpoint returns "not implemented"
-		_, err := mock.CreditApproval(ctx)
-		assert.Contains(err.Error(), "not implemented")
-
-		// Mock the workflow behavior
-		mock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant, faultInjection string) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, err error) {
-			return true, true, 0, true, nil
-		})
-		// Graph endpoint should now return a valid graph
-		graph, err := mock.CreditApproval(ctx)
-		if assert.NoError(err) {
-			assert.NotNil(graph)
-		}
-
-		// Clear the mock
-		mock.MockCreditApproval(nil)
-		_, err = mock.CreditApproval(ctx)
-		assert.Contains(err.Error(), "not implemented")
-	})
-
-	t.Run("identity_verification", func(t *testing.T) { // MARKER: IdentityVerification
-		assert := testarossa.For(t)
-
-		// Before mocking, graph endpoint returns "not implemented"
-		_, err := mock.IdentityVerification(ctx)
-		assert.Contains(err.Error(), "not implemented")
-
-		// Mock the workflow behavior
-		mock.MockIdentityVerification(func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) {
-			return true, nil
-		})
-		// Graph endpoint should now return a valid graph
-		graph, err := mock.IdentityVerification(ctx)
-		if assert.NoError(err) {
-			assert.NotNil(graph)
-		}
-
-		// Clear the mock
-		mock.MockIdentityVerification(nil)
-		_, err = mock.IdentityVerification(ctx)
-		assert.Contains(err.Error(), "not implemented")
-	})
-
-	t.Run("demo", func(t *testing.T) { // MARKER: Demo
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Demo(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockDemo(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Demo(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: Demo
 
 func TestCreditFlow_SubmitCreditApplication(t *testing.T) { // MARKER: SubmitCreditApplication
 	t.Parallel()
@@ -411,7 +188,7 @@ func TestCreditFlow_VerifyCredit(t *testing.T) { // MARKER: VerifyCredit
 	t.Run("good_score", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		creditVerified, err := exec.VerifyCredit(ctx, 750, "")
+		creditVerified, err := exec.VerifyCredit(ctx, 750)
 		if assert.NoError(err) {
 			assert.Expect(creditVerified, true)
 		}
@@ -420,7 +197,7 @@ func TestCreditFlow_VerifyCredit(t *testing.T) { // MARKER: VerifyCredit
 	t.Run("bad_score", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		creditVerified, err := exec.VerifyCredit(ctx, 540, "")
+		creditVerified, err := exec.VerifyCredit(ctx, 540)
 		if assert.NoError(err) {
 			assert.Expect(creditVerified, false)
 		}
@@ -506,7 +283,7 @@ func TestCreditFlow_VerifySSN(t *testing.T) { // MARKER: VerifySSN
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			ssnVerified, err := exec.WithOutputFlow(&outFlow).VerifySSN(ctx, ssn, faultInjection)
+			ssnVerified, err := exec.WithOutputFlow(&outFlow).VerifySSN(ctx, ssn)
 			if assert.NoError(err) {
 				assert.Expect(ssnVerified, true)
 			}
@@ -515,7 +292,7 @@ func TestCreditFlow_VerifySSN(t *testing.T) { // MARKER: VerifySSN
 
 	t.Run("valid", func(t *testing.T) {
 		assert := testarossa.For(t)
-		ssnVerified, err := exec.VerifySSN(ctx, "123-45-6789", "")
+		ssnVerified, err := exec.VerifySSN(ctx, "123-45-6789")
 		if assert.NoError(err) {
 			assert.Expect(ssnVerified, true)
 		}
@@ -523,7 +300,7 @@ func TestCreditFlow_VerifySSN(t *testing.T) { // MARKER: VerifySSN
 
 	t.Run("empty_ssn", func(t *testing.T) {
 		assert := testarossa.For(t)
-		ssnVerified, err := exec.VerifySSN(ctx, "", "")
+		ssnVerified, err := exec.VerifySSN(ctx, "")
 		if assert.NoError(err) {
 			assert.Expect(ssnVerified, false)
 		}
@@ -594,7 +371,7 @@ func TestCreditFlow_VerifyPhoneNumber(t *testing.T) { // MARKER: VerifyPhoneNumb
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			phoneVerified, err := exec.WithOutputFlow(&outFlow).VerifyPhoneNumber(ctx, phone, faultInjection)
+			phoneVerified, err := exec.WithOutputFlow(&outFlow).VerifyPhoneNumber(ctx, phone)
 			if assert.NoError(err) {
 				assert.Expect(phoneVerified, true)
 			}
@@ -603,7 +380,7 @@ func TestCreditFlow_VerifyPhoneNumber(t *testing.T) { // MARKER: VerifyPhoneNumb
 
 	t.Run("valid", func(t *testing.T) {
 		assert := testarossa.For(t)
-		phoneVerified, err := exec.VerifyPhoneNumber(ctx, "555-123-4567", "")
+		phoneVerified, err := exec.VerifyPhoneNumber(ctx, "555-123-4567")
 		if assert.NoError(err) {
 			assert.Expect(phoneVerified, true)
 		}
@@ -752,7 +529,7 @@ func TestCreditFlow_ReviewCredit(t *testing.T) { // MARKER: ReviewCredit
 	t.Run("high_borderline_approved", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		creditVerifiedOut, err := exec.ReviewCredit(ctx, 580, false, 0, "")
+		creditVerifiedOut, err := exec.ReviewCredit(ctx, 580, false, 0)
 		if assert.NoError(err) {
 			assert.Expect(creditVerifiedOut, true)
 		}
@@ -761,7 +538,7 @@ func TestCreditFlow_ReviewCredit(t *testing.T) { // MARKER: ReviewCredit
 	t.Run("too_low_rejected", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		creditVerifiedOut, err := exec.ReviewCredit(ctx, 400, false, 0, "")
+		creditVerifiedOut, err := exec.ReviewCredit(ctx, 400, false, 0)
 		if assert.NoError(err) {
 			assert.Expect(creditVerifiedOut, false)
 		}
@@ -852,7 +629,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			approved, creditVerified, sumEmploymentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...}, "")
+			approved, creditVerified, sumEmploymentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...})
 			assert.Expect(
 				err, nil,
 				status, foremanapi.StatusCompleted,
@@ -872,7 +649,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:         "555-123-4567",
 			Employers:     []string{"Acme Corp", "Globex"},
 			CreditScore:   750,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -894,7 +671,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:         "555-987-6543",
 			Employers:     []string{"Globex"},
 			CreditScore:   400,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -914,7 +691,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:         "(555) 111-2222",
 			Employers:     []string{"Initech"},
 			CreditScore:   580,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -935,7 +712,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:         "555-444-3333",
 			Employers:     []string{"Umbrella Corp"},
 			CreditScore:   560,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -956,7 +733,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:         "555-555-5555",
 			Employers:     []string{"Acme Corp", ""},
 			CreditScore:   750,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -975,7 +752,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			Phone:       "bad",
 			Employers:   []string{"Acme Corp"},
 			CreditScore: 750,
-		}, "")
+		})
 		if assert.NoError(err) {
 			assert.Expect(
 				status, foremanapi.StatusCompleted,
@@ -985,22 +762,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		}
 	})
 
-	t.Run("time_budget_exceeded", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// VerifyPhoneNumber has a 1s time budget; "Delay" fault injection triggers a 1.5s sleep, causing failure
-		_, _, _, _, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{
-			ApplicantName: "Frank",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   750,
-		}, "Delay")
-		if assert.NoError(err) {
-			assert.Expect(status, foremanapi.StatusFailed)
-		}
-	})
+	// time_budget_exceeded: covered by verify/timebudgetflow.
 
 	t.Run("breakpoint", func(t *testing.T) {
 		assert := testarossa.For(t)
@@ -1021,7 +783,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Set a breakpoint on the ReviewCredit task (runs after fan-in, before Decision)
-		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.ReviewCredit.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, "reviewCredit", true)
 		assert.NoError(err)
 
 		// Start the flow
@@ -1093,187 +855,15 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		)
 	})
 
-	t.Run("subgraph_interrupt_resume", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		foremanClient := foremanapi.NewClient(tester)
-
-		// Create the parent flow with MissingSSN fault injection - VerifySSN will interrupt to request it
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant: creditflowapi.Applicant{
-				ApplicantName: "Ivy",
-				SSN:           "123-45-6789",
-				Address:       "123 Main St",
-				Phone:         "555-123-4567",
-				Employers:     []string{"Acme Corp"},
-				CreditScore:   750,
-			},
-			FaultInjection: "MissingSSN",
-		})
-		assert.NoError(err)
-
-		// Start the flow
-		err = foremanClient.Start(ctx, flowKey)
-		assert.NoError(err)
-
-		// VerifySSN interrupts because of MissingSSN fault injection - propagates up to the parent
-		status, state, err := foremanClient.Await(ctx, flowKey)
-		if !assert.Expect(err, nil, status, foremanapi.StatusInterrupted) {
-			return
-		}
-		// The interrupt payload should be visible from the parent's State
-		assert.Expect(state["request"], "ssn")
-
-		// Resume with the SSN provided and clear the fault injection
-		err = foremanClient.Resume(ctx, flowKey, map[string]any{"ssn": "123-45-6789", "faultInjection": ""})
-		assert.NoError(err)
-
-		// Wait for completion
-		status, state, err = foremanClient.Await(ctx, flowKey)
-		assert.Expect(
-			err, nil,
-			status, foremanapi.StatusCompleted,
-			state["approved"], true,
-		)
-	})
-
-	t.Run("retry", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// "Retry" fault injection triggers VerifyCredit to retry 3 times, incrementing retryCount each time
-		approved, creditVerified, _, _, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{
-			ApplicantName: "Kate",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   750,
-		}, "Retry")
-		if assert.NoError(err) {
-			assert.Expect(
-				status, foremanapi.StatusCompleted,
-				approved, true,
-				creditVerified, true,
-			)
-		}
-	})
-
-	t.Run("sleep", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// "Sleep" fault injection triggers ReviewCredit to sleep for 200ms before approving.
-		// ReviewCredit is after fan-in, so the sleep delays the Decision step.
-		t0 := time.Now()
-		approved, _, _, _, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{
-			ApplicantName: "Leo",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   750,
-		}, "Sleep")
-		elapsed := time.Since(t0)
-		if assert.NoError(err) {
-			assert.Expect(
-				status, foremanapi.StatusCompleted,
-				approved, true,
-				elapsed >= 200*time.Millisecond, true,
-			)
-		}
-	})
-
-	t.Run("bad_goto", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// "BadGoto" fault injection triggers ReviewCredit to call flow.Goto with a target
-		// that has no WithGoto transition, which should fail the flow.
-		_, _, _, _, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{
-			ApplicantName: "Max",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   750,
-		}, "BadGoto")
-		if assert.NoError(err) {
-			assert.Expect(status, foremanapi.StatusFailed)
-		}
-	})
-
-	t.Run("error_transition", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// "Error" fault injection causes VerifyCredit to return an error.
-		// The error transition routes to HandleCreditError which sets creditVerified=false.
-		// The flow completes (not fails) with approved=false since credit was not verified.
-		approved, creditVerified, _, _, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{
-			ApplicantName: "Olivia",
-			SSN:           "123-45-6789",
-			Address:       "123 Main St",
-			Phone:         "555-123-4567",
-			Employers:     []string{"Acme Corp"},
-			CreditScore:   750,
-		}, "Error")
-		if assert.NoError(err) {
-			assert.Expect(
-				status, foremanapi.StatusCompleted,
-				approved, false,
-				creditVerified, false,
-			)
-		}
-	})
-
+	// The following fault-injection subtests were removed and are covered by:
+	//   subgraph_interrupt_resume -> verify/interruptflow + verify/subgraphflow
+	//   retry                     -> verify/retryflow
+	//   sleep                     -> verify/sleepflow
+	//   bad_goto                  -> verify/gotoflow (BadGoto workflow)
+	//   error_transition          -> verify/errorflow + verify/fanouterrorflow
 }
 
-func TestCreditFlow_DynamicSubgraph(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	svc := NewService()
-	tester := connector.New("tester.client")
-	foremanClient := foremanapi.NewClient(tester)
-
-	app := application.New()
-	app.Add(svc, foreman.NewService(), tester)
-	app.RunInTest(t)
-
-	t.Run("verify_credit_with_subgraph", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// "Subgraph" fault injection triggers VerifyCredit to dynamically run the
-		// IdentityVerification workflow as a child subgraph. On re-entry after the
-		// child completes, VerifyCredit reads identityVerified from state and
-		// combines it with the credit score check.
-		//
-		// We use CreateTask to run VerifyCredit as a standalone task with a workflow
-		// runner, so it doesn't interfere with the static IdentityVerification
-		// subgraph in the CreditApproval workflow.
-		initialState := map[string]any{
-			"creditScore":    750,
-			"faultInjection": "Subgraph",
-			"applicantName":  "Nina",
-			"ssn":            "123-45-6789",
-			"address":        "123 Main St",
-			"phone":          "555-123-4567",
-		}
-		flowKey, err := foremanClient.CreateTask(ctx, creditflowapi.VerifyCredit.URL(), initialState)
-		if !assert.NoError(err) {
-			return
-		}
-		err = foremanClient.Start(ctx, flowKey)
-		if !assert.NoError(err) {
-			return
-		}
-		status, state, err := foremanClient.Await(ctx, flowKey)
-		if assert.NoError(err) {
-			assert.Expect(
-				status, foremanapi.StatusCompleted,
-				state["creditVerified"], true,
-				state["identityVerified"], true,
-			)
-		}
-	})
-}
+// TestCreditFlow_DynamicSubgraph: covered by verify/dynamicsubgraphflow.
 
 func TestCreditFlow_StartNotify(t *testing.T) {
 	t.Parallel()
@@ -1346,21 +936,7 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert.NotNil(n.snapshot)
 	})
 
-	t.Run("interrupted", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// MissingSSN fault causes VerifySSN to interrupt the flow
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant:      goodApplicant,
-			FaultInjection: "MissingSSN",
-		})
-		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
-		assert.NoError(err)
-
-		n := waitForNotification(assert, flowKey, foremanapi.StatusInterrupted)
-		assert.Expect(n.status, foremanapi.StatusInterrupted)
-	})
+	// interrupted: covered by verify/interruptflow.
 
 	t.Run("cancelled", func(t *testing.T) {
 		assert := testarossa.For(t)
@@ -1370,7 +946,7 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 			Applicant: goodApplicant,
 		})
 		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.ReviewCredit.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, "reviewCredit", true)
 		assert.NoError(err)
 
 		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
@@ -1388,22 +964,7 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert.NotNil(n.snapshot)
 	})
 
-	t.Run("failed", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// Delay fault causes VerifyPhoneNumber to exceed its time budget, failing the flow
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant:      goodApplicant,
-			FaultInjection: "Delay",
-		})
-		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
-		assert.NoError(err)
-
-		n := waitForNotification(assert, flowKey, foremanapi.StatusFailed)
-		assert.Expect(n.status, foremanapi.StatusFailed)
-		assert.NotNil(n.snapshot)
-	})
+	// failed: covered by verify/timebudgetflow (foreman timeout) and verify/retryflow (retry exhaustion).
 }
 
 func TestCreditFlow_Demo(t *testing.T) { // MARKER: Demo
@@ -1469,7 +1030,7 @@ func TestCreditFlow_Demo(t *testing.T) { // MARKER: Demo
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
 				assert.Contains(body, "completed")
-				assert.Contains(body, "submit-credit-application")
+				assert.Contains(body, "submitCreditApplication")
 			}
 		}
 	})

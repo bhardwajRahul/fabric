@@ -18,26 +18,10 @@ package messaging
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/messaging/messagingapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ messagingapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -79,10 +63,9 @@ func (svc *Mock) MockHome(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Home executes the mock handler.
 func (svc *Mock) Home(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Home
-	if svc.mockHome == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockHome != nil {
+		err = svc.mockHome(w, r)
 	}
-	err = svc.mockHome(w, r)
 	return errors.Trace(err)
 }
 
@@ -94,10 +77,9 @@ func (svc *Mock) MockNoQueue(handler func(w http.ResponseWriter, r *http.Request
 
 // NoQueue executes the mock handler.
 func (svc *Mock) NoQueue(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: NoQueue
-	if svc.mockNoQueue == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockNoQueue != nil {
+		err = svc.mockNoQueue(w, r)
 	}
-	err = svc.mockNoQueue(w, r)
 	return errors.Trace(err)
 }
 
@@ -109,10 +91,9 @@ func (svc *Mock) MockDefaultQueue(handler func(w http.ResponseWriter, r *http.Re
 
 // DefaultQueue executes the mock handler.
 func (svc *Mock) DefaultQueue(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: DefaultQueue
-	if svc.mockDefaultQueue == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockDefaultQueue != nil {
+		err = svc.mockDefaultQueue(w, r)
 	}
-	err = svc.mockDefaultQueue(w, r)
 	return errors.Trace(err)
 }
 
@@ -124,10 +105,9 @@ func (svc *Mock) MockCacheLoad(handler func(w http.ResponseWriter, r *http.Reque
 
 // CacheLoad executes the mock handler.
 func (svc *Mock) CacheLoad(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CacheLoad
-	if svc.mockCacheLoad == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockCacheLoad != nil {
+		err = svc.mockCacheLoad(w, r)
 	}
-	err = svc.mockCacheLoad(w, r)
 	return errors.Trace(err)
 }
 
@@ -139,9 +119,8 @@ func (svc *Mock) MockCacheStore(handler func(w http.ResponseWriter, r *http.Requ
 
 // CacheStore executes the mock handler.
 func (svc *Mock) CacheStore(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CacheStore
-	if svc.mockCacheStore == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockCacheStore != nil {
+		err = svc.mockCacheStore(w, r)
 	}
-	err = svc.mockCacheStore(w, r)
 	return errors.Trace(err)
 }

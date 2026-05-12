@@ -18,27 +18,10 @@ package configurator
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ configuratorapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -82,11 +65,9 @@ func (svc *Mock) MockValues(handler func(ctx context.Context, names []string) (v
 
 // Values executes the mock handler.
 func (svc *Mock) Values(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values
-	if svc.mockValues == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockValues != nil {
+		values, err = svc.mockValues(ctx, names)
 	}
-	values, err = svc.mockValues(ctx, names)
 	return values, errors.Trace(err)
 }
 
@@ -98,10 +79,9 @@ func (svc *Mock) MockRefresh(handler func(ctx context.Context) (err error)) *Moc
 
 // Refresh executes the mock handler.
 func (svc *Mock) Refresh(ctx context.Context) (err error) { // MARKER: Refresh
-	if svc.mockRefresh == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockRefresh != nil {
+		err = svc.mockRefresh(ctx)
 	}
-	err = svc.mockRefresh(ctx)
 	return errors.Trace(err)
 }
 
@@ -113,10 +93,9 @@ func (svc *Mock) MockSyncRepo(handler func(ctx context.Context, timestamp time.T
 
 // SyncRepo executes the mock handler.
 func (svc *Mock) SyncRepo(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: SyncRepo
-	if svc.mockSyncRepo == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockSyncRepo != nil {
+		err = svc.mockSyncRepo(ctx, timestamp, values)
 	}
-	err = svc.mockSyncRepo(ctx, timestamp, values)
 	return errors.Trace(err)
 }
 
@@ -128,11 +107,9 @@ func (svc *Mock) MockValues443(handler func(ctx context.Context, names []string)
 
 // Values443 executes the mock handler.
 func (svc *Mock) Values443(ctx context.Context, names []string) (values map[string]string, err error) { // MARKER: Values443
-	if svc.mockValues443 == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockValues443 != nil {
+		values, err = svc.mockValues443(ctx, names)
 	}
-	values, err = svc.mockValues443(ctx, names)
 	return values, errors.Trace(err)
 }
 
@@ -144,10 +121,9 @@ func (svc *Mock) MockRefresh443(handler func(ctx context.Context) (err error)) *
 
 // Refresh443 executes the mock handler.
 func (svc *Mock) Refresh443(ctx context.Context) (err error) { // MARKER: Refresh443
-	if svc.mockRefresh443 == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockRefresh443 != nil {
+		err = svc.mockRefresh443(ctx)
 	}
-	err = svc.mockRefresh443(ctx)
 	return errors.Trace(err)
 }
 
@@ -159,10 +135,9 @@ func (svc *Mock) MockSync443(handler func(ctx context.Context, timestamp time.Ti
 
 // Sync443 executes the mock handler.
 func (svc *Mock) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) { // MARKER: Sync443
-	if svc.mockSync443 == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockSync443 != nil {
+		err = svc.mockSync443(ctx, timestamp, values)
 	}
-	err = svc.mockSync443(ctx, timestamp, values)
 	return errors.Trace(err)
 }
 
@@ -174,9 +149,8 @@ func (svc *Mock) MockPeriodicRefresh(handler func(ctx context.Context) (err erro
 
 // PeriodicRefresh executes the mock handler.
 func (svc *Mock) PeriodicRefresh(ctx context.Context) (err error) { // MARKER: PeriodicRefresh
-	if svc.mockPeriodicRefresh == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockPeriodicRefresh != nil {
+		err = svc.mockPeriodicRefresh(ctx)
 	}
-	err = svc.mockPeriodicRefresh(ctx)
 	return errors.Trace(err)
 }

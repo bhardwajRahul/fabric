@@ -18,26 +18,12 @@ package foreman
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ foremanapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -62,8 +48,8 @@ type Mock struct {
 	mockContinue            func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                   // MARKER: Continue
 	mockHistoryMermaid      func(w http.ResponseWriter, r *http.Request) (err error)                                                          // MARKER: HistoryMermaid
 	mockPurgeExpiredFlows   func(ctx context.Context) (err error)                                                                             // MARKER: PurgeExpiredFlows
-	mockOnChangedNumShards  func(ctx context.Context) (err error)                                                                             // MARKER: NumShards
 	mockOnObserveQueueDepth func(ctx context.Context) (err error)                                                                             // MARKER: QueueDepth
+	mockOnChangedNumShards  func(ctx context.Context) (err error)                                                                             // MARKER: NumShards
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -95,11 +81,9 @@ func (svc *Mock) MockCreate(handler func(ctx context.Context, workflowName strin
 
 // Create executes the mock handler.
 func (svc *Mock) Create(ctx context.Context, workflowName string, initialState any) (flowKey string, err error) { // MARKER: Create
-	if svc.mockCreate == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockCreate != nil {
+		flowKey, err = svc.mockCreate(ctx, workflowName, initialState)
 	}
-	flowKey, err = svc.mockCreate(ctx, workflowName, initialState)
 	return flowKey, errors.Trace(err)
 }
 
@@ -111,11 +95,9 @@ func (svc *Mock) MockStart(handler func(ctx context.Context, flowKey string) (er
 
 // Start executes the mock handler.
 func (svc *Mock) Start(ctx context.Context, flowKey string) (err error) { // MARKER: Start
-	if svc.mockStart == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockStart != nil {
+		err = svc.mockStart(ctx, flowKey)
 	}
-	err = svc.mockStart(ctx, flowKey)
 	return errors.Trace(err)
 }
 
@@ -127,11 +109,9 @@ func (svc *Mock) MockStartNotify(handler func(ctx context.Context, flowKey strin
 
 // StartNotify executes the mock handler.
 func (svc *Mock) StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error) { // MARKER: StartNotify
-	if svc.mockStartNotify == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockStartNotify != nil {
+		err = svc.mockStartNotify(ctx, flowKey, notifyHostname)
 	}
-	err = svc.mockStartNotify(ctx, flowKey, notifyHostname)
 	return errors.Trace(err)
 }
 
@@ -143,11 +123,9 @@ func (svc *Mock) MockSnapshot(handler func(ctx context.Context, flowKey string) 
 
 // Snapshot executes the mock handler.
 func (svc *Mock) Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Snapshot
-	if svc.mockSnapshot == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockSnapshot != nil {
+		status, state, err = svc.mockSnapshot(ctx, flowKey)
 	}
-	status, state, err = svc.mockSnapshot(ctx, flowKey)
 	return status, state, errors.Trace(err)
 }
 
@@ -159,11 +137,9 @@ func (svc *Mock) MockResume(handler func(ctx context.Context, flowKey string, re
 
 // Resume executes the mock handler.
 func (svc *Mock) Resume(ctx context.Context, flowKey string, resumeData any) (err error) { // MARKER: Resume
-	if svc.mockResume == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockResume != nil {
+		err = svc.mockResume(ctx, flowKey, resumeData)
 	}
-	err = svc.mockResume(ctx, flowKey, resumeData)
 	return errors.Trace(err)
 }
 
@@ -175,11 +151,9 @@ func (svc *Mock) MockFork(handler func(ctx context.Context, stepKey string, stat
 
 // Fork executes the mock handler.
 func (svc *Mock) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
-	if svc.mockFork == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockFork != nil {
+		newFlowKey, err = svc.mockFork(ctx, stepKey, stateOverrides)
 	}
-	newFlowKey, err = svc.mockFork(ctx, stepKey, stateOverrides)
 	return newFlowKey, errors.Trace(err)
 }
 
@@ -191,11 +165,9 @@ func (svc *Mock) MockCancel(handler func(ctx context.Context, flowKey string) (e
 
 // Cancel executes the mock handler.
 func (svc *Mock) Cancel(ctx context.Context, flowKey string) (err error) { // MARKER: Cancel
-	if svc.mockCancel == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockCancel != nil {
+		err = svc.mockCancel(ctx, flowKey)
 	}
-	err = svc.mockCancel(ctx, flowKey)
 	return errors.Trace(err)
 }
 
@@ -207,11 +179,9 @@ func (svc *Mock) MockHistory(handler func(ctx context.Context, flowKey string) (
 
 // History executes the mock handler.
 func (svc *Mock) History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error) { // MARKER: History
-	if svc.mockHistory == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockHistory != nil {
+		steps, err = svc.mockHistory(ctx, flowKey)
 	}
-	steps, err = svc.mockHistory(ctx, flowKey)
 	return steps, errors.Trace(err)
 }
 
@@ -223,11 +193,9 @@ func (svc *Mock) MockRetry(handler func(ctx context.Context, flowKey string) (er
 
 // Retry executes the mock handler.
 func (svc *Mock) Retry(ctx context.Context, flowKey string) (err error) { // MARKER: Retry
-	if svc.mockRetry == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockRetry != nil {
+		err = svc.mockRetry(ctx, flowKey)
 	}
-	err = svc.mockRetry(ctx, flowKey)
 	return errors.Trace(err)
 }
 
@@ -239,11 +207,9 @@ func (svc *Mock) MockList(handler func(ctx context.Context, query foremanapi.Que
 
 // List executes the mock handler.
 func (svc *Mock) List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error) { // MARKER: List
-	if svc.mockList == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockList != nil {
+		flows, err = svc.mockList(ctx, query)
 	}
-	flows, err = svc.mockList(ctx, query)
 	return flows, errors.Trace(err)
 }
 
@@ -255,11 +221,9 @@ func (svc *Mock) MockCreateTask(handler func(ctx context.Context, taskName strin
 
 // CreateTask executes the mock handler.
 func (svc *Mock) CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error) { // MARKER: CreateTask
-	if svc.mockCreateTask == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockCreateTask != nil {
+		flowKey, err = svc.mockCreateTask(ctx, taskName, initialState)
 	}
-	flowKey, err = svc.mockCreateTask(ctx, taskName, initialState)
 	return flowKey, errors.Trace(err)
 }
 
@@ -271,11 +235,9 @@ func (svc *Mock) MockEnqueue(handler func(ctx context.Context, shard int, stepID
 
 // Enqueue executes the mock handler.
 func (svc *Mock) Enqueue(ctx context.Context, shard int, stepID int) (err error) { // MARKER: Enqueue
-	if svc.mockEnqueue == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockEnqueue != nil {
+		err = svc.mockEnqueue(ctx, shard, stepID)
 	}
-	err = svc.mockEnqueue(ctx, shard, stepID)
 	return errors.Trace(err)
 }
 
@@ -287,11 +249,9 @@ func (svc *Mock) MockAwait(handler func(ctx context.Context, flowKey string) (st
 
 // Await executes the mock handler.
 func (svc *Mock) Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Await
-	if svc.mockAwait == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockAwait != nil {
+		status, state, err = svc.mockAwait(ctx, flowKey)
 	}
-	status, state, err = svc.mockAwait(ctx, flowKey)
 	return status, state, errors.Trace(err)
 }
 
@@ -303,11 +263,9 @@ func (svc *Mock) MockNotifyStatusChange(handler func(ctx context.Context, flowKe
 
 // NotifyStatusChange executes the mock handler.
 func (svc *Mock) NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error) { // MARKER: NotifyStatusChange
-	if svc.mockNotifyStatusChange == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockNotifyStatusChange != nil {
+		err = svc.mockNotifyStatusChange(ctx, flowKey, status)
 	}
-	err = svc.mockNotifyStatusChange(ctx, flowKey, status)
 	return errors.Trace(err)
 }
 
@@ -319,11 +277,9 @@ func (svc *Mock) MockBreakBefore(handler func(ctx context.Context, flowKey strin
 
 // BreakBefore executes the mock handler.
 func (svc *Mock) BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error) { // MARKER: BreakBefore
-	if svc.mockBreakBefore == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockBreakBefore != nil {
+		err = svc.mockBreakBefore(ctx, flowKey, taskName, enabled)
 	}
-	err = svc.mockBreakBefore(ctx, flowKey, taskName, enabled)
 	return errors.Trace(err)
 }
 
@@ -335,11 +291,9 @@ func (svc *Mock) MockRun(handler func(ctx context.Context, workflowName string, 
 
 // Run executes the mock handler.
 func (svc *Mock) Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error) { // MARKER: Run
-	if svc.mockRun == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockRun != nil {
+		status, state, err = svc.mockRun(ctx, workflowName, initialState)
 	}
-	status, state, err = svc.mockRun(ctx, workflowName, initialState)
 	return status, state, errors.Trace(err)
 }
 
@@ -351,11 +305,9 @@ func (svc *Mock) MockContinue(handler func(ctx context.Context, threadKey string
 
 // Continue executes the mock handler.
 func (svc *Mock) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
-	if svc.mockContinue == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockContinue != nil {
+		newFlowKey, err = svc.mockContinue(ctx, threadKey, additionalState)
 	}
-	newFlowKey, err = svc.mockContinue(ctx, threadKey, additionalState)
 	return newFlowKey, errors.Trace(err)
 }
 
@@ -367,10 +319,9 @@ func (svc *Mock) MockHistoryMermaid(handler func(w http.ResponseWriter, r *http.
 
 // HistoryMermaid executes the mock handler.
 func (svc *Mock) HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: HistoryMermaid
-	if svc.mockHistoryMermaid == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockHistoryMermaid != nil {
+		err = svc.mockHistoryMermaid(w, r)
 	}
-	err = svc.mockHistoryMermaid(w, r)
 	return errors.Trace(err)
 }
 
@@ -382,26 +333,9 @@ func (svc *Mock) MockPurgeExpiredFlows(handler func(ctx context.Context) (err er
 
 // PurgeExpiredFlows executes the mock handler.
 func (svc *Mock) PurgeExpiredFlows(ctx context.Context) (err error) { // MARKER: PurgeExpiredFlows
-	if svc.mockPurgeExpiredFlows == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockPurgeExpiredFlows != nil {
+		err = svc.mockPurgeExpiredFlows(ctx)
 	}
-	err = svc.mockPurgeExpiredFlows(ctx)
-	return errors.Trace(err)
-}
-
-// MockOnChangedNumShards sets up a mock handler for OnChangedNumShards.
-func (svc *Mock) MockOnChangedNumShards(handler func(ctx context.Context) (err error)) *Mock { // MARKER: NumShards
-	svc.mockOnChangedNumShards = handler
-	return svc
-}
-
-// OnChangedNumShards executes the mock handler.
-func (svc *Mock) OnChangedNumShards(ctx context.Context) (err error) { // MARKER: NumShards
-	if svc.mockOnChangedNumShards == nil {
-		return nil
-	}
-	err = svc.mockOnChangedNumShards(ctx)
 	return errors.Trace(err)
 }
 
@@ -413,10 +347,22 @@ func (svc *Mock) MockOnObserveQueueDepth(handler func(ctx context.Context) (err 
 
 // OnObserveQueueDepth executes the mock handler.
 func (svc *Mock) OnObserveQueueDepth(ctx context.Context) (err error) { // MARKER: QueueDepth
-	if svc.mockOnObserveQueueDepth == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOnObserveQueueDepth != nil {
+		err = svc.mockOnObserveQueueDepth(ctx)
 	}
-	err = svc.mockOnObserveQueueDepth(ctx)
+	return errors.Trace(err)
+}
+
+// MockOnChangedNumShards sets up a mock handler for OnChangedNumShards.
+func (svc *Mock) MockOnChangedNumShards(handler func(ctx context.Context) (err error)) *Mock { // MARKER: NumShards
+	svc.mockOnChangedNumShards = handler
+	return svc
+}
+
+// OnChangedNumShards executes the mock handler.
+func (svc *Mock) OnChangedNumShards(ctx context.Context) (err error) { // MARKER: NumShards
+	if svc.mockOnChangedNumShards != nil {
+		err = svc.mockOnChangedNumShards(ctx)
+	}
 	return errors.Trace(err)
 }

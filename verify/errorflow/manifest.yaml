@@ -1,0 +1,31 @@
+general:
+  name: errorflow
+  hostname: errorflow.verify
+  description: errorflow.verify exercises onError routing in a sequential flow.
+  package: github.com/microbus-io/fabric/verify/errorflow
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-14T15:33:30Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(trigger string) (triggerOut string)
+    description: TaskA passes the trigger through to state.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(trigger string) (result string)
+    description: TaskB returns "ok" normally, or an error when the trigger is "fail".
+    route: :428/task-b
+  Handler:
+    signature: Handler(onErr *errors.TracedError) (result string)
+    description: Handler runs when TaskB errors.
+    route: :428/handler
+  TaskC:
+    signature: TaskC(result string) (finalResult string)
+    description: TaskC consumes whichever result reached it.
+    route: :428/task-c
+
+workflows:
+  Error:
+    signature: Error(trigger string) (finalResult string)
+    description: Error defines the graph A -> B -> C with B onError -> Handler -> C.
+    route: :428/error

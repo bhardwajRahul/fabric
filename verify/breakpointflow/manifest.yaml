@@ -1,0 +1,24 @@
+general:
+  hostname: breakpointflow.verify
+  description: breakpointflow.verify exercises BreakBefore + Resume.
+  modifiedAt: "2026-05-14T17:30:03Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (stepA bool)
+    description: TaskA marks stepA as visited.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(stepA bool) (stepB bool)
+    description: TaskB marks stepB.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(stepB bool) (stepC bool)
+    description: TaskC marks stepC.
+    route: :428/task-c
+
+workflows:
+  Breakpoint:
+    signature: Breakpoint() (stepC bool)
+    description: Breakpoint defines A -> B -> C.
+    route: :428/breakpoint

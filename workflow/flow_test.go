@@ -18,9 +18,11 @@ package workflow
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -268,4 +270,76 @@ func TestFlow_MarshalUnmarshal(t *testing.T) {
 	assert.Equal(time.Second, restored.backoffInitialDelay)
 	assert.Equal(2.0, restored.backoffDelayMultiplier)
 	assert.Equal(30*time.Second, restored.backoffMaxDelay)
+}
+
+func TestFlow_RetryOnTimeout_TimeoutError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	timeoutErr := errors.New("upstream slow", http.StatusRequestTimeout)
+
+	scheduled := f.RetryOnTimeout(timeoutErr, 3, 100*time.Millisecond, 2.0, time.Second)
+	assert.True(scheduled)
+	assert.True(f.retry)
+}
+
+func TestFlow_RetryOnTimeout_NonTimeoutError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	internalErr := errors.New("boom", http.StatusInternalServerError)
+
+	scheduled := f.RetryOnTimeout(internalErr, 3, 100*time.Millisecond, 2.0, time.Second)
+	assert.False(scheduled)
+	assert.False(f.retry)
+}
+
+func TestFlow_RetryOnTimeout_AttemptsExhausted(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.attempt = 3
+	timeoutErr := errors.New("still slow", http.StatusRequestTimeout)
+
+	scheduled := f.RetryOnTimeout(timeoutErr, 3, 100*time.Millisecond, 2.0, time.Second)
+	assert.False(scheduled)
+	assert.False(f.retry)
+}
+
+func TestFlow_RetryOnTimeout_NilError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	scheduled := f.RetryOnTimeout(nil, 3, 100*time.Millisecond, 2.0, time.Second)
+	assert.False(scheduled)
+	assert.False(f.retry)
+}
+
+func TestFlow_RetryNowOnTimeout_TimeoutError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	timeoutErr := errors.New("upstream slow", http.StatusRequestTimeout)
+
+	scheduled := f.RetryNowOnTimeout(timeoutErr)
+	assert.True(scheduled)
+	assert.True(f.retry)
+	assert.Equal(time.Duration(0), f.backoffInitialDelay)
+}
+
+func TestFlow_RetryNowOnTimeout_NonTimeoutError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	internalErr := errors.New("boom", http.StatusInternalServerError)
+
+	scheduled := f.RetryNowOnTimeout(internalErr)
+	assert.False(scheduled)
+	assert.False(f.retry)
 }

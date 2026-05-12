@@ -35,8 +35,6 @@
         <a href="/creditflow.example/demo?name=Bob&ssn=987-65-4321&address=456+Oak+Ave&phone=555-987-6543&employers=Globex&score=400">Bad credit</a>
         <a href="/creditflow.example/demo?name=Diana&ssn=444-55-6666&address=321+Pine+Ln&phone=555-444-3333&employers=Umbrella+Corp&score=560">Borderline</a>
         <a href="/creditflow.example/demo?name=Eve&ssn=555-66-7777&address=654+Maple+Ct&phone=555-555-5555&employers=Acme+Corp,Globex,Initech&score=750">Multi employer</a>
-        <a href="/creditflow.example/demo?name=Frank&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750&fault=Delay">Timeout</a>
-        <a href="/creditflow.example/demo?name=Kate&ssn=123-45-6789&address=123+Main+St&phone=555-123-4567&employers=Acme+Corp&score=750&fault=Retry">Retry</a>
     </div>
 
     <div class="card">
@@ -47,7 +45,6 @@
             <div><label>Phone</label><input type="text" name="phone" value="{{ .Phone }}"></div>
             <div><label>Employers</label><input type="text" name="employers" value="{{ .Employers }}" placeholder="comma-separated"></div>
             <div><label>Credit Score</label><input type="number" name="score" value="{{ .Score }}"></div>
-            <input type="hidden" name="fault" value="{{ .Fault }}">
             <div><label></label><input type="submit" value="Run Workflow"></div>
         </form>
     </div>

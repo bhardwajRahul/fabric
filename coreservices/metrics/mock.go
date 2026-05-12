@@ -22,19 +22,9 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/metrics/metricsapi"
 )
 
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ metricsapi.Client
-)
-
-// Mock is a mockable version of the metrics.core microservice, allowing functions, event sinks and web handlers to be mocked.
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
 	mockCollect func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Collect
@@ -48,30 +38,29 @@ func NewMock() *Mock {
 	return svc
 }
 
-// OnStartup makes sure that the mock is not executed in a non-dev environment.
+// OnStartup is called when the microservice is started up.
 func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
-		return errors.New("mocking disallowed in '%s' deployment", svc.Deployment())
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
 	}
 	return nil
 }
 
-// OnShutdown is a no op.
+// OnShutdown is called when the microservice is shut down.
 func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
-// MockCollect sets up a mock handler for the Collect endpoint.
+// MockCollect sets up a mock handler for Collect.
 func (svc *Mock) MockCollect(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Collect
 	svc.mockCollect = handler
 	return svc
 }
 
-// Collect runs the mock handler set by MockCollect.
+// Collect executes the mock handler.
 func (svc *Mock) Collect(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Collect
-	if svc.mockCollect == nil {
-		return errors.New("mocked endpoint 'Collect' not implemented")
+	if svc.mockCollect != nil {
+		err = svc.mockCollect(w, r)
 	}
-	err = svc.mockCollect(w, r)
 	return errors.Trace(err)
 }

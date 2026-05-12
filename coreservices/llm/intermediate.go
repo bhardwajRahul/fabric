@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = llmapi.Hostname
-	Version  = 6
+	Version  = 9
 )
 
 // ToDo is implemented by the service or mock.
@@ -320,9 +320,18 @@ func (svc *Intermediate) doChatLoop(w http.ResponseWriter, r *http.Request) (err
 	if err != nil {
 		return err // No trace
 	}
+	err = graph.Validate()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(graph)
-	return errors.Trace(err)
+	err = json.NewEncoder(w).Encode(struct {
+		Graph *workflow.Graph `json:"graph"`
+	}{Graph: graph})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 /*

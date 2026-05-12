@@ -1,0 +1,24 @@
+general:
+  hostname: sleepflow.verify
+  description: sleepflow.verify exercises flow.Sleep.
+  modifiedAt: "2026-05-14T17:23:03Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(sleepFor time.Duration) (sleepForOut time.Duration)
+    description: TaskA passes the sleep duration through.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(sleepFor time.Duration) (marked bool)
+    description: TaskB calls flow.Sleep.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(marked bool) (completed bool)
+    description: TaskC runs after the sleep elapses.
+    route: :428/task-c
+
+workflows:
+  Delay:
+    signature: Delay(sleepFor time.Duration) (completed bool)
+    description: Delay defines A -> B -> C with B calling flow.Sleep.
+    route: :428/delay

@@ -1,13 +1,16 @@
-graph TD
+graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
     classDef term fill:#e5f4f3,color:#434343,stroke:#434343
 
     _title{{"identity-verification"}}:::term --> _start
-    _start(( )):::term --> t0["init-identity-verification"]:::task
-    t0 --> t1["verify-ssn"]:::task
-    t0 --> t2["verify-address"]:::task
-    t0 --> t3["verify-phone-number"]:::task
-    t1 --> t4["identity-decision"]:::task
-    t2 --> t4
-    t3 --> t4
+    t4@{ shape: trap-t, label: "identityDecision" }
+    _start(( )):::term --> t0["initIdentityVerification"]:::task
+    t0 --> t1["verifySSN"]:::task
+    t0 --> t2["verifyAddress"]:::task
+    t0 --> t3["verifyPhoneNumber"]:::task
+    t1 -->|"fan-in"| t4
+    t2 -->|"fan-in"| t4
+    t3 -->|"fan-in"| t4
     t4 --> _end(( )):::term
+    class t4 task

@@ -18,23 +18,12 @@ package httpingress
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/httpingress/httpingressapi"
 )
 
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ httpingressapi.Client
-)
-
-// Mock is a mockable version of the http.ingress.core microservice, allowing functions, event sinks and web handlers to be mocked.
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
 	mockOnChangedPorts             func(ctx context.Context) (err error) // MARKER: Ports
@@ -57,7 +46,7 @@ func NewMock() *Mock {
 // OnStartup is called when the microservice is started up.
 func (svc *Mock) OnStartup(ctx context.Context) (err error) {
 	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
-		return errors.New("mocking disallowed in '%s' deployment", svc.Deployment())
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
 	}
 	return nil
 }
@@ -75,10 +64,9 @@ func (svc *Mock) MockOnChangedPorts(handler func(ctx context.Context) (err error
 
 // OnChangedPorts executes the mock handler.
 func (svc *Mock) OnChangedPorts(ctx context.Context) (err error) { // MARKER: Ports
-	if svc.mockOnChangedPorts == nil {
-		return nil
+	if svc.mockOnChangedPorts != nil {
+		err = svc.mockOnChangedPorts(ctx)
 	}
-	err = svc.mockOnChangedPorts(ctx)
 	return errors.Trace(err)
 }
 
@@ -90,10 +78,9 @@ func (svc *Mock) MockOnChangedAllowedOrigins(handler func(ctx context.Context) (
 
 // OnChangedAllowedOrigins executes the mock handler.
 func (svc *Mock) OnChangedAllowedOrigins(ctx context.Context) (err error) { // MARKER: AllowedOrigins
-	if svc.mockOnChangedAllowedOrigins == nil {
-		return nil
+	if svc.mockOnChangedAllowedOrigins != nil {
+		err = svc.mockOnChangedAllowedOrigins(ctx)
 	}
-	err = svc.mockOnChangedAllowedOrigins(ctx)
 	return errors.Trace(err)
 }
 
@@ -105,10 +92,9 @@ func (svc *Mock) MockOnChangedPortMappings(handler func(ctx context.Context) (er
 
 // OnChangedPortMappings executes the mock handler.
 func (svc *Mock) OnChangedPortMappings(ctx context.Context) (err error) { // MARKER: PortMappings
-	if svc.mockOnChangedPortMappings == nil {
-		return nil
+	if svc.mockOnChangedPortMappings != nil {
+		err = svc.mockOnChangedPortMappings(ctx)
 	}
-	err = svc.mockOnChangedPortMappings(ctx)
 	return errors.Trace(err)
 }
 
@@ -120,10 +106,9 @@ func (svc *Mock) MockOnChangedReadTimeout(handler func(ctx context.Context) (err
 
 // OnChangedReadTimeout executes the mock handler.
 func (svc *Mock) OnChangedReadTimeout(ctx context.Context) (err error) { // MARKER: ReadTimeout
-	if svc.mockOnChangedReadTimeout == nil {
-		return nil
+	if svc.mockOnChangedReadTimeout != nil {
+		err = svc.mockOnChangedReadTimeout(ctx)
 	}
-	err = svc.mockOnChangedReadTimeout(ctx)
 	return errors.Trace(err)
 }
 
@@ -135,10 +120,9 @@ func (svc *Mock) MockOnChangedWriteTimeout(handler func(ctx context.Context) (er
 
 // OnChangedWriteTimeout executes the mock handler.
 func (svc *Mock) OnChangedWriteTimeout(ctx context.Context) (err error) { // MARKER: WriteTimeout
-	if svc.mockOnChangedWriteTimeout == nil {
-		return nil
+	if svc.mockOnChangedWriteTimeout != nil {
+		err = svc.mockOnChangedWriteTimeout(ctx)
 	}
-	err = svc.mockOnChangedWriteTimeout(ctx)
 	return errors.Trace(err)
 }
 
@@ -150,10 +134,9 @@ func (svc *Mock) MockOnChangedReadHeaderTimeout(handler func(ctx context.Context
 
 // OnChangedReadHeaderTimeout executes the mock handler.
 func (svc *Mock) OnChangedReadHeaderTimeout(ctx context.Context) (err error) { // MARKER: ReadHeaderTimeout
-	if svc.mockOnChangedReadHeaderTimeout == nil {
-		return nil
+	if svc.mockOnChangedReadHeaderTimeout != nil {
+		err = svc.mockOnChangedReadHeaderTimeout(ctx)
 	}
-	err = svc.mockOnChangedReadHeaderTimeout(ctx)
 	return errors.Trace(err)
 }
 
@@ -165,9 +148,8 @@ func (svc *Mock) MockOnChangedBlockedPaths(handler func(ctx context.Context) (er
 
 // OnChangedBlockedPaths executes the mock handler.
 func (svc *Mock) OnChangedBlockedPaths(ctx context.Context) (err error) { // MARKER: BlockedPaths
-	if svc.mockOnChangedBlockedPaths == nil {
-		return nil
+	if svc.mockOnChangedBlockedPaths != nil {
+		err = svc.mockOnChangedBlockedPaths(ctx)
 	}
-	err = svc.mockOnChangedBlockedPaths(ctx)
 	return errors.Trace(err)
 }

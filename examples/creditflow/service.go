@@ -78,37 +78,7 @@ func (svc *Service) SubmitCreditApplication(ctx context.Context, flow *workflow.
 /*
 VerifyCredit checks the applicant's credit score.
 */
-func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error) { // MARKER: VerifyCredit
-	// Fault: return an error to test error transitions
-	if strings.Contains(faultInjection, "Error") {
-		return false, errors.New("credit bureau unavailable", http.StatusServiceUnavailable)
-	}
-	// Fault: retry up to 3 times
-	if strings.Contains(faultInjection, "Retry") {
-		if flow.Retry(3, 0, 0, 0) {
-			return false, nil
-		}
-		return true, nil
-	}
-	// Fault: dynamic subgraph - run IdentityVerification as a child workflow.
-	// On re-entry after the child completes, the child's output (identityVerified)
-	// is in state. This tests the flow.Subgraph re-run model.
-	if strings.Contains(faultInjection, "Subgraph") {
-		if !flow.GetBool("subgraphPending") {
-			// First run: signal subgraph and return
-			flow.SetBool("subgraphPending", true)
-			flow.Subgraph(creditflowapi.IdentityVerification.URL(), map[string]any{
-				"applicantName": flow.GetString("applicantName"),
-				"ssn":           flow.GetString("ssn"),
-				"address":       flow.GetString("address"),
-				"phone":         flow.GetString("phone"),
-			})
-			return false, nil
-		}
-		// Re-entry: child completed, identityVerified is in state
-		creditVerified = creditScore >= 550 && flow.GetBool("identityVerified")
-		return creditVerified, nil
-	}
+func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error) { // MARKER: VerifyCredit
 	creditVerified = creditScore >= 550
 	return creditVerified, nil
 }
@@ -136,19 +106,13 @@ func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, a
 InitIdentityVerification is the entry point for the identity verification subgraph. It passes through the applicant name.
 */
 func (svc *Service) InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error) { // MARKER: InitIdentityVerification
-	// Pass-through: the input arguments are already set in the workflow state
 	return nil
 }
 
 /*
 VerifySSN checks the applicant's SSN.
 */
-func (svc *Service) VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error) { // MARKER: VerifySSN
-	// Fault: interrupt to request the SSN from the caller
-	if strings.Contains(faultInjection, "MissingSSN") {
-		flow.Interrupt(map[string]any{"request": "ssn"})
-		return false, nil
-	}
+func (svc *Service) VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string) (ssnVerified bool, err error) { // MARKER: VerifySSN
 	// Verify pattern XXX-XX-XXXX and reject if last 4 digits are 0000
 	matched, _ := regexp.MatchString(`^\d{3}-\d{2}-\d{4}$`, ssn)
 	ssnVerified = matched && !strings.HasSuffix(ssn, "0000")
@@ -166,11 +130,7 @@ func (svc *Service) VerifyAddress(ctx context.Context, flow *workflow.Flow, addr
 /*
 VerifyPhoneNumber checks the applicant's phone number.
 */
-func (svc *Service) VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string, faultInjection string) (phoneVerified bool, err error) { // MARKER: VerifyPhoneNumber
-	// Fault: sleep to exceed the time budget
-	if strings.Contains(faultInjection, "Delay") {
-		time.Sleep(1500 * time.Millisecond)
-	}
+func (svc *Service) VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string) (phoneVerified bool, err error) { // MARKER: VerifyPhoneNumber
 	// Verify pattern XXX-XXX-XXXX or (XXX) XXX-XXXX
 	phoneVerified, _ = regexp.MatchString(`^(\d{3}-\d{3}-\d{4}|\(\d{3}\) \d{3}-\d{4})$`, phone)
 	return phoneVerified, nil
@@ -188,27 +148,27 @@ func (svc *Service) IdentityDecision(ctx context.Context, flow *workflow.Flow, s
 IdentityVerification defines the workflow graph for the identity verification process.
 */
 func (svc *Service) IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: IdentityVerification
-	initIdentityVerification := creditflowapi.InitIdentityVerification.URL()
-	verifySSN := creditflowapi.VerifySSN.URL()
-	verifyAddress := creditflowapi.VerifyAddress.URL()
-	verifyPhoneNumber := creditflowapi.VerifyPhoneNumber.URL()
-	identityDecision := creditflowapi.IdentityDecision.URL()
-
 	graph = workflow.NewGraph(creditflowapi.IdentityVerification.URL())
-	graph.DeclareInputs("applicantName", "ssn", "address", "phone", "faultInjection")
+	graph.DeclareInputs("applicantName", "ssn", "address", "phone")
 	graph.DeclareOutputs("identityVerified")
+	graph.AddTask("initIdentityVerification", creditflowapi.InitIdentityVerification.URL())
+	graph.AddTask("verifySSN", creditflowapi.VerifySSN.URL())
+	graph.AddTask("verifyAddress", creditflowapi.VerifyAddress.URL())
+	graph.AddTask("verifyPhoneNumber", creditflowapi.VerifyPhoneNumber.URL())
+	graph.AddTask("identityDecision", creditflowapi.IdentityDecision.URL())
+	graph.SetFanIn("identityDecision")
 	// Init fans out to SSN, address, and phone verification
-	graph.AddTransition(initIdentityVerification, verifySSN)
-	graph.AddTransition(initIdentityVerification, verifyAddress)
-	graph.AddTransition(initIdentityVerification, verifyPhoneNumber)
+	graph.AddTransition("initIdentityVerification", "verifySSN")
+	graph.AddTransition("initIdentityVerification", "verifyAddress")
+	graph.AddTransition("initIdentityVerification", "verifyPhoneNumber")
 	// All verifications fan in to the identity decision
-	graph.AddTransition(verifySSN, identityDecision)
-	graph.AddTransition(verifyAddress, identityDecision)
-	graph.AddTransition(verifyPhoneNumber, identityDecision)
+	graph.AddTransition("verifySSN", "identityDecision")
+	graph.AddTransition("verifyAddress", "identityDecision")
+	graph.AddTransition("verifyPhoneNumber", "identityDecision")
 	// Decision terminates the subgraph
-	graph.AddTransition(identityDecision, workflow.END)
+	graph.AddTransition("identityDecision", workflow.END)
 	// VerifyPhoneNumber has a tight time budget to test timeout enforcement
-	graph.SetTimeBudget(verifyPhoneNumber, 1*time.Second)
+	graph.SetTimeBudget("verifyPhoneNumber", 1*time.Second)
 	return graph, nil
 }
 
@@ -224,17 +184,7 @@ ReviewCredit performs a manual review of borderline credit scores.
 For very borderline scores (550-579), it requests more info up to 2 times before deciding.
 Scores of 580+ are approved. Below 550 are rejected.
 */
-func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
-	// Fault: request goto to a non-existent target
-	if strings.Contains(faultInjection, "BadGoto") {
-		flow.Goto("https://credit.flow.example:428/non-existent-task")
-		return creditVerified, nil
-	}
-	// Fault: sleep for 200ms before approving
-	if strings.Contains(faultInjection, "Sleep") {
-		flow.Sleep(200 * time.Millisecond)
-		return true, nil
-	}
+func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
 	// Good scores (650+): pass through without review
 	if creditScore >= 650 {
 		return creditVerified, nil
@@ -360,7 +310,6 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 		Phone              string
 		Employers          string
 		Score              string
-		Fault              string
 		Submitted          bool
 		Error              string
 		Status             string
@@ -377,7 +326,6 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 		Phone:     r.FormValue("phone"),
 		Employers: r.FormValue("employers"),
 		Score:     r.FormValue("score"),
-		Fault:     r.FormValue("fault"),
 	}
 
 	// Default values for GET with no params
@@ -414,8 +362,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 		// Create, start, await, and fetch history
 		foremanClient := foremanapi.NewClient(svc)
 		initialState := creditflowapi.CreditApprovalIn{
-			Applicant:      applicant,
-			FaultInjection: data.Fault,
+			Applicant: applicant,
 		}
 		_, result, runErr := svc.runWorkflow(ctx, foremanClient, initialState)
 		if runErr != nil {
@@ -443,39 +390,48 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 CreditApproval defines the workflow graph for the credit approval process.
 */
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CreditApproval
-	submitCreditApplication := creditflowapi.SubmitCreditApplication.URL()
-	verifyCredit := creditflowapi.VerifyCredit.URL()
-	verifyEmployment := creditflowapi.VerifyEmployment.URL()
-	identityVerification := creditflowapi.IdentityVerification.URL()
-	reviewCredit := creditflowapi.ReviewCredit.URL()
-	requestMoreInfo := creditflowapi.RequestMoreInfo.URL()
-	decision := creditflowapi.Decision.URL()
-
 	graph = workflow.NewGraph(creditflowapi.CreditApproval.URL())
-	graph.DeclareInputs("applicant", "faultInjection")
+	graph.DeclareInputs("applicant")
 	graph.DeclareOutputs("approved", "creditVerified", "sumEmploymentFailures", "identityVerified")
-	// Identity verification is a subgraph with its own internal steps
-	graph.AddSubgraph(identityVerification)
-	handleCreditError := creditflowapi.HandleCreditError.URL()
+	graph.AddTask("submitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
+	graph.AddTask("verifyCredit", creditflowapi.VerifyCredit.URL())
+	graph.AddTask("verifyEmployment", creditflowapi.VerifyEmployment.URL())
+	graph.AddSubgraph("identityVerification", creditflowapi.IdentityVerification.URL())
+	graph.AddTask("handleCreditError", creditflowapi.HandleCreditError.URL())
+	// reviewJoin and reviewCredit are two graph positions sharing the same task URL.
+	// reviewJoin is the fan-in nexus for the submit cohort; reviewCredit is reached
+	// sequentially from reviewJoin and hosts the goto loop with requestMoreInfo.
+	// Splitting them lets the lineage validator close the cohort frame at reviewJoin
+	// without conflicting with the goto re-entry into reviewCredit.
+	graph.AddTask("reviewJoin", creditflowapi.ReviewCredit.URL())
+	graph.AddTask("reviewCredit", creditflowapi.ReviewCredit.URL())
+	graph.AddTask("requestMoreInfo", creditflowapi.RequestMoreInfo.URL())
+	graph.AddTask("decision", creditflowapi.Decision.URL())
+	graph.SetFanIn("reviewJoin")
 	// Submit fans out to credit verification, identity verification (subgraph), and forEach employer verification
-	graph.AddTransition(submitCreditApplication, verifyCredit)
+	graph.AddTransition("submitCreditApplication", "verifyCredit")
 	// If credit verification fails with an error, route to the error handler instead of failing the flow
-	graph.AddErrorTransition(verifyCredit, handleCreditError)
-	graph.AddTransition(handleCreditError, reviewCredit)
-	graph.AddTransitionForEach(submitCreditApplication, verifyEmployment, "employers", "employerName")
-	graph.AddTransition(submitCreditApplication, identityVerification)
+	graph.AddTransitionOnError("verifyCredit", "handleCreditError")
+	graph.AddTransition("handleCreditError", "reviewJoin")
+	graph.AddTransitionForEach("submitCreditApplication", "verifyEmployment", "employers", "employerName")
+	graph.AddTransition("submitCreditApplication", "identityVerification")
 	// Employment failure counts are summed across all employer verifications via the
 	// sum* prefix convention; no explicit reducer is needed.
-	// All verifications fan in to review (which passes through for good scores)
-	graph.AddTransition(verifyCredit, reviewCredit)
-	graph.AddTransition(verifyEmployment, reviewCredit)
-	graph.AddTransition(identityVerification, reviewCredit)
-	// Review can goto RequestMoreInfo for borderline scores; RequestMoreInfo loops back to review
-	graph.AddTransitionGoto(reviewCredit, requestMoreInfo)
-	graph.AddTransition(requestMoreInfo, reviewCredit)
+	// All verifications fan in to reviewJoin (the fan-in nexus).
+	graph.AddTransition("verifyCredit", "reviewJoin")
+	graph.AddTransition("verifyEmployment", "reviewJoin")
+	graph.AddTransition("identityVerification", "reviewJoin")
+	// reviewJoin runs ReviewCredit's logic once on the merged state; if it gotos, the loop
+	// runs through requestMoreInfo and reviewCredit.
+	graph.AddTransitionGoto("reviewJoin", "requestMoreInfo")
+	graph.AddTransition("reviewJoin", "reviewCredit")
+	// reviewCredit may itself goto requestMoreInfo for borderline scores; requestMoreInfo
+	// loops back to reviewCredit (not reviewJoin — the cohort frame has already been closed).
+	graph.AddTransitionGoto("reviewCredit", "requestMoreInfo")
+	graph.AddTransition("requestMoreInfo", "reviewCredit")
 	// Review feeds into decision
-	graph.AddTransition(reviewCredit, decision)
+	graph.AddTransition("reviewCredit", "decision")
 	// Decision terminates the workflow
-	graph.AddTransition(decision, workflow.END)
+	graph.AddTransition("decision", workflow.END)
 	return graph, nil
 }

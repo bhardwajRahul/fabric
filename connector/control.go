@@ -102,6 +102,12 @@ func (c *Connector) handleOpenAPI(w http.ResponseWriter, r *http.Request) error 
 		if s.Host == "all" || strings.HasSuffix(s.Host, ".all") {
 			continue
 		}
+		// Skip subs that aren't on the bus. This excludes manual subs registered via
+		// sub.Manual() that haven't yet been activated via ActivateSubscription -
+		// otherwise the document advertises endpoints callers can't currently reach.
+		if len(s.Subs) == 0 {
+			continue
+		}
 		// sub.Type values intentionally match the openapi.Feature* string values 1:1
 		// (function/web/workflow), so the type field passes through unchanged.
 		switch s.Type {
@@ -117,7 +123,7 @@ func (c *Connector) handleOpenAPI(w http.ResponseWriter, r *http.Request) error 
 				continue
 			}
 		}
-		route := s.Route
+		route := s.Path
 		if !strings.HasPrefix(route, ":") && !strings.HasPrefix(route, "/") {
 			route = "/" + route
 		}

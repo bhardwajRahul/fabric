@@ -25,7 +25,7 @@ Creating or modifying a workflow graph:
 - [ ] Step 8: Implement the logic
 - [ ] Step 9: Define the marshaler function
 - [ ] Step 10: Bind the marshaler function to the microservice
-- [ ] Step 11: Extend the mock
+- [ ] Step 11: Regenerate the mock
 - [ ] Step 12: Test the workflow
 - [ ] Step 13: Housekeeping
 ```
@@ -138,27 +138,28 @@ type ToDo interface {
 
 Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
 
-Define short variable names for task URLs at the top of the function to keep the graph definition legible.
+Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("name", taskURL)` and `graph.AddSubgraph("name", workflowURL)`, then write transitions in terms of names. Use camelCase names that match the task endpoint (e.g. `"taskA"` for `TaskA`).
 
 ```go
 /*
 MyWorkflow does X.
 */
 func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MyWorkflow
-	taskA := myserviceapi.TaskA.URL()
-	taskB := myserviceapi.TaskB.URL()
-	taskC := myserviceapi.TaskC.URL()
-	// childWorkflow := otherapi.ChildWorkflow.URL()
-
 	graph = workflow.NewGraph(myserviceapi.MyWorkflow.URL())
-	// Build the graph here...
-	// graph.AddSubgraph(childWorkflow)  // register a child workflow as a subgraph node
-	// graph.AddTransition(taskA, taskB)
-	// graph.AddTransitionWhen(taskB, workflow.END, "done == true")
-	// graph.AddTransitionGoto(taskB, taskC)
+	graph.DeclareInputs("inputField1", "inputField2")
+	graph.DeclareOutputs("outputField1", "outputField2")
+	graph.AddTask("taskA", myserviceapi.TaskA.URL())
+	graph.AddTask("taskB", myserviceapi.TaskB.URL())
+	graph.AddTask("taskC", myserviceapi.TaskC.URL())
+	// graph.AddSubgraph("childWorkflow", otherapi.ChildWorkflow.URL())  // register a child workflow as a subgraph node
+	// graph.AddTransition("taskA", "taskB")
+	// graph.AddTransitionWhen("taskB", workflow.END, "done == true")
+	// graph.AddTransitionGoto("taskB", "taskC")
 	return graph, nil
 }
 ```
+
+Naming the same task URL twice with different names is the supported way to reuse a task at multiple positions in the graph (each position keeps its own node identity for fan-in tracking).
 
 **Reducers for fan-in fields.** When parallel branches converge, state fields whose names start with a recognized prefix get a reducer automatically:
 
@@ -220,97 +221,9 @@ The first argument to `svc.Subscribe` is the workflow name (must be a Go identif
 
 Add `sub.RequiredClaims(requiredClaims)` to `svc.Subscribe` to define the authorization requirements of the workflow endpoint. Omit to allow all requests.
 
-#### Step 11: Extend the Mock
+#### Step 11: Regenerate the Mock
 
-Add fields to the `Mock` structure definition in `mock.go` to hold the graph override and the unsub callback.
-
-```go
-type Mock struct {
-	// ...
-	mockMyWorkflowGraph func(ctx context.Context) (graph *workflow.Graph, err error)              // MARKER: MyWorkflow
-	unsubMockMyWorkflow func() error                                                              // MARKER: MyWorkflow
-}
-```
-
-Add the stubs to the `Mock`. `MockMyWorkflow` mocks the workflow's behavior by replacing the graph with a trivial single-task graph and subscribing a synthetic task endpoint. The handler has the same typed signature as the workflow - typed inputs, typed outputs, plus the `*workflow.Flow` carrier for control signals.
-
-```go
-// MockMyWorkflow sets up a mock handler for the MyWorkflow workflow.
-func (svc *Mock) MockMyWorkflow(handler func(ctx context.Context, flow *workflow.Flow, inputField1 string, inputField2 float64) (outputField1 bool, outputField2 int, err error)) *Mock { // MARKER: MyWorkflow
-	if svc.unsubMockMyWorkflow != nil {
-		svc.unsubMockMyWorkflow()
-		svc.unsubMockMyWorkflow = nil
-	}
-	if handler == nil {
-		svc.mockMyWorkflowGraph = nil
-		return svc
-	}
-	mockRoute := ":428/mock-wf-" + utils.RandomIdentifier(8)
-	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
-	svc.mockMyWorkflowGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph(myserviceapi.MyWorkflow.URL())
-		g.AddTransition(mockTaskURL, workflow.END)
-		return g, nil
-	}
-	unsub, _ := svc.Subscribe("POST", mockRoute, func(w http.ResponseWriter, r *http.Request) error {
-		var f workflow.Flow
-		err := json.NewDecoder(r.Body).Decode(&f)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		snap := f.Snapshot()
-		var in myserviceapi.MyWorkflowIn
-		f.ParseState(&in)
-		var out myserviceapi.MyWorkflowOut
-		out.OutputField1, out.OutputField2, err = handler(r.Context(), &f, in.InputField1, in.InputField2)
-		if err != nil {
-			return err // No trace
-		}
-		f.SetChanges(out, snap)
-		w.Header().Set("Content-Type", "application/json")
-		return json.NewEncoder(w).Encode(&f)
-	})
-	svc.unsubMockMyWorkflow = unsub
-	return svc
-}
-
-// MyWorkflow returns the workflow graph.
-func (svc *Mock) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MyWorkflow
-	if svc.mockMyWorkflowGraph == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	graph, err = svc.mockMyWorkflowGraph(ctx)
-	return graph, errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-```go
-t.Run("my_workflow", func(t *testing.T) { // MARKER: MyWorkflow
-	assert := testarossa.For(t)
-
-	// Before mocking, graph endpoint returns "not implemented"
-	_, err := mock.MyWorkflow(ctx)
-	assert.Contains(err.Error(), "not implemented")
-
-	// Mock the workflow behavior
-	mock.MockMyWorkflow(func(ctx context.Context, flow *workflow.Flow, inputField1 string, inputField2 float64) (outputField1 bool, outputField2 int, err error) {
-		return true, 42, nil
-	})
-	// Graph endpoint should now return a valid graph
-	graph, err := mock.MyWorkflow(ctx)
-	if assert.NoError(err) {
-		assert.NotNil(graph)
-	}
-
-	// Clear the mock
-	mock.MockMyWorkflow(nil)
-	_, err = mock.MyWorkflow(ctx)
-	assert.Contains(err.Error(), "not implemented")
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 12: Test the Workflow
 

@@ -13,7 +13,8 @@ Copy this checklist and track your progress:
 Removing a feature of a microservice:
 - [ ] Step 1: Remove marked code
 - [ ] Step 2: Remove unused custom types
-- [ ] Step 3: Housekeeping
+- [ ] Step 3: Regenerate the mock
+- [ ] Step 4: Housekeeping
 ```
 
 #### Step 1: Remove Marked Code
@@ -50,6 +51,10 @@ FeatureName = Def{Method: "ANY", Route: "/feature-name"} // MARKER: FeatureName
 
 If the deleted feature was using non-primitive custom types defined in `myserviceapi` directory, and those types are no longer used elsewhere by the microservice, remove their definition.
 
-#### Step 3: Housekeeping
+#### Step 3: Regenerate the Mock
+
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory.
+
+#### Step 4: Housekeeping
 
 Follow the `housekeeping` skill.

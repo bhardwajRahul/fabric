@@ -1,0 +1,18 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"fan-out-error"}}:::term --> _start
+    t5@{ shape: trap-t, label: "taskE" }
+    _start(( )):::term --> t0["taskA"]:::task
+    t0 --> t1["taskB"]:::task
+    t0 --> t2["taskC"]:::task
+    t0 --> t3["taskD"]:::task
+    t1 -->|"onError"| t4["handler"]:::task
+    t1 -->|"fan-in"| t5
+    t2 -->|"fan-in"| t5
+    t3 -->|"fan-in"| t5
+    t4 -->|"fan-in"| t5
+    t5 --> _end(( )):::term
+    class t5 task

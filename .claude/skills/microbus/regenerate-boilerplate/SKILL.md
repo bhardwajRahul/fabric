@@ -64,7 +64,7 @@ Follow these steps from the `add-microservice` skill to recreate the boilerplate
 - **Prepare `client.go`**
 - **Prepare `embed.go`**
 - **Prepare `intermediate.go`**: Use the description from `manifest.yaml`
-- **Prepare `mock.go`**
+- **Generate `mock.go`**
 
 Do NOT follow the steps that create `service.go`, `service_test.go`, `manifest.yaml`, or the directory structure - these already exist.
 
@@ -76,7 +76,7 @@ For each config listed under `configs` in `manifest.yaml`, follow the `add-confi
 - **Define the config**
 - **Implement the getter and setter**
 - **Wire up the config change dispatcher** (only if the config has `callback: true`)
-- **Extend the mock** (only if the config has `callback: true`)
+- **Regenerate the mock** (only if the config has `callback: true`)
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -89,7 +89,7 @@ For each function listed under `functions` in `manifest.yaml`, follow the `add-f
 - **Extend the clients**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -101,7 +101,7 @@ For each web handler listed under `webs` in `manifest.yaml`, follow the `add-web
 - **Define the endpoint**
 - **Extend the clients**
 - **Bind the handler to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -120,7 +120,7 @@ For each event listed under `inboundEvents` in `manifest.yaml`, follow the `add-
 
 - **Extend the `ToDo` interface**
 - **Bind the inbound event sink to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -134,7 +134,7 @@ For each task listed under `tasks` in `manifest.yaml`, follow the `add-task` ski
 - **Extend the executor**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -147,7 +147,7 @@ For each workflow listed under `workflows` in `manifest.yaml`, follow the `add-w
 - **Extend the `ToDo` interface**
 - **Define the marshaler function**
 - **Bind the marshaler function to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -157,7 +157,7 @@ For each ticker listed under `tickers` in `manifest.yaml`, follow the `add-ticke
 
 - **Extend the `ToDo` interface**
 - **Bind the handler to the microservice**
-- **Extend the mock**
+- **Regenerate the mock**
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 
@@ -169,7 +169,7 @@ For each metric listed under `metrics` in `manifest.yaml`, follow the `add-metri
 - **Describe the metric**
 - **Implement the recorders**
 - **Observe with callback** (only if the metric has `observable: true`)
-- **Extend the mock** (only if the metric has `observable: true`)
+- **Regenerate the mock** (only if the metric has `observable: true`)
 
 Skip the steps that affect `service.go` and `service_test.go`. Skip the housekeeping step.
 

@@ -46,48 +46,7 @@ var (
 	_ *eventsourceapi.Client
 )
 
-func TestEventsource_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("register", func(t *testing.T) { // MARKER: Register
-		assert := testarossa.For(t)
-
-		exampleEmail := "test@example.com"
-		expectedAllowed := true
-
-		_, err := mock.Register(ctx, exampleEmail)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockRegister(func(ctx context.Context, email string) (allowed bool, err error) {
-			return expectedAllowed, nil
-		})
-		allowed, err := mock.Register(ctx, exampleEmail)
-		assert.Expect(
-			allowed, expectedAllowed,
-			err, nil,
-		)
-	})
-}
+// MARKER: Register
 
 func TestEventsource_Register(t *testing.T) { // MARKER: Register
 	t.Parallel()

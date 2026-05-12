@@ -213,26 +213,59 @@ func Workflow(inputs any, outputs any) Option {
 	}
 }
 
-// Infra marks the subscription as framework infrastructure that brackets the user lifecycle:
-// it is activated before [OnStartup] runs and deactivated after [OnShutdown] returns.
-// Non-infra subscriptions are activated after OnStartup returns and deactivated before
-// OnShutdown runs, so user code gets a "clean" environment that doesn't receive requests
-// outside the OnStartup/OnShutdown window. Reserved for framework-internal subscriptions whose
-// handlers must be reachable from inside OnStartup and OnShutdown - e.g. the distributed cache.
-func Infra() Option {
+// Manual opts the subscription out of the connector's automatic activate/deactivate passes.
+// User code drives its lifecycle via [connector.Connector.ActivateSubscription] and
+// [connector.Connector.DeactivateSubscription].
+func Manual() Option {
 	return func(sub *Subscription) error {
-		sub.Infra = true
+		sub.Manual = true
 		return nil
 	}
 }
 
-// Ultra clears the [Infra] flag, restoring the default activation/deactivation behavior
-// where the subscription brackets the user lifecycle from the outside (activated after
-// OnStartup, deactivated before OnShutdown). It is the symmetric counterpart of [Infra]
-// and is provided for API completeness; in practice subscriptions default to non-infra.
-func Ultra() Option {
+// Automatic clears the [Manual] flag, restoring the default automatic activate/deactivate behavior.
+func Automatic() Option {
 	return func(sub *Subscription) error {
-		sub.Infra = false
+		sub.Manual = false
+		return nil
+	}
+}
+
+// Tag attaches one or more free-form labels to the subscription. Tags are surfaced through
+// [connector.Connector.Subscriptions] and let user code group related subscriptions for
+// activation, deactivation, or other bulk operations. Tag names are not parsed by the
+// framework; convention is short, lowercase, hyphen-or-dot-free identifiers (e.g. "python",
+// "billing", "experimental"). Multiple calls accumulate; duplicates are preserved as written.
+func Tag(tags ...string) Option {
+	return func(sub *Subscription) error {
+		for _, t := range tags {
+			if t == "" {
+				return errors.New("empty tag")
+			}
+		}
+		sub.Tags = append(sub.Tags, tags...)
+		return nil
+	}
+}
+
+// Untag removes one or more tags previously attached with [Tag]. Tags not currently set are
+// silently ignored. Provided for symmetry with [Tag] in programmatically composed option lists.
+func Untag(tags ...string) Option {
+	return func(sub *Subscription) error {
+		if len(sub.Tags) == 0 || len(tags) == 0 {
+			return nil
+		}
+		remove := make(map[string]bool, len(tags))
+		for _, t := range tags {
+			remove[t] = true
+		}
+		kept := sub.Tags[:0]
+		for _, t := range sub.Tags {
+			if !remove[t] {
+				kept = append(kept, t)
+			}
+		}
+		sub.Tags = kept
 		return nil
 	}
 }
@@ -247,9 +280,7 @@ func NoTrace() Option {
 	}
 }
 
-// Trace clears the [NoTrace] flag, restoring the default behavior where each handled request
-// creates an OpenTelemetry server span. It is the symmetric counterpart of [NoTrace]
-// and is provided for API completeness; in practice subscriptions default to tracing enabled.
+// Trace clears the [NoTrace] flag, restoring the default behavior where each handled request creates an OpenTelemetry server span.
 func Trace() Option {
 	return func(sub *Subscription) error {
 		sub.NoTrace = false

@@ -22,7 +22,7 @@ Creating or modifying a configuration property:
 - [ ] Step 7: Wire up the config change dispatcher
 - [ ] Step 8: Implement the callback
 - [ ] Step 9: Use the config
-- [ ] Step 10: Extend the mock
+- [ ] Step 10: Regenerate the mock
 - [ ] Step 11: Test the callback
 - [ ] Step 12: Add to config file
 - [ ] Step 13: Housekeeping
@@ -242,54 +242,11 @@ myConfig := svc.MyConfig()
 
 Use `svc.SetMyConfig(value)` to set the value programmatically, for example in tests.
 
-#### Step 10: Extend the Mock
+#### Step 10: Regenerate the Mock
 
 Skip this step if the config does not have a callback.
 
-Add a field to the `Mock` structure definition in `mock.go` to hold a mock handler.
-
-```go
-type Mock struct {
-	// ...
-	mockOnChangedMyConfig func(ctx context.Context) (err error) // MARKER: MyConfig
-}
-```
-
-Add the stub to the `Mock`.
-
-```go
-// MockOnChangedMyConfig sets up a mock handler for OnChangedMyConfig.
-func (svc *Mock) MockOnChangedMyConfig(handler func(ctx context.Context) (err error)) *Mock { // MARKER: MyConfig
-	svc.mockOnChangedMyConfig = handler
-	return svc
-}
-
-// OnChangedMyConfig executes the mock handler.
-func (svc *Mock) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER: MyConfig
-	if svc.mockOnChangedMyConfig == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
-	}
-	err = svc.mockOnChangedMyConfig(ctx)
-	return errors.Trace(err)
-}
-```
-
-Add a test case at the end of `TestMyService_Mock` in `service_test.go`, after the last existing test case.
-
-```go
-t.Run("on_changed_my_config", func(t *testing.T) { // MARKER: MyConfig
-	assert := testarossa.For(t)
-
-	err := mock.OnChangedMyConfig(ctx)
-	assert.Contains(err.Error(), "not implemented")
-	mock.MockOnChangedMyConfig(func(ctx context.Context) (err error) {
-		return nil
-	})
-	err = mock.OnChangedMyConfig(ctx)
-	assert.NoError(err)
-})
-```
+Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory. This regenerates both `mock.go` and `mock_test.go`.
 
 #### Step 11: Test the Callback
 

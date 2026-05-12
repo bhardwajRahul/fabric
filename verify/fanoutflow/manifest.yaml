@@ -1,0 +1,35 @@
+general:
+  name: fanoutflow
+  hostname: fanoutflow.verify
+  description: "fanoutflow.verify exercises static fan-out + fan-in: A -> {B, C, D} -> E."
+  package: github.com/microbus-io/fabric/verify/fanoutflow
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-14T15:33:30Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (markA bool)
+    description: TaskA is the fan-out source. Marks A as visited.
+    route: :428/task-a
+  TaskB:
+    signature: TaskB(markA bool) (markB bool)
+    description: TaskB is one of three parallel branches.
+    route: :428/task-b
+  TaskC:
+    signature: TaskC(markA bool) (markC bool)
+    description: TaskC is one of three parallel branches.
+    route: :428/task-c
+  TaskD:
+    signature: TaskD(markA bool) (markD bool)
+    description: TaskD is one of three parallel branches.
+    route: :428/task-d
+  TaskE:
+    signature: TaskE(markB bool, markC bool, markD bool) (allMarked bool)
+    description: TaskE is the fan-in target.
+    route: :428/task-e
+
+workflows:
+  FanOut:
+    signature: FanOut() (allMarked bool)
+    description: FanOut defines the workflow graph for A -> {B, C, D} -> E.
+    route: :428/fan-out

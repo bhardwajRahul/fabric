@@ -50,94 +50,13 @@ var (
 	_ accesstokenapi.Client
 )
 
-func TestAccessToken_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Mint
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: JWKS
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: LocalKeys
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("mint", func(t *testing.T) { // MARKER: Mint
-		assert := testarossa.For(t)
-
-		exampleClaims := map[string]any{"sub": "user1"}
-		expectedToken := "mock-token"
-
-		_, err := mock.Mint(ctx, exampleClaims)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockMint(func(ctx context.Context, claims any) (token string, err error) {
-			return expectedToken, nil
-		})
-		token, err := mock.Mint(ctx, exampleClaims)
-		assert.Expect(
-			token, expectedToken,
-			err, nil,
-		)
-	})
-
-	t.Run("jwks", func(t *testing.T) { // MARKER: JWKS
-		assert := testarossa.For(t)
-
-		expectedKeys := []accesstokenapi.JWK{}
-
-		_, err := mock.JWKS(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockJWKS(func(ctx context.Context) (keys []accesstokenapi.JWK, err error) {
-			return expectedKeys, nil
-		})
-		keys, err := mock.JWKS(ctx)
-		assert.Expect(
-			keys, expectedKeys,
-			err, nil,
-		)
-	})
-
-	t.Run("local_keys", func(t *testing.T) { // MARKER: LocalKeys
-		assert := testarossa.For(t)
-
-		expectedKeys := []accesstokenapi.JWK{}
-
-		_, err := mock.LocalKeys(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockLocalKeys(func(ctx context.Context) (keys []accesstokenapi.JWK, err error) {
-			return expectedKeys, nil
-		})
-		keys, err := mock.LocalKeys(ctx)
-		assert.Expect(
-			keys, expectedKeys,
-			err, nil,
-		)
-	})
-
-	t.Run("rotate_key", func(t *testing.T) { // MARKER: RotateKey
-		assert := testarossa.For(t)
-
-		err := mock.RotateKey(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockRotateKey(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.RotateKey(ctx)
-		assert.NoError(err)
-	})
-}
+// MARKER: RotateKey
 
 func TestAccessToken_RotateKey(t *testing.T) { // MARKER: RotateKey
 	t.Parallel()

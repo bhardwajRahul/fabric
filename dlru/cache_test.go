@@ -384,13 +384,19 @@ func TestDLRU_Options(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	dlru, err := dlru.NewCache(t.Context(), connector.New("www.example.com"), "/path")
-	dlru.SetMaxAge(5 * time.Hour)
-	dlru.SetMaxMemoryMB(8)
+	ctx := t.Context()
+	con := connector.New("www.example.com")
+	err := con.Startup(ctx)
 	assert.NoError(err)
+	defer con.Shutdown(ctx)
 
-	assert.Equal(5*time.Hour, dlru.MaxAge())
-	assert.Equal(8*1024*1024, dlru.MaxMemory())
+	cache, err := dlru.NewCache(ctx, con, "/path")
+	assert.NoError(err)
+	cache.SetMaxAge(5 * time.Hour)
+	cache.SetMaxMemoryMB(8)
+
+	assert.Equal(5*time.Hour, cache.MaxAge())
+	assert.Equal(8*1024*1024, cache.MaxMemory())
 }
 
 func TestDLRU_MulticastOptim(t *testing.T) {
@@ -1088,5 +1094,70 @@ func TestDLRU_GetOrCompute(t *testing.T) {
 		var got user
 		err := cache.GetOrCompute(ctx, "user/nil", &got, nil)
 		assert.Error(err)
+	})
+}
+
+// TestDLRU_LifecycleSurvivesRestart pins the restart contract; see CLAUDE.md.
+func TestDLRU_LifecycleSurvivesRestart(t *testing.T) {
+	// No parallel - restarts a connector.
+	ctx := t.Context()
+
+	verify := func(t *testing.T, alpha, beta *connector.Connector) {
+		t.Helper()
+		assert := testarossa.For(t)
+		// alpha stores locally; beta's Load broadcasts and must reach alpha's /all sub.
+		err := alpha.DistribCache().Store(ctx, "k", []byte("v"))
+		assert.NoError(err)
+		val, ok, err := beta.DistribCache().Load(ctx, "k")
+		assert.NoError(err)
+		assert.True(ok, "beta should have loaded k from alpha via /all broadcast")
+		assert.Equal("v", string(val))
+	}
+
+	t.Run("clean_restart", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		alpha := connector.New("restart.clean.dlru")
+		err := alpha.Startup(ctx)
+		assert.NoError(err)
+		err = alpha.Shutdown(ctx)
+		assert.NoError(err)
+		err = alpha.Startup(ctx)
+		assert.NoError(err)
+		defer alpha.Shutdown(ctx)
+
+		beta := connector.New("restart.clean.dlru")
+		err = beta.Startup(ctx)
+		assert.NoError(err)
+		defer beta.Shutdown(ctx)
+
+		verify(t, alpha, beta)
+	})
+
+	t.Run("restart_after_failed_onstartup", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		alpha := connector.New("restart.failed.dlru")
+		var fail bool = true
+		alpha.SetOnStartup(func(ctx context.Context) error {
+			if fail {
+				return errors.New("simulated startup failure")
+			}
+			return nil
+		})
+		err := alpha.Startup(ctx)
+		assert.Error(err, "first Startup should fail because OnStartup returned an error")
+
+		fail = false
+		err = alpha.Startup(ctx)
+		assert.NoError(err)
+		defer alpha.Shutdown(ctx)
+
+		beta := connector.New("restart.failed.dlru")
+		err = beta.Startup(ctx)
+		assert.NoError(err)
+		defer beta.Shutdown(ctx)
+
+		verify(t, alpha, beta)
 	})
 }

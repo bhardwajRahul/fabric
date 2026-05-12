@@ -18,26 +18,10 @@ package mcpportal
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/mcpportal/mcpportalapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ mcpportalapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -75,9 +59,8 @@ func (svc *Mock) MockMCP(handler func(w http.ResponseWriter, r *http.Request) (e
 
 // MCP executes the mock handler.
 func (svc *Mock) MCP(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MCP
-	if svc.mockMCP == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMCP != nil {
+		err = svc.mockMCP(w, r)
 	}
-	err = svc.mockMCP(w, r)
 	return errors.Trace(err)
 }

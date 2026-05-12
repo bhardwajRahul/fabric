@@ -1,0 +1,32 @@
+general:
+  hostname: subgraphflow.verify
+  description: subgraphflow.verify exercises subgraph invocation, output merging, and the parent-child state boundary.
+  modifiedAt: "2026-05-14T16:04:10Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(seed string) (seedOut string)
+    description: TaskA passes the seed through.
+    route: :428/task-a
+  TaskX:
+    signature: TaskX(seed string) (innerStage string)
+    description: TaskX is the subgraph entry.
+    route: :428/task-x
+  TaskY:
+    signature: TaskY(innerStage string) (innerResult string)
+    description: TaskY runs after TaskX in the subgraph.
+    route: :428/task-y
+  TaskZ:
+    signature: TaskZ(innerResult string) (finalResult string)
+    description: TaskZ runs in the parent after the subgraph.
+    route: :428/task-z
+
+workflows:
+  Inner:
+    signature: Inner(seed string) (innerResult string)
+    description: Inner defines the subgraph X -> Y.
+    route: :428/inner
+  Parent:
+    signature: Parent(seed string) (finalResult string)
+    description: Parent defines the graph A -> [Inner subgraph] -> Z.
+    route: :428/parent

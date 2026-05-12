@@ -26,6 +26,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 )
 
 // clientCall is one invocation of an endpoint method on a typed
@@ -524,8 +526,10 @@ func parseInternalURL(s string) (host, port, path string, ok bool) {
 
 // resolveDownstream folds detected client calls and raw requests into
 // aclDownstream entries. Each typed-client call resolves to an endpoint
-// of its target's *api package; raw requests bucket by URL host.
-func resolveDownstream(calls []clientCall, raws []rawRequest, fromDir, listDir string) ([]aclDownstream, error) {
+// of its target's *api package; raw requests bucket by URL host. resolver
+// may be nil; when non-nil it memoizes cross-service package lookups and
+// short-circuits in-module paths past `go list`.
+func resolveDownstream(calls []clientCall, raws []rawRequest, fromDir, listDir string, resolver *pkgresolver.Resolver) ([]aclDownstream, error) {
 	// Group typed-client calls by alias.
 	byAlias := map[string][]clientCall{}
 	for _, c := range calls {
@@ -549,7 +553,7 @@ func resolveDownstream(calls []clientCall, raws []rawRequest, fromDir, listDir s
 		if !ok {
 			continue
 		}
-		dir, err := goListDir(apiPath, listDir)
+		dir, err := resolver.Dir(apiPath, listDir)
 		if err != nil {
 			return nil, fmt.Errorf("resolve %s: %w", apiPath, err)
 		}

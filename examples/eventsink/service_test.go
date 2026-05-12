@@ -44,79 +44,11 @@ var (
 	_ eventsinkapi.Client
 )
 
-func TestEventsink_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Registered
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: OnAllowRegister
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("registered", func(t *testing.T) { // MARKER: Registered
-		assert := testarossa.For(t)
-
-		expectedEmails := []string{"user@example.com"}
-
-		_, err := mock.Registered(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockRegistered(func(ctx context.Context) (emails []string, err error) {
-			return expectedEmails, nil
-		})
-		emails, err := mock.Registered(ctx)
-		assert.Expect(
-			emails, expectedEmails,
-			err, nil,
-		)
-	})
-
-	t.Run("on_allow_register", func(t *testing.T) { // MARKER: OnAllowRegister
-		assert := testarossa.For(t)
-
-		exampleEmail := "user@example.com"
-		expectedAllow := true
-
-		_, err := mock.OnAllowRegister(ctx, exampleEmail)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnAllowRegister(func(ctx context.Context, email string) (allow bool, err error) {
-			return expectedAllow, nil
-		})
-		allow, err := mock.OnAllowRegister(ctx, exampleEmail)
-		assert.Expect(
-			allow, expectedAllow,
-			err, nil,
-		)
-	})
-
-	t.Run("on_registered", func(t *testing.T) { // MARKER: OnRegistered
-		assert := testarossa.For(t)
-
-		exampleEmail := "user@example.com"
-
-		err := mock.OnRegistered(ctx, exampleEmail)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnRegistered(func(ctx context.Context, email string) (err error) {
-			return nil
-		})
-		err = mock.OnRegistered(ctx, exampleEmail)
-		assert.NoError(err)
-	})
-}
+// MARKER: OnRegistered
 
 func TestEventsink_Registered(t *testing.T) { // MARKER: Registered
 	t.Parallel()

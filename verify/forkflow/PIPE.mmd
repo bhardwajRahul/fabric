@@ -1,0 +1,10 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"pipe"}}:::term --> _start
+    _start(( )):::term --> t0["taskA"]:::task
+    t0 --> t1["taskB"]:::task
+    t1 --> t2["taskC"]:::task
+    t2 --> _end(( )):::term

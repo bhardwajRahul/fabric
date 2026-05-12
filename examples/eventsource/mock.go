@@ -18,20 +18,9 @@ package eventsource
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/eventsource/eventsourceapi"
-)
-
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ eventsourceapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -69,10 +58,8 @@ func (svc *Mock) MockRegister(handler func(ctx context.Context, email string) (a
 
 // Register executes the mock handler.
 func (svc *Mock) Register(ctx context.Context, email string) (allowed bool, err error) { // MARKER: Register
-	if svc.mockRegister == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockRegister != nil {
+		allowed, err = svc.mockRegister(ctx, email)
 	}
-	allowed, err = svc.mockRegister(ctx, email)
 	return allowed, errors.Trace(err)
 }

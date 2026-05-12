@@ -43,199 +43,29 @@ var (
 	_ workflow.Flow
 )
 
-func TestForeman_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Create
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: Start
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: StartNotify
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
+// MARKER: Snapshot
 
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
+// MARKER: Resume
 
-	t.Run("create", func(t *testing.T) { // MARKER: Create
-		assert := testarossa.For(t)
+// MARKER: Cancel
 
-		_, err := mock.Create(ctx, "test-workflow", nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCreate(func(ctx context.Context, workflowName string, initialState any) (flowKey string, err error) {
-			return "test-flow-id", nil
-		})
-		flowKey, err := mock.Create(ctx, "test-workflow", nil)
-		assert.Expect(
-			flowKey, "test-flow-id",
-			err, nil,
-		)
-	})
+// MARKER: PurgeExpiredFlows
 
-	t.Run("start", func(t *testing.T) { // MARKER: Start
-		assert := testarossa.For(t)
+// MARKER: CreateTask
 
-		err := mock.Start(ctx, "test-flow-id")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockStart(func(ctx context.Context, flowKey string) (err error) {
-			return nil
-		})
-		err = mock.Start(ctx, "test-flow-id")
-		assert.NoError(err)
-	})
+// MARKER: Await
 
-	t.Run("start_notify", func(t *testing.T) { // MARKER: StartNotify
-		assert := testarossa.For(t)
+// MARKER: NotifyStatusChange
 
-		err := mock.StartNotify(ctx, "test-flow-id", "my.caller.host")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockStartNotify(func(ctx context.Context, flowKey string, notifyHostname string) (err error) {
-			return nil
-		})
-		err = mock.StartNotify(ctx, "test-flow-id", "my.caller.host")
-		assert.NoError(err)
-	})
+// MARKER: History
 
-	t.Run("flow_snapshot", func(t *testing.T) { // MARKER: Snapshot
-		assert := testarossa.For(t)
-
-		_, _, err := mock.Snapshot(ctx, "test-flow-id")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockSnapshot(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
-			return "completed", map[string]any{"x": 1}, nil
-		})
-		status, state, err := mock.Snapshot(ctx, "test-flow-id")
-		assert.Expect(
-			state["x"], 1,
-			status, "completed",
-			err, nil,
-		)
-	})
-
-	t.Run("resume", func(t *testing.T) { // MARKER: Resume
-		assert := testarossa.For(t)
-
-		err := mock.Resume(ctx, "test-flow-id", nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockResume(func(ctx context.Context, flowKey string, resumeData any) (err error) {
-			return nil
-		})
-		err = mock.Resume(ctx, "test-flow-id", map[string]any{"answer": 42})
-		assert.NoError(err)
-	})
-
-	t.Run("cancel", func(t *testing.T) { // MARKER: Cancel
-		assert := testarossa.For(t)
-
-		err := mock.Cancel(ctx, "test-flow-id")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCancel(func(ctx context.Context, flowKey string) (err error) {
-			return nil
-		})
-		err = mock.Cancel(ctx, "test-flow-id")
-		assert.NoError(err)
-	})
-
-	t.Run("purge_expired_flows", func(t *testing.T) { // MARKER: PurgeExpiredFlows
-		assert := testarossa.For(t)
-
-		err := mock.PurgeExpiredFlows(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockPurgeExpiredFlows(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.PurgeExpiredFlows(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("create_task", func(t *testing.T) { // MARKER: CreateTask
-		assert := testarossa.For(t)
-
-		_, err := mock.CreateTask(ctx, "svc:428/my-task", nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCreateTask(func(ctx context.Context, taskName string, initialState any) (flowKey string, err error) {
-			return "test-flow-id", nil
-		})
-		flowKey, err := mock.CreateTask(ctx, "svc:428/my-task", nil)
-		assert.Expect(
-			flowKey, "test-flow-id",
-			err, nil,
-		)
-	})
-
-	t.Run("wait_for_stop", func(t *testing.T) { // MARKER: Await
-		assert := testarossa.For(t)
-
-		_, _, err := mock.Await(ctx, "test-flow-id")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockAwait(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
-			return foremanapi.StatusCompleted, map[string]any{"result": "done"}, nil
-		})
-		status, state, err := mock.Await(ctx, "test-flow-id")
-		assert.Expect(
-			status, foremanapi.StatusCompleted,
-			state["result"], "done",
-			err, nil,
-		)
-	})
-
-	t.Run("notify_status_change", func(t *testing.T) { // MARKER: NotifyStatusChange
-		assert := testarossa.For(t)
-
-		err := mock.NotifyStatusChange(ctx, "test-flow-id", foremanapi.StatusCompleted)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockNotifyStatusChange(func(ctx context.Context, flowKey string, status string) (err error) {
-			return nil
-		})
-		err = mock.NotifyStatusChange(ctx, "test-flow-id", foremanapi.StatusCompleted)
-		assert.NoError(err)
-	})
-
-	t.Run("flow_history", func(t *testing.T) { // MARKER: History
-		assert := testarossa.For(t)
-
-		_, err := mock.History(ctx, "test-flow-id")
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockHistory(func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error) {
-			return []foremanapi.FlowStep{
-				{StepDepth: 1, TaskName: "task-1", Status: "completed"},
-			}, nil
-		})
-		steps, err := mock.History(ctx, "test-flow-id")
-		assert.Expect(
-			err, nil,
-			len(steps), 1,
-			steps[0].StepDepth, 1,
-			steps[0].TaskName, "task-1",
-			steps[0].Status, "completed",
-		)
-	})
-
-	t.Run("continue", func(t *testing.T) { // MARKER: Continue
-		assert := testarossa.For(t)
-
-		_, err := mock.Continue(ctx, "0-1-abc", nil)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockContinue(func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) {
-			return "0-2-def", nil
-		})
-		newFlowKey, err := mock.Continue(ctx, "0-1-abc", nil)
-		assert.Expect(
-			newFlowKey, "0-2-def",
-			err, nil,
-		)
-	})
-}
+// MARKER: Continue
 
 func TestForeman_LowLevel(t *testing.T) {
 	t.Parallel()
@@ -256,7 +86,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, map[string]any{"input": "value"})
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "value"})
 		assert.NoError(err)
 		shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
 		assert.NoError(err)
@@ -272,7 +102,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.NoError(err)
 		assert.Expect(
 			len(flowToken) > 0, true,
-			workflowName, testWorkflowURL,
+			workflowName, "https://test.workflow.host:428/my-workflow",
 			status, foremanapi.StatusCreated,
 			stepID > 0, true,
 			forkedFlowID, 0,
@@ -288,7 +118,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Graph should be valid JSON
 		var g workflow.Graph
 		assert.NoError(json.Unmarshal([]byte(graphJSON), &g))
-		assert.Equal(testWorkflowURL, g.Name())
+		assert.Equal("https://test.workflow.host:428/my-workflow", g.Name())
 
 		// Verify step row
 		var stepDepth, timeBudgetMs, breakpointHit, attempt int
@@ -301,7 +131,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.Expect(
 			stepDepth, 1,
 			len(stepToken) > 0, true,
-			taskName, "https://test.workflow.host:428/task-a",
+			taskName, "taskA",
 			stepStatus, foremanapi.StatusCreated,
 			changesJSON, "{}",
 			interruptPayloadJSON, "{}",
@@ -320,7 +150,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	t.Run("start_and_complete", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, map[string]any{"input": "test"})
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"})
 		assert.NoError(err)
 		_, flowID, _, err := parseFlowKey(flowKey)
 		assert.NoError(err)
@@ -361,7 +191,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	t.Run("start_notify", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, nil)
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 		assert.NoError(err)
 		_, flowID, _, _ := parseFlowKey(flowKey)
 
@@ -377,7 +207,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, nil)
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 		assert.NoError(err)
 		_, flowID, _, _ := parseFlowKey(flowKey)
 
@@ -395,7 +225,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	t.Run("break_before", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, nil)
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 		assert.NoError(err)
 		_, flowID, _, _ := parseFlowKey(flowKey)
 
@@ -429,7 +259,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Create and start a flow that will interrupt at task-b
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, map[string]any{
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{
 			"needInput": true,
 		})
 		assert.NoError(err)
@@ -477,7 +307,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Run to completion
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, map[string]any{"input": "original"})
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "original"})
 		assert.NoError(err)
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
@@ -507,7 +337,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		_, origFlowID, _, _ := parseFlowKey(flowKey)
 		assert.Expect(
 			forkedStatus, foremanapi.StatusCreated,
-			forkedWorkflowName, testWorkflowURL,
+			forkedWorkflowName, "https://test.workflow.host:428/my-workflow",
 			forkedFlowIDRef, origFlowID,
 			forkedStepDepth, steps[0].StepDepth,
 		)
@@ -535,7 +365,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert := testarossa.For(t)
 
 		// Run to completion
-		flowKey, err := foremanClient.Create(ctx, testWorkflowURL, map[string]any{"input": "first"})
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "first"})
 		assert.NoError(err)
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
@@ -562,7 +392,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		db.QueryRowContext(ctx, "SELECT status, workflow_name FROM microbus_flows WHERE flow_id=?", newFlowID).Scan(&newStatus, &newWorkflowName)
 		assert.Expect(
 			newStatus, foremanapi.StatusCreated,
-			newWorkflowName, testWorkflowURL,
+			newWorkflowName, "https://test.workflow.host:428/my-workflow",
 		)
 
 		// Verify the new flow shares the same thread_id and thread_token as the first flow
@@ -582,19 +412,19 @@ func TestForeman_LowLevel(t *testing.T) {
 	})
 }
 
-const testWorkflowURL = "https://test.workflow.host:428/my-workflow"
-
 // newTestWorkflowSvc creates a minimal workflow service (taskA -> taskB -> END).
 // taskA sets result="hello". taskB appends " world" unless needInput=true (then it interrupts).
 func newTestWorkflowSvc() *connector.Connector {
 	graphSvc := connector.New("test.workflow.host")
 	graphSvc.Subscribe("MyWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
-			g := workflow.NewGraph(testWorkflowURL)
+			g := workflow.NewGraph("https://test.workflow.host:428/my-workflow")
 			g.DeclareInputs("*")
 			g.DeclareOutputs("result")
-			g.AddTransition("https://test.workflow.host:428/task-a", "https://test.workflow.host:428/task-b")
-			g.AddTransition("https://test.workflow.host:428/task-b", workflow.END)
+			g.AddTask("taskA", "https://test.workflow.host:428/task-a")
+			g.AddTask("taskB", "https://test.workflow.host:428/task-b")
+			g.AddTransition("taskA", "taskB")
+			g.AddTransition("taskB", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -645,7 +475,7 @@ func TestForeman_Create(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, map[string]any{"x": 1})
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"x": 1})
 	if assert.NoError(err) {
 		assert.True(flowKey != "")
 	}
@@ -666,7 +496,7 @@ func TestForeman_Start(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -688,7 +518,7 @@ func TestForeman_StartNotify(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -710,7 +540,7 @@ func TestForeman_Cancel(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -734,7 +564,7 @@ func TestForeman_Resume(t *testing.T) {
 	assert := testarossa.For(t)
 
 	// Start a flow that interrupts at task-b
-	flowKey, err := client.Create(ctx, testWorkflowURL, map[string]any{"needInput": true})
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"needInput": true})
 	if !assert.NoError(err) {
 		return
 	}
@@ -768,7 +598,7 @@ func TestForeman_Fork(t *testing.T) {
 	assert := testarossa.For(t)
 
 	// Run to completion
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -809,7 +639,7 @@ func TestForeman_BreakBefore(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -868,7 +698,7 @@ func TestForeman_Snapshot(t *testing.T) {
 	app.Add(svc, newTestWorkflowSvc(), tester)
 	app.RunInTest(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, map[string]any{"input": "test"})
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"})
 	assert := testarossa.For(t)
 	if !assert.NoError(err) {
 		return
@@ -902,7 +732,7 @@ func TestForeman_History(t *testing.T) {
 	app.Add(svc, newTestWorkflowSvc(), tester)
 	app.RunInTest(t)
 
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	assert := testarossa.For(t)
 	if !assert.NoError(err) {
 		return
@@ -914,9 +744,9 @@ func TestForeman_History(t *testing.T) {
 	steps, err := client.History(ctx, flowKey)
 	if assert.NoError(err) {
 		assert.Equal(2, len(steps))
-		assert.Equal("https://test.workflow.host:428/task-a", steps[0].TaskName)
+		assert.Equal("taskA", steps[0].TaskName)
 		assert.Equal(foremanapi.StatusCompleted, steps[0].Status)
-		assert.Equal("https://test.workflow.host:428/task-b", steps[1].TaskName)
+		assert.Equal("taskB", steps[1].TaskName)
 		assert.Equal(foremanapi.StatusCompleted, steps[1].Status)
 		assert.True(steps[0].StepKey != "")
 		assert.True(steps[1].StepKey != "")
@@ -934,8 +764,8 @@ func TestForeman_List(t *testing.T) {
 	app.RunInTest(t)
 
 	// Create two flows
-	flowKey1, _ := client.Create(ctx, testWorkflowURL, nil)
-	flowKey2, _ := client.Create(ctx, testWorkflowURL, nil)
+	flowKey1, _ := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
+	flowKey2, _ := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	assert := testarossa.For(t)
 
 	// List created flows
@@ -973,7 +803,8 @@ func TestForeman_Retry(t *testing.T) {
 			g := workflow.NewGraph("https://test.fail.host:428/fail-workflow")
 			g.DeclareInputs("*")
 			g.DeclareOutputs("result")
-			g.AddTransition("https://test.fail.host:428/fail-task", workflow.END)
+			g.AddTask("failTask", "https://test.fail.host:428/fail-task")
+			g.AddTransition("failTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -1038,7 +869,7 @@ func TestForeman_Run(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	status, state, err := client.Run(ctx, testWorkflowURL, map[string]any{"input": "test"})
+	status, state, err := client.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"})
 	if assert.NoError(err) {
 		assert.Expect(
 			status, foremanapi.StatusCompleted,
@@ -1059,7 +890,7 @@ func TestForeman_Continue(t *testing.T) {
 	assert := testarossa.For(t)
 
 	// Run first flow
-	flowKey, err := client.Create(ctx, testWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -1119,8 +950,6 @@ func TestForeman_Continue(t *testing.T) {
 	}
 }
 
-const testErrorWorkflowURL = "https://test.error.host:428/error-workflow"
-
 // newTestErrorWorkflowSvc creates a workflow where taskA fails if failTask=true,
 // routing to an error handler that captures the error. Otherwise taskA succeeds to taskB.
 // taskA -> taskB -> END (happy path)
@@ -1129,17 +958,16 @@ func newTestErrorWorkflowSvc() *connector.Connector {
 	svc := connector.New("test.error.host")
 	svc.Subscribe("ErrorWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
-			taskA := "https://test.error.host:428/task-a"
-			taskB := "https://test.error.host:428/task-b"
-			errorHandler := "https://test.error.host:428/error-handler"
-
-			g := workflow.NewGraph(testErrorWorkflowURL)
+			g := workflow.NewGraph("https://test.error.host:428/error-workflow")
 			g.DeclareInputs("*")
 			g.DeclareOutputs("*")
-			g.AddTransition(taskA, taskB)
-			g.AddTransition(taskB, workflow.END)
-			g.AddErrorTransition(taskA, errorHandler)
-			g.AddTransition(errorHandler, workflow.END)
+			g.AddTask("taskA", "https://test.error.host:428/task-a")
+			g.AddTask("taskB", "https://test.error.host:428/task-b")
+			g.AddTask("errorHandler", "https://test.error.host:428/error-handler")
+			g.AddTransition("taskA", "taskB")
+			g.AddTransition("taskB", workflow.END)
+			g.AddTransitionOnError("taskA", "errorHandler")
+			g.AddTransition("errorHandler", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -1206,7 +1034,7 @@ func TestForeman_ErrorTransition(t *testing.T) {
 	assert := testarossa.For(t)
 
 	// Happy path: taskA succeeds, goes to taskB
-	flowKey, err := client.Create(ctx, testErrorWorkflowURL, nil)
+	flowKey, err := client.Create(ctx, "https://test.error.host:428/error-workflow", nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -1219,7 +1047,7 @@ func TestForeman_ErrorTransition(t *testing.T) {
 	}
 
 	// Error path: taskA fails, routes to errorHandler
-	flowKey, err = client.Create(ctx, testErrorWorkflowURL, map[string]any{"failTask": true})
+	flowKey, err = client.Create(ctx, "https://test.error.host:428/error-workflow", map[string]any{"failTask": true})
 	if !assert.NoError(err) {
 		return
 	}
@@ -1270,7 +1098,8 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph(subWorkflow)
 			g.DeclareInputs("*")
-			g.AddTransition(subTask, workflow.END)
+			g.AddTask("subTask", subTask)
+			g.AddTransition("subTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -1297,12 +1126,16 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 			g := workflow.NewGraph(mainWorkflow)
 			g.DeclareInputs("*")
 			g.DeclareOutputs("result")
-			g.AddSubgraph(subWorkflow)
-			g.AddTransition(startTask, slowTask)
-			g.AddTransition(startTask, subWorkflow)
-			g.AddTransition(slowTask, finalTask)
-			g.AddTransition(subWorkflow, finalTask)
-			g.AddTransition(finalTask, workflow.END)
+			g.AddTask("startTask", startTask)
+			g.AddTask("slowTask", slowTask)
+			g.AddSubgraph("subWorkflow", subWorkflow)
+			g.AddTask("finalTask", finalTask)
+			g.SetFanIn("finalTask")
+			g.AddTransition("startTask", "slowTask")
+			g.AddTransition("startTask", "subWorkflow")
+			g.AddTransition("slowTask", "finalTask")
+			g.AddTransition("subWorkflow", "finalTask")
+			g.AddTransition("finalTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -1406,7 +1239,8 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 				g := workflow.NewGraph(workflowURL)
 				g.DeclareInputs("*")
 				g.DeclareOutputs(outputField)
-				g.AddTransition(taskURL, workflow.END)
+				g.AddTask(name, taskURL)
+				g.AddTransition(name, workflow.END)
 				w.Header().Set("Content-Type", "application/json")
 				return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 			},
@@ -1441,13 +1275,16 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 			g := workflow.NewGraph(mainWorkflow)
 			g.DeclareInputs("*")
 			g.DeclareOutputs("result", "outA", "outB")
-			g.AddSubgraph(subA)
-			g.AddSubgraph(subB)
-			g.AddTransition(startTask, subA)
-			g.AddTransition(startTask, subB)
-			g.AddTransition(subA, finalTask)
-			g.AddTransition(subB, finalTask)
-			g.AddTransition(finalTask, workflow.END)
+			g.AddTask("startTask", startTask)
+			g.AddSubgraph("subA", subA)
+			g.AddSubgraph("subB", subB)
+			g.AddTask("finalTask", finalTask)
+			g.SetFanIn("finalTask")
+			g.AddTransition("startTask", "subA")
+			g.AddTransition("startTask", "subB")
+			g.AddTransition("subA", "finalTask")
+			g.AddTransition("subB", "finalTask")
+			g.AddTransition("finalTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
 		},
@@ -1502,4 +1339,145 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 		state["outA"], "from-A",
 		state["outB"], "from-B",
 	)
+}
+
+// newTestTimeoutWorkflowSvc creates a workflow where taskA fails with a
+// configurable HTTP status code, routing through OnTimeout (408-coded) or
+// OnError (catch-all) handlers. The workflow records which handler ran.
+//
+// taskA -> taskB -> END                  (happy path)
+// taskA -> timeoutHandler -> END         (when status == 408)
+// taskA -> errHandler -> END             (any other error)
+func newTestTimeoutWorkflowSvc() *connector.Connector {
+	svc := connector.New("test.timeout.host")
+	svc.Subscribe("TimeoutWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.timeout.host:428/timeout-workflow")
+			g.DeclareInputs("*")
+			g.DeclareOutputs("*")
+			g.AddTask("taskA", "https://test.timeout.host:428/task-a")
+			g.AddTask("taskB", "https://test.timeout.host:428/task-b")
+			g.AddTask("timeoutHandler", "https://test.timeout.host:428/timeout-handler")
+			g.AddTask("errHandler", "https://test.timeout.host:428/err-handler")
+			g.AddTransition("taskA", "taskB")
+			g.AddTransition("taskB", workflow.END)
+			g.AddTransitionOnTimeout("taskA", "timeoutHandler")
+			g.AddTransitionOnError("taskA", "errHandler")
+			g.AddTransition("timeoutHandler", workflow.END)
+			g.AddTransition("errHandler", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/timeout-workflow"),
+		sub.Web(),
+	)
+	svc.Subscribe("TaskA",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			status := f.GetInt("failStatus")
+			if status != 0 {
+				return errors.New("task-a failed", status)
+			}
+			f.SetString("result", "success")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/task-a"),
+		sub.Web(),
+	)
+	svc.Subscribe("TaskB",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("handled", "taskB")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/task-b"),
+		sub.Web(),
+	)
+	svc.Subscribe("TimeoutHandler",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("handled", "timeout")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/timeout-handler"),
+		sub.Web(),
+	)
+	svc.Subscribe("ErrHandler",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("handled", "err")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/err-handler"),
+		sub.Web(),
+	)
+	return svc
+}
+
+func TestForeman_OnTimeoutTransition(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestTimeoutWorkflowSvc(), tester)
+	app.RunInTest(t)
+	assert := testarossa.For(t)
+
+	// failStatus = 408 -> OnTimeout transition wins over OnError.
+	flowKey, err := client.Create(ctx, "https://test.timeout.host:428/timeout-workflow", map[string]any{
+		"failStatus": http.StatusRequestTimeout,
+	})
+	if !assert.NoError(err) {
+		return
+	}
+	assert.NoError(client.Start(ctx, flowKey))
+	status, state, err := client.Await(ctx, flowKey)
+	if assert.NoError(err) {
+		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal("timeout", state["handled"])
+	}
+
+	// failStatus = 500 -> OnTimeout doesn't match, falls back to OnError.
+	flowKey, err = client.Create(ctx, "https://test.timeout.host:428/timeout-workflow", map[string]any{
+		"failStatus": http.StatusInternalServerError,
+	})
+	if !assert.NoError(err) {
+		return
+	}
+	assert.NoError(client.Start(ctx, flowKey))
+	status, state, err = client.Await(ctx, flowKey)
+	if assert.NoError(err) {
+		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal("err", state["handled"])
+	}
+
+	// failStatus = 0 -> taskA succeeds, no error routing.
+	flowKey, err = client.Create(ctx, "https://test.timeout.host:428/timeout-workflow", nil)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.NoError(client.Start(ctx, flowKey))
+	status, state, err = client.Await(ctx, flowKey)
+	if assert.NoError(err) {
+		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal("taskB", state["handled"])
+	}
 }

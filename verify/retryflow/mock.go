@@ -1,0 +1,145 @@
+package retryflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/retryflow/retryflowapi"
+)
+
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
+type Mock struct {
+	*Intermediate
+	mockTaskA      func(ctx context.Context, flow *workflow.Flow, target int) (targetOut int, err error)                 // MARKER: TaskA
+	mockFlaky      func(ctx context.Context, flow *workflow.Flow, attempts int, target int) (attemptsOut int, err error) // MARKER: Flaky
+	mockTaskB      func(ctx context.Context, flow *workflow.Flow, attempts int) (finalAttempts int, err error)           // MARKER: TaskB
+	mockRetryGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                          // MARKER: Retry
+	unsubMockRetry func() error                                                                                          // MARKER: Retry
+}
+
+// NewMock creates a new mockable version of the microservice.
+func NewMock() *Mock {
+	svc := &Mock{}
+	svc.Intermediate = NewIntermediate(svc)
+	svc.SetVersion(7357) // Stands for TEST
+	return svc
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Mock) OnStartup(ctx context.Context) (err error) {
+	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
+	}
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+// MockTaskA sets up a mock handler for TaskA.
+func (svc *Mock) MockTaskA(handler func(ctx context.Context, flow *workflow.Flow, target int) (targetOut int, err error)) *Mock { // MARKER: TaskA
+	svc.mockTaskA = handler
+	return svc
+}
+
+// TaskA executes the mock handler.
+func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow, target int) (targetOut int, err error) { // MARKER: TaskA
+	if svc.mockTaskA != nil {
+		targetOut, err = svc.mockTaskA(ctx, flow, target)
+	}
+	return targetOut, errors.Trace(err)
+}
+
+// MockFlaky sets up a mock handler for Flaky.
+func (svc *Mock) MockFlaky(handler func(ctx context.Context, flow *workflow.Flow, attempts int, target int) (attemptsOut int, err error)) *Mock { // MARKER: Flaky
+	svc.mockFlaky = handler
+	return svc
+}
+
+// Flaky executes the mock handler.
+func (svc *Mock) Flaky(ctx context.Context, flow *workflow.Flow, attempts int, target int) (attemptsOut int, err error) { // MARKER: Flaky
+	if svc.mockFlaky != nil {
+		attemptsOut, err = svc.mockFlaky(ctx, flow, attempts, target)
+	}
+	return attemptsOut, errors.Trace(err)
+}
+
+// MockTaskB sets up a mock handler for TaskB.
+func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow, attempts int) (finalAttempts int, err error)) *Mock { // MARKER: TaskB
+	svc.mockTaskB = handler
+	return svc
+}
+
+// TaskB executes the mock handler.
+func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, attempts int) (finalAttempts int, err error) { // MARKER: TaskB
+	if svc.mockTaskB != nil {
+		finalAttempts, err = svc.mockTaskB(ctx, flow, attempts)
+	}
+	return finalAttempts, errors.Trace(err)
+}
+
+// MockRetry sets up a mock handler for the Retry workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockRetry(handler func(ctx context.Context, flow *workflow.Flow, target int) (finalAttempts int, err error)) *Mock { // MARKER: Retry
+	if svc.unsubMockRetry != nil {
+		svc.unsubMockRetry()
+		svc.unsubMockRetry = nil
+	}
+	if handler == nil {
+		svc.mockRetryGraph = nil
+		return svc
+	}
+	mockName := "MockRetry" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-retry-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockRetryGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(retryflowapi.Retry.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in retryflowapi.RetryIn
+		f.ParseState(&in)
+		finalAttempts, err := handler(r.Context(), &f, in.Target)
+		if err != nil {
+			return err // No trace
+		}
+		out := retryflowapi.RetryOut{FinalAttempts: finalAttempts}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(retryflowapi.RetryIn{}, retryflowapi.RetryOut{}),
+	)
+	if err == nil {
+		svc.unsubMockRetry = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// Retry returns the workflow graph, or a mocked graph if MockRetry was called.
+func (svc *Mock) Retry(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Retry
+	if svc.mockRetryGraph != nil {
+		graph, err = svc.mockRetryGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}

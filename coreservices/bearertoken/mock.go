@@ -18,26 +18,11 @@ package bearertoken
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/bearertoken/bearertokenapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ bearertokenapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -78,11 +63,9 @@ func (svc *Mock) MockMint(handler func(ctx context.Context, claims any) (token s
 
 // Mint executes the mock handler.
 func (svc *Mock) Mint(ctx context.Context, claims any) (token string, err error) { // MARKER: Mint
-	if svc.mockMint == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockMint != nil {
+		token, err = svc.mockMint(ctx, claims)
 	}
-	token, err = svc.mockMint(ctx, claims)
 	return token, errors.Trace(err)
 }
 
@@ -94,11 +77,9 @@ func (svc *Mock) MockJWKS(handler func(ctx context.Context) (keys []bearertokena
 
 // JWKS executes the mock handler.
 func (svc *Mock) JWKS(ctx context.Context) (keys []bearertokenapi.JWK, err error) { // MARKER: JWKS
-	if svc.mockJWKS == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockJWKS != nil {
+		keys, err = svc.mockJWKS(ctx)
 	}
-	keys, err = svc.mockJWKS(ctx)
 	return keys, errors.Trace(err)
 }
 
@@ -110,11 +91,9 @@ func (svc *Mock) MockOnChangedPrivateKey(handler func(ctx context.Context) (err 
 
 // OnChangedPrivateKey executes the mock handler.
 func (svc *Mock) OnChangedPrivateKey(ctx context.Context) (err error) { // MARKER: PrivateKey
-	if svc.mockOnChangedPrivateKey == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOnChangedPrivateKey != nil {
+		err = svc.mockOnChangedPrivateKey(ctx)
 	}
-	err = svc.mockOnChangedPrivateKey(ctx)
 	return errors.Trace(err)
 }
 
@@ -126,10 +105,8 @@ func (svc *Mock) MockOnChangedAltPrivateKey(handler func(ctx context.Context) (e
 
 // OnChangedAltPrivateKey executes the mock handler.
 func (svc *Mock) OnChangedAltPrivateKey(ctx context.Context) (err error) { // MARKER: AltPrivateKey
-	if svc.mockOnChangedAltPrivateKey == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOnChangedAltPrivateKey != nil {
+		err = svc.mockOnChangedAltPrivateKey(ctx)
 	}
-	err = svc.mockOnChangedAltPrivateKey(ctx)
 	return errors.Trace(err)
 }

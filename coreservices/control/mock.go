@@ -22,16 +22,8 @@ import (
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
-)
-
-var (
-	_ http.Request
-	_ errors.TracedError
-	_ *workflow.Flow
-	_ controlapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -73,11 +65,9 @@ func (svc *Mock) MockPing(handler func(ctx context.Context) (pong int, err error
 
 // Ping executes the mock handler.
 func (svc *Mock) Ping(ctx context.Context) (pong int, err error) { // MARKER: Ping
-	if svc.mockPing == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockPing != nil {
+		pong, err = svc.mockPing(ctx)
 	}
-	pong, err = svc.mockPing(ctx)
 	return pong, errors.Trace(err)
 }
 
@@ -89,11 +79,9 @@ func (svc *Mock) MockConfigRefresh(handler func(ctx context.Context) (err error)
 
 // ConfigRefresh executes the mock handler.
 func (svc *Mock) ConfigRefresh(ctx context.Context) (err error) { // MARKER: ConfigRefresh
-	if svc.mockConfigRefresh == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockConfigRefresh != nil {
+		err = svc.mockConfigRefresh(ctx)
 	}
-	err = svc.mockConfigRefresh(ctx)
 	return errors.Trace(err)
 }
 
@@ -105,11 +93,9 @@ func (svc *Mock) MockTrace(handler func(ctx context.Context, id string) (err err
 
 // Trace executes the mock handler.
 func (svc *Mock) Trace(ctx context.Context, id string) (err error) { // MARKER: Trace
-	if svc.mockTrace == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockTrace != nil {
+		err = svc.mockTrace(ctx, id)
 	}
-	err = svc.mockTrace(ctx, id)
 	return errors.Trace(err)
 }
 
@@ -121,10 +107,9 @@ func (svc *Mock) MockMetrics(handler func(w http.ResponseWriter, r *http.Request
 
 // Metrics executes the mock handler.
 func (svc *Mock) Metrics(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Metrics
-	if svc.mockMetrics == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMetrics != nil {
+		err = svc.mockMetrics(w, r)
 	}
-	err = svc.mockMetrics(w, r)
 	return errors.Trace(err)
 }
 
@@ -136,10 +121,8 @@ func (svc *Mock) MockOpenAPI(handler func(ctx context.Context) (httpResponseBody
 
 // OpenAPI executes the mock handler.
 func (svc *Mock) OpenAPI(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) { // MARKER: OpenAPI
-	if svc.mockOpenAPI == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockOpenAPI != nil {
+		httpResponseBody, httpStatusCode, err = svc.mockOpenAPI(ctx)
 	}
-	httpResponseBody, httpStatusCode, err = svc.mockOpenAPI(ctx)
 	return httpResponseBody, httpStatusCode, errors.Trace(err)
 }

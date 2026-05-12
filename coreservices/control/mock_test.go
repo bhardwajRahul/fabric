@@ -1,0 +1,87 @@
+package control
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/testarossa"
+
+	"github.com/microbus-io/fabric/coreservices/control/controlapi"
+)
+
+func TestControl_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("ping", func(t *testing.T) { // MARKER: Ping
+		assert := testarossa.For(t)
+
+		mock.MockPing(func(ctx context.Context) (pong int, err error) {
+			return
+		})
+		_, err := mock.Ping(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("config_refresh", func(t *testing.T) { // MARKER: ConfigRefresh
+		assert := testarossa.For(t)
+
+		mock.MockConfigRefresh(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.ConfigRefresh(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("trace", func(t *testing.T) { // MARKER: Trace
+		assert := testarossa.For(t)
+
+		mock.MockTrace(func(ctx context.Context, id string) (err error) {
+			return
+		})
+		var id string
+		err := mock.Trace(ctx, id)
+		assert.NoError(err)
+	})
+
+	t.Run("metrics", func(t *testing.T) { // MARKER: Metrics
+		assert := testarossa.For(t)
+
+		mock.MockMetrics(func(w http.ResponseWriter, r *http.Request) (err error) {
+			return nil
+		})
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+		err := mock.Metrics(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("open_a_p_i", func(t *testing.T) { // MARKER: OpenAPI
+		assert := testarossa.For(t)
+
+		mock.MockOpenAPI(func(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) {
+			return
+		})
+		_, _, err := mock.OpenAPI(ctx)
+		assert.NoError(err)
+	})
+
+}

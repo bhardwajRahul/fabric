@@ -18,26 +18,10 @@ package helloworld
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/examples/helloworld/helloworldapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ helloworldapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -75,9 +59,8 @@ func (svc *Mock) MockHelloWorld(handler func(w http.ResponseWriter, r *http.Requ
 
 // HelloWorld executes the mock handler.
 func (svc *Mock) HelloWorld(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: HelloWorld
-	if svc.mockHelloWorld == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockHelloWorld != nil {
+		err = svc.mockHelloWorld(w, r)
 	}
-	err = svc.mockHelloWorld(w, r)
 	return errors.Trace(err)
 }

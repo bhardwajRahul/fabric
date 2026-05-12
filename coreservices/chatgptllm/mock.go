@@ -18,30 +18,13 @@ package chatgptllm
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
-
-	"github.com/microbus-io/fabric/coreservices/chatgptllm/chatgptllmapi"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 )
 
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ chatgptllmapi.Client
-)
-
-// Mock is a mockable version of the microservice.
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
 	mockTurn func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) // MARKER: Turn
@@ -76,10 +59,8 @@ func (svc *Mock) MockTurn(handler func(ctx context.Context, model string, messag
 
 // Turn executes the mock handler.
 func (svc *Mock) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
-	if svc.mockTurn == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockTurn != nil {
+		content, toolCalls, usage, err = svc.mockTurn(ctx, model, messages, tools, options)
 	}
-	content, toolCalls, usage, err = svc.mockTurn(ctx, model, messages, tools, options)
 	return content, toolCalls, usage, errors.Trace(err)
 }

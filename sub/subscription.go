@@ -64,7 +64,7 @@ type Subscription struct {
 	Host           string
 	Port           string
 	Method         string
-	Route          string
+	Path           string
 	Queue          string
 	Handler        any
 	Subs           []*transport.Subscription
@@ -73,8 +73,9 @@ type Subscription struct {
 	Type           string
 	Inputs         any
 	Outputs        any
-	Infra          bool
+	Manual         bool
 	NoTrace        bool
+	Tags           []string
 }
 
 /*
@@ -134,7 +135,7 @@ func NewSubscription(name string, defaultHost string, handler HTTPHandler, optio
 	}
 	s.Host = canonicalHost
 	s.Port = u.Port()
-	s.Route = u.Path
+	s.Path = u.Path
 	return s, nil
 }
 
@@ -239,7 +240,7 @@ func (sub *Subscription) Apply(options ...Option) error {
 
 // Canonical returns the fully-qualified canonical host:port/path of the subscription, not including the scheme or the method.
 func (sub *Subscription) Canonical() string {
-	return fmt.Sprintf("%s:%s%s", sub.Host, sub.Port, sub.Route)
+	return fmt.Sprintf("%s:%s%s", sub.Host, sub.Port, sub.Path)
 }
 
 // RefreshHostname refreshes the subscription for a different hostname.

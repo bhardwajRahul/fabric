@@ -30,7 +30,6 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -49,46 +48,7 @@ var (
 	_ browserapi.Client
 )
 
-func TestBrowser_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
-
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
-
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("browse", func(t *testing.T) { // MARKER: Browse
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Browse(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockBrowse(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Browse(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: Browse
 
 func TestBrowser_Browse(t *testing.T) { // MARKER: Browse
 	t.Parallel()

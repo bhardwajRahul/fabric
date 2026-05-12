@@ -17,8 +17,8 @@ limitations under the License.
 package main
 
 // Manifest is the in-memory representation of a microservice's manifest.yaml.
-// The shape is a superset of cmd/schema's Manifest - that package keeps a
-// narrow consumer-side shape; this one carries every field the tool emits.
+// The shape is a superset of cmd/internal/schema's Manifest - that package keeps
+// a narrow consumer-side shape; this one carries every field the tool emits.
 type Manifest struct {
 	General        General
 	Configs        []Config

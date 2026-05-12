@@ -1,0 +1,24 @@
+general:
+  hostname: retryflow.verify
+  description: retryflow.verify exercises flow.Retry with backoff and exhaustion.
+  modifiedAt: "2026-05-14T17:03:02Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(target int) (targetOut int)
+    description: TaskA passes the target through.
+    route: :428/task-a
+  Flaky:
+    signature: Flaky(attempts int, target int) (attemptsOut int)
+    description: Flaky increments attempts and calls flow.Retry while attempts<target.
+    route: :428/flaky
+  TaskB:
+    signature: TaskB(attempts int) (finalAttempts int)
+    description: TaskB surfaces the final attempts count.
+    route: :428/task-b
+
+workflows:
+  Retry:
+    signature: Retry(target int) (finalAttempts int)
+    description: Retry defines A -> Flaky -> B.
+    route: :428/retry

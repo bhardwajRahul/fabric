@@ -9,6 +9,7 @@ require (
 	github.com/microbus-io/boolexp v1.1.0
 	github.com/microbus-io/copyrighter v1.3.0
 	github.com/microbus-io/errors v1.0.0
+	github.com/microbus-io/pyvenv v1.0.0
 	github.com/microbus-io/sequel v1.5.7
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.8

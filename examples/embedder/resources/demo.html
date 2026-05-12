@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Embedder Demo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; margin-bottom: 8px; }
+        h2 { color: #444; margin-top: 32px; font-size: 1.15em; }
+        p.note { color: #666; font-size: 0.95em; }
+        .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+        label { display: block; font-size: 0.9em; color: #555; margin: 8px 0 4px; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; box-sizing: border-box; }
+        button { padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+        button:hover { background: #1565c0; }
+        button:disabled { background: #999; cursor: not-allowed; }
+        .row { display: flex; gap: 8px; align-items: flex-end; }
+        .row input { flex: 1; }
+        .result { margin-top: 12px; padding: 12px; background: #f0f7ff; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; word-wrap: break-word; min-height: 1.4em; }
+        .score { font-size: 1.6em; font-weight: 600; color: #1976d2; }
+        .preview { color: #777; font-size: 0.85em; }
+        .examples { margin: 8px 0 4px; }
+        .examples button { margin-right: 6px; margin-bottom: 4px; padding: 5px 10px; background: #e8e8e8; color: #333; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .examples button:hover { background: #ddd; }
+        .err { color: #b00020; font-size: 0.9em; }
+        .status-line { font-size: 0.95em; color: #555; margin: 8px 0; }
+        .status-pending { color: #1976d2; }
+        .status-ready { color: #2e7d32; }
+        .status-error { color: #b00020; }
+        .logs { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.82em; white-space: pre-wrap; max-height: 320px; overflow-y: auto; margin-top: 8px; min-height: 60px; }
+        .hidden { display: none; }
+        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #ccc; border-top-color: #1976d2; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -1px; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>Embedder Demo</h1>
+    <p class="note">This microservice uses <code>venv.py.core</code> to load a sentence-transformers model in Python and serves Go endpoints that call it. The venv must be initialized before the embedding and similarity actions are available.</p>
+
+    <!-- Setup card: shown while the venv is not yet initialized. -->
+    <div class="card" id="setupCard">
+        <h2 style="margin-top:0">Initialize Python VM</h2>
+        <p class="note">Clicking the button below provisions a Python virtual environment in <code>venv.py.core</code>, installs <code>sentence-transformers</code>, and loads the <code>all-MiniLM-L6-v2</code> model. First run downloads ~80MB and takes 20-60 seconds; subsequent runs reuse the cached venv and complete in a few seconds.</p>
+        <div style="margin-top:12px">
+            <button id="initBtn" onclick="initVenv()">Initialize Python VM</button>
+        </div>
+        <div class="status-line" id="setupStatus"></div>
+    </div>
+
+    <!-- Operations card: shown once the venv is ready. -->
+    <div class="card hidden" id="similarityCard">
+        <h2 style="margin-top:0">Similarity</h2>
+        <p class="note">Computes cosine similarity between the embeddings of two strings. Range is [-1.0, 1.0]; higher means more semantically similar.</p>
+        <div class="examples">
+            <button onclick="fillSim('A cat sat on the mat.', 'A feline rested on the rug.')">cat / feline</button>
+            <button onclick="fillSim('Coffee in the morning', 'Tea at night')">coffee / tea</button>
+            <button onclick="fillSim('I love programming', 'My passion is writing code')">programming / code</button>
+            <button onclick="fillSim('The sun is bright today', 'Bananas are yellow')">unrelated</button>
+        </div>
+        <label for="simA">String A</label>
+        <input type="text" id="simA" placeholder="First string">
+        <label for="simB">String B</label>
+        <input type="text" id="simB" placeholder="Second string">
+        <div style="margin-top:12px">
+            <button id="simBtn" onclick="runSimilarity()">Compute similarity</button>
+        </div>
+        <div class="result" id="simOut"></div>
+    </div>
+
+    <div class="card hidden" id="embedCard">
+        <h2 style="margin-top:0">Embedding</h2>
+        <p class="note">Returns the raw embedding vector. The MiniLM model produces 384-dimensional vectors; we show the first eight values.</p>
+        <label for="embText">Text</label>
+        <input type="text" id="embText" placeholder="Any string" value="Hello, embedder.">
+        <div style="margin-top:12px">
+            <button id="embBtn" onclick="runEmbed()">Embed</button>
+        </div>
+        <div class="result" id="embOut"></div>
+    </div>
+
+    <!-- Terminal card: always visible. Shows pip-install progress during init and any
+         stdout/stderr from the Python worker during subsequent Embed/Similarity calls. -->
+    <div class="card" id="logsCard">
+        <h2 style="margin-top:0">Python Terminal</h2>
+        <p class="note">Tailed stdout + stderr from the Python venv. Empty until the venv is initialized; updates every second while the page is open.</p>
+        <pre class="logs" id="setupLogs"></pre>
+    </div>
+
+    <script>
+        // Derive endpoint URLs from the page's own pathname so the demo works
+        // both via the ingress (e.g. /embedder.example/demo) and direct
+        // access on the microservice's port (e.g. /demo).
+        const SELF = window.location.pathname.replace(/\/+$/, '');
+        const slashIdx = SELF.lastIndexOf('/');
+        const PARENT = slashIdx > 0 ? SELF.substring(0, slashIdx) : '';
+        const URL_STATUS = SELF + '/status';
+        const URL_INIT = SELF + '/init';
+        const URL_EMBED = PARENT + '/embed';
+        const URL_SIMILARITY = PARENT + '/similarity';
+
+        let pollTimer = null;
+        // Tracks the last ETag returned by /status. Sent as If-None-Match so the server can
+        // long-poll: it holds the request until the underlying state changes or returns 204
+        // when nothing changed before its context deadline expires.
+        let lastETag = '';
+
+        function setStatus(text, cls) {
+            const el = document.getElementById('setupStatus');
+            el.textContent = text;
+            el.className = 'status-line ' + (cls ? 'status-' + cls : '');
+        }
+
+        function setLogs(text) {
+            const el = document.getElementById('setupLogs');
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+            el.textContent = text || '';
+            if (atBottom) {
+                el.scrollTop = el.scrollHeight;
+            }
+        }
+
+        function showSetup() {
+            document.getElementById('setupCard').classList.remove('hidden');
+            document.getElementById('similarityCard').classList.add('hidden');
+            document.getElementById('embedCard').classList.add('hidden');
+        }
+
+        function showOperations() {
+            document.getElementById('setupCard').classList.add('hidden');
+            document.getElementById('similarityCard').classList.remove('hidden');
+            document.getElementById('embedCard').classList.remove('hidden');
+        }
+
+        async function fetchStatus() {
+            try {
+                const headers = {};
+                if (lastETag) {
+                    headers['If-None-Match'] = lastETag;
+                }
+                const res = await fetch(URL_STATUS, { headers });
+                if (res.status === 204) {
+                    // Long-poll timed out without a state change. Keep our cached
+                    // view and the existing ETag; the caller will refire.
+                    return { unchanged: true };
+                }
+                if (!res.ok) {
+                    setStatus('Status request failed: ' + res.status, 'error');
+                    return null;
+                }
+                const etag = res.headers.get('ETag');
+                if (etag) {
+                    lastETag = etag;
+                }
+                return await res.json();
+            } catch (e) {
+                setStatus('Status request failed: ' + e.message, 'error');
+                return null;
+            }
+        }
+
+        function applyStatus(body) {
+            if (!body) return;
+            // 204 No Content from the long-poll: nothing changed before the server's
+            // deadline elapsed. Keep the existing UI; just refire the poll.
+            if (body.unchanged) {
+                schedulePoll(0);
+                return;
+            }
+            setLogs(body.logs);
+            switch (body.status) {
+                case 'not_started':
+                    document.getElementById('initBtn').disabled = false;
+                    setStatus('Not initialized. Click the button to start.', null);
+                    showSetup();
+                    break;
+                case 'pending':
+                    document.getElementById('initBtn').disabled = true;
+                    setStatus('Initializing... (pip install + model download)', 'pending');
+                    document.getElementById('initBtn').innerHTML = '<span class="spinner"></span>Initializing...';
+                    showSetup();
+                    break;
+                case 'ready':
+                    document.getElementById('initBtn').disabled = false;
+                    document.getElementById('initBtn').textContent = 'Initialize Python VM';
+                    setStatus('Ready.', 'ready');
+                    showOperations();
+                    break;
+                case 'error':
+                    document.getElementById('initBtn').disabled = false;
+                    document.getElementById('initBtn').textContent = 'Retry';
+                    setStatus('Error: ' + (body.message || 'unknown'), 'error');
+                    showSetup();
+                    break;
+            }
+            // Keep polling regardless of status so the terminal continues to update during
+            // Embed/Similarity calls and any post-init stdout/stderr keeps streaming. The
+            // server long-polls, so refire immediately — a state change returns ~instantly and
+            // 204 No Content fires only when the server's request deadline is about to expire.
+            schedulePoll(0);
+        }
+
+        function schedulePoll(delayMs) {
+            if (pollTimer) clearTimeout(pollTimer);
+            pollTimer = setTimeout(async () => {
+                pollTimer = null;
+                const body = await fetchStatus();
+                applyStatus(body);
+            }, delayMs);
+        }
+
+        async function initVenv() {
+            document.getElementById('initBtn').disabled = true;
+            try {
+                const res = await fetch(URL_INIT, { method: 'POST' });
+                if (!res.ok) {
+                    setStatus('Init failed: ' + res.status, 'error');
+                    document.getElementById('initBtn').disabled = false;
+                    return;
+                }
+                const body = await res.json();
+                applyStatus(body);
+            } catch (e) {
+                setStatus('Init failed: ' + e.message, 'error');
+                document.getElementById('initBtn').disabled = false;
+            }
+        }
+
+        function fillSim(a, b) {
+            document.getElementById('simA').value = a;
+            document.getElementById('simB').value = b;
+        }
+
+        async function runSimilarity() {
+            const a = document.getElementById('simA').value;
+            const b = document.getElementById('simB').value;
+            const out = document.getElementById('simOut');
+            const btn = document.getElementById('simBtn');
+            if (!a || !b) {
+                out.innerHTML = '<span class="err">Enter both strings.</span>';
+                return;
+            }
+            btn.disabled = true;
+            out.textContent = 'Working...';
+            try {
+                const url = URL_SIMILARITY + '?a=' + encodeURIComponent(a) + '&b=' + encodeURIComponent(b);
+                const res = await fetch(url);
+                if (!res.ok) {
+                    out.innerHTML = '<span class="err">' + res.status + ' ' + res.statusText + '</span>';
+                    return;
+                }
+                const body = await res.json();
+                const score = body.score || 0;
+                out.innerHTML = '<span class="score">' + score.toFixed(4) + '</span>';
+            } catch (e) {
+                out.innerHTML = '<span class="err">' + e.message + '</span>';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function runEmbed() {
+            const text = document.getElementById('embText').value;
+            const out = document.getElementById('embOut');
+            const btn = document.getElementById('embBtn');
+            if (!text) {
+                out.innerHTML = '<span class="err">Enter text.</span>';
+                return;
+            }
+            btn.disabled = true;
+            out.textContent = 'Working...';
+            try {
+                const url = URL_EMBED + '?text=' + encodeURIComponent(text);
+                const res = await fetch(url);
+                if (!res.ok) {
+                    out.innerHTML = '<span class="err">' + res.status + ' ' + res.statusText + '</span>';
+                    return;
+                }
+                const body = await res.json();
+                const vec = body.vector || [];
+                const preview = vec.slice(0, 8).map(v => v.toFixed(4)).join(', ');
+                out.innerHTML = 'dim = ' + vec.length + '<br><span class="preview">[' + preview + (vec.length > 8 ? ', ...' : '') + ']</span>';
+            } catch (e) {
+                out.innerHTML = '<span class="err">' + e.message + '</span>';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Initial status fetch on page load.
+        fetchStatus().then(applyStatus);
+    </script>
+</body>
+</html>

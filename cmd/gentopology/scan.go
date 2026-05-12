@@ -21,23 +21,24 @@ package main
 //   - which other services are dependencies (any *api import)
 //   - which services we hook events from (any NewHook call)
 //   - whether the service touches SQL (database/sql or sequel imports)
+//   - whether the service runs a Python venv (pyvenv import)
 //   - whether the service uses HTTP egress + which external host(s)
 //
 // No per-call route resolution, no Def lookup, no rule construction.
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 )
 
 // scanned is a service's source-derived facts ready for the mermaid
@@ -47,6 +48,7 @@ type scanned struct {
 	Deps   []string // hostnames of services this one depends on (via *api client)
 	Events []string // hostnames of services this one hooks events from
 	DB     string   // "SQL" if database/sql or sequel is imported, else ""
+	Py     string   // "Py" if pyvenv is imported, else ""
 	Cloud  string   // external host (if exactly one), "various" (if >1 or none extractable), or "" if no egress
 }
 
@@ -58,9 +60,10 @@ func scanAll(services []service, bundleDir string) ([]scanned, error) {
 	for _, s := range services {
 		bundleHosts[s.Hostname] = true
 	}
+	resolver := pkgresolver.New(bundleDir)
 	out := make([]scanned, 0, len(services))
 	for _, s := range services {
-		sc, err := scanService(s, bundleDir, bundleHosts)
+		sc, err := scanService(s, bundleDir, bundleHosts, resolver)
 		if err != nil {
 			return nil, fmt.Errorf("scan %s: %w", s.Hostname, err)
 		}
@@ -70,7 +73,7 @@ func scanAll(services []service, bundleDir string) ([]scanned, error) {
 }
 
 // scanService walks one service's source and returns its facts.
-func scanService(s service, bundleDir string, bundleHosts map[string]bool) (scanned, error) {
+func scanService(s service, bundleDir string, bundleHosts map[string]bool, resolver *pkgresolver.Resolver) (scanned, error) {
 	listDir := bundleDir
 	if listDir == "" {
 		listDir = s.Dir
@@ -87,6 +90,14 @@ func scanService(s service, bundleDir string, bundleHosts map[string]bool) (scan
 	for _, imp := range imports {
 		if imp == "database/sql" || imp == "github.com/microbus-io/sequel" || strings.HasPrefix(imp, "github.com/microbus-io/sequel/") {
 			out.DB = "SQL"
+			break
+		}
+	}
+
+	// Python: detected by pyvenv import.
+	for _, imp := range imports {
+		if imp == "github.com/microbus-io/pyvenv" || strings.HasPrefix(imp, "github.com/microbus-io/pyvenv/") {
+			out.Py = "Py"
 			break
 		}
 	}
@@ -123,7 +134,7 @@ func scanService(s service, bundleDir string, bundleHosts map[string]bool) (scan
 	depHosts := map[string]bool{}
 	eventHosts := map[string]bool{}
 	for imp := range apiImports {
-		dir, err := goListDir(imp, listDir)
+		dir, err := resolver.Dir(imp, listDir)
 		if err != nil {
 			return out, fmt.Errorf("resolve %s: %w", imp, err)
 		}
@@ -378,30 +389,6 @@ func stripHost(authority string) string {
 		return ""
 	}
 	return u.Hostname()
-}
-
-// goListDir returns the on-disk directory of a Go package. With the
-// -e flag set, `go list` itself succeeds for missing packages (the
-// returned Dir is empty), so an error here represents a real toolchain
-// failure rather than a missing dependency.
-func goListDir(pkgPath, fromDir string) (string, error) {
-	cmd := exec.Command("go", "list", "-json", "-e", pkgPath)
-	if fromDir != "" {
-		cmd.Dir = fromDir
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		stderr := ""
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = strings.TrimSpace(string(ee.Stderr))
-		}
-		return "", fmt.Errorf("go list %s: %w (%s)", pkgPath, err, stderr)
-	}
-	var info struct{ Dir string }
-	if err := json.Unmarshal(out, &info); err != nil {
-		return "", fmt.Errorf("go list parse for %s: %w", pkgPath, err)
-	}
-	return info.Dir, nil
 }
 
 // readHostname reads the Hostname constant from an *api/endpoints.go.

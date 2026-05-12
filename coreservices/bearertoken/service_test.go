@@ -65,89 +65,13 @@ func generateTestPEM() string {
 	return string(pem.EncodeToMemory(block))
 }
 
-func TestBearerToken_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Mint
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: JWKS
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: PrivateKey
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("mint", func(t *testing.T) { // MARKER: Mint
-		assert := testarossa.For(t)
-
-		exampleClaims := map[string]any{"sub": "user1"}
-		expectedToken := "mock-token"
-
-		_, err := mock.Mint(ctx, exampleClaims)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockMint(func(ctx context.Context, claims any) (token string, err error) {
-			return expectedToken, nil
-		})
-		token, err := mock.Mint(ctx, exampleClaims)
-		assert.Expect(
-			token, expectedToken,
-			err, nil,
-		)
-	})
-
-	t.Run("jwks", func(t *testing.T) { // MARKER: JWKS
-		assert := testarossa.For(t)
-
-		expectedKeys := []bearertokenapi.JWK{}
-
-		_, err := mock.JWKS(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockJWKS(func(ctx context.Context) (keys []bearertokenapi.JWK, err error) {
-			return expectedKeys, nil
-		})
-		keys, err := mock.JWKS(ctx)
-		assert.Expect(
-			keys, expectedKeys,
-			err, nil,
-		)
-	})
-
-	t.Run("on_changed_private_key_pem", func(t *testing.T) { // MARKER: PrivateKey
-		assert := testarossa.For(t)
-
-		err := mock.OnChangedPrivateKey(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnChangedPrivateKey(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.OnChangedPrivateKey(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("on_changed_alt_private_key_pem", func(t *testing.T) { // MARKER: AltPrivateKey
-		assert := testarossa.For(t)
-
-		err := mock.OnChangedAltPrivateKey(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockOnChangedAltPrivateKey(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.OnChangedAltPrivateKey(ctx)
-		assert.NoError(err)
-	})
-}
+// MARKER: AltPrivateKey
 
 func TestBearerToken_Mint(t *testing.T) { // MARKER: Mint
 	t.Parallel()

@@ -1,0 +1,190 @@
+package fanouterrorflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/fanouterrorflow/fanouterrorflowapi"
+)
+
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
+type Mock struct {
+	*Intermediate
+	mockTaskA            func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                                     // MARKER: TaskA
+	mockTaskB            func(ctx context.Context, flow *workflow.Flow, started bool) (markB bool, err error)                                         // MARKER: TaskB
+	mockTaskC            func(ctx context.Context, flow *workflow.Flow, started bool) (markC bool, err error)                                         // MARKER: TaskC
+	mockTaskD            func(ctx context.Context, flow *workflow.Flow, started bool) (markD bool, err error)                                         // MARKER: TaskD
+	mockHandler          func(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (handled bool, err error)                          // MARKER: Handler
+	mockTaskE            func(ctx context.Context, flow *workflow.Flow, handled bool, markB bool, markC bool, markD bool) (recovered bool, err error) // MARKER: TaskE
+	mockFanOutErrorGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                 // MARKER: FanOutError
+	unsubMockFanOutError func() error                                                                                                                 // MARKER: FanOutError
+}
+
+// NewMock creates a new mockable version of the microservice.
+func NewMock() *Mock {
+	svc := &Mock{}
+	svc.Intermediate = NewIntermediate(svc)
+	svc.SetVersion(7357) // Stands for TEST
+	return svc
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Mock) OnStartup(ctx context.Context) (err error) {
+	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
+	}
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+// MockTaskA sets up a mock handler for TaskA.
+func (svc *Mock) MockTaskA(handler func(ctx context.Context, flow *workflow.Flow) (started bool, err error)) *Mock { // MARKER: TaskA
+	svc.mockTaskA = handler
+	return svc
+}
+
+// TaskA executes the mock handler.
+func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow) (started bool, err error) { // MARKER: TaskA
+	if svc.mockTaskA != nil {
+		started, err = svc.mockTaskA(ctx, flow)
+	}
+	return started, errors.Trace(err)
+}
+
+// MockTaskB sets up a mock handler for TaskB.
+func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow, started bool) (markB bool, err error)) *Mock { // MARKER: TaskB
+	svc.mockTaskB = handler
+	return svc
+}
+
+// TaskB executes the mock handler.
+func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, started bool) (markB bool, err error) { // MARKER: TaskB
+	if svc.mockTaskB != nil {
+		markB, err = svc.mockTaskB(ctx, flow, started)
+	}
+	return markB, errors.Trace(err)
+}
+
+// MockTaskC sets up a mock handler for TaskC.
+func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow, started bool) (markC bool, err error)) *Mock { // MARKER: TaskC
+	svc.mockTaskC = handler
+	return svc
+}
+
+// TaskC executes the mock handler.
+func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow, started bool) (markC bool, err error) { // MARKER: TaskC
+	if svc.mockTaskC != nil {
+		markC, err = svc.mockTaskC(ctx, flow, started)
+	}
+	return markC, errors.Trace(err)
+}
+
+// MockTaskD sets up a mock handler for TaskD.
+func (svc *Mock) MockTaskD(handler func(ctx context.Context, flow *workflow.Flow, started bool) (markD bool, err error)) *Mock { // MARKER: TaskD
+	svc.mockTaskD = handler
+	return svc
+}
+
+// TaskD executes the mock handler.
+func (svc *Mock) TaskD(ctx context.Context, flow *workflow.Flow, started bool) (markD bool, err error) { // MARKER: TaskD
+	if svc.mockTaskD != nil {
+		markD, err = svc.mockTaskD(ctx, flow, started)
+	}
+	return markD, errors.Trace(err)
+}
+
+// MockHandler sets up a mock handler for Handler.
+func (svc *Mock) MockHandler(handler func(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (handled bool, err error)) *Mock { // MARKER: Handler
+	svc.mockHandler = handler
+	return svc
+}
+
+// Handler executes the mock handler.
+func (svc *Mock) Handler(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (handled bool, err error) { // MARKER: Handler
+	if svc.mockHandler != nil {
+		handled, err = svc.mockHandler(ctx, flow, onErr)
+	}
+	return handled, errors.Trace(err)
+}
+
+// MockTaskE sets up a mock handler for TaskE.
+func (svc *Mock) MockTaskE(handler func(ctx context.Context, flow *workflow.Flow, handled bool, markB bool, markC bool, markD bool) (recovered bool, err error)) *Mock { // MARKER: TaskE
+	svc.mockTaskE = handler
+	return svc
+}
+
+// TaskE executes the mock handler.
+func (svc *Mock) TaskE(ctx context.Context, flow *workflow.Flow, handled bool, markB bool, markC bool, markD bool) (recovered bool, err error) { // MARKER: TaskE
+	if svc.mockTaskE != nil {
+		recovered, err = svc.mockTaskE(ctx, flow, handled, markB, markC, markD)
+	}
+	return recovered, errors.Trace(err)
+}
+
+// MockFanOutError sets up a mock handler for the FanOutError workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockFanOutError(handler func(ctx context.Context, flow *workflow.Flow) (recovered bool, err error)) *Mock { // MARKER: FanOutError
+	if svc.unsubMockFanOutError != nil {
+		svc.unsubMockFanOutError()
+		svc.unsubMockFanOutError = nil
+	}
+	if handler == nil {
+		svc.mockFanOutErrorGraph = nil
+		return svc
+	}
+	mockName := "MockFanOutError" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-fan-out-error-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockFanOutErrorGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(fanouterrorflowapi.FanOutError.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in fanouterrorflowapi.FanOutErrorIn
+		f.ParseState(&in)
+		recovered, err := handler(r.Context(), &f)
+		if err != nil {
+			return err // No trace
+		}
+		out := fanouterrorflowapi.FanOutErrorOut{Recovered: recovered}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(fanouterrorflowapi.FanOutErrorIn{}, fanouterrorflowapi.FanOutErrorOut{}),
+	)
+	if err == nil {
+		svc.unsubMockFanOutError = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// FanOutError returns the workflow graph, or a mocked graph if MockFanOutError was called.
+func (svc *Mock) FanOutError(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: FanOutError
+	if svc.mockFanOutErrorGraph != nil {
+		graph, err = svc.mockFanOutErrorGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}

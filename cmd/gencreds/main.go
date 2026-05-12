@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 )
 
 func main() {
@@ -99,8 +101,9 @@ func run(cfg config) error {
 		return fmt.Errorf("create out dir: %w", err)
 	}
 
+	resolver := pkgresolver.New(services[0].Dir)
 	for _, s := range services {
-		creds, err := signService(s, accountKP, cfg)
+		creds, err := signService(s, accountKP, cfg, resolver)
 		if err != nil {
 			return fmt.Errorf("sign %s: %w", s.Hostname, err)
 		}

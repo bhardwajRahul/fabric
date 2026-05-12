@@ -61,16 +61,16 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
-	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int, faultInjection string) (creditVerified bool, err error)                                                                                       // MARKER: VerifyCredit
+	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error)                                                                                                              // MARKER: VerifyCredit
 	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)                                                                       // MARKER: VerifyEmployment
 	InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                        // MARKER: InitIdentityVerification
-	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string, faultInjection string) (ssnVerified bool, err error)                                                                                                  // MARKER: VerifySSN
+	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string) (ssnVerified bool, err error)                                                                                                                         // MARKER: VerifySSN
 	VerifyAddress(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                             // MARKER: VerifyAddress
-	VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string, faultInjection string) (phoneVerified bool, err error)                                                                                      // MARKER: VerifyPhoneNumber
+	VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string) (phoneVerified bool, err error)                                                                                                             // MARKER: VerifyPhoneNumber
 	IdentityDecision(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error)                                                             // MARKER: IdentityDecision
 	IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                          // MARKER: IdentityVerification
 	RequestMoreInfo(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                                      // MARKER: RequestMoreInfo
-	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int, faultInjection string) (creditVerifiedOut bool, err error)                                           // MARKER: ReviewCredit
+	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error)                                                                  // MARKER: ReviewCredit
 	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                               // MARKER: HandleCreditError
 	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)                                                                  // MARKER: Decision
 	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                // MARKER: CreditApproval
@@ -270,7 +270,7 @@ func (svc *Intermediate) doVerifyCredit(w http.ResponseWriter, r *http.Request) 
 	var in creditflowapi.VerifyCreditIn
 	flow.ParseState(&in)
 	var out creditflowapi.VerifyCreditOut
-	out.CreditVerified, err = svc.VerifyCredit(r.Context(), &flow, in.CreditScore, in.FaultInjection)
+	out.CreditVerified, err = svc.VerifyCredit(r.Context(), &flow, in.CreditScore)
 	if err != nil {
 		return err // No trace
 	}
@@ -342,7 +342,7 @@ func (svc *Intermediate) doVerifySSN(w http.ResponseWriter, r *http.Request) (er
 	var in creditflowapi.VerifySSNIn
 	flow.ParseState(&in)
 	var out creditflowapi.VerifySSNOut
-	out.SsnVerified, err = svc.VerifySSN(r.Context(), &flow, in.SSN, in.FaultInjection)
+	out.SsnVerified, err = svc.VerifySSN(r.Context(), &flow, in.SSN)
 	if err != nil {
 		return err // No trace
 	}
@@ -390,7 +390,7 @@ func (svc *Intermediate) doVerifyPhoneNumber(w http.ResponseWriter, r *http.Requ
 	var in creditflowapi.VerifyPhoneNumberIn
 	flow.ParseState(&in)
 	var out creditflowapi.VerifyPhoneNumberOut
-	out.PhoneVerified, err = svc.VerifyPhoneNumber(r.Context(), &flow, in.Phone, in.FaultInjection)
+	out.PhoneVerified, err = svc.VerifyPhoneNumber(r.Context(), &flow, in.Phone)
 	if err != nil {
 		return err // No trace
 	}
@@ -482,7 +482,7 @@ func (svc *Intermediate) doReviewCredit(w http.ResponseWriter, r *http.Request) 
 	var in creditflowapi.ReviewCreditIn
 	flow.ParseState(&in)
 	var out creditflowapi.ReviewCreditOut
-	out.CreditVerifiedOut, err = svc.ReviewCredit(r.Context(), &flow, in.CreditScore, in.CreditVerified, in.ReviewAttempts, in.FaultInjection)
+	out.CreditVerifiedOut, err = svc.ReviewCredit(r.Context(), &flow, in.CreditScore, in.CreditVerified, in.ReviewAttempts)
 	if err != nil {
 		return err // No trace
 	}

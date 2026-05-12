@@ -63,12 +63,14 @@ callback of the microservice and destroyed in the OnShutdown.
 	})
 */
 type Cache struct {
-	localCache *lru.Cache[string, []byte]
-	basePath   string
-	svc        Service
-	hits       int64
-	misses     int64
-	sf         singleflight.Group
+	localCache    *lru.Cache[string, []byte]
+	basePath      string
+	svc           Service
+	allSubName    string
+	rescueSubName string
+	hits          int64
+	misses        int64
+	sf            singleflight.Group
 }
 
 // Service is an interface abstraction of a microservice used by the distributed cache.
@@ -145,31 +147,42 @@ func (c *Cache) MaxMemory() int {
 	return c.localCache.MaxWeight()
 }
 
-// start registers the cache event handlers with the connector. Registration happens once per
-// connector instance (gated upstream by [Connector.distribCache] in the lifecycle code). The
-// subscriptions are tagged with [sub.Infra] so they bracket the user lifecycle: activated
-// before OnStartup runs and deactivated after OnShutdown returns. They also persist in the
-// connector's subscription map across Shutdown->Startup cycles - the connector's normal
-// activate/deactivate flow handles transport state. There is no symmetric stop here: cleanup
-// flows through the connector's infra deactivation pass.
+// start registers the cache event handlers with the connector and activates them on the
+// bus. The subs are marked [sub.Manual] so the connector's automatic activation passes
+// skip them; the cache owns their lifecycle directly via [Cache.Close], which deactivates
+// them before the offload-to-peers pass so the offload doesn't loop back through this
+// connector's own handlers. The subs persist in the connector's subscription map across
+// Shutdown->Startup cycles.
 func (c *Cache) start(ctx context.Context) error {
-	if err := c.svc.Subscribe(c.subscriptionName("All"), c.handleAll,
+	c.allSubName = c.subscriptionName("All")
+	c.rescueSubName = c.subscriptionName("Rescue")
+	err := c.svc.Subscribe(c.allSubName, c.handleAll,
 		sub.At("ANY", c.basePath+"/all"),
 		sub.Description("Distributed cache broadcast handler."),
 		sub.Web(),
 		sub.NoQueue(),
-		sub.Infra(),
-	); err != nil {
+		sub.Manual(),
+	)
+	if err != nil {
 		return errors.Trace(err)
 	}
-	if err := c.svc.Subscribe(c.subscriptionName("Rescue"), c.handleRescue,
+	err = c.svc.Subscribe(c.rescueSubName, c.handleRescue,
 		sub.At("ANY", c.basePath+"/rescue"),
 		sub.Description("Distributed cache rescue-load handler."),
 		sub.Web(),
 		sub.DefaultQueue(),
-		sub.Infra(),
-	); err != nil {
-		_ = c.svc.Unsubscribe(c.subscriptionName("All"))
+		sub.Manual(),
+	)
+	if err != nil {
+		_ = c.svc.Unsubscribe(c.allSubName)
+		return errors.Trace(err)
+	}
+	err = c.svc.ActivateSubscription(c.allSubName)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.svc.ActivateSubscription(c.rescueSubName)
+	if err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -384,14 +397,32 @@ func (c *Cache) handleRescue(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// Close offloads any locally-cached entries to peers and clears the local cache. The
-// underlying subscriptions are owned by the connector and remain in its subscription map
-// across Shutdown->Startup cycles; transport-level cleanup happens via the connector's
-// infra deactivation pass.
+// Close unsubscribes the cache's handlers, offloads any locally-cached entries to
+// peers, and clears the local cache. Unsubscribing before the offload guarantees
+// the rescue PUTs route only to peers - the sender's own queue group is gone, so
+// entries can't loop back into this connector's about-to-be-discarded cache. Full
+// Unsubscribe (not just Deactivate) is necessary so a subsequent NewCache on the
+// same connector can re-register cleanly without colliding on the subscription
+// name.
 func (c *Cache) Close(ctx context.Context) error {
+	var lastErr error
+	if c.allSubName != "" {
+		err := c.svc.Unsubscribe(c.allSubName)
+		if err != nil {
+			lastErr = errors.Trace(err)
+		}
+		c.allSubName = ""
+	}
+	if c.rescueSubName != "" {
+		err := c.svc.Unsubscribe(c.rescueSubName)
+		if err != nil {
+			lastErr = errors.Trace(err)
+		}
+		c.rescueSubName = ""
+	}
 	c.offload(ctx)
 	c.localCache.Clear()
-	return nil
+	return lastErr
 }
 
 // offload distributes the elements in the cache to random peers.

@@ -24,10 +24,11 @@ Take the agent-guided tour:
 - [ ] Step 11: Login
 - [ ] Step 12: Credit Flow
 - [ ] Step 13: Chatbox
-- [ ] Step 14: Telemetry
-- [ ] Step 15: Stop example app
-- [ ] Step 16: Stop Docker containers
-- [ ] Step 17: What's next
+- [ ] Step 14: Embedder
+- [ ] Step 15: Telemetry
+- [ ] Step 16: Stop example app
+- [ ] Step 17: Stop Docker containers
+- [ ] Step 18: What's next
 ```
 
 #### Step 1: Download Examples
@@ -294,9 +295,37 @@ Suggest the user try questions like "What is 6 times 7?", "How much is 100 divid
 Present the user with these options:
 - "Next step" - Proceed to the next step
 - "Explore more" - Prepare and show an overview of the features of the microservice. Suggest to the user they can see the code of any individual feature of the microservice and offer them the opportunity to ask questions. If asked to see the code, be sure to display the full implementation code of the feature, not just its signature.
-- "End the tour" - Skip to step 15
+- "End the tour" - Skip to step 16
 
-#### Step 14: Telemetry
+#### Step 14: Embedder
+
+The `embedder.example` microservice demonstrates how a Go microservice can use a real Python library (here, `sentence-transformers`) for its core compute. It loads the `all-MiniLM-L6-v2` model in an in-process Python virtual environment via the [`github.com/microbus-io/pyvenv`](https://github.com/microbus-io/pyvenv) module and exposes typed Go endpoints that delegate to it via `svc.venv.CallAndAwait`.
+
+The microservice is already running as part of the example app. The Python venv is *not* started at OnStartup; the user explicitly triggers it from the demo page so the multi-second cost of `pip install sentence-transformers` and the model download is obvious rather than hidden. Skip this step if the user does not have `python3` on `$PATH` or does not want to download ~80MB on first run.
+
+Present the demo link:
+
+- http://localhost:8080/embedder.example/demo - interactive UI; click "Initialize Python VM" to start the venv (20–60 seconds on first run, instant on subsequent runs since the venv is cached on disk at a temp directory pyvenv creates). Once the status flips to "ready", the page exposes Embed and Similarity action cards.
+
+Once the venv is ready, these direct REST calls also work:
+
+- http://localhost:8080/embedder.example/similarity?a=cat&b=feline - cosine similarity between two strings
+- http://localhost:8080/embedder.example/embed?text=hello - returns the 384-dimensional embedding
+
+Explain the lifecycle to the user:
+
+- The microservice's `OnStartup` constructs the `*pyvenv.Venv` but does not start it. The bus accepts the microservice for control-plane traffic immediately; the Python subprocess is not spawned until the user clicks Initialize.
+- `Embed` and `Similarity` are subscribed with `sub.Manual()` and `sub.Tag("python")` so they stay off-bus until pyvenv's `LivenessCallback` fires `StateReady`. The microservice's `onVenvLiveness` handler activates the python-tagged subs at that point. Before that, calls to `/embed` or `/similarity` get a clean 404 ack-timeout.
+- `Demo`, `DemoInit`, and `DemoStatus` are *not* manual and are reachable immediately. The page long-polls `DemoStatus` to surface tailed `pip install` and Python stdout/stderr while the venv warms up.
+- If the Python subprocess dies unexpectedly after going Ready, the `LivenessCallback` fires `StateDied`; the microservice deactivates Python subs and schedules a fresh `Start` in the background. Recovery is fast since the on-disk venv is reused.
+- `OnShutdown` calls `svc.venv.Close(ctx)` to kill the subprocess and clean up the on-disk venv.
+
+Present the user with these options:
+- "Next step" - Proceed to the next step
+- "Explore more" - Walk through `service.go`, `python.go`, and `service.py` (at the microservice's root, alongside the Go files) to show how the Go side delegates to Python via `svc.venv.CallAndAwait` and how the manual-subscription pattern is wired.
+- "End the tour" - Skip to step 16
+
+#### Step 15: Telemetry
 
 Skip this step if the user elected not to install the LGTM stack with Docker.
 
@@ -305,11 +334,11 @@ Explain to the user that they can view the telemetry collected by Grafana at htt
 Present the user with these options:
 - "End the tour" - Proceed to the next step
 
-#### Step 15: Stop Example App
+#### Step 16: Stop Example App
 
 Interrupt or kill the example app that was spun up earlier.
 
-#### Step 16: Stop Docker Containers
+#### Step 17: Stop Docker Containers
 
 Skip this step if the user elected not to install NATS and LGTM with Docker in step 3.
 
@@ -319,7 +348,7 @@ Stop the Docker containers that were started earlier.
 docker compose -f setup/microbus.yaml -p microbus down
 ```
 
-#### Step 17: What's Next
+#### Step 18: What's Next
 
 Tell the user this concludes the tour and suggest to them that they try creating their own microservice by prompting the agent. Offer a few example prompts to get them started:
 

@@ -30,7 +30,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -50,154 +49,21 @@ var (
 	_ helloapi.Client
 )
 
-func TestHello_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Hello
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: Echo
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: Ping
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
+// MARKER: Calculator
 
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
+// MARKER: BusPNG
 
-	t.Run("hello", func(t *testing.T) { // MARKER: Hello
-		assert := testarossa.For(t)
+// MARKER: Localization
 
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
+// MARKER: Root
 
-		err := mock.Hello(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockHello(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Hello(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("echo", func(t *testing.T) { // MARKER: Echo
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Echo(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockEcho(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Echo(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("ping", func(t *testing.T) { // MARKER: Ping
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Ping(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockPing(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Ping(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("calculator", func(t *testing.T) { // MARKER: Calculator
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Calculator(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCalculator(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Calculator(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("bus_png", func(t *testing.T) { // MARKER: BusPNG
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.BusPNG(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockBusPNG(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.BusPNG(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("localization", func(t *testing.T) { // MARKER: Localization
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Localization(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockLocalization(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Localization(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("root", func(t *testing.T) { // MARKER: Root
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Root(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockRoot(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Root(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("tick_tock", func(t *testing.T) { // MARKER: TickTock
-		assert := testarossa.For(t)
-
-		err := mock.TickTock(ctx)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockTickTock(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.TickTock(ctx)
-		assert.NoError(err)
-	})
-}
+// MARKER: TickTock
 
 func TestHello_Hello(t *testing.T) { // MARKER: Hello
 	t.Parallel()

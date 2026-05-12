@@ -1,0 +1,44 @@
+general:
+  hostname: nestedfanoutflow.verify
+  description: nestedfanoutflow.verify exercises nested fan-out via the subgraph escape hatch.
+  modifiedAt: "2026-05-14T17:36:10Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (started bool)
+    description: TaskA is the outer fan-out source.
+    route: :428/task-a
+  NormalB:
+    signature: NormalB() (normalResult string)
+    description: NormalB is the non-subgraph sibling.
+    route: :428/normal-b
+  TaskX:
+    signature: TaskX() (innerStarted bool)
+    description: TaskX is the inner subgraph entry.
+    route: :428/task-x
+  TaskY:
+    signature: TaskY() (sumInnerOut int)
+    description: TaskY contributes a delta to the inner sum reducer.
+    route: :428/task-y
+  TaskZ:
+    signature: TaskZ() (sumInnerOut int)
+    description: TaskZ contributes a delta to the inner sum reducer.
+    route: :428/task-z
+  TaskW:
+    signature: TaskW(sumInner int) (innerResult int)
+    description: TaskW is the inner subgraph fan-in.
+    route: :428/task-w
+  TaskJ:
+    signature: TaskJ(normalResult string, innerResult int) (finalResult string)
+    description: TaskJ is the outer fan-in.
+    route: :428/task-j
+
+workflows:
+  Inner:
+    signature: Inner() (innerResult int)
+    description: Inner defines the inner subgraph X -> {Y, Z} -> W.
+    route: :428/inner
+  Nested:
+    signature: Nested() (finalResult string)
+    description: Nested defines the outer graph A -> {NormalB, Inner subgraph} -> J.
+    route: :428/nested

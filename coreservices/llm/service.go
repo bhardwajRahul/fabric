@@ -281,6 +281,9 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 
 /*
 ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
+When the conversation is complete (no tool calls or round limit exhausted), it calls
+flow.Goto(workflow.END) to exit the chat loop. Otherwise the forEach transition fans out
+one ExecuteTool per pending tool call.
 */
 func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (listMessagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// Read internal state
@@ -294,8 +297,8 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 
 	toolRoundsOut = toolRounds
 
-	if len(pending) == 0 {
-		// No tool calls - we're done
+	done := len(pending) == 0 || toolRounds >= maxToolRounds
+	if done {
 		toolsRequested = false
 		if llmContent != "" {
 			listMessagesOut = append(listMessagesOut, llmapi.Message{
@@ -303,19 +306,7 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, ll
 				Content: llmContent,
 			})
 		}
-		return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
-	}
-
-	// Tool calls present - check round limit
-	if toolRounds >= maxToolRounds {
-		// Exhausted rounds, return what we have
-		toolsRequested = false
-		if llmContent != "" {
-			listMessagesOut = append(listMessagesOut, llmapi.Message{
-				Role:    "assistant",
-				Content: llmContent,
-			})
-		}
+		flow.Goto(workflow.END)
 		return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
@@ -437,29 +428,30 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 ChatLoop defines the workflow graph for the LLM chat loop.
 */
 func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: ChatLoop
-	initChat := llmapi.InitChat.URL()
-	callLLM := llmapi.CallLLM.URL()
-	processResponse := llmapi.ProcessResponse.URL()
-	executeTool := llmapi.ExecuteTool.URL()
-
 	graph = workflow.NewGraph(llmapi.ChatLoop.URL())
-
-	// InitChat -> CallLLM -> ProcessResponse
-	graph.AddTransition(initChat, callLLM)
-	graph.AddTransition(callLLM, processResponse)
-
-	// ProcessResponse -> END when no tools requested
-	graph.AddTransitionWhen(processResponse, workflow.END, "!toolsRequested")
-
-	// ProcessResponse -> forEach(pendingToolCalls) -> ExecuteTool -> CallLLM when tools requested
-	graph.AddTransitionForEach(processResponse, executeTool, "pendingToolCalls", "currentTool")
-	graph.AddTransition(executeTool, callLLM)
-
-	// listMessages auto-appends at fan-in via the list* prefix convention.
-
-	// Declare inputs and outputs
 	graph.DeclareInputs("provider", "model", "listMessages", "tools", "options")
 	graph.DeclareOutputs("listMessages", "usage")
-
+	graph.AddTask("initChat", llmapi.InitChat.URL())
+	// firstLLM and nextLLM are two graph positions sharing one task URL. firstLLM is the
+	// initial sequential call after initChat; nextLLM is the fan-in nexus for the per-round
+	// tool cohort. Both dispatch to the same CallLLM task. Splitting them lets the lineage
+	// validator pop the cohort frame at nextLLM without conflicting with the initial entry,
+	// which has no frame to pop.
+	graph.AddTask("firstLLM", llmapi.CallLLM.URL())
+	graph.AddTask("nextLLM", llmapi.CallLLM.URL())
+	graph.AddTask("processResponse", llmapi.ProcessResponse.URL())
+	graph.AddTask("executeTool", llmapi.ExecuteTool.URL())
+	graph.SetFanIn("nextLLM")
+	graph.AddTransition("initChat", "firstLLM")
+	graph.AddTransition("firstLLM", "processResponse")
+	// When ProcessResponse decides the conversation is done (no tools requested or round
+	// limit exceeded), it calls flow.Goto(workflow.END) to exit the loop.
+	graph.AddTransitionGoto("processResponse", workflow.END)
+	// Otherwise the forEach fans out one ExecuteTool per pending tool call; all branches
+	// converge at nextLLM via the fan-in. The merged listMessages (auto-appended via the
+	// list* prefix reducer) reaches the LLM with the full conversation history.
+	graph.AddTransitionForEach("processResponse", "executeTool", "pendingToolCalls", "currentTool")
+	graph.AddTransition("executeTool", "nextLLM")
+	graph.AddTransition("nextLLM", "processResponse")
 	return graph, nil
 }

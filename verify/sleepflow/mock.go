@@ -1,0 +1,146 @@
+package sleepflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/sleepflow/sleepflowapi"
+)
+
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
+type Mock struct {
+	*Intermediate
+	mockTaskA      func(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (sleepForOut time.Duration, err error) // MARKER: TaskA
+	mockTaskB      func(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (marked bool, err error)               // MARKER: TaskB
+	mockTaskC      func(ctx context.Context, flow *workflow.Flow, marked bool) (completed bool, err error)                       // MARKER: TaskC
+	mockDelayGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                  // MARKER: Delay
+	unsubMockDelay func() error                                                                                                  // MARKER: Delay
+}
+
+// NewMock creates a new mockable version of the microservice.
+func NewMock() *Mock {
+	svc := &Mock{}
+	svc.Intermediate = NewIntermediate(svc)
+	svc.SetVersion(7357) // Stands for TEST
+	return svc
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Mock) OnStartup(ctx context.Context) (err error) {
+	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
+	}
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+// MockTaskA sets up a mock handler for TaskA.
+func (svc *Mock) MockTaskA(handler func(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (sleepForOut time.Duration, err error)) *Mock { // MARKER: TaskA
+	svc.mockTaskA = handler
+	return svc
+}
+
+// TaskA executes the mock handler.
+func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (sleepForOut time.Duration, err error) { // MARKER: TaskA
+	if svc.mockTaskA != nil {
+		sleepForOut, err = svc.mockTaskA(ctx, flow, sleepFor)
+	}
+	return sleepForOut, errors.Trace(err)
+}
+
+// MockTaskB sets up a mock handler for TaskB.
+func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (marked bool, err error)) *Mock { // MARKER: TaskB
+	svc.mockTaskB = handler
+	return svc
+}
+
+// TaskB executes the mock handler.
+func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (marked bool, err error) { // MARKER: TaskB
+	if svc.mockTaskB != nil {
+		marked, err = svc.mockTaskB(ctx, flow, sleepFor)
+	}
+	return marked, errors.Trace(err)
+}
+
+// MockTaskC sets up a mock handler for TaskC.
+func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow, marked bool) (completed bool, err error)) *Mock { // MARKER: TaskC
+	svc.mockTaskC = handler
+	return svc
+}
+
+// TaskC executes the mock handler.
+func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow, marked bool) (completed bool, err error) { // MARKER: TaskC
+	if svc.mockTaskC != nil {
+		completed, err = svc.mockTaskC(ctx, flow, marked)
+	}
+	return completed, errors.Trace(err)
+}
+
+// MockDelay sets up a mock handler for the Delay workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockDelay(handler func(ctx context.Context, flow *workflow.Flow, sleepFor time.Duration) (completed bool, err error)) *Mock { // MARKER: Delay
+	if svc.unsubMockDelay != nil {
+		svc.unsubMockDelay()
+		svc.unsubMockDelay = nil
+	}
+	if handler == nil {
+		svc.mockDelayGraph = nil
+		return svc
+	}
+	mockName := "MockDelay" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-delay-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockDelayGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(sleepflowapi.Delay.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in sleepflowapi.DelayIn
+		f.ParseState(&in)
+		completed, err := handler(r.Context(), &f, in.SleepFor)
+		if err != nil {
+			return err // No trace
+		}
+		out := sleepflowapi.DelayOut{Completed: completed}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(sleepflowapi.DelayIn{}, sleepflowapi.DelayOut{}),
+	)
+	if err == nil {
+		svc.unsubMockDelay = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// Delay returns the workflow graph, or a mocked graph if MockDelay was called.
+func (svc *Mock) Delay(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Delay
+	if svc.mockDelayGraph != nil {
+		graph, err = svc.mockDelayGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}

@@ -1,0 +1,128 @@
+package nestedfanoutflow
+
+import (
+	"context"
+	"testing"
+
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/testarossa"
+)
+
+func TestNestedfanoutflow_Mock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	mock := NewMock()
+	mock.SetDeployment(connector.TESTING)
+
+	t.Run("on_startup", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnStartup(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_shutdown", func(t *testing.T) {
+		assert := testarossa.For(t)
+		err := mock.OnShutdown(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("task_a", func(t *testing.T) { // MARKER: TaskA
+		assert := testarossa.For(t)
+
+		mock.MockTaskA(func(ctx context.Context, flow *workflow.Flow) (started bool, err error) {
+			return
+		})
+		_, err := mock.TaskA(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("normal_b", func(t *testing.T) { // MARKER: NormalB
+		assert := testarossa.For(t)
+
+		mock.MockNormalB(func(ctx context.Context, flow *workflow.Flow) (normalResult string, err error) {
+			return
+		})
+		_, err := mock.NormalB(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("task_x", func(t *testing.T) { // MARKER: TaskX
+		assert := testarossa.For(t)
+
+		mock.MockTaskX(func(ctx context.Context, flow *workflow.Flow) (innerStarted bool, err error) {
+			return
+		})
+		_, err := mock.TaskX(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("task_y", func(t *testing.T) { // MARKER: TaskY
+		assert := testarossa.For(t)
+
+		mock.MockTaskY(func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) {
+			return
+		})
+		_, err := mock.TaskY(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("task_z", func(t *testing.T) { // MARKER: TaskZ
+		assert := testarossa.For(t)
+
+		mock.MockTaskZ(func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) {
+			return
+		})
+		_, err := mock.TaskZ(ctx, nil)
+		assert.NoError(err)
+	})
+
+	t.Run("task_w", func(t *testing.T) { // MARKER: TaskW
+		assert := testarossa.For(t)
+
+		mock.MockTaskW(func(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error) {
+			return
+		})
+		var sumInner int
+		_, err := mock.TaskW(ctx, nil, sumInner)
+		assert.NoError(err)
+	})
+
+	t.Run("task_j", func(t *testing.T) { // MARKER: TaskJ
+		assert := testarossa.For(t)
+
+		mock.MockTaskJ(func(ctx context.Context, flow *workflow.Flow, normalResult string, innerResult int) (finalResult string, err error) {
+			return
+		})
+		var normalResult string
+		var innerResult int
+		_, err := mock.TaskJ(ctx, nil, normalResult, innerResult)
+		assert.NoError(err)
+	})
+
+	t.Run("inner", func(t *testing.T) { // MARKER: Inner
+		assert := testarossa.For(t)
+
+		mock.MockInner(func(ctx context.Context, flow *workflow.Flow) (innerResult int, err error) {
+			return
+		})
+		graph, err := mock.Inner(ctx)
+		if assert.NoError(err) {
+			assert.NotNil(graph)
+		}
+	})
+
+	t.Run("nested", func(t *testing.T) { // MARKER: Nested
+		assert := testarossa.For(t)
+
+		mock.MockNested(func(ctx context.Context, flow *workflow.Flow) (finalResult string, err error) {
+			return
+		})
+		graph, err := mock.Nested(ctx)
+		if assert.NoError(err) {
+			assert.NotNil(graph)
+		}
+	})
+
+}

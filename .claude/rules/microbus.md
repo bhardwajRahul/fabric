@@ -149,6 +149,32 @@ Agentic workflows allow microservices to collaborate on multi-step processes. A 
 
 **IMPORTANT**: If the microservice defines tasks or workflows (has `tasks` or `workflows` in its `manifest.yaml`), read `.claude/rules/workflows.txt` before proceeding.
 
+### Calling Python
+
+Microservices that need Python libraries (PyTorch, pandas, sentence-transformers, etc.) for their core compute own their own in-process Python virtual environment via the [`github.com/microbus-io/pyvenv`](https://github.com/microbus-io/pyvenv) module. The Go side handles all framework concerns (logging, tracing, config, downstream calls); Python is a pure compute kernel reached via local pipes to a long-lived worker subprocess.
+
+**IMPORTANT**: If the microservice's directory contains a `python.go` and/or a `service.py` at its root (i.e. it was scaffolded with `add-python-microservice`), read `.claude/rules/python.txt` before proceeding.
+
+### Manual subscriptions and per-name activation
+
+A subscription can be registered with the `sub.Manual()` option, in which case the connector skips it during the user-business activation wave of `Startup` and during the deactivation wave of `Shutdown`. The subscription stays off the bus and unicast callers see a clean 404 ack-timeout until user code (typically inside `OnStartup` or a resource-ready callback) brings it online via `svc.ActivateSubscription(name)`. The symmetric `svc.DeactivateSubscription(name)` takes it back off the bus while leaving it registered.
+
+Useful when a handler depends on a heavy resource (Python venv, database connection, ML model load) that isn't ready by the end of `OnStartup`, or that may need to be rebuilt mid-lifecycle (e.g. on a `410 Gone` from an upstream allocator). The microservice goes live on the bus immediately for control-plane reachability while the manual handler stays off-bus until the resource is provisioned. Unicast callers' load balancing routes around the cold replica until the sub activates.
+
+Activation and deactivation are valid while the connector is `startingUp`, `startedUp`, or `shuttingDown`, so user code can drive the lifecycle of a manual sub from inside both `OnStartup` and `OnShutdown`.
+
+To act on a group of related subscriptions, tag them at registration with `sub.Tag("name")` (multiple tags allowed) and iterate `svc.Subscriptions()` to filter by tag, type, or any other field on `connector.SubscriptionInfo`. Each call to `svc.ActivateSubscription(name)` is idempotent.
+
+```go
+for _, s := range svc.Subscriptions() {
+    if slices.Contains(s.Tags, "python") {
+        svc.ActivateSubscription(s.Name)
+    }
+}
+```
+
+The pattern lets a microservice with multiple manual groups (e.g. a Python venv and a database pool) recover one group without disturbing the other.
+
 ### Manifest
 
 Each microservice contains a `manifest.yaml` that documents its features. Read all manifests when starting work on a project to build a mental map of the system.
@@ -452,6 +478,8 @@ func (svc *Service) onOrderCreated(ctx context.Context, order Order) error {
 
 Use `svc.LogDebug`, `svc.LogInfo`, `svc.LogWarn` and `svc.LogError` to print to the log. Logs include attributes in the `slog` name=value pair pattern, e.g. `svc.LogError(ctx, "Job failed", "job", jobID, "error", err)`. Use the label `"error"` when logging an `error`. In most cases there is no need to log errors - any error returned from an endpoint is automatically logged by Microbus.
 
+`svc.LogDebug` calls are filtered out by default. Set the env var `MICROBUS_LOG_DEBUG=1` (e.g. when running `go test` or starting a binary) to enable verbose debug output when diagnosing an issue.
+
 ### Distributed Tracing
 
 Every call to an endpoint is automatically wrapped with a trace span. The span can be accessed via `svc.Span(ctx)` and extended with `SetAttributes` or `LogInfo` using the slog name=value pair pattern. All downstream service calls automatically participate in the trace.
@@ -717,7 +745,7 @@ Together, godoc sections cover scalar function arguments while `jsonschema` tags
 
 ### Building a Microservice With Skills
 
-Always use skills in `.claude/skills/` to build microservices. Scaffold with the appropriate skill (e.g. `add-microservice` or `add-sql-microservice`), then use `add-feature` skills for each feature.
+Always use skills in `.claude/skills/` to build microservices. Scaffold with `add-microservice`, then use `add-feature` skills for each feature.
 
 The available feature skills are:
 

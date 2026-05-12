@@ -18,27 +18,13 @@ package yellowpages
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
-	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/yellowpages/yellowpagesapi"
-)
-
-var (
-	_ http.Request
-	_ json.Encoder
-	_ errors.TracedError
-	_ httpx.BodyReader
-	_ = utils.RandomIdentifier
-	_ *workflow.Flow
-	_ yellowpagesapi.Client
 )
 
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
@@ -104,11 +90,9 @@ func (svc *Mock) MockCreate(handler func(ctx context.Context, obj *yellowpagesap
 
 // Create executes the mock handler.
 func (svc *Mock) Create(ctx context.Context, obj *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, err error) { // MARKER: Create
-	if svc.mockCreate == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockCreate != nil {
+		objKey, err = svc.mockCreate(ctx, obj)
 	}
-	objKey, err = svc.mockCreate(ctx, obj)
 	return objKey, errors.Trace(err)
 }
 
@@ -120,11 +104,9 @@ func (svc *Mock) MockStore(handler func(ctx context.Context, obj *yellowpagesapi
 
 // Store executes the mock handler.
 func (svc *Mock) Store(ctx context.Context, obj *yellowpagesapi.Person) (stored bool, err error) { // MARKER: Store
-	if svc.mockStore == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockStore != nil {
+		stored, err = svc.mockStore(ctx, obj)
 	}
-	stored, err = svc.mockStore(ctx, obj)
 	return stored, errors.Trace(err)
 }
 
@@ -136,10 +118,10 @@ func (svc *Mock) MockMustStore(handler func(ctx context.Context, obj *yellowpage
 
 // MustStore executes the mock handler.
 func (svc *Mock) MustStore(ctx context.Context, obj *yellowpagesapi.Person) (err error) { // MARKER: MustStore
-	if svc.mockMustStore == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMustStore != nil {
+		err = svc.mockMustStore(ctx, obj)
 	}
-	return errors.Trace(svc.mockMustStore(ctx, obj))
+	return errors.Trace(err)
 }
 
 // MockRevise sets up a mock handler for Revise.
@@ -150,11 +132,9 @@ func (svc *Mock) MockRevise(handler func(ctx context.Context, obj *yellowpagesap
 
 // Revise executes the mock handler.
 func (svc *Mock) Revise(ctx context.Context, obj *yellowpagesapi.Person) (revised bool, err error) { // MARKER: Revise
-	if svc.mockRevise == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockRevise != nil {
+		revised, err = svc.mockRevise(ctx, obj)
 	}
-	revised, err = svc.mockRevise(ctx, obj)
 	return revised, errors.Trace(err)
 }
 
@@ -166,10 +146,10 @@ func (svc *Mock) MockMustRevise(handler func(ctx context.Context, obj *yellowpag
 
 // MustRevise executes the mock handler.
 func (svc *Mock) MustRevise(ctx context.Context, obj *yellowpagesapi.Person) (err error) { // MARKER: MustRevise
-	if svc.mockMustRevise == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMustRevise != nil {
+		err = svc.mockMustRevise(ctx, obj)
 	}
-	return errors.Trace(svc.mockMustRevise(ctx, obj))
+	return errors.Trace(err)
 }
 
 // MockDelete sets up a mock handler for Delete.
@@ -180,11 +160,9 @@ func (svc *Mock) MockDelete(handler func(ctx context.Context, objKey yellowpages
 
 // Delete executes the mock handler.
 func (svc *Mock) Delete(ctx context.Context, objKey yellowpagesapi.PersonKey) (deleted bool, err error) { // MARKER: Delete
-	if svc.mockDelete == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockDelete != nil {
+		deleted, err = svc.mockDelete(ctx, objKey)
 	}
-	deleted, err = svc.mockDelete(ctx, objKey)
 	return deleted, errors.Trace(err)
 }
 
@@ -196,10 +174,10 @@ func (svc *Mock) MockMustDelete(handler func(ctx context.Context, objKey yellowp
 
 // MustDelete executes the mock handler.
 func (svc *Mock) MustDelete(ctx context.Context, objKey yellowpagesapi.PersonKey) (err error) { // MARKER: MustDelete
-	if svc.mockMustDelete == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMustDelete != nil {
+		err = svc.mockMustDelete(ctx, objKey)
 	}
-	return errors.Trace(svc.mockMustDelete(ctx, objKey))
+	return errors.Trace(err)
 }
 
 // MockList sets up a mock handler for List.
@@ -210,11 +188,9 @@ func (svc *Mock) MockList(handler func(ctx context.Context, query yellowpagesapi
 
 // List executes the mock handler.
 func (svc *Mock) List(ctx context.Context, query yellowpagesapi.Query) (objs []*yellowpagesapi.Person, totalCount int, err error) { // MARKER: List
-	if svc.mockList == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockList != nil {
+		objs, totalCount, err = svc.mockList(ctx, query)
 	}
-	objs, totalCount, err = svc.mockList(ctx, query)
 	return objs, totalCount, errors.Trace(err)
 }
 
@@ -226,11 +202,9 @@ func (svc *Mock) MockLookup(handler func(ctx context.Context, query yellowpagesa
 
 // Lookup executes the mock handler.
 func (svc *Mock) Lookup(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, found bool, err error) { // MARKER: Lookup
-	if svc.mockLookup == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockLookup != nil {
+		obj, found, err = svc.mockLookup(ctx, query)
 	}
-	obj, found, err = svc.mockLookup(ctx, query)
 	return obj, found, errors.Trace(err)
 }
 
@@ -242,10 +216,9 @@ func (svc *Mock) MockMustLookup(handler func(ctx context.Context, query yellowpa
 
 // MustLookup executes the mock handler.
 func (svc *Mock) MustLookup(ctx context.Context, query yellowpagesapi.Query) (obj *yellowpagesapi.Person, err error) { // MARKER: MustLookup
-	if svc.mockMustLookup == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMustLookup != nil {
+		obj, err = svc.mockMustLookup(ctx, query)
 	}
-	obj, err = svc.mockMustLookup(ctx, query)
 	return obj, errors.Trace(err)
 }
 
@@ -257,11 +230,9 @@ func (svc *Mock) MockLoad(handler func(ctx context.Context, objKey yellowpagesap
 
 // Load executes the mock handler.
 func (svc *Mock) Load(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, found bool, err error) { // MARKER: Load
-	if svc.mockLoad == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockLoad != nil {
+		obj, found, err = svc.mockLoad(ctx, objKey)
 	}
-	obj, found, err = svc.mockLoad(ctx, objKey)
 	return obj, found, errors.Trace(err)
 }
 
@@ -273,10 +244,9 @@ func (svc *Mock) MockMustLoad(handler func(ctx context.Context, objKey yellowpag
 
 // MustLoad executes the mock handler.
 func (svc *Mock) MustLoad(ctx context.Context, objKey yellowpagesapi.PersonKey) (obj *yellowpagesapi.Person, err error) { // MARKER: MustLoad
-	if svc.mockMustLoad == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockMustLoad != nil {
+		obj, err = svc.mockMustLoad(ctx, objKey)
 	}
-	obj, err = svc.mockMustLoad(ctx, objKey)
 	return obj, errors.Trace(err)
 }
 
@@ -288,10 +258,9 @@ func (svc *Mock) MockBulkLoad(handler func(ctx context.Context, objKeys []yellow
 
 // BulkLoad executes the mock handler.
 func (svc *Mock) BulkLoad(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (objs []*yellowpagesapi.Person, err error) { // MARKER: BulkLoad
-	if svc.mockBulkLoad == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBulkLoad != nil {
+		objs, err = svc.mockBulkLoad(ctx, objKeys)
 	}
-	objs, err = svc.mockBulkLoad(ctx, objKeys)
 	return objs, errors.Trace(err)
 }
 
@@ -303,10 +272,9 @@ func (svc *Mock) MockBulkDelete(handler func(ctx context.Context, objKeys []yell
 
 // BulkDelete executes the mock handler.
 func (svc *Mock) BulkDelete(ctx context.Context, objKeys []yellowpagesapi.PersonKey) (deletedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkDelete
-	if svc.mockBulkDelete == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBulkDelete != nil {
+		deletedKeys, err = svc.mockBulkDelete(ctx, objKeys)
 	}
-	deletedKeys, err = svc.mockBulkDelete(ctx, objKeys)
 	return deletedKeys, errors.Trace(err)
 }
 
@@ -318,10 +286,9 @@ func (svc *Mock) MockBulkCreate(handler func(ctx context.Context, objs []*yellow
 
 // BulkCreate executes the mock handler.
 func (svc *Mock) BulkCreate(ctx context.Context, objs []*yellowpagesapi.Person) (objKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkCreate
-	if svc.mockBulkCreate == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBulkCreate != nil {
+		objKeys, err = svc.mockBulkCreate(ctx, objs)
 	}
-	objKeys, err = svc.mockBulkCreate(ctx, objs)
 	return objKeys, errors.Trace(err)
 }
 
@@ -333,10 +300,9 @@ func (svc *Mock) MockBulkStore(handler func(ctx context.Context, objs []*yellowp
 
 // BulkStore executes the mock handler.
 func (svc *Mock) BulkStore(ctx context.Context, objs []*yellowpagesapi.Person) (storedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkStore
-	if svc.mockBulkStore == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBulkStore != nil {
+		storedKeys, err = svc.mockBulkStore(ctx, objs)
 	}
-	storedKeys, err = svc.mockBulkStore(ctx, objs)
 	return storedKeys, errors.Trace(err)
 }
 
@@ -348,10 +314,9 @@ func (svc *Mock) MockBulkRevise(handler func(ctx context.Context, objs []*yellow
 
 // BulkRevise executes the mock handler.
 func (svc *Mock) BulkRevise(ctx context.Context, objs []*yellowpagesapi.Person) (revisedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkRevise
-	if svc.mockBulkRevise == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockBulkRevise != nil {
+		revisedKeys, err = svc.mockBulkRevise(ctx, objs)
 	}
-	revisedKeys, err = svc.mockBulkRevise(ctx, objs)
 	return revisedKeys, errors.Trace(err)
 }
 
@@ -363,10 +328,9 @@ func (svc *Mock) MockPurge(handler func(ctx context.Context, query yellowpagesap
 
 // Purge executes the mock handler.
 func (svc *Mock) Purge(ctx context.Context, query yellowpagesapi.Query) (deletedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: Purge
-	if svc.mockPurge == nil {
-		return nil, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockPurge != nil {
+		deletedKeys, err = svc.mockPurge(ctx, query)
 	}
-	deletedKeys, err = svc.mockPurge(ctx, query)
 	return deletedKeys, errors.Trace(err)
 }
 
@@ -378,10 +342,9 @@ func (svc *Mock) MockCount(handler func(ctx context.Context, query yellowpagesap
 
 // Count executes the mock handler.
 func (svc *Mock) Count(ctx context.Context, query yellowpagesapi.Query) (count int, err error) { // MARKER: Count
-	if svc.mockCount == nil {
-		return 0, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockCount != nil {
+		count, err = svc.mockCount(ctx, query)
 	}
-	count, err = svc.mockCount(ctx, query)
 	return count, errors.Trace(err)
 }
 
@@ -393,11 +356,9 @@ func (svc *Mock) MockCreateREST(handler func(ctx context.Context, httpRequestBod
 
 // CreateREST executes the mock handler.
 func (svc *Mock) CreateREST(ctx context.Context, httpRequestBody *yellowpagesapi.Person) (objKey yellowpagesapi.PersonKey, httpStatusCode int, err error) { // MARKER: CreateREST
-	if svc.mockCreateREST == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockCreateREST != nil {
+		objKey, httpStatusCode, err = svc.mockCreateREST(ctx, httpRequestBody)
 	}
-	objKey, httpStatusCode, err = svc.mockCreateREST(ctx, httpRequestBody)
 	return objKey, httpStatusCode, errors.Trace(err)
 }
 
@@ -409,10 +370,9 @@ func (svc *Mock) MockStoreREST(handler func(ctx context.Context, key yellowpages
 
 // StoreREST executes the mock handler.
 func (svc *Mock) StoreREST(ctx context.Context, key yellowpagesapi.PersonKey, httpRequestBody *yellowpagesapi.Person) (httpStatusCode int, err error) { // MARKER: StoreREST
-	if svc.mockStoreREST == nil {
-		return 0, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockStoreREST != nil {
+		httpStatusCode, err = svc.mockStoreREST(ctx, key, httpRequestBody)
 	}
-	httpStatusCode, err = svc.mockStoreREST(ctx, key, httpRequestBody)
 	return httpStatusCode, errors.Trace(err)
 }
 
@@ -424,10 +384,9 @@ func (svc *Mock) MockDeleteREST(handler func(ctx context.Context, key yellowpage
 
 // DeleteREST executes the mock handler.
 func (svc *Mock) DeleteREST(ctx context.Context, key yellowpagesapi.PersonKey) (httpStatusCode int, err error) { // MARKER: DeleteREST
-	if svc.mockDeleteREST == nil {
-		return 0, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockDeleteREST != nil {
+		httpStatusCode, err = svc.mockDeleteREST(ctx, key)
 	}
-	httpStatusCode, err = svc.mockDeleteREST(ctx, key)
 	return httpStatusCode, errors.Trace(err)
 }
 
@@ -439,10 +398,9 @@ func (svc *Mock) MockLoadREST(handler func(ctx context.Context, key yellowpagesa
 
 // LoadREST executes the mock handler.
 func (svc *Mock) LoadREST(ctx context.Context, key yellowpagesapi.PersonKey) (httpResponseBody *yellowpagesapi.Person, httpStatusCode int, err error) { // MARKER: LoadREST
-	if svc.mockLoadREST == nil {
-		return nil, 0, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockLoadREST != nil {
+		httpResponseBody, httpStatusCode, err = svc.mockLoadREST(ctx, key)
 	}
-	httpResponseBody, httpStatusCode, err = svc.mockLoadREST(ctx, key)
 	return httpResponseBody, httpStatusCode, errors.Trace(err)
 }
 
@@ -454,10 +412,9 @@ func (svc *Mock) MockListREST(handler func(ctx context.Context, q yellowpagesapi
 
 // ListREST executes the mock handler.
 func (svc *Mock) ListREST(ctx context.Context, q yellowpagesapi.Query) (httpResponseBody []*yellowpagesapi.Person, httpStatusCode int, err error) { // MARKER: ListREST
-	if svc.mockListREST == nil {
-		return nil, 0, errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockListREST != nil {
+		httpResponseBody, httpStatusCode, err = svc.mockListREST(ctx, q)
 	}
-	httpResponseBody, httpStatusCode, err = svc.mockListREST(ctx, q)
 	return httpResponseBody, httpStatusCode, errors.Trace(err)
 }
 
@@ -469,11 +426,9 @@ func (svc *Mock) MockTryReserve(handler func(ctx context.Context, objKey yellowp
 
 // TryReserve executes the mock handler.
 func (svc *Mock) TryReserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: TryReserve
-	if svc.mockTryReserve == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockTryReserve != nil {
+		reserved, err = svc.mockTryReserve(ctx, objKey, dur)
 	}
-	reserved, err = svc.mockTryReserve(ctx, objKey, dur)
 	return reserved, errors.Trace(err)
 }
 
@@ -485,11 +440,9 @@ func (svc *Mock) MockTryBulkReserve(handler func(ctx context.Context, objKeys []
 
 // TryBulkReserve executes the mock handler.
 func (svc *Mock) TryBulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: TryBulkReserve
-	if svc.mockTryBulkReserve == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockTryBulkReserve != nil {
+		reservedKeys, err = svc.mockTryBulkReserve(ctx, objKeys, dur)
 	}
-	reservedKeys, err = svc.mockTryBulkReserve(ctx, objKeys, dur)
 	return reservedKeys, errors.Trace(err)
 }
 
@@ -501,11 +454,9 @@ func (svc *Mock) MockReserve(handler func(ctx context.Context, objKey yellowpage
 
 // Reserve executes the mock handler.
 func (svc *Mock) Reserve(ctx context.Context, objKey yellowpagesapi.PersonKey, dur time.Duration) (reserved bool, err error) { // MARKER: Reserve
-	if svc.mockReserve == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockReserve != nil {
+		reserved, err = svc.mockReserve(ctx, objKey, dur)
 	}
-	reserved, err = svc.mockReserve(ctx, objKey, dur)
 	return reserved, errors.Trace(err)
 }
 
@@ -517,11 +468,9 @@ func (svc *Mock) MockBulkReserve(handler func(ctx context.Context, objKeys []yel
 
 // BulkReserve executes the mock handler.
 func (svc *Mock) BulkReserve(ctx context.Context, objKeys []yellowpagesapi.PersonKey, dur time.Duration) (reservedKeys []yellowpagesapi.PersonKey, err error) { // MARKER: BulkReserve
-	if svc.mockBulkReserve == nil {
-		err = errors.New("mock not implemented", http.StatusNotImplemented)
-		return
+	if svc.mockBulkReserve != nil {
+		reservedKeys, err = svc.mockBulkReserve(ctx, objKeys, dur)
 	}
-	reservedKeys, err = svc.mockBulkReserve(ctx, objKeys, dur)
 	return reservedKeys, errors.Trace(err)
 }
 
@@ -533,9 +482,8 @@ func (svc *Mock) MockDemo(handler func(w http.ResponseWriter, r *http.Request) (
 
 // Demo executes the mock handler.
 func (svc *Mock) Demo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Demo
-	if svc.mockDemo == nil {
-		return errors.New("mock not implemented", http.StatusNotImplemented)
+	if svc.mockDemo != nil {
+		err = svc.mockDemo(w, r)
 	}
-	err = svc.mockDemo(w, r)
 	return errors.Trace(err)
 }

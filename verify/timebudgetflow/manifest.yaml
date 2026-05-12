@@ -1,0 +1,20 @@
+general:
+  hostname: timebudgetflow.verify
+  description: timebudgetflow.verify exercises per-task time budget timeouts.
+  modifiedAt: "2026-05-14T17:27:37Z"
+
+tasks:
+  TaskA:
+    signature: TaskA() (started bool)
+    description: TaskA is the entry point.
+    route: :428/task-a
+  Slow:
+    signature: Slow() (done bool)
+    description: Slow sleeps longer than the time budget.
+    route: :428/slow
+
+workflows:
+  TimeBudget:
+    signature: TimeBudget() (done bool)
+    description: TimeBudget defines A -> Slow with a 50ms budget on Slow.
+    route: :428/time-budget

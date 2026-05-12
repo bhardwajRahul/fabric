@@ -44,81 +44,13 @@ var (
 	_ calculatorapi.Client
 )
 
-func TestCalculator_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Arithmetic
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: Square
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: Distance
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
-
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("arithmetic", func(t *testing.T) { // MARKER: Arithmetic
-		assert := testarossa.For(t)
-		_, _, _, _, err := mock.Arithmetic(ctx, 1, "+", 2)
-		assert.Error(err) // Not mocked yet
-
-		mock.MockArithmetic(func(ctx context.Context, x int, op string, y int) (xEcho int, opEcho string, yEcho int, result int, err error) {
-			return x, op, y, x + y, nil
-		})
-		xEcho, opEcho, yEcho, result, err := mock.Arithmetic(ctx, 3, "+", 4)
-		assert.NoError(err)
-		assert.Expect(xEcho, 3, opEcho, "+", yEcho, 4, result, 7)
-	})
-
-	t.Run("square", func(t *testing.T) { // MARKER: Square
-		assert := testarossa.For(t)
-		_, _, err := mock.Square(ctx, 5)
-		assert.Error(err) // Not mocked yet
-
-		mock.MockSquare(func(ctx context.Context, x int) (xEcho int, result int, err error) {
-			return x, x * x, nil
-		})
-		xEcho, result, err := mock.Square(ctx, 5)
-		assert.NoError(err)
-		assert.Expect(xEcho, 5, result, 25)
-	})
-
-	t.Run("distance", func(t *testing.T) { // MARKER: Distance
-		assert := testarossa.For(t)
-		_, err := mock.Distance(ctx, calculatorapi.Point{}, calculatorapi.Point{})
-		assert.Error(err) // Not mocked yet
-
-		mock.MockDistance(func(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error) {
-			return 5.0, nil
-		})
-		d, err := mock.Distance(ctx, calculatorapi.Point{X: 3, Y: 0}, calculatorapi.Point{X: 0, Y: 4})
-		assert.NoError(err)
-		assert.Expect(d, 5.0)
-	})
-
-	t.Run("on_observe_sum_operations", func(t *testing.T) { // MARKER: SumOperations
-		assert := testarossa.For(t)
-		err := mock.OnObserveSumOperations(ctx)
-		assert.Error(err) // Not mocked yet
-
-		mock.MockOnObserveSumOperations(func(ctx context.Context) (err error) {
-			return nil
-		})
-		err = mock.OnObserveSumOperations(ctx)
-		assert.NoError(err)
-	})
-}
+// MARKER: SumOperations
 
 func TestCalculator_Arithmetic(t *testing.T) { // MARKER: Arithmetic
 	t.Parallel()

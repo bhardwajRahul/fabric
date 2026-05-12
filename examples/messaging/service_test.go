@@ -25,7 +25,6 @@ import (
 
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/testarossa"
 
@@ -42,110 +41,15 @@ var (
 	_ messagingapi.Client
 )
 
-func TestMessaging_Mock(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
+// MARKER: Home
 
-	mock := NewMock()
-	mock.SetDeployment(connector.TESTING)
+// MARKER: NoQueue
 
-	t.Run("on_startup", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnStartup(ctx)
-		assert.NoError(err)
+// MARKER: DefaultQueue
 
-		mock.SetDeployment(connector.PROD)
-		err = mock.OnStartup(ctx)
-		assert.Error(err)
-		mock.SetDeployment(connector.TESTING)
-	})
+// MARKER: CacheLoad
 
-	t.Run("on_shutdown", func(t *testing.T) {
-		assert := testarossa.For(t)
-		err := mock.OnShutdown(ctx)
-		assert.NoError(err)
-	})
-
-	t.Run("home", func(t *testing.T) { // MARKER: Home
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.Home(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockHome(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.Home(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("no_queue", func(t *testing.T) { // MARKER: NoQueue
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.NoQueue(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockNoQueue(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.NoQueue(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("default_queue", func(t *testing.T) { // MARKER: DefaultQueue
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.DefaultQueue(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockDefaultQueue(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.DefaultQueue(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("cache_load", func(t *testing.T) { // MARKER: CacheLoad
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.CacheLoad(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCacheLoad(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.CacheLoad(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("cache_store", func(t *testing.T) { // MARKER: CacheStore
-		assert := testarossa.For(t)
-
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-
-		err := mock.CacheStore(w, r)
-		assert.Contains(err.Error(), "not implemented")
-		mock.MockCacheStore(func(w http.ResponseWriter, r *http.Request) (err error) {
-			w.WriteHeader(http.StatusOK)
-			return nil
-		})
-		err = mock.CacheStore(w, r)
-		assert.NoError(err)
-	})
-}
+// MARKER: CacheStore
 
 func TestMessaging_Home(t *testing.T) { // MARKER: Home
 	t.Parallel()

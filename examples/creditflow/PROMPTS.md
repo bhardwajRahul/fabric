@@ -26,7 +26,7 @@ SubmitCreditApplication → (fan-out)
 
 Construction details:
 - `graph.AddSubgraph(identityVerification)` - marks IdentityVerification as a subgraph node
-- `graph.AddErrorTransition(verifyCredit, handleCreditError)` - routes errors from VerifyCredit to HandleCreditError
+- `graph.AddTransitionOnError(verifyCredit, handleCreditError)` - routes errors from VerifyCredit to HandleCreditError
 - `graph.AddTransitionForEach(submitCreditApplication, verifyEmployment, "employers", "employerName")` - creates one VerifyEmployment invocation per element of the `employers` array, binding each element to `employerName`
 - The state field `sumEmploymentFailures` uses the `sum*` prefix convention, so its values from each forEach branch are summed automatically at fan-in (no explicit `SetReducer` call needed)
 - `graph.AddTransitionGoto(reviewCredit, requestMoreInfo)` - declares that ReviewCredit may dynamically goto RequestMoreInfo

@@ -1,0 +1,28 @@
+general:
+  hostname: conditionalflow.verify
+  description: conditionalflow.verify exercises AddTransitionWhen for boolean-expression branching.
+  modifiedAt: "2026-05-14T15:59:05Z"
+
+tasks:
+  TaskA:
+    signature: TaskA(score int) (scoreOut int)
+    description: TaskA passes the score through to state.
+    route: :428/task-a
+  TaskHigh:
+    signature: TaskHigh(score int) (branch string)
+    description: TaskHigh runs when score>=50.
+    route: :428/task-high
+  TaskLow:
+    signature: TaskLow(score int) (branch string)
+    description: TaskLow runs when score<50.
+    route: :428/task-low
+  TaskC:
+    signature: TaskC(branch string) (finalBranch string)
+    description: TaskC surfaces the branch that ran.
+    route: :428/task-c
+
+workflows:
+  Conditional:
+    signature: Conditional(score int) (finalBranch string)
+    description: Conditional defines the graph with when transitions.
+    route: :428/conditional

@@ -34,23 +34,25 @@ package main
 // same output.
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/microbus-io/fabric/cmd/internal/pkgresolver"
 )
 
 // scanService walks the microservice rooted at serviceDir and returns
 // an aclInput populated from source. fromDir is the working directory
 // for `go list` resolution of cross-package deps; pass "" for the
-// process's CWD.
-func scanService(serviceDir, fromDir string) (aclInput, error) {
+// process's CWD. resolver may be nil; when non-nil it is shared across
+// services in one run to memoize lookups and to short-circuit in-module
+// paths past `go list`.
+func scanService(serviceDir, fromDir string, resolver *pkgresolver.Resolver) (aclInput, error) {
 	if fromDir == "" {
 		fromDir = serviceDir
 	}
@@ -107,7 +109,7 @@ func scanService(serviceDir, fromDir string) (aclInput, error) {
 	// event Def name. Look up the foreign package via the importing file's
 	// alias map; read its Hostname + Defs.
 	for _, h := range hookCalls {
-		ep, err := resolveHook(h, intermediatePath, fromDir)
+		ep, err := resolveHook(h, intermediatePath, fromDir, resolver)
 		if err != nil || ep.Hostname == "" {
 			continue
 		}
@@ -132,7 +134,7 @@ func scanService(serviceDir, fromDir string) (aclInput, error) {
 	if err != nil {
 		return aclInput{}, err
 	}
-	in.Downstream, err = resolveDownstream(clientCalls, rawReqs, serviceDir, fromDir)
+	in.Downstream, err = resolveDownstream(clientCalls, rawReqs, serviceDir, fromDir, resolver)
 	if err != nil {
 		return aclInput{}, err
 	}
@@ -426,12 +428,12 @@ func findHookAlias(expr ast.Expr, ownAPIAlias string) string {
 
 // resolveHook turns a detected hookCall into a populated aclInboundEvent
 // by reading the foreign *api package's Hostname + Def lookup.
-func resolveHook(h hookCall, fromFile, fromDir string) (aclInboundEvent, error) {
+func resolveHook(h hookCall, fromFile, fromDir string, resolver *pkgresolver.Resolver) (aclInboundEvent, error) {
 	pkgPath, err := aliasImportPath(fromFile, h.apiAlias)
 	if err != nil || pkgPath == "" {
 		return aclInboundEvent{}, err
 	}
-	dir, err := goListDir(pkgPath, fromDir)
+	dir, err := resolver.Dir(pkgPath, fromDir)
 	if err != nil || dir == "" {
 		return aclInboundEvent{}, err
 	}
@@ -481,30 +483,6 @@ func aliasImportPath(filePath, alias string) (string, error) {
 		}
 	}
 	return "", nil
-}
-
-// goListDir returns the on-disk directory for a Go package path. With
-// the -e flag set, `go list` itself succeeds even for missing packages
-// (it produces a stub with an empty Dir), so an error here represents
-// a real toolchain failure, not a missing dependency.
-func goListDir(pkgPath, fromDir string) (string, error) {
-	cmd := exec.Command("go", "list", "-json", "-e", pkgPath)
-	if fromDir != "" {
-		cmd.Dir = fromDir
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		stderr := ""
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = strings.TrimSpace(string(ee.Stderr))
-		}
-		return "", fmt.Errorf("go list %s: %w (%s)", pkgPath, err, stderr)
-	}
-	var info struct{ Dir string }
-	if err := json.Unmarshal(out, &info); err != nil {
-		return "", fmt.Errorf("go list parse for %s: %w", pkgPath, err)
-	}
-	return info.Dir, nil
 }
 
 // parseFile is a thin wrapper around go/parser that always includes

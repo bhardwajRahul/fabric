@@ -55,7 +55,7 @@ func repoPath(t *testing.T, rel string) string {
 // Doesn't pin byte equality - operators tweaking service names or the
 // bundle composition would otherwise have to update a brittle golden.
 func TestRun_RealBundle(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the full main bundle.
 	assert := testarossa.For(t)
 	bundle := repoPath(t, "main/main.go")
 	out := filepath.Join(t.TempDir(), "topology.mmd")
@@ -70,7 +70,7 @@ func TestRun_RealBundle(t *testing.T) {
 
 	// Structural shape: header, classDefs, class statements at the end.
 	wantSubstr := []string{
-		"graph TB",
+		"graph LR",
 		"classDef core",
 		"classDef svc",
 		"classDef danger fill:#f15922",
@@ -93,6 +93,7 @@ func TestRun_RealBundle(t *testing.T) {
 		"creditflow calls foreman":    "creditflow.example[CreditFlow<br>creditflow.example] ---> foreman.core",
 		"some service has cloud":      ".cloud@{shape: cloud, label:",
 		"bearer.token.core is danger": "bearer.token.core danger",
+		"embedder has Py":             "embedder.example.py[[Py]]",
 	}
 	for desc, substr := range checks {
 		assert.Contains(got, substr, "%s: missing %q", desc, substr)
@@ -102,7 +103,7 @@ func TestRun_RealBundle(t *testing.T) {
 // TestRun_CheckMode_Clean asserts --check returns nil when the existing
 // file matches what the scan would produce.
 func TestRun_CheckMode_Clean(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the full main bundle twice.
 	assert := testarossa.For(t)
 	bundle := repoPath(t, "main/main.go")
 	out := filepath.Join(t.TempDir(), "topology.mmd")
@@ -171,7 +172,7 @@ const Endpoint = "https://api.example.com/v1/widgets"
 // TestRun_CheckMode_Dirty asserts --check returns errCheckDiff when the
 // existing file is out of date.
 func TestRun_CheckMode_Dirty(t *testing.T) {
-	t.Parallel()
+	// No parallel - scans the full main bundle.
 	bundle := repoPath(t, "main/main.go")
 	out := filepath.Join(t.TempDir(), "topology.mmd")
 	if err := os.WriteFile(out, []byte("stale content\n"), 0o644); err != nil {
