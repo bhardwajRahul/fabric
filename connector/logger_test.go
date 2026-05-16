@@ -56,6 +56,10 @@ func TestConnector_Log(t *testing.T) {
 		Level: slog.LevelDebug,
 	}))
 
+	// LogDebug is gated by c.logDebug, which Startup sets from MICROBUS_LOG_DEBUG.
+	// Drive it explicitly so the test is independent of the ambient env var and
+	// verifies both gating directions on every run.
+	con.logDebug = false
 	con.LogDebug(ctx, "This is a log debug message", "someStr", "some string")
 	con.LogInfo(ctx, "This is a log info message", "someStr", "some string")
 	con.LogWarn(ctx, "This is a log warn message", "error", stderror, "someStr", "some string")
@@ -66,4 +70,9 @@ func TestConnector_Log(t *testing.T) {
 	assert.Contains(bufStr, `level=WARN msg="This is a log warn message"`)
 	assert.Contains(bufStr, `level=ERROR msg="This is a log error message"`)
 	assert.NotContains(bufStr, `level=DEBUG msg="This is a log debug message"`)
+
+	// With debug logging enabled, LogDebug emits.
+	con.logDebug = true
+	con.LogDebug(ctx, "This is a log debug message", "someStr", "some string")
+	assert.Contains(buf.String(), `level=DEBUG msg="This is a log debug message"`)
 }
