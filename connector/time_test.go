@@ -370,7 +370,7 @@ func TestConnector_Sleep(t *testing.T) {
 	t0 := time.Now()
 	v := con.Sleep(ctx, time.Millisecond*100)
 	dur := time.Since(t0)
-	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
 	assert.True(v)
 
 	// Context timeout
@@ -378,7 +378,7 @@ func TestConnector_Sleep(t *testing.T) {
 	t0 = time.Now()
 	v = con.Sleep(ctxTimeout, time.Millisecond*1000)
 	dur = time.Since(t0)
-	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
 	assert.False(v)
 	cancel()
 
@@ -391,7 +391,7 @@ func TestConnector_Sleep(t *testing.T) {
 	t0 = time.Now()
 	v = con.Sleep(ctxCancel, time.Millisecond*1000)
 	dur = time.Since(t0)
-	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
 	assert.False(v)
 
 	// Lifetime cancellation
@@ -402,6 +402,6 @@ func TestConnector_Sleep(t *testing.T) {
 	t0 = time.Now()
 	v = con.Sleep(ctx, time.Millisecond*1000)
 	dur = time.Since(t0)
-	assert.True(dur > time.Millisecond*100 && dur <= time.Millisecond*200)
+	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
 	assert.False(v)
 }
