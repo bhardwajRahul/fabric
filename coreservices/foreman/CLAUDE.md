@@ -440,6 +440,31 @@ foreman lifetime context, a timing-out context only for the outbound task HTTP c
 termination is driven by `queue.close()` + `svc.workers.Wait()`, not ctx cancellation, so
 cancelling `rootCtx` only after the drain never interrupts an in-flight write.
 
+### Shutdown ordering: drain workers before closing `wakeTimer`
+
+`shortenNextPoll` signals the timer via `select { case svc.wakeTimer <- struct{}{}: default: }`. The
+`default` only guards against a *full* channel - a send on a *closed* channel still panics, even inside a
+`select`. The only callers of `shortenNextPoll` are worker goroutines (`processStep` and its retry/sleep/
+poison paths); `timerLoop` only ever receives from `wakeTimer`. So `OnShutdown` must fully drain the worker
+pool before closing `wakeTimer`:
+
+```
+queue.close()        // unblocks workerLoop independently of wakeTimer
+workers.Wait()       // no shortenNextPoll caller remains
+close(wakeTimer)     // timerLoop's only termination signal
+timerWorker.Wait()   // timerLoop fully exited
+rootCancel()         // in-flight DB writes already complete
+```
+
+The timer goroutine therefore lives on its own `timerWorker` WaitGroup, not the worker-pool `workers`
+WaitGroup. If it shared `workers`, the close-then-wait order could not be reordered: `timerLoop` exits only
+when `wakeTimer` closes, so `workers.Wait()` before `close(wakeTimer)` would deadlock. During the
+worker-drain window `timerLoop` may still call `pollPendingSteps` → `queue.push`; `push` does not check
+`closed`, so it is a harmless append onto a queue no worker will pop. The earlier code closed `wakeTimer`
+before `workers.Wait()`, so a worker mid-`processStep` (e.g. the retry-sleep `shortenNextPoll` at the line
+after a 408/ack-timeout failStep) raced the close and panicked `send on closed channel` (caught by
+`workerLoop`'s `errors.CatchPanic`, but spurious and a real ordering hazard).
+
 ### Transactions
 
 `Start`, `Resume`, `Retry`, and `Cancel` wrap their step and flow mutations in a transaction with **steps-first-then-flow lock ordering** to prevent deadlocks. `processStep`'s transition evaluation (insert next steps + update flow's `step_id`) also runs in a transaction.

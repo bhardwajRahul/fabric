@@ -42,7 +42,9 @@ var (
 )
 
 func TestDocextractionflow_DocExtraction(t *testing.T) { // MARKER: DocExtraction
-	t.Parallel()
+	// Not parallel: this fixture is intentionally heavy (16 foreman workers driving a
+	// doubly-nested forEach with 1s + 2-5s task sleeps). Running it alongside other
+	// parallel tests starves CPU and pushes per-task dispatches past their time budget.
 	ctx := t.Context()
 
 	svc := NewService()
@@ -58,8 +60,10 @@ func TestDocextractionflow_DocExtraction(t *testing.T) { // MARKER: DocExtractio
 	app := application.New()
 	app.Add(
 		svc,
-		// Max out workers to parallelize the per-chunk OCR latency.
-		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(64) }),
+		// 4 workers. The simulated OCR latency is small (50-150ms/chunk), so wall time
+		// stays well within the test budget at this worker count even on a contended
+		// runner; the count is not load-bearing for correctness.
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(4) }),
 		tester,
 	)
 	app.RunInTest(t)

@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
@@ -368,18 +369,18 @@ func TestConnector_Sleep(t *testing.T) {
 
 	// Natural expiration
 	t0 := time.Now()
-	v := con.Sleep(ctx, time.Millisecond*100)
+	err = con.Sleep(ctx, time.Millisecond*100)
 	dur := time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
-	assert.True(v)
+	assert.NoError(err)
 
 	// Context timeout
 	ctxTimeout, cancel := context.WithTimeout(t.Context(), time.Millisecond*100)
 	t0 = time.Now()
-	v = con.Sleep(ctxTimeout, time.Millisecond*1000)
+	err = con.Sleep(ctxTimeout, time.Millisecond*1000)
 	dur = time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
-	assert.False(v)
+	assert.True(errors.Is(err, context.DeadlineExceeded))
 	cancel()
 
 	// Context cancellation
@@ -389,10 +390,10 @@ func TestConnector_Sleep(t *testing.T) {
 		cancel()
 	}()
 	t0 = time.Now()
-	v = con.Sleep(ctxCancel, time.Millisecond*1000)
+	err = con.Sleep(ctxCancel, time.Millisecond*1000)
 	dur = time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
-	assert.False(v)
+	assert.True(errors.Is(err, context.Canceled))
 
 	// Lifetime cancellation
 	go func() {
@@ -400,8 +401,8 @@ func TestConnector_Sleep(t *testing.T) {
 		con.Shutdown(ctx)
 	}()
 	t0 = time.Now()
-	v = con.Sleep(ctx, time.Millisecond*1000)
+	err = con.Sleep(ctx, time.Millisecond*1000)
 	dur = time.Since(t0)
 	assert.True(dur > time.Millisecond*100 && dur < time.Millisecond*900)
-	assert.False(v)
+	assert.True(errors.Is(err, context.Canceled))
 }

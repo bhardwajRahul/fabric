@@ -16,13 +16,13 @@ ScanPDF -forEach(pageImages as page)->
     TranscribeChunk -[fan-in]-> JoinPageTranscriptions -[fan-in]-> JoinDocTranscriptions -> END
 ```
 
-- `ScanPDF` (forEach source over pages): ~1s delay, returns 5-22 pages of random image bytes
-  (~50-150 KB each) and `pageCount`.
+- `ScanPDF` (forEach source over pages): ~100ms delay, returns 5-22 pages of random image
+  bytes (~50-150 KB each) and `pageCount`.
 - `IdentifyChunks` (inner forEach source over chunks): 2-5 chunk rectangles per page (always
   >=1 so the inner forEach never empties).
-- `TranscribeChunk`: 2-5s simulated OCR latency; 5% failure rate retried via
-  `flow.Retry(10, 1s, 2.0, 5s)`; on success contributes one sentence (8-20 words) as the
-  single-element `listTranscriptions` delta.
+- `TranscribeChunk`: 50-150ms simulated OCR latency; 5% failure rate retried via
+  `flow.Retry(100, 500ms, 1.0, 500ms)` (constant delay, no backoff); on success contributes
+  one sentence (8-20 words) as the single-element `listTranscriptions` delta.
 - `JoinPageTranscriptions` (`SetFanIn`, inner): joins a page's chunk transcriptions and
   contributes the page text as the single-element `listPageTexts` delta.
 - `JoinDocTranscriptions` (`SetFanIn`, outer): joins all page texts into `docTranscription`,
@@ -36,7 +36,7 @@ ScanPDF -forEach(pageImages as page)->
   (`listTranscriptions` inner, `listPageTexts` outer) so reducers do not cross levels
 - Deterministic fan-in ordering via `fan_out_ordinal` (page order, chunk order) despite the
   random per-chunk latency that scrambles completion order
-- Task-initiated bounded retry with exponential backoff under a real failure rate
+- Task-initiated bounded retry (constant delay, no backoff) under a real failure rate
 - A non-trivial `Rectangle` complex type flowing through state
 
 ## Deterministic assertions
@@ -52,14 +52,26 @@ test asserts structural invariants:
 
 ## Runtime note
 
-This is intentionally a heavy fixture (real 1s + 2-5s sleeps, large image bytes carried in
-state through every nested step). The test pins the foreman to the maximum 64 workers to
-parallelize the chunk transcriptions; expect a multi-second wall time.
+The simulated latencies are deliberately small (ScanPDF ~100ms, TranscribeChunk
+50-150ms/chunk). They exist only to scramble task-completion order so the deterministic
+`fan_out_ordinal` merge is actually exercised - the property under test needs *variance* in
+completion order, not *seconds* of it. Keeping them small decouples wall time from worker
+count and per-core budget: the whole flow finishes in a few seconds at 4 workers even on a
+contended or `GOMAXPROCS=2` runner, so the timeout/time-budget flake class is gone at the
+root rather than papered over with worker tuning.
+
+Historical note: an earlier revision used 1s + 2-5s sleeps with 64 foreman workers. That
+burst of long, concurrent task dispatches to the single replica oversubscribed a CPU-starved
+runner badly enough that a `transcribe-chunk` call exceeded its per-task time budget (HTTP
+408) or ack window (404); dropping to 4 workers then made a single run exceed the harness
+`-timeout`. Shrinking the sleeps removed the underlying cause. The test is also **not**
+`t.Parallel()` so it doesn't add to cross-package CPU contention, and the per-chunk sleeps
+use `svc.Sleep(ctx, d)` so a cancelled task aborts immediately instead of finishing its
+sleep and burning more CPU after cancellation.
 
 The synchronous `foremanapi.Client.Run`/`Await` blocks on a single request whose context
-bounds `Await`; the default request timeout is far shorter than this workflow. The test
-therefore builds the foreman client with `pub.Timeout(5 * time.Minute)` - **omitting that is
-the difference between green and an intermittent HTTP 408 on slow runs**, not a foreman bug.
+bounds `Await`. The test builds the foreman client with `pub.Timeout(5 * time.Minute)` so
+that request is not the limiting factor - cheap insurance, not a foreman bug.
 `TranscribeChunk`'s retry uses a constant 500ms / 100-attempt policy so neither retry
 exhaustion nor backoff inflation contributes to latency.
 

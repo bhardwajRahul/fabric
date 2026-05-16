@@ -507,6 +507,17 @@ Add the HTTP egress proxy to the main app in `main/main.go`, if not already adde
 ### Miscellaneous
 
 - **Current Time**: Use `svc.Now(ctx)` to get the current time rather than `time.Now()`
+- **Sleeping**: Use `svc.Sleep(ctx, dur)` rather than `time.Sleep(dur)`. It returns early if `ctx` or the
+  microservice's lifetime is canceled, returning the canceling context's error (`context.Canceled` or
+  `context.DeadlineExceeded`), traced, or `nil` if the full duration elapsed. Propagate a non-nil return so a
+  canceled or shutting-down operation stops promptly instead of blocking and continuing as if it had slept:
+
+  ```go
+  err := svc.Sleep(ctx, dur)
+  if err != nil {
+      return errors.Trace(err)
+  }
+  ```
 
 ### Recording Metrics
 

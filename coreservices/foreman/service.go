@@ -81,10 +81,13 @@ type Service struct {
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
 
-	// Timer goroutine for polling delayed steps
+	// Timer goroutine for polling delayed steps. timerWorker is a WaitGroup
+	// separate from the worker pool so OnShutdown can drain the workers (the only
+	// callers of shortenNextPoll) before closing wakeTimer.
 	nextPoll     time.Time
 	nextPollLock sync.Mutex
 	wakeTimer    chan struct{}
+	timerWorker  sync.WaitGroup
 
 	// Wait registry for Await (keyed by flowKey)
 	waitersLock sync.Mutex
@@ -119,10 +122,11 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 			svc.workerLoop(svc.rootCtx)
 		}()
 	}
-	// Timer goroutine for polling delayed steps
-	svc.workers.Add(1)
+	// Timer goroutine for polling delayed steps. Tracked separately from the
+	// worker pool so OnShutdown drains workers before closing wakeTimer.
+	svc.timerWorker.Add(1)
 	go func() {
-		defer svc.workers.Done()
+		defer svc.timerWorker.Done()
 		svc.timerLoop(svc.rootCtx)
 	}()
 	return nil
@@ -131,10 +135,15 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	svc.queue.close() // Terminate workerLoop
-	if svc.wakeTimer != nil {
-		close(svc.wakeTimer) // Terminate timerLoop
-	}
+	// Drain the worker pool before closing wakeTimer. Workers are the only callers
+	// of shortenNextPoll, which sends on wakeTimer; a send on a closed channel
+	// panics even inside a select with a default. queue.close() unblocks workers
+	// independently of wakeTimer, so this cannot deadlock.
 	svc.workers.Wait()
+	if svc.wakeTimer != nil {
+		close(svc.wakeTimer) // Terminate timerLoop (no shortenNextPoll callers remain)
+	}
+	svc.timerWorker.Wait()
 	// Workers have drained; their in-flight DB writes are complete. Safe to cancel.
 	if svc.rootCancel != nil {
 		svc.rootCancel()

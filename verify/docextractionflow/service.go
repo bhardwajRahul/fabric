@@ -40,14 +40,6 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
-// sleepCtx blocks for d or until ctx is done, whichever comes first.
-func sleepCtx(ctx context.Context, d time.Duration) {
-	select {
-	case <-time.After(d):
-	case <-ctx.Done():
-	}
-}
-
 var vocabulary = strings.Fields(
 	"the quick brown fox jumps over a lazy dog invoice total amount due date " +
 		"customer address signature page section clause amount paid balance " +
@@ -64,12 +56,15 @@ func randomSentence() string {
 }
 
 /*
-ScanPDF is the entry task. It simulates rasterizing a PDF: a ~1s delay, then 5-22
+ScanPDF is the entry task. It simulates rasterizing a PDF: a ~100ms delay, then 5-22
 pages of random image data (~50-150 KB each). It is the forEach source over pages.
 */
 func (svc *Service) ScanPDF(ctx context.Context, flow *workflow.Flow, pdf []byte) (pageImages [][]byte, pageCount int, err error) { // MARKER: ScanPDF
 	flow.Set("pdf", nil) // Don't copy down the chain
-	sleepCtx(ctx, time.Second)
+	err = svc.Sleep(ctx, 100*time.Millisecond)
+	if err != nil {
+		return nil, 0, err
+	}
 	pageCount = 5 + rand.IntN(18) // 5..22
 	pageImages = make([][]byte, pageCount)
 	for p := range pageImages {
@@ -102,14 +97,17 @@ func (svc *Service) IdentifyChunks(ctx context.Context, flow *workflow.Flow, pag
 }
 
 /*
-TranscribeChunk runs once per chunk. It simulates OCR latency (2-5s) and a 5%
-failure rate; on failure it retries with exponential backoff (up to 10 attempts,
-1s initial, 2x multiplier, 5s cap). On success it contributes one transcription
-as the single-element listTranscriptions delta (append reducer at fan-in).
+TranscribeChunk runs once per chunk. It simulates OCR latency (50-150ms) and a 5%
+failure rate; on failure it retries via flow.Retry (100 attempts, constant 500ms, no
+backoff). On success it contributes one transcription as the single-element
+listTranscriptions delta (append reducer at fan-in).
 */
 func (svc *Service) TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) { // MARKER: TranscribeChunk
-	flow.Set("page", nil)                                                        // Don't copy down the chain
-	sleepCtx(ctx, 2*time.Second+time.Duration(rand.IntN(3001))*time.Millisecond) // 2-5s
+	flow.Set("page", nil) // Don't copy down the chain
+	err = svc.Sleep(ctx, 50*time.Millisecond+time.Duration(rand.IntN(101))*time.Millisecond) // 50-150ms
+	if err != nil {
+		return nil, err
+	}
 	if rand.Float64() < 0.05 {
 		// Constant 500ms delay, 100 attempts: at a 5% failure rate this effectively
 		// never exhausts and adds negligible, near-constant latency - so neither

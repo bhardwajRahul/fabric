@@ -206,19 +206,20 @@ func (c *Connector) Now(ctx context.Context) time.Time {
 
 // Sleep pauses the current goroutine for the specified duration,
 // or until the provided context or the lifetime context of the microservice is canceled or its deadline is exceeded.
-// It returns true if the sleep completed, false if interrupted by the context.
-func (c *Connector) Sleep(ctx context.Context, duration time.Duration) bool {
+// It returns nil if the full duration elapsed, or the canceling context's error
+// (context.Canceled or context.DeadlineExceeded), traced, if interrupted.
+func (c *Connector) Sleep(ctx context.Context, duration time.Duration) error {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
 		// The duration has elapsed
-		return true
+		return nil
 	case <-ctx.Done():
-		// The context was canceled or its deadline was exceeded
-		return false
+		// The provided context was canceled or its deadline was exceeded
+		return errors.Trace(ctx.Err())
 	case <-c.Lifetime().Done():
-		// The context was canceled or its deadline was exceeded
-		return false
+		// The microservice is shutting down
+		return errors.Trace(c.Lifetime().Err())
 	}
 }

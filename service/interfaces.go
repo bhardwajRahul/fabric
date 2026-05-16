@@ -152,7 +152,7 @@ type Executor interface {
 // Timer are actions related to time management.
 type Timer interface {
 	Now(ctx context.Context) time.Time
-	Sleep(ctx context.Context, duration time.Duration) bool
+	Sleep(ctx context.Context, duration time.Duration) error
 }
 
 // Service are all the actions that a connector provides.
