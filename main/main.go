@@ -35,6 +35,7 @@ import (
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
+	"github.com/microbus-io/fabric/coreservices/litellm"
 	"github.com/microbus-io/fabric/coreservices/llm"
 	"github.com/microbus-io/fabric/coreservices/mcpportal"
 	"github.com/microbus-io/fabric/coreservices/metrics"
@@ -52,6 +53,9 @@ import (
 	"github.com/microbus-io/fabric/examples/login"
 	"github.com/microbus-io/fabric/examples/messaging"
 	"github.com/microbus-io/fabric/examples/yellowpages"
+
+	"github.com/microbus-io/fabric/verify/docextractionflow"
+	"github.com/microbus-io/fabric/verify/perelementpipelineflow"
 )
 
 /*
@@ -88,6 +92,7 @@ func main() {
 		claudellm.NewService(),
 		chatgptllm.NewService(),
 		geminillm.NewService(),
+		litellm.NewService(),
 	)
 	app.Add(
 		// Example microservices
@@ -107,7 +112,9 @@ func main() {
 		chatbox.NewService(),
 	)
 	app.Add(
-	// HINT: Add solution microservices here
+		// HINT: Add solution microservices here
+		perelementpipelineflow.NewService(),
+		docextractionflow.NewService(),
 	)
 	app.Add(
 		// When everything is ready, begin to accept external requests

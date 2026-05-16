@@ -1,0 +1,27 @@
+general:
+  name: retryfanoutflow
+  hostname: retryfanoutflow.verify
+  description: retryfanoutflow.verify exercises ordered list fan-in across a forEach fan-out whose per-element task retries infinitely on a random 10% failure.
+  package: github.com/microbus-io/fabric/verify/retryfanoutflow
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-16T02:13:11Z"
+
+tasks:
+  Enter:
+    signature: Enter(elements []int) (elementsOut []int)
+    description: Enter is the forEach source.
+    route: :428/enter
+  Increment:
+    signature: Increment(element int) (listResultOut []int)
+    description: Increment runs once per element, retrying infinitely on a random 10% failure.
+    route: :428/increment
+  Join:
+    signature: Join(listResult []int) (listResultOut []int)
+    description: Join is the fan-in target.
+    route: :428/join
+
+workflows:
+  RetryFanOut:
+    signature: RetryFanOut(elements []int) (listResult []int)
+    description: "RetryFanOut defines the graph: Enter -> forEach(elements) -> Increment -> Join."
+    route: :428/retry-fan-out

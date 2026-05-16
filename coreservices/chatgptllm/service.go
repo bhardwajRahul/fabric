@@ -123,7 +123,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	apiURL := svc.BaseURL() + "/v1/chat/completions"
+	apiURL := svc.CompletionURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, llmapi.Usage{}, errors.Trace(err)

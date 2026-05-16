@@ -152,7 +152,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	apiURL := svc.BaseURL() + "/v1beta/models/" + model + ":generateContent?key=" + svc.APIKey()
+	apiURL := svc.CompletionURL() + "/" + model + ":generateContent?key=" + svc.APIKey()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, llmapi.Usage{}, errors.Trace(err)

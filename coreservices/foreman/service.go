@@ -71,9 +71,15 @@ type Service struct {
 	dbs     []*sequel.DB
 	dbsLock sync.RWMutex
 
-	// FIFO work queue and worker pool
-	queue   jobQueue
-	workers sync.WaitGroup
+	// FIFO work queue and worker pool. rootCtx is the foreman's own lifetime
+	// context for all worker/timer database operations - it must not be tied to
+	// OnStartup's ctx (request/startup-scoped) nor to svc.Lifetime() (still
+	// context.Background() during OnStartup, per connector/CLAUDE.md). It is
+	// cancelled in OnShutdown only after the worker pool has drained.
+	queue      jobQueue
+	workers    sync.WaitGroup
+	rootCtx    context.Context
+	rootCancel context.CancelFunc
 
 	// Timer goroutine for polling delayed steps
 	nextPoll     time.Time
@@ -98,19 +104,26 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	svc.queue.init()
 	svc.wakeTimer = make(chan struct{}, 1)
 	svc.nextPoll = time.Now().Add(5 * time.Minute)
+	// Workers and the timer loop run for the service lifetime and own all the
+	// foreman's database operations. They use rootCtx, the foreman's own root
+	// context, NOT OnStartup's ctx (request/startup-scoped, could be cancelled
+	// mid-flow and strand a fan-in/step write) and NOT svc.Lifetime() (still
+	// context.Background() during OnStartup). rootCtx is cancelled in OnShutdown
+	// only after the pool has drained, so in-flight DB writes are never aborted.
+	svc.rootCtx, svc.rootCancel = context.WithCancel(context.Background())
 	numWorkers := svc.Workers()
 	for range numWorkers {
 		svc.workers.Add(1)
 		go func() {
 			defer svc.workers.Done()
-			svc.workerLoop(ctx)
+			svc.workerLoop(svc.rootCtx)
 		}()
 	}
 	// Timer goroutine for polling delayed steps
 	svc.workers.Add(1)
 	go func() {
 		defer svc.workers.Done()
-		svc.timerLoop(ctx)
+		svc.timerLoop(svc.rootCtx)
 	}()
 	return nil
 }
@@ -122,6 +135,10 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 		close(svc.wakeTimer) // Terminate timerLoop
 	}
 	svc.workers.Wait()
+	// Workers have drained; their in-flight DB writes are complete. Safe to cancel.
+	if svc.rootCancel != nil {
+		svc.rootCancel()
+	}
 	// Wake all Await callers so they don't hang
 	svc.waitersLock.Lock()
 	for _, chans := range svc.waiters {
@@ -213,101 +230,104 @@ body { font-family: sans-serif; margin: 2em; background: #fafafa; }
 }
 
 // renderMermaidSteps writes Mermaid flowchart nodes and edges for a list of steps.
-// It returns the head node IDs (entry points) and tail node IDs (exit points) so the
-// caller can wire them to surrounding nodes. Subgraph steps are expanded inline: the
-// subgraph's own heads and tails replace the parent node in the flow.
-// The startDate is the timestamp of the flow's first step, used to compute relative deltas.
+// It returns the head node IDs (no incoming edge) and tail node IDs (no outgoing edge)
+// so the caller can wire them to the surrounding start/end markers.
+//
+// The execution DAG is reconstructed purely from the recorded edges - each step's
+// PredecessorID and SuccessorID - and step_depth is deliberately ignored. Every edge
+// is recorded on at least one endpoint: fan-out edges via each child's PredecessorID,
+// fan-in edges via each cohort exit step's SuccessorID, linear edges on both; the
+// rendered edge set is their deduped union, which is exact for arbitrary nesting.
+// Subgraph steps are expanded inline: edges into/out of the subgraph step attach to
+// the subgraph's enter/exit markers. The startDate is the timestamp of the flow's
+// first step, used to compute relative deltas.
 func renderMermaidSteps(buf *strings.Builder, prefix string, steps []foremanapi.FlowStep, startDate time.Time) (heads []string, tails []string) {
 	if len(steps) == 0 {
 		return nil, nil
 	}
 
-	// Group steps by stepDepth to handle fan-out
-	type stepEntry struct {
-		step  foremanapi.FlowStep
-		heads []string // entry node IDs for this step
-		tails []string // exit node IDs for this step
+	type renderNode struct {
+		entry string // node ID an incoming edge should point at
+		exit  string // node ID an outgoing edge should originate from
 	}
-	type stepGroup struct {
-		stepDepth int
-		entries   []stepEntry
-	}
-	var groups []stepGroup
-	groupIdx := map[int]int{}
-	for _, s := range steps {
-		if idx, ok := groupIdx[s.StepDepth]; ok {
-			groups[idx].entries = append(groups[idx].entries, stepEntry{step: s})
+	byID := make(map[int]*renderNode, len(steps))
+	stepByID := make(map[int]foremanapi.FlowStep, len(steps))
+	order := make([]int, 0, len(steps))
+
+	// Render each step's node (or inline-expanded subgraph) and record its entry/exit.
+	for i := range steps {
+		s := steps[i]
+		if s.StepID == 0 {
+			continue
+		}
+		if s.Subgraph && len(s.SubHistory) > 0 {
+			subPrefix := fmt.Sprintf("%ss%d_sub", prefix, s.StepID)
+			subStartID := subPrefix + "_enter"
+			subEndID := subPrefix + "_exit"
+			fmt.Fprintf(buf, "    %s((\" \")):::term\n", subStartID)
+			fmt.Fprintf(buf, "    %s((\" \")):::term\n", subEndID)
+			subHeads, subTails := renderMermaidSteps(buf, subPrefix, s.SubHistory, startDate)
+			for _, h := range subHeads {
+				fmt.Fprintf(buf, "    %s --> %s\n", subStartID, h)
+			}
+			for _, t := range subTails {
+				fmt.Fprintf(buf, "    %s --> %s\n", t, subEndID)
+			}
+			byID[s.StepID] = &renderNode{entry: subStartID, exit: subEndID}
 		} else {
-			groupIdx[s.StepDepth] = len(groups)
-			groups = append(groups, stepGroup{
-				stepDepth: s.StepDepth,
-				entries:   []stepEntry{{step: s}},
-			})
-		}
-	}
-
-	// Render nodes and determine heads/tails for each entry
-	for gi := range groups {
-		for ei := range groups[gi].entries {
-			e := &groups[gi].entries[ei]
-			s := e.step
-
-			if s.Subgraph && len(s.SubHistory) > 0 {
-				// Expand subgraph inline with start/end markers
-				subPrefix := fmt.Sprintf("%ss%d_%d_sub", prefix, groups[gi].stepDepth, ei)
-				subLabel := " "
-				subStartID := subPrefix + "_enter"
-				subEndID := subPrefix + "_exit"
-				fmt.Fprintf(buf, "    %s((\"%s\")):::term\n", subStartID, subLabel)
-				fmt.Fprintf(buf, "    %s((\"%s\")):::term\n", subEndID, subLabel)
-				subHeads, subTails := renderMermaidSteps(buf, subPrefix, s.SubHistory, startDate)
-				for _, h := range subHeads {
-					fmt.Fprintf(buf, "    %s --> %s\n", subStartID, h)
-				}
-				for _, t := range subTails {
-					fmt.Fprintf(buf, "    %s --> %s\n", t, subEndID)
-				}
-				e.heads = []string{subStartID}
-				e.tails = []string{subEndID}
-			} else {
-				// Regular node
-				nodeID := fmt.Sprintf("%ss%d_%d", prefix, groups[gi].stepDepth, ei)
-				label := stripProto(s.TaskName)
-				if !s.UpdatedAt.IsZero() && !startDate.IsZero() {
-					label += "\n" + formatDeltaDuration(s.UpdatedAt.Sub(startDate))
-				}
-				statusClass := s.Status
-				if statusClass == "" {
-					statusClass = "pending"
-				}
-				fmt.Fprintf(buf, "    %s[\"%s\"]:::%s\n", nodeID, label, statusClass)
-				e.heads = []string{nodeID}
-				e.tails = []string{nodeID}
+			nodeID := fmt.Sprintf("%ss%d", prefix, s.StepID)
+			label := stripProto(s.TaskName)
+			if !s.UpdatedAt.IsZero() && !startDate.IsZero() {
+				label += "\n" + formatDeltaDuration(s.UpdatedAt.Sub(startDate))
 			}
-		}
-	}
-
-	// Connect edges between consecutive groups
-	for gi := 1; gi < len(groups); gi++ {
-		prevGroup := groups[gi-1]
-		curGroup := groups[gi]
-		for _, prev := range prevGroup.entries {
-			for _, cur := range curGroup.entries {
-				for _, t := range prev.tails {
-					for _, h := range cur.heads {
-						fmt.Fprintf(buf, "    %s --> %s\n", t, h)
-					}
-				}
+			statusClass := s.Status
+			if statusClass == "" {
+				statusClass = "pending"
 			}
+			fmt.Fprintf(buf, "    %s[\"%s\"]:::%s\n", nodeID, label, statusClass)
+			byID[s.StepID] = &renderNode{entry: nodeID, exit: nodeID}
+		}
+		stepByID[s.StepID] = s
+		order = append(order, s.StepID)
+	}
+
+	// Edges = deduped union of {predecessor -> step} and {step -> successor}.
+	emitted := map[string]bool{}
+	hasIncoming := map[int]bool{}
+	hasOutgoing := map[int]bool{}
+	addEdge := func(fromID, toID int) {
+		from := byID[fromID]
+		to := byID[toID]
+		if from == nil || to == nil || from == to {
+			return
+		}
+		key := from.exit + "\x00" + to.entry
+		if emitted[key] {
+			return
+		}
+		emitted[key] = true
+		fmt.Fprintf(buf, "    %s --> %s\n", from.exit, to.entry)
+		hasOutgoing[fromID] = true
+		hasIncoming[toID] = true
+	}
+	for _, id := range order {
+		s := stepByID[id]
+		if s.PredecessorID != 0 {
+			addEdge(s.PredecessorID, id)
+		}
+		if s.SuccessorID != 0 {
+			addEdge(id, s.SuccessorID)
 		}
 	}
 
-	// Collect overall heads from first group and tails from last group
-	for _, e := range groups[0].entries {
-		heads = append(heads, e.heads...)
-	}
-	for _, e := range groups[len(groups)-1].entries {
-		tails = append(tails, e.tails...)
+	// Heads have no incoming edge; tails have no outgoing edge.
+	for _, id := range order {
+		if !hasIncoming[id] {
+			heads = append(heads, byID[id].entry)
+		}
+		if !hasOutgoing[id] {
+			tails = append(tails, byID[id].exit)
+		}
 	}
 	return heads, tails
 }
@@ -1502,12 +1522,12 @@ func (svc *Service) historyBeforeStep(ctx context.Context, shardNum int, flowID 
 	var rows *sql.Rows
 	if beforeStepDepth > 0 {
 		rows, err = db.QueryContext(ctx,
-			"SELECT step_id, step_token, step_depth, task_name, state, changes, status, error, updated_at FROM microbus_steps WHERE flow_id=? AND step_depth<? ORDER BY step_depth, step_id",
+			"SELECT step_id, step_token, step_depth, task_name, state, changes, status, error, updated_at, predecessor_id, successor_id FROM microbus_steps WHERE flow_id=? AND step_depth<? ORDER BY step_depth, step_id",
 			flowID, beforeStepDepth,
 		)
 	} else {
 		rows, err = db.QueryContext(ctx,
-			"SELECT step_id, step_token, step_depth, task_name, state, changes, status, error, updated_at FROM microbus_steps WHERE flow_id=? ORDER BY step_depth, step_id",
+			"SELECT step_id, step_token, step_depth, task_name, state, changes, status, error, updated_at, predecessor_id, successor_id FROM microbus_steps WHERE flow_id=? ORDER BY step_depth, step_id",
 			flowID,
 		)
 	}
@@ -1533,10 +1553,11 @@ func (svc *Service) scanHistorySteps(ctx context.Context, shardNum int, rows *sq
 		var stepID int
 		var stepToken string
 		var stateJSON, changesJSON, errMsg string
-		err := rows.Scan(&stepID, &stepToken, &step.StepDepth, &step.TaskName, &stateJSON, &changesJSON, &step.Status, &errMsg, &step.UpdatedAt)
+		err := rows.Scan(&stepID, &stepToken, &step.StepDepth, &step.TaskName, &stateJSON, &changesJSON, &step.Status, &errMsg, &step.UpdatedAt, &step.PredecessorID, &step.SuccessorID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		step.StepID = stepID
 		step.StepKey = fmt.Sprintf("%d-%d-%s", shardNum, stepID, strings.TrimSpace(stepToken))
 		step.Status = strings.TrimSpace(step.Status)
 		step.Subgraph = graph.IsSubgraph(step.TaskName)
@@ -1631,17 +1652,20 @@ func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // 
 
 	// Load failed step(s) for duplication
 	type failedStep struct {
-		stepID       int
-		stepDepth    int
-		taskName     string
-		state        string
-		timeBudgetMs int
+		stepID        int
+		stepDepth     int
+		taskName      string
+		state         string
+		timeBudgetMs  int
+		lineageID     int
+		fanOutOrdinal int
+		predecessorID int
 	}
 	var failedSteps []failedStep
 	if fanOut {
 		// Potentially multiple failed steps
 		rows, err := db.QueryContext(ctx,
-			"SELECT step_id, step_depth, task_name, state, time_budget_ms FROM microbus_steps WHERE flow_id=? AND status=?",
+			"SELECT step_id, step_depth, task_name, state, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id FROM microbus_steps WHERE flow_id=? AND status=?",
 			flowID, foremanapi.StatusFailed,
 		)
 		if err != nil {
@@ -1650,7 +1674,7 @@ func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // 
 		defer rows.Close()
 		for rows.Next() {
 			var fs failedStep
-			err := rows.Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs)
+			err := rows.Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs, &fs.lineageID, &fs.fanOutOrdinal, &fs.predecessorID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -1662,9 +1686,9 @@ func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // 
 	} else {
 		var fs failedStep
 		err = db.QueryRowContext(ctx,
-			"SELECT step_id, step_depth, task_name, state, time_budget_ms FROM microbus_steps WHERE step_id=? AND status=?",
+			"SELECT step_id, step_depth, task_name, state, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id FROM microbus_steps WHERE step_id=? AND status=?",
 			flowStepID, foremanapi.StatusFailed,
-		).Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs)
+		).Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs, &fs.lineageID, &fs.fanOutOrdinal, &fs.predecessorID)
 		if err != nil && err != sql.ErrNoRows {
 			return errors.Trace(err)
 		}
@@ -1704,10 +1728,14 @@ func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // 
 	// Insert new copies of the failed steps with pending status
 	var newStepIDs []int
 	for _, fs := range failedSteps {
+		// Carry lineage_id and fan_out_ordinal so the retried step rejoins its fan-in
+		// cohort in its original position; without lineage_id it would orphan from the
+		// cohort. Carry predecessor_id so it slots back into the execution DAG where
+		// the failed step was.
 		newStepID, err := tx.InsertReturnID(ctx, "step_id",
-			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?)",
-			flowID, fs.stepDepth, utils.RandomIdentifier(16), fs.taskName, fs.state, foremanapi.StatusPending, fs.timeBudgetMs,
+			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id)"+
+				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			flowID, fs.stepDepth, utils.RandomIdentifier(16), fs.taskName, fs.state, foremanapi.StatusPending, fs.timeBudgetMs, fs.lineageID, fs.fanOutOrdinal, fs.predecessorID,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -1935,8 +1963,20 @@ func (svc *Service) workerLoop(ctx context.Context) {
 func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (err error) {
 	defer func() {
 		if sequel.IsLockContentionError(err) {
-			// The step row was not updated; trigger an immediate poll cycle to recover it
-			// rather than waiting up to maxPollInterval for the next scheduled poll.
+			// The step row was not updated. If this worker had already leased it,
+			// expire the lease and reset it to pending so the immediate poll can
+			// re-enqueue it now. Without this the step keeps its full
+			// time_budget+leaseMargin lease (minutes), so pollPendingSteps - which
+			// only recovers running steps whose lease has expired - cannot act on
+			// it, stalling the whole flow's fan-in until the lease lapses.
+			if db, derr := svc.shard(shardNum); derr == nil {
+				db.ExecContext(ctx,
+					"UPDATE microbus_steps SET status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
+					foremanapi.StatusPending, stepID, foremanapi.StatusRunning,
+				)
+			}
+			// Trigger an immediate poll cycle to recover it rather than waiting up
+			// to maxPollInterval for the next scheduled poll.
 			svc.shortenNextPoll(time.Now())
 		}
 	}()
@@ -2506,7 +2546,6 @@ postExecution:
 
 	// Handle retry (with optional sleep for backoff)
 	if maxAttempts, initialDelay, multiplier, maxDelay, retryRequested := resultFlow.RetryRequested(); retryRequested {
-		svc.LogDebug(ctx, "Task retried", "task", taskName, "flow", workflowName, "attempt", attempt)
 		taskSpan.SetAttributes("workflow.command", "retry")
 
 		// Compute sleep delay: use backoff parameters if present, otherwise use flow.Sleep()
@@ -2523,6 +2562,8 @@ postExecution:
 			}
 			retrySleepMs = time.Duration(delay).Milliseconds()
 		}
+		svc.LogDebug(ctx, "Task retried", "task", taskName, "flow", workflowName, "step", stepID,
+			"attempt", attempt, "maxAttempts", maxAttempts, "delayMs", retrySleepMs)
 
 		// State column is invariant. Accumulated changes already include this execution's output.
 		// On the next attempt, the flow builder merges state+changes so the task sees everything.
@@ -2587,6 +2628,8 @@ postExecution:
 			if err != nil {
 				return errors.Trace(err)
 			}
+			svc.LogDebug(ctx, "Fan-in arrival", "flow", flowID, "spawnCohort", lineageID, "delta", cancelled,
+				"reason", "onError-sibling-cancel", "byStep", stepID, "task", taskName)
 		}
 	}
 
@@ -2685,7 +2728,7 @@ postExecution:
 	sleepMs := sleepDur.Milliseconds()
 	var newStepIDs []int
 
-	for _, next := range normalNexts {
+	for i, next := range normalNexts {
 		stepStateJSON := childInputJSON
 		if next.item != nil {
 			perStepState := make(map[string]any, len(childInputState)+1)
@@ -2694,15 +2737,32 @@ postExecution:
 			stepStateJSON, _ = json.Marshal(perStepState)
 		}
 		nextTimeBudget := svc.taskTimeBudget(&graph, next.taskName)
+		// fan_out_ordinal records this branch's position in the fan-out (forEach array
+		// index, or static fan-out declaration order) so fan-in can merge in that order.
+		// predecessor_id is the step that spawned this one (the current step), so the
+		// execution-DAG edge is recorded on the child side (covers linear and fan-out).
 		newStepID, err := tx.InsertReturnID(ctx, "step_id",
-			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
-			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, sleepMs,
+			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, not_before)"+
+				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, i, stepID, sleepMs,
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		newStepIDs = append(newStepIDs, int(newStepID))
+	}
+
+	// Record the forward edge on the source step: successor_id points to the first
+	// next step (linear: the single next; fan-out: the first child). The full fan-out
+	// edge set is recovered from each child's predecessor_id.
+	if len(newStepIDs) > 0 {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET successor_id=? WHERE step_id=?",
+			newStepIDs[0], stepID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Set cohort_size on the spawn step the first time we fan out from it.
@@ -2714,6 +2774,7 @@ postExecution:
 		if err != nil {
 			return errors.Trace(err)
 		}
+		svc.LogDebug(ctx, "Fan-out cohort spawned", "flow", flowID, "spawnStep", stepID, "task", taskName, "cohortSize", cohortSize, "childLineage", childLineageID)
 	}
 
 	// Increment cohort_arrivals for each direct FanIn arrival from this transition.
@@ -2733,8 +2794,12 @@ postExecution:
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if size > 0 && arrivals >= size {
-			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, fanInTaskName, &graph, sleepMs)
+		fire := size > 0 && arrivals >= size
+		svc.LogDebug(ctx, "Fan-in arrival", "flow", flowID, "spawnCohort", cohortSpawnID, "delta", fanInArrivals,
+			"arrivals", arrivals, "size", size, "fire", fire, "fanInTask", fanInTaskName,
+			"byStep", stepID, "task", taskName, "lineage", lineageID, "push", isPushTransition)
+		if fire {
+			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, stepID, fanInTaskName, &graph, sleepMs)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -2816,9 +2881,18 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 	sleepMs := sleepDur.Milliseconds()
 	nextTimeBudget := svc.taskTimeBudget(graph, fanInTarget)
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), lineageID, sleepMs,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), lineageID, stepID, sleepMs,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Empty cohort: the single edge is spawn -> fan-in. Record the forward side too.
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_steps SET successor_id=? WHERE step_id=?",
+		int(fanInStepID), stepID,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -2845,12 +2919,20 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 }
 
 // insertFanInStep creates the fan-in step inside the caller's tx after the cohort completes.
-// Merges state from all cohort members (steps with lineage_id = cohortSpawnID) using reducers.
-// The new step's lineage_id is the spawn's lineage_id (one frame popped).
-func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64) (int, error) {
+// Only cohort members (steps with lineage_id = cohortSpawnID) in status 'completed' contribute
+// their changes, merged in fan_out_ordinal order (the forEach array / spawn order) so list/append/
+// sum reducers are deterministic; step_id breaks ties. Non-completed members ('failed',
+// 'cancelled', 'retried', 'pending', 'running') contribute no state and the fan-in does NOT
+// escalate on them: a 'cancelled' member is the normal OnError sibling-cancel case and the flow
+// must still recover via the handler path; genuine failures/cancels are already terminal via
+// failStep / the Cancel API / the terminal-flow check. The new step's lineage_id is the spawn's
+// lineage_id (one frame popped). Its predecessor_id is predecessorStepID (the last cohort member
+// to finish); each cohort exit step's successor_id is set to the fan-in step so the many-to-one
+// fan-in edges are recorded.
+func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID, predecessorStepID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64) (stepID int, err error) {
 	var spawnStateJSON, spawnChangesJSON string
 	var spawnLineageID int
-	err := tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		"SELECT state, changes, lineage_id FROM microbus_steps WHERE step_id=?",
 		cohortSpawnID,
 	).Scan(&spawnStateJSON, &spawnChangesJSON, &spawnLineageID)
@@ -2866,7 +2948,7 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 	}
 
 	rows, err := tx.QueryContext(ctx,
-		"SELECT changes FROM microbus_steps WHERE flow_id=? AND lineage_id=? ORDER BY updated_at, step_id",
+		"SELECT status, changes FROM microbus_steps WHERE flow_id=? AND lineage_id=? ORDER BY fan_out_ordinal, step_id",
 		flowID, cohortSpawnID,
 	)
 	if err != nil {
@@ -2874,10 +2956,15 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var changesJSON string
-		err = rows.Scan(&changesJSON)
+		var status, changesJSON string
+		err = rows.Scan(&status, &changesJSON)
 		if err != nil {
 			return 0, errors.Trace(err)
+		}
+		// Only completed members contribute state. failed/cancelled/retried/pending/
+		// running are skipped - the fan-in does not escalate on them.
+		if status != foremanapi.StatusCompleted {
+			continue
 		}
 		var changes map[string]any
 		json.Unmarshal([]byte(changesJSON), &changes)
@@ -2894,14 +2981,49 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 	mergedJSON, _ := json.Marshal(merged)
 	nextTimeBudget := svc.taskTimeBudget(graph, fanInTaskName)
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, not_before)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, sleepMs,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?))",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, predecessorStepID, sleepMs,
 	)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
+
+	// Record the fan-in edges on the cohort exit steps: those whose task transitions
+	// into the fan-in (per the graph), scoped to this cohort by lineage_id. This is
+	// the exit set, not the whole lineage (e.g. in S->forEach->{A->B->C}->J only the
+	// C's, not A/B, point at J).
+	exitTasks := fanInPredecessorTasks(graph, fanInTaskName)
+	if len(exitTasks) > 0 {
+		placeholders := strings.Repeat("?,", len(exitTasks)-1) + "?"
+		args := []any{int(fanInStepID), flowID, cohortSpawnID}
+		for _, t := range exitTasks {
+			args = append(args, t)
+		}
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET successor_id=? WHERE flow_id=? AND lineage_id=? AND task_name IN ("+placeholders+")",
+			args...,
+		)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
 	return int(fanInStepID), nil
+}
+
+// fanInPredecessorTasks returns the distinct task node names that transition into
+// fanInTask via a normal (non-goto, non-error) transition. These are the cohort's
+// exit tasks; their step instances are the direct predecessors of the fan-in step.
+func fanInPredecessorTasks(graph *workflow.Graph, fanInTask string) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, tr := range graph.Transitions() {
+		if tr.To == fanInTask && !tr.WithGoto && !tr.OnError && !seen[tr.From] {
+			seen[tr.From] = true
+			names = append(names, tr.From)
+		}
+	}
+	return names
 }
 
 // completeFlowSequential marks the flow completed and the current step completed when no
@@ -2962,6 +3084,61 @@ func (svc *Service) mergeStepDepthState(ctx context.Context, db sequel.Executor,
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+	}
+	return merged, nil
+}
+
+// mergeTerminalSteps computes the merged state of the execution-DAG tail: completed
+// steps with no recorded outgoing edge (successor_id = 0). A well-formed graph has a
+// single such step (the one that transitioned to END); a force-terminated flow may
+// have several. Returns nil (not an error) when no completed terminal step exists, so
+// the caller can fall back to the legacy depth-based merge for pre-migration flows.
+func (svc *Service) mergeTerminalSteps(ctx context.Context, db sequel.Executor, flowID int, reducers map[string]workflow.Reducer) (map[string]any, error) {
+	rows, err := db.QueryContext(ctx,
+		"SELECT state, changes FROM microbus_steps WHERE flow_id=? AND successor_id=0 AND status=? ORDER BY step_depth, step_id",
+		flowID, foremanapi.StatusCompleted,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer rows.Close()
+
+	var baseState map[string]any
+	var allChanges []map[string]any
+	found := false
+	for rows.Next() {
+		found = true
+		var stateJSON, changesJSON string
+		if err := rows.Scan(&stateJSON, &changesJSON); err != nil {
+			return nil, errors.Trace(err)
+		}
+		if baseState == nil {
+			if err := json.Unmarshal([]byte(stateJSON), &baseState); err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+		var changes map[string]any
+		if err := json.Unmarshal([]byte(changesJSON), &changes); err != nil {
+			return nil, errors.Trace(err)
+		}
+		allChanges = append(allChanges, changes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !found {
+		return nil, nil
+	}
+
+	merged := baseState
+	for _, changes := range allChanges {
+		merged, err = workflow.MergeState(merged, changes, reducers)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	if merged == nil {
+		merged = map[string]any{}
 	}
 	return merged, nil
 }
@@ -3301,20 +3478,29 @@ func (svc *Service) computeFinalState(ctx context.Context, db sequel.Executor, f
 		return "", "", errors.Trace(err)
 	}
 
-	// Find the latest step_depth for this flow
-	var maxStepDepth int
-	err = db.QueryRowContext(ctx,
-		"SELECT MAX(step_depth) FROM microbus_steps WHERE flow_id=?",
-		flowID,
-	).Scan(&maxStepDepth)
+	// The flow's terminal state is the merged state of the execution-DAG tail: the
+	// completed steps with no recorded outgoing edge. MAX(step_depth) is not the tail -
+	// an intra-thread Goto loop inside a fan-out drives a non-terminal branch to a
+	// deeper step_depth than the fan-in/terminal step.
+	merged, err := svc.mergeTerminalSteps(ctx, db, flowID, graph.Reducers())
 	if err != nil {
 		return "", "", errors.Trace(err)
 	}
-
-	// Merge state from all steps at the latest step_depth
-	merged, err := svc.mergeStepDepthState(ctx, db, flowID, maxStepDepth, graph.Reducers())
-	if err != nil {
-		return "", "", errors.Trace(err)
+	if merged == nil {
+		// Legacy flows predating predecessor_id/successor_id, or a flow force-terminated
+		// before any step completed: fall back to the depth-based merge.
+		var maxStepDepth int
+		err = db.QueryRowContext(ctx,
+			"SELECT MAX(step_depth) FROM microbus_steps WHERE flow_id=?",
+			flowID,
+		).Scan(&maxStepDepth)
+		if err != nil {
+			return "", "", errors.Trace(err)
+		}
+		merged, err = svc.mergeStepDepthState(ctx, db, flowID, maxStepDepth, graph.Reducers())
+		if err != nil {
+			return "", "", errors.Trace(err)
+		}
 	}
 
 	data, err := json.Marshal(merged)

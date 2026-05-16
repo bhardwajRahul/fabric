@@ -1,0 +1,175 @@
+package docextractionflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/docextractionflow/docextractionflowapi"
+)
+
+// Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
+type Mock struct {
+	*Intermediate
+	mockScanPDF                func(ctx context.Context, flow *workflow.Flow, pdf []byte) (pageImages [][]byte, pageCount int, err error)                                 // MARKER: ScanPDF
+	mockIdentifyChunks         func(ctx context.Context, flow *workflow.Flow, page []byte) (chunks []docextractionflowapi.Rectangle, err error)                           // MARKER: IdentifyChunks
+	mockTranscribeChunk        func(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) // MARKER: TranscribeChunk
+	mockJoinPageTranscriptions func(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error)                            // MARKER: JoinPageTranscriptions
+	mockJoinDocTranscriptions  func(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error)                                // MARKER: JoinDocTranscriptions
+	mockDocExtractionGraph     func(ctx context.Context) (graph *workflow.Graph, err error)                                                                               // MARKER: DocExtraction
+	unsubMockDocExtraction     func() error                                                                                                                               // MARKER: DocExtraction
+}
+
+// NewMock creates a new mockable version of the microservice.
+func NewMock() *Mock {
+	svc := &Mock{}
+	svc.Intermediate = NewIntermediate(svc)
+	svc.SetVersion(7357) // Stands for TEST
+	return svc
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Mock) OnStartup(ctx context.Context) (err error) {
+	if svc.Deployment() != connector.LOCAL && svc.Deployment() != connector.TESTING {
+		return errors.New("mocking disallowed in %s deployment", svc.Deployment())
+	}
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+// MockScanPDF sets up a mock handler for ScanPDF.
+func (svc *Mock) MockScanPDF(handler func(ctx context.Context, flow *workflow.Flow, pdf []byte) (pageImages [][]byte, pageCount int, err error)) *Mock { // MARKER: ScanPDF
+	svc.mockScanPDF = handler
+	return svc
+}
+
+// ScanPDF executes the mock handler.
+func (svc *Mock) ScanPDF(ctx context.Context, flow *workflow.Flow, pdf []byte) (pageImages [][]byte, pageCount int, err error) { // MARKER: ScanPDF
+	if svc.mockScanPDF != nil {
+		pageImages, pageCount, err = svc.mockScanPDF(ctx, flow, pdf)
+	}
+	return pageImages, pageCount, errors.Trace(err)
+}
+
+// MockIdentifyChunks sets up a mock handler for IdentifyChunks.
+func (svc *Mock) MockIdentifyChunks(handler func(ctx context.Context, flow *workflow.Flow, page []byte) (chunks []docextractionflowapi.Rectangle, err error)) *Mock { // MARKER: IdentifyChunks
+	svc.mockIdentifyChunks = handler
+	return svc
+}
+
+// IdentifyChunks executes the mock handler.
+func (svc *Mock) IdentifyChunks(ctx context.Context, flow *workflow.Flow, page []byte) (chunks []docextractionflowapi.Rectangle, err error) { // MARKER: IdentifyChunks
+	if svc.mockIdentifyChunks != nil {
+		chunks, err = svc.mockIdentifyChunks(ctx, flow, page)
+	}
+	return chunks, errors.Trace(err)
+}
+
+// MockTranscribeChunk sets up a mock handler for TranscribeChunk.
+func (svc *Mock) MockTranscribeChunk(handler func(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error)) *Mock { // MARKER: TranscribeChunk
+	svc.mockTranscribeChunk = handler
+	return svc
+}
+
+// TranscribeChunk executes the mock handler.
+func (svc *Mock) TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) { // MARKER: TranscribeChunk
+	if svc.mockTranscribeChunk != nil {
+		listTranscriptions, err = svc.mockTranscribeChunk(ctx, flow, page, chunk)
+	}
+	return listTranscriptions, errors.Trace(err)
+}
+
+// MockJoinPageTranscriptions sets up a mock handler for JoinPageTranscriptions.
+func (svc *Mock) MockJoinPageTranscriptions(handler func(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error)) *Mock { // MARKER: JoinPageTranscriptions
+	svc.mockJoinPageTranscriptions = handler
+	return svc
+}
+
+// JoinPageTranscriptions executes the mock handler.
+func (svc *Mock) JoinPageTranscriptions(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error) { // MARKER: JoinPageTranscriptions
+	if svc.mockJoinPageTranscriptions != nil {
+		listPageTexts, err = svc.mockJoinPageTranscriptions(ctx, flow, listTranscriptions)
+	}
+	return listPageTexts, errors.Trace(err)
+}
+
+// MockJoinDocTranscriptions sets up a mock handler for JoinDocTranscriptions.
+func (svc *Mock) MockJoinDocTranscriptions(handler func(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error)) *Mock { // MARKER: JoinDocTranscriptions
+	svc.mockJoinDocTranscriptions = handler
+	return svc
+}
+
+// JoinDocTranscriptions executes the mock handler.
+func (svc *Mock) JoinDocTranscriptions(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error) { // MARKER: JoinDocTranscriptions
+	if svc.mockJoinDocTranscriptions != nil {
+		docTranscription, err = svc.mockJoinDocTranscriptions(ctx, flow, listPageTexts)
+	}
+	return docTranscription, errors.Trace(err)
+}
+
+// MockDocExtraction sets up a mock handler for the DocExtraction workflow.
+// The handler receives typed inputs from the workflow's state and returns typed outputs.
+// A nil handler clears the mock.
+func (svc *Mock) MockDocExtraction(handler func(ctx context.Context, flow *workflow.Flow, pdf []byte) (docTranscription string, pageCount int, err error)) *Mock { // MARKER: DocExtraction
+	if svc.unsubMockDocExtraction != nil {
+		svc.unsubMockDocExtraction()
+		svc.unsubMockDocExtraction = nil
+	}
+	if handler == nil {
+		svc.mockDocExtractionGraph = nil
+		return svc
+	}
+	mockName := "MockDocExtraction" + utils.RandomIdentifier(8)
+	mockRoute := ":428/mock-doc-extraction-" + utils.RandomIdentifier(8)
+	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
+	svc.mockDocExtractionGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
+		g := workflow.NewGraph(docextractionflowapi.DocExtraction.URL())
+		g.AddTransition(mockTaskURL, workflow.END)
+		g.DeclareInputs("*")
+		g.DeclareOutputs("*")
+		return g, nil
+	}
+	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return errors.Trace(err)
+		}
+		snap := f.Snapshot()
+		var in docextractionflowapi.DocExtractionIn
+		f.ParseState(&in)
+		docTranscription, pageCount, err := handler(r.Context(), &f, in.Pdf)
+		if err != nil {
+			return err // No trace
+		}
+		out := docextractionflowapi.DocExtractionOut{DocTranscription: docTranscription, PageCount: pageCount}
+		f.SetChanges(out, snap)
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	},
+		sub.At("POST", mockRoute),
+		sub.Task(docextractionflowapi.DocExtractionIn{}, docextractionflowapi.DocExtractionOut{}),
+	)
+	if err == nil {
+		svc.unsubMockDocExtraction = func() error { return svc.Unsubscribe(mockName) }
+	}
+	return svc
+}
+
+// DocExtraction returns the workflow graph, or a mocked graph if MockDocExtraction was called.
+func (svc *Mock) DocExtraction(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: DocExtraction
+	if svc.mockDocExtractionGraph != nil {
+		graph, err = svc.mockDocExtractionGraph(ctx)
+	}
+	return graph, errors.Trace(err)
+}

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS microbus_flows (
     thread_token         CHAR(16)     NOT NULL DEFAULT '',
     trace_parent         VARCHAR(128) NOT NULL DEFAULT '',
     notify_hostname      VARCHAR(256) NOT NULL DEFAULT '',
-    final_state          TEXT         NOT NULL DEFAULT '{}',
+    final_state          TEXT         NOT NULL DEFAULT ('{}'),
     breakpoints          JSON         NOT NULL DEFAULT ('{}'),
     created_at           DATETIME(3)  NOT NULL DEFAULT NOW_UTC(),
     updated_at           DATETIME(3)  NOT NULL DEFAULT NOW_UTC(),

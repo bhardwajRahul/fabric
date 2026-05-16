@@ -10,7 +10,7 @@ require (
 	github.com/microbus-io/copyrighter v1.3.0
 	github.com/microbus-io/errors v1.0.0
 	github.com/microbus-io/pyvenv v1.0.0
-	github.com/microbus-io/sequel v1.5.8
+	github.com/microbus-io/sequel v1.5.9
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.8
 	github.com/nats-io/jwt/v2 v2.8.1

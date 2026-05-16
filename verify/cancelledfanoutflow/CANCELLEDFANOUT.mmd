@@ -1,0 +1,16 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"cancelled-fan-out"}}:::term --> _start
+    t4@{ shape: trap-t, label: "j" }
+    _start(( )):::term --> t0["source"]:::task
+    t0 --> t1["a"]:::task
+    t0 --> t2["b"]:::task
+    t0 --> t3["c"]:::task
+    t1 -->|"fan-in"| t4
+    t2 -->|"fan-in"| t4
+    t3 -->|"fan-in"| t4
+    t4 --> _end(( )):::term
+    class t4 task

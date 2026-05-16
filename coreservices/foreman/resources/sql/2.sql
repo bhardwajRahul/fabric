@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS microbus_steps (
     interrupt_payload  JSON         NOT NULL DEFAULT ('{}'),
     status             CHAR(16)     NOT NULL,
     goto_next          VARCHAR(512) NOT NULL DEFAULT '',
-    error              TEXT         NOT NULL DEFAULT '',
+    error              TEXT         NOT NULL DEFAULT (''),
     time_budget_ms     INT          NOT NULL,
     breakpoint_hit     TINYINT      NOT NULL DEFAULT 0,
     attempt            INT          NOT NULL DEFAULT 0,

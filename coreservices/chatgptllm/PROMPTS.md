@@ -13,12 +13,12 @@ Expose one endpoint:
    - `assistant` messages with `ToolCalls` JSON: unmarshal and populate `openaiToolCall` entries with `id`, `type: "function"`, and `function: {name, arguments}`. Note that OpenAI tool call arguments are a JSON-encoded string, not raw JSON.
    - `tool` messages: set `tool_call_id` from `msg.ToolCallID`.
 2. Convert `[]llmapi.Tool` to `[]openaiTool` with `type: "function"` and a nested `function` object (name, description, parameters as `json.RawMessage`).
-3. POST to `svc.BaseURL() + "/v1/chat/completions"` with `Authorization: Bearer <APIKey>`.
+3. POST to `svc.CompletionURL()` with `Authorization: Bearer <APIKey>`.
 4. On non-200 status, return an error with the status code and body.
 5. Parse the first choice's message: set `completion.Content` and convert `tool_calls` to `[]llmapi.ToolCall` (OpenAI tool call arguments are a string, decode as `json.RawMessage`).
 
 ### Config Properties
 
-- `BaseURL` - OpenAI API base URL, default `https://api.openai.com`, validated as URL.
+- `CompletionURL` - OpenAI chat completions endpoint URL, default `https://api.openai.com/v1/chat/completions`, validated as URL.
 - `APIKey` - OpenAI API key, `secret: true`.
 - `Model` - OpenAI model identifier, default `gpt-4`.

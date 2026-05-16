@@ -123,6 +123,75 @@ Outside the hot path, `completeSurgraphFlow` and `surgraphChain` also paralleliz
 
 **Fan-in does not escalate on cancelled or failed siblings.** If a sibling at the current depth is in `failed` or `cancelled` status when fan-in evaluates, the flow is already being driven by another path: a sibling's `failStep` has cascaded the flow to failed, an external `Cancel` has cancelled it, or an `OnError` sibling-cancel has handed the depth off to an error handler. The fan-in worker bails out with `return nil` instead of calling `failStep` on its own step. Calling `failStep` here races with the OnError handler and incorrectly fails an otherwise-recoverable flow: the OnError handler's next step (e.g. an error-routed alternative path) is in flight at depth `N+1` while the fan-in worker is still finishing depth `N`, and a redundant `failStep` from the fan-in worker would mark the parent flow failed before the OnError path ever runs.
 
+**Fan-in merge order and contribution (lineage `SetFanIn` path).** `insertFanInStep` reads cohort members
+(`lineage_id = cohortSpawnID`) `ORDER BY fan_out_ordinal, step_id`. `fan_out_ordinal` is stamped on each branch at
+fan-out from its position in the spawn loop, which is the `forEach` array index (or static fan-out declaration order),
+so `list`/`append`/`sum`/`set` reducers fold in input-array order rather than non-deterministic completion order;
+`step_id` only breaks ties. The firing gate is unchanged - fan-in still fires when `cohort_arrivals >= cohort_size`,
+which is a counter on the spawn step independent of the merge query, so the merge's status filter cannot deadlock
+fan-in. Only members in `completed` status contribute their `changes`; `failed`/`cancelled`/`retried`/`pending`/
+`running` members contribute no state and are skipped. Excluding `cancelled` from the merge matches the long-standing
+"cancelled members count as arrivals but contribute no state" intent; before this, the unfiltered merge folded their
+empty/partial `changes` in.
+
+**The fan-in does not escalate on failed/cancelled members.** It records a normal `pending` fan-in step regardless of
+cohort composition - it never marks the fan-in terminal or cascades `failStep`. A `cancelled` cohort member is the
+*expected* OnError sibling-cancel case (one branch errored and routed to its `OnError` handler, which cancelled the
+others; the flow must still recover via the handler -> fan-in path and complete). Genuine terminal outcomes are
+already handled elsewhere and do not rely on the fan-in: an unhandled task error cascades via `failStep`, the Cancel
+API sets the flow terminal directly, and the terminal-flow check in `processStep` catches siblings. An earlier
+revision had the fan-in *poison* itself (mark terminal + `failStep`) when any member was failed/cancelled; that
+regressed the OnError recovery invariant and made `verify/fanouterrorflow` flaky (it failed iff the erroring branch
+lost the race to its still-running siblings), so it was removed. `verify/failedfanoutflow` and
+`verify/cancelledfanoutflow` still pass without it, confirming poison was never load-bearing for them.
+
+**Retry rejoins its cohort.** The API-level `Retry` insert copies the failed step's `lineage_id` and
+`fan_out_ordinal` onto the new pending step. Without the `lineage_id` copy the retried step would orphan from its
+fan-in cohort (its `lineage_id` would default to 0) and its output would be silently dropped from the merge; the
+`fan_out_ordinal` copy keeps the retried branch in its original list position. The immutable `retried` row is excluded
+from the merge by the `completed`-only filter, so the retry does not double-count under append/sum/union/merge.
+
+### Execution-DAG edges (`predecessor_id` / `successor_id`)
+
+`lineage_id` is a cohort-counting device, not a DAG: a `forEach` source applies one `childLineageID` to every
+branch, so an entire per-element sub-pipeline (e.g. `forEach -> {A -> B -> C}`) collapses into a single lineage. It
+therefore cannot reconstruct the true parent/child structure - which is why history rendering used to draw an
+all-to-all bipartite join by `step_depth` and connected every `H` to every `A`/`B`.
+
+`microbus_steps.predecessor_id` and `successor_id` (migration `7.sql`) record the actual execution edges so the DAG
+is *recorded*, not *reconstructed*. Every edge lands on at least one endpoint:
+
+- **Linear** `X->Y`: `Y.predecessor_id=X` (at insert) and `X.successor_id=Y` (the post-loop UPDATE in `processStep`).
+- **Fan-out** `X->{Yi}`: every `Yi.predecessor_id=X`; `X.successor_id` = the first child only. The full set is
+  recovered from the children's `predecessor_id`.
+- **Fan-in** `{Yi}->Z`: `Z.predecessor_id` = the last cohort member to finish (the step that triggered fan-in);
+  every cohort *exit* step gets `successor_id=Z`. The exit set is `lineage_id == cohortSpawnID AND task_name IN`
+  the graph-predecessor tasks of the fan-in (`fanInPredecessorTasks`) - **not** the whole lineage, so `A`/`B` in
+  `forEach->{A->B->C}->J` are excluded and only the `C`s point at `J`.
+- **Retry**: the new step copies the failed step's `predecessor_id` so it slots back into the DAG in place.
+- **Entry / subgraph-entry / fork-entry steps**: `predecessor_id` defaults to 0 (no in-flow predecessor).
+
+`renderMermaidSteps` ignores `step_depth` and `lineage_id` entirely: it draws the deduped union of
+`{predecessor_id -> step}` and `{step -> successor_id}`, which is exact for arbitrary nesting (validated by
+`mermaid_test.go` for the per-element pipeline and `forEach`-of-chain shapes). Heads are nodes with no incoming
+edge, tails are nodes with no outgoing edge. Subgraph steps still expand inline via the `SubHistory` recursion;
+edges into/out of a subgraph step attach to its enter/exit markers. Cross-flow fork seams are not wired (the
+forked entry has `predecessor_id=0`), so a forked flow renders as its own connected sub-DAG from `_start` rather
+than stitched to its ancestor - acceptable and arguably clearer than the old depth hack.
+
+`computeFinalState` also reads the DAG, not `step_depth`. The flow's terminal state is the merge of the tail
+steps - completed steps with `successor_id = 0` (`mergeTerminalSteps`). The earlier `MAX(step_depth)` heuristic
+was wrong for any graph where an intra-thread `flow.Goto` self-loop sits inside a fan-out: each loop iteration
+pushes `step_depth + 1`, so the looping branch can outrun the fan-in/terminal step in depth. When `normalC`
+(shallow branch) is the last cohort member to arrive, the fan-in `taskD` is created at `normalC.step_depth + 1`,
+which is *less* than the dangling final loop iteration's depth, so `MAX(step_depth)` selected the loop step
+(no `finalResult`) and `DeclareOutputs` filtering then yielded `{}`. The bug was order-dependent (only when the
+shallow branch lost the fan-in race), which is why `verify/intrathreadgotoflow` failed intermittently. The
+tail-step merge is depth-agnostic: the loop iterations carry `successor_id = taskD` (set by the fan-in cohort-exit
+UPDATE), so only the real terminal step qualifies. `mergeTerminalSteps` returns nil when no completed terminal
+step exists (pre-`7.sql` flows, or a flow force-terminated before anything completed); the caller then falls back
+to the legacy `MAX(step_depth)` merge so `Cancel`/`failStep` snapshots are unaffected.
+
 ### Time Budgets
 
 Each step has a `time_budget_ms` that controls the `pub.Timeout` on the task execution HTTP call. The budget is resolved at step creation: the graph's per-task budget (`graph.SetTimeBudget`) takes precedence; otherwise the foreman's `DefaultTimeBudget` config is used (default 2m).
@@ -216,8 +285,90 @@ When `SQLDataSourceName` is empty (default in `TESTING` deployment), the foreman
 
 - **Write-first transactions** - `advanceFlow` uses an `UPDATE` as the first operation in its transaction to immediately acquire a write lock. On MySQL/Postgres, this serializes concurrent workers (equivalent to `SELECT ... FOR UPDATE`). On SQLite with `cache=shared`, this prevents deadlocks: deferred transactions that start with reads both acquire SHARED locks, and neither can upgrade to write when the other holds a read lock. Starting with a write acquires the lock immediately, causing the second transaction to block until the first commits.
 - **Busy timeout** - `sequel` (since v1.5.7) automatically applies `_pragma=busy_timeout(1000)` to SQLite DSNs that don't already set one. Without this, concurrent workers hitting a write lock immediately fail with `SQLITE_BUSY`; with it, they wait up to 1 second for the lock. This is essential for the foreman because four worker goroutines routinely write to `microbus_steps` in parallel during fan-out.
-- **Lock contention recovery** - `processStep` defers a check on its return value: if the error is a database lock contention (`sequel.IsLockContentionError`), it calls `shortenNextPoll(time.Now())` to wake `pollPendingSteps` immediately rather than waiting up to `maxPollInterval` (5 min). The step itself will be reset to `pending` by the lease-expiry path the next time poll runs.
+- **Lock contention recovery** - `processStep` defers a check on its return value: if the error is a database
+  lock contention (`sequel.IsLockContentionError`), the deferred handler first resets the step it had leased
+  (`status='running'` → `pending`, `lease_expires=NOW_UTC()`), then calls `shortenNextPoll(time.Now())` to wake
+  `pollPendingSteps` immediately. Both halves are load-bearing: `pollPendingSteps` only recovers running steps
+  whose lease has *already* expired, and a freshly leased step holds its `time_budget+leaseMargin` lease (minutes,
+  e.g. `DefaultTimeBudget` 2m + `leaseMargin` 30s = 2.5m). Without the lease reset, the immediate poll finds
+  nothing to do and the step - and the whole flow's fan-in, if the step sat inside a fan-out branch - stalls until
+  the lease lapses on its own. The reset is guarded by `WHERE status='running'`: a no-op if contention struck
+  before the lease was acquired (still `pending`) or after the step already completed (a later statement failed),
+  so only the leased-and-uncommitted case is rewound. Re-execution after this rewind is the same idempotency
+  contract the lease-expiry recovery path already imposes - this change only shortens the latency from minutes to
+  the next poll, it does not introduce a new re-run hazard.
 - **Migration scripts** - all `.sql` files in `resources/sql/` include `-- DRIVER: sqlite` variants.
+
+### MySQL Column Defaults
+
+In the `-- DRIVER: mysql` schema sections, `TEXT`/`BLOB`/`JSON` columns cannot take a bare literal `DEFAULT`. MySQL
+rejects `DEFAULT '{}'` on these types with error 1101; the value must be written as a parenthesized expression default,
+`DEFAULT ('{}')` (supported since MySQL 8.0.13). The same applies to function defaults other than `CURRENT_TIMESTAMP`,
+which is why the `NOW_UTC()` macro must also expand parenthesized. `VARCHAR`/`CHAR` columns are unaffected and keep bare
+literal defaults. The Postgres, SQL Server, and SQLite sections all permit bare literal defaults on their text/JSON
+types, so this constraint is MySQL-only. When editing the schema files, mirror the existing parenthesized form on every
+MySQL `TEXT`/`JSON` column or fresh MySQL deployments will fail to migrate.
+
+## Schema Column Catalog
+
+The `resources/sql/*.sql` migration files carry **no prose comments by design** - only the functional
+`-- DRIVER: <dialect>` directives the `sequel` runner parses to select the per-dialect statement (it splits on
+`;\n`, then strips every `--` line before executing, so descriptive comments were dead weight). All schema
+rationale and the meaning of every column live here.
+
+#### `microbus_flows`
+
+| Column | Meaning |
+|---|---|
+| `flow_id` | Per-shard auto-increment primary key. The external flowKey is `{shard}-{flow_id}-{flow_token}` |
+| `flow_token` | Random token component of the flowKey, guards against id guessing |
+| `workflow_name` | URL/name of the workflow graph this flow runs |
+| `graph` | JSON of the workflow graph, frozen at `Create` time |
+| `actor_claims` | JSON of the caller's JWT claims captured at `Create`; a fresh access token is minted from these before each task |
+| `status` | Flow lifecycle: `created`/`running`/`interrupted`/`completed`/`failed`/`cancelled` |
+| `step_id` | The flow's current step; `0` during fan-out (multiple steps active at one depth) |
+| `forked_flow_id` | Ancestor flow id if this flow was produced by `Fork`; `0` otherwise |
+| `forked_step_depth` | The ancestor `step_depth` the fork was taken from |
+| `surgraph_flow_id` | Parent (surgraph) flow id if this is a subgraph flow; `0` otherwise |
+| `surgraph_step_depth` | The parent's `step_depth` that spawned this subgraph |
+| `surgraph_step_id` | (`3.sql`) PK of the parent's parked surgraph step, so a subgraph flow identifies its surgraph step unambiguously when parallel parked surgraph steps coexist at one depth. `0` = legacy row, falls back to the lease-threshold search |
+| `thread_id` | Groups flows in a `Continue` thread; defaults to `flow_id` (each flow its own thread) |
+| `thread_token` | Token component of the thread's flowKey |
+| `trace_parent` | W3C `traceparent` for distributed-trace continuity across the flow |
+| `notify_hostname` | Set by `StartNotify`; `OnFlowStopped` fires here when the flow stops. `''` = no notification |
+| `final_state` | JSON state computed at termination, filtered through the graph's `DeclareOutputs` |
+| `breakpoints` | JSON `map[taskName]string` of `BreakBefore` breakpoints |
+| `created_at` | UTC creation time. Append-only and PK-correlated; the `PurgeExpiredFlows` cursor heuristic and `idx_*_created_at` rely on this |
+| `updated_at` | UTC time of the last status transition; bumped on every state change |
+
+#### `microbus_steps`
+
+| Column | Meaning |
+|---|---|
+| `step_id` | Per-shard auto-increment primary key, globally unique within a shard across flows. External stepKey is `{shard}-{step_id}-{step_token}` |
+| `flow_id` | Owning flow |
+| `step_depth` | Sequential transition depth; fan-out siblings share it. Used for history ordering and legacy depth-based fan-in, **not** for the execution DAG (see "Execution-DAG edges") |
+| `step_token` | Random token component of the stepKey |
+| `task_name` | Graph node name of the task this step executes |
+| `state` | JSON input snapshot. Immutable except on retry/resume (see "State mutation on retry and resume") |
+| `changes` | JSON output delta the task produced |
+| `interrupt_payload` | JSON payload from `flow.Interrupt()` |
+| `status` | Step lifecycle: `created`/`pending`/`running`/`interrupted`/`completed`/`failed`/`retried`/`cancelled` |
+| `goto_next` | Task-requested `flow.Goto` target; `''` = none |
+| `error` | Error text when `failed`; `''` otherwise |
+| `time_budget_ms` | Execution budget; the HTTP timeout on the task call |
+| `breakpoint_hit` | `1` once a breakpoint on this step has fired, so it does not re-trigger on resume |
+| `attempt` | Task-initiated retry (`flow.Retry`) attempt counter, drives the backoff |
+| `not_before` | Earliest UTC time the step may execute (`flow.Sleep` / retry backoff) |
+| `lease_expires` | Crash-recovery lease; `pollPendingSteps` reclaims `running` steps past this |
+| `created_at` | UTC creation time |
+| `updated_at` | UTC time of the last status transition |
+| `lineage_id` | (`5.sql`) Cohort frame: the spawn step's `step_id` on a push, else inherited. Drives explicit `SetFanIn` arrival counting and the merge. A cohort-counting device, **not** a DAG. `0` = no `SetFanIn` |
+| `cohort_size` | (`5.sql`) On a fan-out spawn step: number of branches spawned |
+| `cohort_arrivals` | (`5.sql`) On a fan-out spawn step: branches that reached the fan-in; fan-in fires when `arrivals >= size` |
+| `fan_out_ordinal` | (`6.sql`) This branch's index in its fan-out (forEach array index / static declaration order); fan-in merges in this order so list/sum reducers are deterministic. Retry copies it. `0` = not part of a fan-out |
+| `predecessor_id` | (`7.sql`) Step that ran immediately before this one in the execution DAG. `0` = none (entry/subgraph-entry/fork-entry) |
+| `successor_id` | (`7.sql`) Step that runs immediately after this one. `0` = none (exit) |
 
 ## Database Indexing Strategy
 
@@ -243,6 +394,8 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 | `idx_microbus_flows_status` | `(status, updated_at)` | `List` by status. Append-only terminal sections as described above |
 | `idx_microbus_flows_workflow_name` | `(workflow_name)` | `List` by workflow name. Low cardinality (hundreds of distinct values) but high volume. Actual key length is ~40 bytes despite the 512-char column definition since all three databases store variable-length strings at actual length in B-tree indexes |
 | `idx_microbus_flows_thread` | `(thread_id, flow_id)` | `Continue` (find latest flow in thread) and `List` by thread. Point lookups by thread_id with flow_id ordering for "latest" queries |
+| `idx_microbus_flows_surgraph` | `(surgraph_flow_id)`, partial `WHERE surgraph_flow_id > 0` on pgx/sqlite | Walking the subgraph chain (parent → child subgraph flows) |
+| `idx_microbus_flows_created_at` | `(created_at)` (migration `4.sql`) | Time-window queries (e.g. "flows created in the last hour"). `created_at` is append-only/monotonic in practice so new rows land at the rightmost leaf page - minimal B-tree maintenance, no random page splits |
 
 #### `microbus_steps` table
 
@@ -251,6 +404,7 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 | PK | `(step_id)` | Row lookups, lease acquisition in `processStep` |
 | `idx_microbus_steps_flow_id` | `(flow_id, step_id)` on MySQL; `(flow_id)` on pgx/mssql | Per-flow step queries (history, fan-in siblings, cancel) |
 | `idx_microbus_steps_status` | `(status, updated_at)` - partial on pgx: `WHERE status IN ('pending', 'running')` | `pollPendingSteps` recovery and pending step discovery. Only non-terminal statuses are queried through this index |
+| `idx_microbus_steps_created_at` | `(created_at)` (migration `4.sql`) | Time-window queries; append-only, same minimal-maintenance rationale as the flows index |
 
 ### Data Retention
 
@@ -263,6 +417,28 @@ The `PurgeExpiredFlows` ticker runs every 24 hours and deletes terminated flows 
 ## Concurrency and Crash Recovery
 
 The foreman uses SQL transactions for multi-statement operations and `lease_expires` for crash recovery.
+
+### Worker context: `rootCtx`, not `OnStartup`'s ctx and not `Lifetime()`
+
+All worker and timer database operations run on `svc.rootCtx`, a foreman-owned context created
+(`context.WithCancel(context.Background())`) at the top of `OnStartup` and cancelled in `OnShutdown`
+*after* `svc.workers.Wait()` has drained the pool. It is deliberately **not**:
+
+- `OnStartup`'s `ctx` argument - that ctx is request/startup-scoped; if it were cancelled while a
+  flow was mid-flight, a fan-in/step/cohort write would abort and strand the flow in `running`
+  (no fan-in fires, `Await` waits forever). This was the suspected cause of an intermittent
+  "deadlock" report; the real culprit turned out to be a too-short synchronous `Run`/`Await`
+  request timeout, but the ctx coupling was a latent hazard regardless and is now removed.
+- `svc.Lifetime()` - per `connector/CLAUDE.md`, `lifetimeCtx` is created *between* `OnStartup`
+  returning and control-sub activation, so during `OnStartup` `svc.Lifetime()` is still the
+  construction-time `context.Background()`. Capturing it there would not give the real
+  cancellable lifetime ctx.
+
+The task call is the only place a *cancellable* context is used: `executeTask` receives a
+`taskCtx` derived from `rootCtx` bounded by the step's time budget. So: worker DB ops on the
+foreman lifetime context, a timing-out context only for the outbound task HTTP call. Worker
+termination is driven by `queue.close()` + `svc.workers.Wait()`, not ctx cancellation, so
+cancelling `rootCtx` only after the drain never interrupts an in-flight write.
 
 ### Transactions
 

@@ -1,7 +1,7 @@
 general:
   hostname: perelementpipelineflow.verify
   description: perelementpipelineflow.verify is the SKIP-marked per-element pipeline pattern (lineage redesign required).
-  modifiedAt: "2026-05-14T17:05:54Z"
+  modifiedAt: "2026-05-16T14:57:15Z"
 
 tasks:
   TaskS:

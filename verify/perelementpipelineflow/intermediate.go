@@ -36,7 +36,7 @@ var (
 
 const (
 	Hostname = perelementpipelineflowapi.Hostname
-	Version  = 1
+	Version  = 3
 )
 
 // ToDo is implemented by the service or mock.

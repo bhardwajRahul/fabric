@@ -17,6 +17,8 @@ graph LR
     claude.llm.core --- claude.llm.core.cloud@{shape: cloud, label: "api.anthropic.com"}
     gemini.llm.core[GeminiLLM<br>gemini.llm.core] ---> http.egress.core
     gemini.llm.core --- gemini.llm.core.cloud@{shape: cloud, label: "generativelanguage.googleapis.com"}
+    lite.llm.core[LiteLLM<br>lite.llm.core] ---> http.egress.core
+    lite.llm.core --- lite.llm.core.cloud@{shape: cloud, label: "localhost"}
     mcp.core[MCPPortal<br>mcp.core] ---> openapi.core[OpenAPIPortal<br>openapi.core]
     metrics.core[Metrics<br>metrics.core]
     browser.example[Browser<br>browser.example] ---> http.egress.core
@@ -31,8 +33,10 @@ graph LR
     login.example[Login<br>login.example] --->|danger| bearer.token.core
     messaging.example[Messaging<br>messaging.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
+    docextractionflow.verify[docextractionflow<br>docextractionflow.verify]
+    perelementpipelineflow.verify[perelementpipelineflow<br>perelementpipelineflow.verify]
 
-    class browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
-    class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,mcp.core,metrics.core,openapi.core core
+    class browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example,docextractionflow.verify,perelementpipelineflow.verify svc
+    class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,lite.llm.core,mcp.core,metrics.core,openapi.core core
     class access.token.core,bearer.token.core danger
-    class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext
+    class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,lite.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext

@@ -28,8 +28,8 @@ configs:
   Workers:
     signature: Workers() (workers int)
     description: Workers is the number of concurrent workers that process flow steps.
-    validation: int [1,64]
-    default: 4
+    validation: int [1,]
+    default: 64
   RetentionDays:
     signature: RetentionDays() (retentionDays int)
     description: RetentionDays is the number of days to retain terminated flows and their steps. Set to 0 to disable purging.

@@ -1,0 +1,39 @@
+# Copyright (c) 2023-2026 Microbus LLC and various contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general:
+  name: LiteLLM
+  hostname: lite.llm.core
+  description: The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Chat Completions wire format.
+  package: github.com/microbus-io/fabric/coreservices/litellm
+  frameworkVersion: 1.28.0
+  modifiedAt: "2026-05-16T14:45:38Z"
+
+configs:
+  CompletionURL:
+    signature: CompletionURL() (value string)
+    description: CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
+    validation: url
+    default: http://localhost:4000/v1/chat/completions
+  APIKey:
+    signature: APIKey() (value string)
+    description: APIKey is the virtual key for the LiteLLM proxy.
+    secret: true
+
+functions:
+  Turn:
+    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage)
+    description: Turn executes a single LLM turn through the LiteLLM proxy.
+    method: POST
+    route: :444/turn

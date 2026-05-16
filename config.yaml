@@ -22,6 +22,7 @@ my.service:
 
 foreman.core:
   # RetentionDays: 0
+  # Workers: 64
 
 llm.core:
   # MaxToolRounds: 10

@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = foremanapi.Hostname
-	Version  = 9
+	Version  = 15
 )
 
 // ToDo is implemented by the service or mock.
@@ -250,8 +250,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.DefineConfig( // MARKER: Workers
 		"Workers",
 		cfg.Description(`Workers is the number of concurrent workers that process flow steps.`),
-		cfg.DefaultValue(`4`),
-		cfg.Validation(`int [1,64]`),
+		cfg.DefaultValue(`64`),
+		cfg.Validation(`int [1,]`),
 	)
 	svc.DefineConfig( // MARKER: RetentionDays
 		"RetentionDays",

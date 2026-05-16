@@ -1,0 +1,85 @@
+package failedfanoutflowapi
+
+import (
+	"github.com/microbus-io/fabric/httpx"
+)
+
+// Hostname is the default hostname of the microservice.
+const Hostname = "failedfanoutflow.verify"
+
+// Def is the routing identity of an endpoint exposed by this microservice.
+type Def struct {
+	Method string
+	Route  string
+}
+
+// URL is the full URL of the endpoint, joined with the package-level Hostname.
+func (d Def) URL() string {
+	return httpx.JoinHostAndPath(Hostname, d.Route)
+}
+
+var (
+	// HINT: Insert endpoint definitions here
+	Src          = Def{Method: "POST", Route: ":428/src"}                // MARKER: Src
+	A            = Def{Method: "POST", Route: ":428/a"}                  // MARKER: A
+	B            = Def{Method: "POST", Route: ":428/b"}                  // MARKER: B
+	C            = Def{Method: "POST", Route: ":428/c"}                  // MARKER: C
+	J            = Def{Method: "POST", Route: ":428/j"}                  // MARKER: J
+	FailedFanOut = Def{Method: "GET", Route: ":428/failed-fan-out"}      // MARKER: FailedFanOut
+)
+
+// SrcIn are the input arguments of Src.
+type SrcIn struct { // MARKER: Src
+}
+
+// SrcOut are the output arguments of Src.
+type SrcOut struct { // MARKER: Src
+	Started bool `json:"started,omitzero"`
+}
+
+// AIn are the input arguments of A.
+type AIn struct { // MARKER: A
+}
+
+// AOut are the output arguments of A.
+type AOut struct { // MARKER: A
+	SumExecutedOut int `json:"sumExecuted,omitzero"`
+}
+
+// BIn are the input arguments of B.
+type BIn struct { // MARKER: B
+}
+
+// BOut are the output arguments of B.
+type BOut struct { // MARKER: B
+	SumExecutedOut int `json:"sumExecuted,omitzero"`
+}
+
+// CIn are the input arguments of C.
+type CIn struct { // MARKER: C
+}
+
+// COut are the output arguments of C.
+type COut struct { // MARKER: C
+	SumExecutedOut int `json:"sumExecuted,omitzero"`
+}
+
+// JIn are the input arguments of J.
+type JIn struct { // MARKER: J
+	SumExecuted int `json:"sumExecuted,omitzero"`
+}
+
+// JOut are the output arguments of J.
+type JOut struct { // MARKER: J
+	TotalExecuted int `json:"totalExecuted,omitzero"`
+}
+
+// FailedFanOutIn are the input arguments of FailedFanOut.
+type FailedFanOutIn struct { // MARKER: FailedFanOut
+}
+
+// FailedFanOutOut are the output arguments of FailedFanOut.
+type FailedFanOutOut struct { // MARKER: FailedFanOut
+	SumExecuted   int `json:"sumExecuted,omitzero"`
+	TotalExecuted int `json:"totalExecuted,omitzero"`
+}

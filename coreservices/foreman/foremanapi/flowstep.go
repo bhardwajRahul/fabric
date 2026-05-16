@@ -21,8 +21,15 @@ import "time"
 // FlowStep represents a single step in the execution history of a flow.
 type FlowStep struct {
 	StepKey    string         `json:"stepKey,omitzero"`
+	StepID     int            `json:"stepID,omitzero"`
 	StepDepth  int            `json:"stepDepth,omitzero"`
 	TaskName   string         `json:"taskName,omitzero"`
+	// PredecessorID and SuccessorID are the shard-local step ids of the step that
+	// ran immediately before and after this one in the execution DAG. Together they
+	// record every edge: fan-out via children's PredecessorID, fan-in via each exit
+	// step's SuccessorID, linear on both. 0 means no such edge.
+	PredecessorID int `json:"predecessorID,omitzero"`
+	SuccessorID   int `json:"successorID,omitzero"`
 	Subgraph   bool           `json:"subgraph,omitzero"`
 	SubHistory []FlowStep     `json:"subHistory,omitzero"`
 	State      map[string]any `json:"state,omitzero"`

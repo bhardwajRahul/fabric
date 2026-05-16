@@ -53,7 +53,7 @@ var (
 
 const (
 	Hostname = chatgptllmapi.Hostname
-	Version  = 3
+	Version  = 4
 )
 
 // ToDo is implemented by the service or mock.
@@ -113,10 +113,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	// HINT: Add tickers here
 
 	// HINT: Add configs here
-	svc.DefineConfig( // MARKER: BaseURL
-		"BaseURL",
-		cfg.Description(`BaseURL is the base URL of the OpenAI API.`),
-		cfg.DefaultValue("https://api.openai.com"),
+	svc.DefineConfig( // MARKER: CompletionURL
+		"CompletionURL",
+		cfg.Description(`CompletionURL is the URL of the OpenAI chat completions endpoint.`),
+		cfg.DefaultValue("https://api.openai.com/v1/chat/completions"),
 		cfg.Validation("url"),
 	)
 	svc.DefineConfig( // MARKER: APIKey
@@ -160,17 +160,17 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 }
 
 /*
-BaseURL is the base URL of the OpenAI API.
+CompletionURL is the URL of the OpenAI chat completions endpoint.
 */
-func (svc *Intermediate) BaseURL() (value string) { // MARKER: BaseURL
-	return svc.Config("BaseURL")
+func (svc *Intermediate) CompletionURL() (value string) { // MARKER: CompletionURL
+	return svc.Config("CompletionURL")
 }
 
 /*
-SetBaseURL sets the value of the configuration property.
+SetCompletionURL sets the value of the configuration property.
 */
-func (svc *Intermediate) SetBaseURL(value string) (err error) { // MARKER: BaseURL
-	return svc.SetConfig("BaseURL", value)
+func (svc *Intermediate) SetCompletionURL(value string) (err error) { // MARKER: CompletionURL
+	return svc.SetConfig("CompletionURL", value)
 }
 
 /*
