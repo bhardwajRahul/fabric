@@ -18,7 +18,8 @@ limitations under the License.
 // source code. It extracts service description, endpoints (functions, webs,
 // tasks, workflows), configs, metrics, tickers, outbound events, inbound event
 // hooks, and downstream dependencies from intermediate.go, *api/endpoints.go,
-// *api/client.go, and service.go. Operator-curated fields (general.name,
+// *api/client.go, and the microservice's other non-test .go files (handlers are
+// not assumed to live only in service.go). Operator-curated fields (general.name,
 // general.cloud, general.frameworkVersion) are preserved across regeneration.
 package main
 

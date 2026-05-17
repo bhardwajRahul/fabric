@@ -577,7 +577,8 @@ func (f Frame) IfActor(boolExp string) (ok bool, err error) {
 }
 
 // Tenant returns the tenant claim of the actor, or 0 if it is not present or not numeric.
-// The tenant claim is expected to be named "tid" or "tenant".
+// The tenant claim is expected to be named "tid" or "tenant", and may be either a JSON
+// number or a numeric string (e.g. 42 or "42"); a non-numeric value yields 0.
 func (f Frame) Tenant() (tid int, err error) {
 	claims, err := f.actorClaims()
 	if err != nil {
@@ -593,9 +594,18 @@ func (f Frame) Tenant() (tid int, err error) {
 	if !ok {
 		return 0, nil
 	}
-	tenantNum, ok := tenant.(float64)
-	if !ok {
-		return 0, nil
+	switch v := tenant.(type) {
+	case float64:
+		return int(v), nil
+	case string:
+		n, perr := strconv.Atoi(v)
+		if perr == nil {
+			return n, nil
+		}
+		fv, ferr := strconv.ParseFloat(v, 64)
+		if ferr == nil {
+			return int(fv), nil
+		}
 	}
-	return int(tenantNum), nil
+	return 0, nil
 }

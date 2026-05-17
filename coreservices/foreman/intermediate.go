@@ -60,27 +60,30 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, workflowName string, initialState any) (flowKey string, err error)                   // MARKER: Create
-	Start(ctx context.Context, flowKey string) (err error)                                                           // MARKER: Start
-	StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error)                              // MARKER: StartNotify
-	Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                   // MARKER: Snapshot
-	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                          // MARKER: Resume
-	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                     // MARKER: Fork
-	Cancel(ctx context.Context, flowKey string) (err error)                                                          // MARKER: Cancel
-	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                            // MARKER: History
-	Retry(ctx context.Context, flowKey string) (err error)                                                           // MARKER: Retry
-	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                    // MARKER: List
-	CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                   // MARKER: CreateTask
-	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                  // MARKER: Enqueue
-	Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                      // MARKER: Await
-	NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error)                               // MARKER: NotifyStatusChange
-	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                      // MARKER: BreakBefore
-	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error) // MARKER: Run
-	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)              // MARKER: Continue
-	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                               // MARKER: HistoryMermaid
-	PurgeExpiredFlows(ctx context.Context) (err error)                                                               // MARKER: PurgeExpiredFlows
-	OnChangedNumShards(ctx context.Context) (err error)                                                              // MARKER: NumShards
-	OnObserveQueueDepth(ctx context.Context) (err error)                                                             // MARKER: QueueDepth
+	Create(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                   // MARKER: Create
+	Start(ctx context.Context, flowKey string) (err error)                                                                                       // MARKER: Start
+	StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                          // MARKER: StartNotify
+	Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                                               // MARKER: Snapshot
+	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                                      // MARKER: Resume
+	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                                 // MARKER: Fork
+	Cancel(ctx context.Context, flowKey string) (err error)                                                                                      // MARKER: Cancel
+	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                        // MARKER: History
+	Retry(ctx context.Context, flowKey string) (err error)                                                                                       // MARKER: Retry
+	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                                                // MARKER: List
+	CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                                               // MARKER: CreateTask
+	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                                              // MARKER: Enqueue
+	Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                                                  // MARKER: Await
+	NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error)                                                           // MARKER: NotifyStatusChange
+	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                                  // MARKER: BreakBefore
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error) // MARKER: Run
+	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                          // MARKER: Continue
+	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                           // MARKER: HistoryMermaid
+	PurgeExpiredFlows(ctx context.Context) (err error)                                                                                           // MARKER: PurgeExpiredFlows
+	OnChangedNumShards(ctx context.Context) (err error)                                                                                          // MARKER: NumShards
+	OnObserveQueueDepth(ctx context.Context) (err error)                                                                                         // MARKER: QueueDepth
+	OnObservePendingStepsByPriority(ctx context.Context) (err error)                                                                             // MARKER: PendingStepsByPriority
+	OnObserveOldestPendingAgeSeconds(ctx context.Context) (err error)                                                                            // MARKER: OldestPendingAgeSeconds
+	OnObserveDistinctFairnessKeys(ctx context.Context) (err error)                                                                               // MARKER: DistinctFairnessKeys
 }
 
 // NewService creates a new instance of the microservice.
@@ -188,7 +191,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Enqueue
 		"Enqueue", svc.doEnqueue,
 		sub.At(foremanapi.Enqueue.Method, foremanapi.Enqueue.Route),
-		sub.Description(`Enqueue adds a step to the local work queue for processing.`),
+		sub.Description(`Enqueue rings the work doorbell, signalling that a step is pending, so the receiving replica refills or flushes-and-refills its candidate cache.`),
 		sub.Function(foremanapi.EnqueueIn{}, foremanapi.EnqueueOut{}),
 	)
 	svc.Subscribe( // MARKER: Await
@@ -232,11 +235,16 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 
 	// HINT: Add metrics here
-	svc.DescribeCounter("microbus_flows_started_total", "FlowsStarted counts the number of flows that have been started.")                               // MARKER: FlowsStarted
-	svc.DescribeCounter("microbus_flows_terminated_total", "FlowsTerminated counts the number of flows that have reached a terminal status.")            // MARKER: FlowsTerminated
-	svc.DescribeCounter("microbus_steps_executed_total", "StepsExecuted counts the number of steps that have been executed.")                            // MARKER: StepsExecuted
-	svc.DescribeGauge("microbus_queue_depth", "QueueDepth records the number of steps waiting in the local worker queue.")                               // MARKER: QueueDepth
-	svc.DescribeCounter("microbus_steps_recovered_total", "StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.") // MARKER: StepsRecovered
+	svc.DescribeCounter("microbus_flows_started_total", "FlowsStarted counts the number of flows that have been started.")                                                                                      // MARKER: FlowsStarted
+	svc.DescribeCounter("microbus_flows_terminated_total", "FlowsTerminated counts the number of flows that have reached a terminal status.")                                                                   // MARKER: FlowsTerminated
+	svc.DescribeCounter("microbus_steps_executed_total", "StepsExecuted counts the number of steps that have been executed.")                                                                                   // MARKER: StepsExecuted
+	svc.DescribeGauge("microbus_queue_depth", "QueueDepth records the number of steps waiting in the local worker queue.")                                                                                      // MARKER: QueueDepth
+	svc.DescribeCounter("microbus_steps_recovered_total", "StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.")                                                        // MARKER: StepsRecovered
+	svc.DescribeGauge("microbus_pending_steps_by_priority", "PendingStepsByPriority records the number of due pending steps in each priority band.")                                                            // MARKER: PendingStepsByPriority
+	svc.DescribeGauge("microbus_oldest_pending_age_seconds", "OldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.")                                        // MARKER: OldestPendingAgeSeconds
+	svc.DescribeGauge("microbus_distinct_fairness_keys", "DistinctFairnessKeys records the number of distinct fairness keys in the most recent refill selection.")                                              // MARKER: DistinctFairnessKeys
+	svc.DescribeHistogram("microbus_claim_wait_seconds", "ClaimWaitSeconds records how long a worker waited for a candidate before executing a step.", []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10}) // MARKER: ClaimWaitSeconds
+	svc.DescribeCounter("microbus_completion_contention_total", "CompletionContention counts lock-contention rewinds on the post-execution advance write.")                                                     // MARKER: CompletionContention
 
 	// HINT: Add tickers here
 	svc.StartTicker("PurgeExpiredFlows", 24*time.Hour, svc.PurgeExpiredFlows) // MARKER: PurgeExpiredFlows
@@ -259,11 +267,17 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.DefaultValue(`0`),
 		cfg.Validation(`int [0,]`),
 	)
-	svc.DefineConfig( // MARKER: DefaultTimeBudget
-		"DefaultTimeBudget",
-		cfg.Description(`DefaultTimeBudget is the default execution timeout for task steps when the graph does not specify a per-task time budget.`),
+	svc.DefineConfig( // MARKER: TimeBudget
+		"TimeBudget",
+		cfg.Description(`TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.`),
 		cfg.DefaultValue(`2m`),
 		cfg.Validation(`dur [1s,15m]`),
+	)
+	svc.DefineConfig( // MARKER: DefaultPriority
+		"DefaultPriority",
+		cfg.Description(`DefaultPriority is the priority assigned to a flow when the caller does not specify one. Priority is an integer >= 1, lower numbers run first.`),
+		cfg.DefaultValue(`5`),
+		cfg.Validation(`int [1,]`),
 	)
 	svc.DefineConfig( // MARKER: NumShards
 		"NumShards",
@@ -286,7 +300,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 	return svc.Parallel(
 		// HINT: Call JIT observers to record the metric here
-		func() (err error) { return svc.OnObserveQueueDepth(ctx) }, // MARKER: QueueDepth
+		func() (err error) { return svc.OnObserveQueueDepth(ctx) },              // MARKER: QueueDepth
+		func() (err error) { return svc.OnObservePendingStepsByPriority(ctx) },  // MARKER: PendingStepsByPriority
+		func() (err error) { return svc.OnObserveOldestPendingAgeSeconds(ctx) }, // MARKER: OldestPendingAgeSeconds
+		func() (err error) { return svc.OnObserveDistinctFairnessKeys(ctx) },    // MARKER: DistinctFairnessKeys
 	)
 }
 
@@ -323,7 +340,7 @@ func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) (err e
 	var in foremanapi.CreateIn
 	var out foremanapi.CreateOut
 	err = marshalFunction(w, r, foremanapi.Create.Route, &in, &out, func(_ any, _ any) error {
-		out.FlowKey, err = svc.Create(r.Context(), in.WorkflowName, in.InitialState)
+		out.FlowKey, err = svc.Create(r.Context(), in.WorkflowName, in.InitialState, in.Opts)
 		return err
 	})
 	return err // No trace
@@ -488,7 +505,7 @@ func (svc *Intermediate) doRun(w http.ResponseWriter, r *http.Request) (err erro
 	var in foremanapi.RunIn
 	var out foremanapi.RunOut
 	err = marshalFunction(w, r, foremanapi.Run.Route, &in, &out, func(_ any, _ any) error {
-		out.Status, out.State, err = svc.Run(r.Context(), in.WorkflowName, in.InitialState)
+		out.Status, out.State, err = svc.Run(r.Context(), in.WorkflowName, in.InitialState, in.Opts)
 		return err
 	})
 	return err // No trace
@@ -552,19 +569,35 @@ func (svc *Intermediate) SetRetentionDays(retentionDays int) (err error) { // MA
 }
 
 /*
-DefaultTimeBudget is the default execution timeout for task steps when the graph does not specify a per-task time budget.
+TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
 */
-func (svc *Intermediate) DefaultTimeBudget() (budget time.Duration) { // MARKER: DefaultTimeBudget
-	_val := svc.Config("DefaultTimeBudget")
+func (svc *Intermediate) TimeBudget() (budget time.Duration) { // MARKER: TimeBudget
+	_val := svc.Config("TimeBudget")
 	_dur, _ := time.ParseDuration(_val)
 	return _dur
 }
 
 /*
-SetDefaultTimeBudget sets the value of the configuration property.
+SetTimeBudget sets the value of the configuration property.
 */
-func (svc *Intermediate) SetDefaultTimeBudget(budget time.Duration) (err error) { // MARKER: DefaultTimeBudget
-	return svc.SetConfig("DefaultTimeBudget", budget.String())
+func (svc *Intermediate) SetTimeBudget(budget time.Duration) (err error) { // MARKER: TimeBudget
+	return svc.SetConfig("TimeBudget", budget.String())
+}
+
+/*
+DefaultPriority is the priority assigned to a flow when the caller does not specify one. Priority is an integer >= 0, lower numbers run first.
+*/
+func (svc *Intermediate) DefaultPriority() (defaultPriority int) { // MARKER: DefaultPriority
+	_val := svc.Config("DefaultPriority")
+	_i, _ := strconv.ParseInt(_val, 10, 64)
+	return int(_i)
+}
+
+/*
+SetDefaultPriority sets the value of the configuration property.
+*/
+func (svc *Intermediate) SetDefaultPriority(defaultPriority int) (err error) { // MARKER: DefaultPriority
+	return svc.SetConfig("DefaultPriority", strconv.Itoa(defaultPriority))
 }
 
 /*
@@ -624,4 +657,43 @@ IncrementStepsRecovered counts the number of steps recovered by pollPendingSteps
 */
 func (svc *Intermediate) IncrementStepsRecovered(ctx context.Context, value int) (err error) { // MARKER: StepsRecovered
 	return svc.IncrementCounter(ctx, "microbus_steps_recovered_total", float64(value))
+}
+
+/*
+RecordPendingStepsByPriority records the number of due pending steps in each priority band.
+*/
+func (svc *Intermediate) RecordPendingStepsByPriority(ctx context.Context, value int, priority string) (err error) { // MARKER: PendingStepsByPriority
+	return svc.RecordGauge(ctx, "microbus_pending_steps_by_priority", float64(value),
+		"priority", utils.AnyToString(priority),
+	)
+}
+
+/*
+RecordOldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.
+*/
+func (svc *Intermediate) RecordOldestPendingAgeSeconds(ctx context.Context, value int, priority string) (err error) { // MARKER: OldestPendingAgeSeconds
+	return svc.RecordGauge(ctx, "microbus_oldest_pending_age_seconds", float64(value),
+		"priority", utils.AnyToString(priority),
+	)
+}
+
+/*
+RecordDistinctFairnessKeys records the number of distinct fairness keys in the most recent refill selection.
+*/
+func (svc *Intermediate) RecordDistinctFairnessKeys(ctx context.Context, value int) (err error) { // MARKER: DistinctFairnessKeys
+	return svc.RecordGauge(ctx, "microbus_distinct_fairness_keys", float64(value))
+}
+
+/*
+RecordClaimWaitSeconds records how long a worker waited for a candidate before executing a step.
+*/
+func (svc *Intermediate) RecordClaimWaitSeconds(ctx context.Context, value float64) (err error) { // MARKER: ClaimWaitSeconds
+	return svc.RecordHistogram(ctx, "microbus_claim_wait_seconds", value)
+}
+
+/*
+IncrementCompletionContention counts lock-contention rewinds on the post-execution advance write.
+*/
+func (svc *Intermediate) IncrementCompletionContention(ctx context.Context, value int) (err error) { // MARKER: CompletionContention
+	return svc.IncrementCounter(ctx, "microbus_completion_contention_total", float64(value))
 }

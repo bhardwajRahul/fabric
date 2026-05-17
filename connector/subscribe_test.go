@@ -857,6 +857,93 @@ func TestConnector_VerifiedSourceOverwrite(t *testing.T) {
 		"receiver must overwrite spoofed From-Host with verified source from the subject")
 }
 
+// TestConnector_SubscriptionTimeBudget verifies that sub.TimeBudget shortens
+// the inbound handler's context deadline to min(caller budget, declared budget),
+// never lengthens it, and is inert when not declared.
+func TestConnector_SubscriptionTimeBudget(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	var declaredBudget, undeclaredBudget, callerBudget, longBudget time.Duration
+	var declaredRemaining time.Duration
+
+	con := New("time.budget.connector")
+	con.Subscribe("Declared",
+		func(w http.ResponseWriter, r *http.Request) error {
+			declaredBudget = frame.Of(r).TimeBudget()
+			if dl, ok := r.Context().Deadline(); ok {
+				declaredRemaining = time.Until(dl)
+			}
+			return nil
+		},
+		sub.At("GET", "/declared"),
+		sub.Web(),
+		sub.TimeBudget(2*time.Second),
+	)
+	con.Subscribe("Undeclared",
+		func(w http.ResponseWriter, r *http.Request) error {
+			undeclaredBudget = frame.Of(r).TimeBudget()
+			return nil
+		},
+		sub.At("GET", "/undeclared"),
+		sub.Web(),
+	)
+	con.Subscribe("Caller",
+		func(w http.ResponseWriter, r *http.Request) error {
+			callerBudget = frame.Of(r).TimeBudget()
+			return nil
+		},
+		sub.At("GET", "/caller"),
+		sub.Web(),
+		sub.TimeBudget(2*time.Second),
+	)
+	con.Subscribe("Long",
+		func(w http.ResponseWriter, r *http.Request) error {
+			longBudget = frame.Of(r).TimeBudget()
+			return nil
+		},
+		sub.At("GET", "/long"),
+		sub.Web(),
+		sub.TimeBudget(40*time.Second),
+	)
+
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// No caller budget: the connector default (20s) is clamped down to the
+	// declared 2s, and the handler's context deadline reflects it.
+	_, err = con.Request(ctx, pub.GET("https://time.budget.connector/declared"))
+	assert.NoError(err)
+	assert.Equal(2*time.Second, declaredBudget, "declared budget should clamp the connector default")
+	assert.True(declaredRemaining > 0 && declaredRemaining <= 2*time.Second,
+		"handler deadline should be within the declared budget, got %v", declaredRemaining)
+	assert.True(declaredRemaining < con.defaultTimeBudget,
+		"declared budget must shorten below the connector default %v, got %v", con.defaultTimeBudget, declaredRemaining)
+
+	// No declared budget: the connector default stays in force, unclamped.
+	_, err = con.Request(ctx, pub.GET("https://time.budget.connector/undeclared"))
+	assert.NoError(err)
+	assert.Equal(con.defaultTimeBudget, undeclaredBudget, "absent sub.TimeBudget leaves the default in force")
+
+	// Caller budget smaller than the declared budget wins (min semantics);
+	// the declared budget never lengthens what the caller asked for.
+	_, err = con.Request(ctx,
+		pub.GET("https://time.budget.connector/caller"),
+		pub.Timeout(800*time.Millisecond),
+	)
+	assert.NoError(err)
+	assert.Equal(800*time.Millisecond, callerBudget, "smaller caller budget must win over the declared budget")
+
+	// Declared budget longer than the connector default cannot lengthen it -
+	// sub.TimeBudget only ever shortens.
+	_, err = con.Request(ctx, pub.GET("https://time.budget.connector/long"))
+	assert.NoError(err)
+	assert.Equal(con.defaultTimeBudget, longBudget, "a declared budget above the default must not lengthen it")
+}
+
 func BenchmarkConnection_AckRequest(b *testing.B) {
 	ctx := context.Background()
 	// Startup the microservices

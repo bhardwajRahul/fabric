@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package fanouterrorflow
 
 import (
@@ -69,17 +85,12 @@ func TestFanouterrorflow_FanOutError(t *testing.T) { // MARKER: FanOutError
 	})
 
 	t.Run("handler_runs_and_state_reaches_taskE", func(t *testing.T) {
-		// This assertion is currently flaky because of a SEPARATE race in the
-		// depth-based fan-in: a sibling that completes before B's errorRouted finishes
-		// can insert the normal fan-in target (TaskE) at depth N+1 first, and B's
-		// subsequent attempt to insert Handler at the same depth gets blocked by
-		// existingCount>0 race protection. The flow still completes, but Handler
-		// never runs, so TaskE sees handled=false.
-		//
-		// This is exactly the case the lineage-based fan-in redesign solves
-		// (see _DOMINATOR.md). Re-enable when the redesign lands.
-		t.Skip("depth-N+1 collision between Handler and fan-in target; pending lineage redesign")
-
+		// With the lineage-based fan-in (graph.SetFanIn("taskE")), the OnError
+		// path is coordinated by the spawn cohort, not by step_depth, so the
+		// old depth-N+1 collision between Handler and the fan-in target cannot
+		// occur: a sibling completing before B's errorRouted finishes no longer
+		// blocks Handler's insert. Handler must run and TaskE must observe
+		// recovered=true. Stress with -count=N to surface any regression.
 		assert := testarossa.For(t)
 
 		recovered, status, err := exec.FanOutError(ctx)

@@ -120,7 +120,7 @@ The exact subject layout is **load-bearing for security**, not a private impleme
 
 1. **`subjectOf` and helpers in `subjects.go`** - what publishers emit and subscribers match against at runtime.
 2. **This document** - the operator-facing description of the wire format. Operators reading or writing NATS ACLs depend on it being accurate.
-3. **The ACL generator skill** (Phase 5, when it lands) - Markdown + prompt instructions, hardcodes the layout from this doc since it can't call Go at run time. Drift here means generated ACLs don't match runtime traffic, and the failure looks like "ACLs are broken" rather than "the encoding changed."
+3. **A future ACL generator skill** - Markdown + prompt instructions, hardcodes the layout from this doc since it can't call Go at run time. Drift here means generated ACLs don't match runtime traffic, and the failure looks like "ACLs are broken" rather than "the encoding changed."
 
 The pinning mechanism is a regression-test golden table in `subjects_test.go` - `TestConnector_SubjectOfSubscription`, `TestConnector_SubjectOfRequest`, `TestConnector_subjectOfResponseSub`, `TestConnector_subjectOfResponse` cover representative cases (multi-segment hostnames, hyphenated hostnames, root paths, path arguments, greedy paths, wildcard ports, lowercasing). Any change to the layout has to update those tests, and the diff in the test file is what code review catches.
 

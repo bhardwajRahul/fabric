@@ -1,0 +1,29 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"soak"}}:::term --> _start
+    t2@{ shape: st-rect, label: "work" }
+    t3@{ shape: trap-t, label: "collect" }
+    t8@{ shape: trap-t, label: "join" }
+    _start(( )):::term --> t0["seed"]:::task
+    t0 -->|"if branch == 0"| t1["fanA"]:::task
+    t0 -->|"if branch == 1"| t4["loop"]:::task
+    t0 -->|"if branch == 2"| t9[["sub"]]:::sub
+    t0 -->|"if branch == 3"| t5["boomR"]:::task
+    t0 -->|"if branch == 4"| t7["boomF"]:::task
+    t1 -->|"for each in items"| t2
+    t2 -->|"fan-in"| t3
+    t3 -->|"fan-in"| t8
+    t4 -->|"goto"| t4
+    t4 -->|"fan-in"| t8
+    t9 -->|"fan-in"| t8
+    t5 -->|"onError"| t6["recover"]:::task
+    t5 -->|"fan-in"| t8
+    t6 -->|"fan-in"| t8
+    t7 -->|"fan-in"| t8
+    t8 --> _end(( )):::term
+    class t2 task
+    class t3 task
+    class t8 task

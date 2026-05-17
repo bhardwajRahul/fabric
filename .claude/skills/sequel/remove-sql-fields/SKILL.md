@@ -88,7 +88,14 @@ ALTER TABLE my_table
 ALTER TABLE my_table DROP COLUMN
 	deprecated_field,
 	unused_field;
+
+-- DRIVER: sqlite
+ALTER TABLE my_table DROP COLUMN deprecated_field;
+-- DRIVER: sqlite
+ALTER TABLE my_table DROP COLUMN unused_field;
 ```
+
+**IMPORTANT**: SQLite only supports dropping one column per `ALTER TABLE` statement. Each column must be a separate statement prefixed with `-- DRIVER: sqlite`.
 
 #### Step 5: Remove Mappings of Column Names to Object Fields
 

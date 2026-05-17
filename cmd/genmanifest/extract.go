@@ -108,11 +108,11 @@ func extract(dir string) (*extracted, error) {
 		})
 	}
 
-	// Walk service.go (and intermediate.go's imports) for downstreams, db/cloud
-	// detection, hook source resolution, and ticker/inbound-event godocs.
-	servicePath := filepath.Join(dir, "service.go")
-	if err := enrichFromServiceFiles(servicePath, x, apiPkg); err != nil {
-		return nil, fmt.Errorf("enrich from %s: %w", servicePath, err)
+	// Walk every non-test .go file in the microservice for inbound-event source
+	// alias resolution and ticker/inbound-event godocs. Handlers are not assumed
+	// to live only in service.go - it may be split across multiple files.
+	if err := enrichFromSourceFiles(dir, x, apiPkg); err != nil {
+		return nil, fmt.Errorf("enrich from %s: %w", dir, err)
 	}
 
 	return x, nil

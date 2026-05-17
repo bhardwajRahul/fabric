@@ -18,6 +18,7 @@ package foremanapi
 
 import (
 	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/workflow"
 )
 
 // Hostname is the default hostname of the microservice.
@@ -36,8 +37,9 @@ func (d Def) URL() string {
 
 // CreateIn are the input arguments of Create.
 type CreateIn struct { // MARKER: Create
-	WorkflowName string `json:"workflowName,omitzero"`
-	InitialState any    `json:"initialState,omitzero"`
+	WorkflowName string                `json:"workflowName,omitzero"`
+	InitialState any                   `json:"initialState,omitzero"`
+	Opts         *workflow.FlowOptions `json:"opts,omitzero"`
 }
 
 // CreateOut are the output arguments of Create.
@@ -189,8 +191,9 @@ type BreakBeforeOut struct { // MARKER: BreakBefore
 
 // RunIn are the input arguments of Run.
 type RunIn struct { // MARKER: Run
-	WorkflowName string `json:"workflowName,omitzero"`
-	InitialState any    `json:"initialState,omitzero"`
+	WorkflowName string                `json:"workflowName,omitzero"`
+	InitialState any                   `json:"initialState,omitzero"`
+	Opts         *workflow.FlowOptions `json:"opts,omitzero"`
 }
 
 // RunOut are the output arguments of Run.

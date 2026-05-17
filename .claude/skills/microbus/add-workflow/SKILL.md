@@ -115,7 +115,7 @@ func (_c Executor) MyWorkflow(ctx context.Context, inputField1 string, inputFiel
 		return outputField1, outputField2, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out MyWorkflowOut
-	status, err = marshalWorkflow(ctx, _c.runner, MyWorkflow.URL(), MyWorkflowIn{
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, MyWorkflow.URL(), MyWorkflowIn{
 		InputField1: inputField1,
 		InputField2: inputField2,
 	}, &out)
@@ -161,13 +161,15 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 
 Naming the same task URL twice with different names is the supported way to reuse a task at multiple positions in the graph (each position keeps its own node identity for fan-in tracking).
 
+**Every fan-out requires a matching fan-in.** Any node with two or more normal outgoing transitions, or an `AddTransitionForEach` transition, is a fan-out: its branches run in parallel. Every fan-out must converge on a single node that you mark with `graph.SetFanIn("name")`. Add the `SetFanIn` call in the same edit as the fan-out transitions, and route every parallel branch into the marked node before the graph reaches `workflow.END`. A graph that fans out without a `SetFanIn` node still compiles and passes `go vet`, but `graph.Validate()` (Step 9) rejects it at run time, so the test in Step 12 fails. This is the single most common workflow-graph mistake. The fan-out/fan-in section in `.claude/rules/workflows.txt` has the full rule and a worked example.
+
 **Reducers for fan-in fields.** When parallel branches converge, state fields whose names start with a recognized prefix get a reducer automatically:
 
 - `sum*` - numeric add
 - `list*` - array append (duplicates kept)
 - `set*` - polymorphic: array union (dedupe) or object merge (new key wins)
 
-The character right after the prefix must be uppercase (e.g. `sumScore`, `listMessages`, `setUsers`). For new graphs, prefer naming fan-in state fields with these prefixes - no explicit reducer configuration is needed.
+The character right after the prefix must be uppercase (e.g. `sumScore`, `listMessages`, `setUsers`). For new graphs, prefer naming fan-in state fields with these prefixes - no explicit reducer configuration is needed. Conversely, these prefixes are reserved: do not name a state field `sum*`, `list*`, or `set*` unless it is a genuine fan-in accumulator, or it will be silently summed/appended/unioned instead of replaced once written on parallel branches.
 
 `graph.SetReducer(field, reducer)` is the escape hatch for fields whose names are dictated by an external schema or pre-existing API surface and cannot follow the convention.
 

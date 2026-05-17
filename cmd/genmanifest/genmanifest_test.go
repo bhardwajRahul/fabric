@@ -104,6 +104,15 @@ func TestExtract_CreditFlow(t *testing.T) {
 			assert.Contains(w.Signature, "ssn string", "expected lowercase ssn in workflow signature")
 		}
 	}
+	// sub.TimeBudget on a task is extracted as a compact duration.
+	var sawPhone bool
+	for _, ts := range x.tasks {
+		if ts.Name == "VerifyPhoneNumber" {
+			sawPhone = true
+			assert.Equal("1s", ts.TimeBudget, "VerifyPhoneNumber time budget")
+		}
+	}
+	assert.True(sawPhone, "expected a VerifyPhoneNumber task")
 }
 
 // TestEmit_RoundTrip verifies that running the tool twice produces the same
@@ -423,15 +432,16 @@ func assertManifestGolden(t *testing.T, name string) {
 		name, want, got)
 }
 
-// TestEmit_NoHeaderWhenAbsent: a fresh manifest (no existing file, no leading
-// comment block) must NOT have a synthesized license header. Operators add a
-// header once and the tool preserves it; the tool itself emits none.
+// TestEmit_NoHeaderWhenAbsent: a fresh manifest (no existing file) gets no
+// synthesized license header, but it always starts with the generated marker
+// so the file is never mistaken for hand-authored. Operators add a license
+// header once and the tool preserves it above the marker.
 func TestEmit_NoHeaderWhenAbsent(t *testing.T) {
 	assert := testarossa.For(t)
 	m := &Manifest{General: General{Hostname: "x.svc"}}
 	out := string(emit(m, nil))
-	assert.False(strings.HasPrefix(out, "#"), "fresh manifest should not start with a comment, got:\n%s", out)
-	assert.True(strings.HasPrefix(out, "general:"), "fresh manifest should start with `general:`, got:\n%s", out)
+	assert.True(strings.HasPrefix(out, genmanifestMarker+"\n\ngeneral:"),
+		"fresh manifest should start with the generated marker then general:, got:\n%s", out)
 }
 
 // TestEmit_PreservesExistingHeader: an existing file's leading comment block

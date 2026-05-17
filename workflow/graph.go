@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/microbus-io/boolexp"
 	"github.com/microbus-io/errors"
@@ -36,10 +35,9 @@ const END = "END"
 // step rows (microbus_steps.task_name). URL is the dispatch target the
 // foreman calls when the node is reached.
 type Node struct {
-	Name       string
-	URL        string
-	TimeBudget time.Duration
-	Subgraph   bool
+	Name     string
+	URL      string
+	Subgraph bool
 }
 
 // Transition defines a possible transition between two nodes in a workflow graph.
@@ -343,26 +341,6 @@ func (g *Graph) SetReducer(field string, reducer Reducer) {
 // Reducers returns the reducer map for state fields.
 func (g *Graph) Reducers() map[string]Reducer {
 	return g.reducers
-}
-
-// SetTimeBudget sets the execution time budget for a specific node, by name.
-func (g *Graph) SetTimeBudget(name string, budget time.Duration) {
-	for i := range g.nodes {
-		if g.nodes[i].Name == name {
-			g.nodes[i].TimeBudget = budget
-			return
-		}
-	}
-}
-
-// TimeBudget returns the execution time budget for a node by name, or 0 if not set.
-func (g *Graph) TimeBudget(name string) time.Duration {
-	for _, t := range g.nodes {
-		if t.Name == name {
-			return t.TimeBudget
-		}
-	}
-	return 0
 }
 
 // Mermaid returns a fully-styled Mermaid flowchart representation of the graph,
@@ -787,19 +765,14 @@ func stripProto(s string) string {
 // MarshalJSON serializes the graph to JSON.
 func (g *Graph) MarshalJSON() ([]byte, error) {
 	type jsonTask struct {
-		Name       string `json:"name"`
-		URL        string `json:"url,omitzero"`
-		TimeBudget string `json:"timeBudget,omitzero"`
-		Subgraph   bool   `json:"subgraph,omitzero"`
-		FanIn      bool   `json:"fanIn,omitzero"`
+		Name     string `json:"name"`
+		URL      string `json:"url,omitzero"`
+		Subgraph bool   `json:"subgraph,omitzero"`
+		FanIn    bool   `json:"fanIn,omitzero"`
 	}
 	jsonTasks := make([]jsonTask, len(g.nodes))
 	for i, t := range g.nodes {
-		jt := jsonTask{Name: t.Name, URL: t.URL, Subgraph: t.Subgraph, FanIn: g.fanInNodes[t.Name]}
-		if t.TimeBudget > 0 {
-			jt.TimeBudget = t.TimeBudget.String()
-		}
-		jsonTasks[i] = jt
+		jsonTasks[i] = jsonTask{Name: t.Name, URL: t.URL, Subgraph: t.Subgraph, FanIn: g.fanInNodes[t.Name]}
 	}
 	type jsonGraph struct {
 		Name          string             `json:"name"`
@@ -833,11 +806,10 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON deserializes the graph from JSON.
 func (g *Graph) UnmarshalJSON(data []byte) error {
 	type jsonTask struct {
-		Name       string `json:"name"`
-		URL        string `json:"url,omitzero"`
-		TimeBudget string `json:"timeBudget,omitzero"`
-		Subgraph   bool   `json:"subgraph,omitzero"`
-		FanIn      bool   `json:"fanIn,omitzero"`
+		Name     string `json:"name"`
+		URL      string `json:"url,omitzero"`
+		Subgraph bool   `json:"subgraph,omitzero"`
+		FanIn    bool   `json:"fanIn,omitzero"`
 	}
 	type jsonGraph struct {
 		Name          string             `json:"name"`
@@ -866,9 +838,6 @@ func (g *Graph) UnmarshalJSON(data []byte) error {
 			g.nodes[i].URL = jt.Name
 		}
 		g.nodes[i].Subgraph = jt.Subgraph
-		if jt.TimeBudget != "" {
-			g.nodes[i].TimeBudget, _ = time.ParseDuration(jt.TimeBudget)
-		}
 		if jt.FanIn {
 			if g.fanInNodes == nil {
 				g.fanInNodes = make(map[string]bool)

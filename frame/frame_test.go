@@ -315,3 +315,58 @@ func TestFrame_IfActor(t *testing.T) {
 		assert.False(ok)
 	}
 }
+
+func TestFrame_Tenant(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := Of(make(http.Header))
+
+	// Absent actor
+	tid, err := f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(0, tid)
+	}
+
+	// JSON number "tid"
+	f.SetToken(signTestJWT(t, map[string]any{"tid": 42}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(42, tid)
+	}
+
+	// Numeric string "tid"
+	f.SetToken(signTestJWT(t, map[string]any{"tid": "42"}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(42, tid)
+	}
+
+	// Numeric string with a fractional ".0" form
+	f.SetToken(signTestJWT(t, map[string]any{"tid": "12.0"}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(12, tid)
+	}
+
+	// Fallback to "tenant" when "tid" is absent, numeric string
+	f.SetToken(signTestJWT(t, map[string]any{"tenant": "7"}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(7, tid)
+	}
+
+	// "tid" takes precedence over "tenant"
+	f.SetToken(signTestJWT(t, map[string]any{"tid": "3", "tenant": "9"}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(3, tid)
+	}
+
+	// Non-numeric string yields 0
+	f.SetToken(signTestJWT(t, map[string]any{"tid": "acme"}))
+	tid, err = f.Tenant()
+	if assert.NoError(err) {
+		assert.Equal(0, tid)
+	}
+}

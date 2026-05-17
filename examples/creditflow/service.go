@@ -25,7 +25,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/pub"
@@ -167,8 +166,6 @@ func (svc *Service) IdentityVerification(ctx context.Context) (graph *workflow.G
 	graph.AddTransition("verifyPhoneNumber", "identityDecision")
 	// Decision terminates the subgraph
 	graph.AddTransition("identityDecision", workflow.END)
-	// VerifyPhoneNumber has a tight time budget to test timeout enforcement
-	graph.SetTimeBudget("verifyPhoneNumber", 1*time.Second)
 	return graph, nil
 }
 
@@ -258,7 +255,7 @@ type demoResult struct {
 
 // runWorkflow creates, starts, awaits, and fetches the history of a credit approval workflow.
 func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Client, initialState creditflowapi.CreditApprovalIn) (flowKey string, result demoResult, err error) {
-	flowKey, err = foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), initialState)
+	flowKey, err = foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), initialState, nil)
 	if err != nil {
 		return "", result, errors.Trace(err)
 	}

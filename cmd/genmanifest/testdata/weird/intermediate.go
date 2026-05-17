@@ -113,6 +113,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(weirdapi.Plain.Method, weirdapi.Plain.Route),
 		sub.Description(`Plain is a baseline function on the safe trust segment.`),
 		sub.Function(weirdapi.PlainIn{}, weirdapi.PlainOut{}),
+		sub.TimeBudget(30*time.Second),
 	)
 	svc.Subscribe( // MARKER: PathArg
 		"PathArg", svc.doPathArg,

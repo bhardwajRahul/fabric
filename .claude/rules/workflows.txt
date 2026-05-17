@@ -46,20 +46,17 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 
 	graph = workflow.NewGraph(myserviceapi.CreditApproval.URL())
 
-	// Linear transition
+	// Fan-out: submitApp has two normal outgoing transitions, so verifyCredit and verifyEmployment run as parallel branches
 	graph.AddTransition(submitApp, verifyCredit)
-	// Fan-out: parallel branches from submitApp
 	graph.AddTransition(submitApp, verifyEmployment)
-	// Fan-in: both branches converge on finalDecision
+	// Fan-in: every parallel branch must converge on a node marked with SetFanIn, or graph.Validate rejects the graph
+	graph.SetFanIn(finalDecision)
 	graph.AddTransition(verifyCredit, finalDecision)
 	graph.AddTransition(verifyEmployment, finalDecision)
 	// Conditional transition
 	graph.AddTransitionWhen(finalDecision, workflow.END, "creditVerified")
 	// Goto transition (taken only when task calls flow.Goto)
 	graph.AddTransitionGoto(finalDecision, submitApp)
-
-	// Per-task time budget
-	graph.SetTimeBudget(verifyCredit, 30*time.Second)
 
 	return graph, nil
 }
@@ -95,10 +92,10 @@ Control signals on `Flow`:
 - `AddTransitionWhen(from, to, when)` - conditional transition based on state expression
 - `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called
 - `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
+- `SetFanIn(taskURL)` - mark a node as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in))
 - `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
 - `AddTransitionOnTimeout(from, to)` - error transition taken only when the source task's error carries HTTP status 408 (both foreman-side and task-side timeouts). Wins over a plain OnError when the status matches
 - `SetReducer(field, reducer)` - escape hatch to override the prefix-driven reducer for a state field (rarely needed; see Reducers below)
-- `SetTimeBudget(taskURL, duration)` - set execution timeout for a task
 - `DeclareInputs(fields...)` - declare which state fields are passed into this graph; no args = nothing, `"*"` = everything, named = those only
 - `DeclareOutputs(fields...)` - declare which state fields are returned on completion; no args = nothing, `"*"` = everything, named = those only
 - `workflow.END` - pseudo-node indicating workflow termination
@@ -112,6 +109,8 @@ Control signals on `Flow`:
 
 The character right after the prefix must be uppercase. `summary`, `listening`, `setup` do not match; `sumScore`, `listMessages`, `setUsers` do. This boundary rule prevents accidental matches against English words.
 
+**These prefixes are reserved. Do not name a state field or task argument `sum*`, `list*`, or `set*` unless it is meant to be reduced at a fan-in.** Unless you override it with `graph.SetReducer`, the reducer for a field is inferred from its name prefix, so a field innocently named `listFiles`, `sumTotal`, or `setConfig` is silently appended/added/unioned (not replaced) the moment it is written on more than one parallel branch, producing duplicated or accumulated values that are hard to trace back to the name. For an ordinary field that is not a fan-in accumulator, pick a name that does not start with these prefixes (e.g. `files`, `total`, `config`, `allUsers`). Reach for a prefix only when the task writes a per-branch delta into a field that converges at a `SetFanIn` node.
+
 If a state field's name is dictated by an external schema and cannot follow the prefix convention, attach a reducer explicitly with `graph.SetReducer(field, reducer)`. The supported reducer values are:
 
 - `workflow.ReducerReplace` - last write wins (default)
@@ -123,6 +122,49 @@ If a state field's name is dictated by an external schema and cannot follow the 
 Explicit reducers are strict: `ReducerUnion` rejects object values, `ReducerMerge` rejects array values. Only the prefix-driven `set*` is polymorphic.
 
 Tasks writing to reducer-managed fields must set only the **delta**, not the full accumulated value. For example, with `listMessages` (auto-append), each fan-out branch should set just the new messages it produced - not the full conversation history.
+
+## Fan-Out and Fan-In
+
+A **fan-out** is any node with two or more normal outgoing transitions, or any `forEach` transition. Goto-only and
+error transitions do not count toward fan-out. When a node fans out, the branches it spawns run in parallel, and they
+must all converge on a single node that you explicitly mark with `graph.SetFanIn(name)`.
+
+This is mandatory, not optional. `graph.Validate` (called by the workflow's marshaler before the foreman runs the
+graph) rejects:
+
+- A fan-out source with no downstream `SetFanIn` node ("fan-out source ... has no fan-in node downstream").
+- A path that reaches `workflow.END` while parallel branches are still open ("transition to END ... has unpopped
+  fan-out frames").
+
+A graph that fans out but never calls `SetFanIn` compiles and passes `go vet` - it fails only at run time when the
+foreman fetches and validates the graph. Adding the fan-out without the matching fan-in is the single most common way
+to produce an invalid graph, so add the `SetFanIn` call in the same edit as the fan-out transitions.
+
+```go
+graph.AddTask("split", myserviceapi.Split.URL())
+graph.AddTask("branchA", myserviceapi.BranchA.URL())
+graph.AddTask("branchB", myserviceapi.BranchB.URL())
+graph.AddTask("join", myserviceapi.Join.URL())
+graph.SetFanIn("join")                  // mark the convergence node
+graph.AddTransition("split", "branchA") // fan-out: two normal edges
+graph.AddTransition("split", "branchB")
+graph.AddTransition("branchA", "join")  // every branch converges on the fan-in node
+graph.AddTransition("branchB", "join")
+graph.AddTransition("join", workflow.END)
+```
+
+The same rule applies to a `forEach` fan-out: `graph.AddTransitionForEach("split", "worker", "items", "item")` followed
+by `graph.AddTransition("worker", "join")` and `graph.SetFanIn("join")`. An empty `items` array spawns zero branches;
+the foreman then creates the fan-in step directly, so the flow still continues past the join.
+
+State fields produced by the parallel branches are merged at the fan-in node by reducers (see Reducers above), so name
+them with the `sum*`, `list*`, or `set*` prefix, or attach a reducer with `SetReducer`. Each branch writes only its own
+delta, never the accumulated value.
+
+To reuse one task at two graph positions across a fan-in boundary (for example, fan in and then loop back), register
+the same task URL under two distinct names with `AddTask`; each name is a separate node with its own lineage scope. See
+`examples/creditflow/service.go` for a worked graph that combines fan-out/fan-in, `forEach`, subgraphs, goto loops, and
+error transitions.
 
 ## Error Transitions
 
@@ -181,7 +223,7 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bo
 
 ## Time Budgets and Long-Running Work
 
-Each task step has an execution time budget enforced by the foreman as an HTTP call timeout. The default is `2m` (set by the foreman's `DefaultTimeBudget` config) and the maximum allowed value is `15m` - the config validation rejects anything longer. Override the budget per task in the graph definition with `graph.SetTimeBudget(taskURL, duration)`.
+Each task step has an execution time budget enforced by the foreman as an HTTP call timeout. The foreman's `TimeBudget` config is the hard ceiling applied to every task dispatch: it defaults to `2m`, and its validation rejects anything outside `1s`-`15m`. A task endpoint declares its own, shorter budget on its subscription with the framework option `sub.TimeBudget(duration)`; the connector then shortens that task handler's context deadline to the smaller of the caller-provided budget and the declared one, so the task is cancelled at its declared bound. The budget is a property of the task endpoint, not of the workflow graph - the graph carries no timing.
 
 If a task exceeds its budget, the foreman cancels the HTTP call and the step's lease eventually expires for `pollPendingSteps` to recover. A task that intrinsically needs more than 15 minutes to finish must not block the worker - instead, use one of the two patterns below to free the worker between work and completion.
 
@@ -240,11 +282,12 @@ The Foreman core service orchestrates workflow execution. Use `foremanapi.NewCli
 ```go
 import "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 
-// Run a workflow synchronously (create + start + await)
-status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState)
+// Run a workflow synchronously (create + start + await).
+// The final argument is *workflow.FlowOptions; pass nil for defaults.
+status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
 
 // Fine-grained control
-flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState)
+flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
 err = foremanapi.NewClient(svc).Start(ctx, flowID)
 status, state, err := foremanapi.NewClient(svc).Await(ctx, flowID)
 
@@ -272,6 +315,49 @@ output1, status, err := exec.MyWorkflow(ctx, input1, input2)
 ```
 
 The `WorkflowRunner` interface is defined in the API package to avoid a `foremanapi` dependency. `foremanapi.Client` satisfies it implicitly.
+
+### Flow Options (priority and fairness)
+
+A flow can carry scheduling hints via `*workflow.FlowOptions` (a flow-level concept, so it lives in the `workflow` package, not `foremanapi`):
+
+```go
+opts := &workflow.FlowOptions{
+    Priority:       1,        // explicit priority is >= 1, lower runs first; 0 = unset -> the foreman DefaultPriority config
+    FairnessKey:    "tenant-42", // "" -> derived from the tid/tenant actor claim, else the "" bucket
+    FairnessWeight: 2.0,      // relative dispatch share of the fairness key; 0 -> 1
+}
+status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
+flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
+```
+
+These three values are immutable for the life of the flow and are inherited unchanged by `Continue`, `Fork`, and subgraphs. The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
+
+The generated per-workflow `Executor` methods keep their minimal signatures. To run a *typed* workflow with options in a test, attach them once with the `WithFlowOptions` builder:
+
+```go
+exec := myworkflowapi.NewExecutor(tester).
+    WithWorkflowRunner(foremanClient).
+    WithFlowOptions(&workflow.FlowOptions{Priority: 1})
+output1, status, err := exec.MyWorkflow(ctx, input1, input2) // unchanged signature
+```
+
+Scheduling semantics (active): the foreman dispatches by a two-level selection over the pending steps.
+
+- Priority is a strict band. The lowest priority number with due pending work runs first, with no aging and no
+  safety valve: a continuously fed stream of higher-priority flows will starve a lower-priority flow for as
+  long as the stream lasts. This starvation is by design - use priority only for genuine urgency tiers, not as
+  a soft hint.
+- Within the chosen priority band, a fairness key is picked by weighted random (share proportional to
+  `FairnessWeight`), then that key's oldest pending step runs. The pick is re-rolled per dispatch, so expected
+  throughput per key tracks its weight regardless of how deep each key has backlogged - a heavy key cannot
+  monopolize a light one. Order within a single key is strict FIFO by creation.
+- The weight used for a key is taken from that key's oldest pending step. Supplying inconsistent
+  `FairnessWeight` values for the same key across flows is the caller's responsibility (the behavior is
+  well-defined but the effective weight is then whichever flow is currently oldest).
+
+Relevant `foreman.core` configs: `DefaultPriority` (priority when the caller specifies none), `Workers` (the
+per-replica candidate-cache size and dispatch parallelism), and `TimeBudget` (the hard per-step dispatch
+ceiling; a task may declare a shorter `sub.TimeBudget` of its own).
 
 ## Flow Stop Notifications
 

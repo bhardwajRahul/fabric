@@ -33,6 +33,8 @@ func emitMockTest(g *generated, existing []byte) ([]byte, error) {
 		sb.WriteString(h)
 		sb.WriteString("\n\n")
 	}
+	sb.WriteString(genmockMarker)
+	sb.WriteString("\n\n")
 	sb.WriteString("package ")
 	sb.WriteString(g.pkgName)
 	sb.WriteString("\n\n")

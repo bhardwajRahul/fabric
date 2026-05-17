@@ -19,7 +19,6 @@ package workflow
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/microbus-io/testarossa"
 )
@@ -290,56 +289,6 @@ func TestGraph_ValidateWhenExpression(t *testing.T) {
 	err := g2.Validate()
 	assert.Error(err)
 	assert.Contains(err.Error(), "invalid 'when' expression")
-}
-
-func TestGraph_TimeBudget(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	g := NewGraph("test")
-	g.AddTransition("svc/a", "svc/b")
-	g.SetTimeBudget("svc/a", 30*time.Second)
-	g.SetTimeBudget("svc/b", 2*time.Minute)
-
-	assert.Equal(30*time.Second, g.TimeBudget("svc/a"))
-	assert.Equal(2*time.Minute, g.TimeBudget("svc/b"))
-	assert.Equal(time.Duration(0), g.TimeBudget("svc/unknown"))
-
-	// TimeBudget should be reflected in Nodes()
-	tasks := g.Nodes()
-	assert.Equal(30*time.Second, tasks[0].TimeBudget)
-	assert.Equal(2*time.Minute, tasks[1].TimeBudget)
-
-	// Round-trip through JSON
-	data, err := json.Marshal(g)
-	assert.NoError(err)
-	var restored Graph
-	err = json.Unmarshal(data, &restored)
-	assert.NoError(err)
-	assert.Equal(30*time.Second, restored.TimeBudget("svc/a"))
-	assert.Equal(2*time.Minute, restored.TimeBudget("svc/b"))
-}
-
-func TestGraph_EmptyTimeBudgets(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	g := NewGraph("simple")
-	g.AddTransition("svc/start", "svc/end")
-
-	data, err := json.Marshal(g)
-	assert.NoError(err)
-
-	// Tasks without time budgets should omit the timeBudget field
-	var raw struct {
-		Tasks []map[string]json.RawMessage `json:"tasks"`
-	}
-	err = json.Unmarshal(data, &raw)
-	assert.NoError(err)
-	for _, task := range raw.Tasks {
-		_, ok := task["timeBudget"]
-		assert.False(ok)
-	}
 }
 
 func TestGraph_AddTransitionOnTimeout(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/boolexp"
 	"github.com/microbus-io/errors"
@@ -83,6 +84,21 @@ func RequiredClaims(boolExp string) Option {
 func Description(text string) Option {
 	return func(sub *Subscription) error {
 		sub.Description = text
+		return nil
+	}
+}
+
+// TimeBudget declares the maximum duration the endpoint's handler may run.
+// The inbound request's context deadline is shortened to the smaller of the
+// caller-provided budget and this declared budget. A zero or negative duration
+// declares no budget. The deadline binds only this handler's own context; it
+// does not change what an upstream caller waits.
+func TimeBudget(d time.Duration) Option {
+	return func(sub *Subscription) error {
+		if d < 0 {
+			d = 0
+		}
+		sub.TimeBudget = d
 		return nil
 	}
 }

@@ -6,17 +6,22 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 
 ## Purpose
 
-Verification fixture for the **per-element pipeline** pattern, which is one of the headline cases the depth-based foreman cannot execute correctly. The graph is `S -> forEach(items) -> H -> {A, B} -> M -> L`. Each forEach element should run its own `H -> {A,B} -> M` pipeline producing one M_k per element, and L consolidates all M_k results.
+Verification fixture for the **per-element pipeline** pattern. The graph is
+`S -> forEach(items) -> H -> {A, B} -> M -> L`. Each forEach element runs its own independent
+`H -> {A, B} -> M` pipeline producing one per-element result, and L consolidates the results across all
+elements.
 
-Under the depth-based fan-in, the forEach instances collapse at the first fan-in (one shared H, one shared M, one shared L). So this graph completes but produces a single fused result rather than N independent results. The relevant test is `t.Skip`'d with reference to `_DOMINATOR.md` (lineage redesign).
+The lineage-based fan-in scopes each element's inner `{A, B} -> M` fan-in to that element's own spawn
+cohort (`graph.SetFanIn("taskM")`), and the fan-in across elements is a second cohort
+(`graph.SetFanIn("taskL")`). Because a cohort is identified by spawn lineage rather than `step_depth`, the
+N inner pipelines stay independent. An earlier depth-based fan-in collapsed them - one shared H, one shared
+M, one shared L - into a single fused result instead of N. The test runs 3 elements and asserts the flow
+completes with `finalCount == 3`; a collapsed pipeline would yield 1, so this is the regression guard for
+per-element pipeline independence.
 
-## Patterns exercised when the redesign lands
+## Patterns exercised
 
-- Dynamic fan-out (forEach) followed by per-thread inner pipeline
-- Inner fan-out per thread (`{A, B}`)
-- Inner fan-in per thread (M_k)
-- Outer fan-in across threads at L (via `set*` reducer in this fixture, since list ordering would be racy)
-
-## Why this service exists pre-redesign
-
-Building the graph, tasks, and test scaffolding now means the lineage redesign only needs to remove the `t.Skip` to validate. No new scaffolding work at that time.
+- Dynamic fan-out (`forEach`) followed by a per-element inner pipeline
+- Inner fan-out per element (`{A, B}`) with inner lineage fan-in at `taskM`
+- Outer lineage fan-in across elements at `taskL`
+- `set*` union reducer consolidating per-element results

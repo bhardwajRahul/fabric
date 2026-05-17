@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package timebudgetflow
 
 import (
@@ -44,9 +60,10 @@ func (svc *Service) TaskA(ctx context.Context, flow *workflow.Flow) (started boo
 }
 
 /*
-Slow sleeps for 500ms, well beyond the 50ms budget configured by the workflow.
-The foreman cancels the request via the ctx; the task observes the cancellation
-and returns ctx.Err(), which the foreman surfaces as a step failure with status 408.
+Slow sleeps for 500ms, well beyond the 50ms budget the Slow endpoint declares
+via sub.TimeBudget. The connector shortens the inbound context deadline to that
+budget; the task observes the cancellation and returns ctx.Err(), which the
+foreman surfaces as a step failure with status 408.
 */
 func (svc *Service) Slow(ctx context.Context, flow *workflow.Flow) (done bool, err error) { // MARKER: Slow
 	select {
@@ -58,7 +75,8 @@ func (svc *Service) Slow(ctx context.Context, flow *workflow.Flow) (done bool, e
 }
 
 /*
-TimeBudget defines A -> Slow with a 50ms budget on Slow.
+TimeBudget defines A -> Slow. The Slow endpoint declares its own 50ms budget
+via sub.TimeBudget, so the graph carries no timing.
 */
 func (svc *Service) TimeBudget(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: TimeBudget
 	graph = workflow.NewGraph(timebudgetflowapi.TimeBudget.URL())
@@ -68,6 +86,5 @@ func (svc *Service) TimeBudget(ctx context.Context) (graph *workflow.Graph, err 
 	graph.AddTask("slow", timebudgetflowapi.Slow.URL())
 	graph.AddTransition("taskA", "slow")
 	graph.AddTransition("slow", workflow.END)
-	graph.SetTimeBudget("slow", 50*time.Millisecond)
 	return graph, nil
 }

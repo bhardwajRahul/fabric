@@ -20,3 +20,5 @@ nats.creds
 .claude/scheduled_tasks.lock
 /coreservices/venvpy/venv.py.core
 /main/venv.py.core
+
+/_*.md

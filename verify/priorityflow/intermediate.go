@@ -1,0 +1,177 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package priorityflow
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/verify/priorityflow/priorityflowapi"
+	"github.com/microbus-io/fabric/verify/priorityflow/resources"
+)
+
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ priorityflowapi.Client
+	_ *workflow.Flow
+)
+
+const (
+	Hostname = priorityflowapi.Hostname
+	Version  = 1
+)
+
+// ToDo is implemented by the service or mock.
+type ToDo interface {
+	OnStartup(ctx context.Context) (err error)
+	OnShutdown(ctx context.Context) (err error)
+	Record(ctx context.Context, flow *workflow.Flow) (recorded bool, err error) // MARKER: Record
+	Priority(ctx context.Context) (graph *workflow.Graph, err error)            // MARKER: Priority
+}
+
+// NewService creates a new instance of the microservice.
+func NewService() *Service {
+	svc := &Service{}
+	svc.Intermediate = NewIntermediate(svc)
+	return svc
+}
+
+// Init enables a single-statement pattern for initializing the microservice.
+func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
+	svc.Connector.Init(func(_ *connector.Connector) (err error) {
+		return initializer(svc)
+	})
+	return svc
+}
+
+// Intermediate extends and customizes the generic base connector.
+type Intermediate struct {
+	*connector.Connector
+	ToDo
+}
+
+// NewIntermediate creates a new instance of the intermediate.
+func NewIntermediate(impl ToDo) *Intermediate {
+	svc := &Intermediate{
+		Connector: connector.New(Hostname),
+		ToDo:      impl,
+	}
+	svc.SetVersion(Version)
+	svc.SetDescription(`priorityflow.verify exercises priority-based dispatch and starvation by design.`)
+	svc.SetOnStartup(svc.OnStartup)
+	svc.SetOnShutdown(svc.OnShutdown)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	svc.Subscribe( // MARKER: Record
+		"Record", svc.doRecord,
+		sub.At(priorityflowapi.Record.Method, priorityflowapi.Record.Route),
+		sub.Description(`Record sleeps for the requested delay and appends its tag to the completion order.`),
+		sub.Task(priorityflowapi.RecordIn{}, priorityflowapi.RecordOut{}),
+	)
+
+	svc.Subscribe( // MARKER: Priority
+		"Priority", svc.doPriority,
+		sub.At(priorityflowapi.Priority.Method, priorityflowapi.Priority.Route),
+		sub.Description(`Priority defines the single-task graph used to observe dispatch order under saturation.`),
+		sub.Workflow(priorityflowapi.PriorityIn{}, priorityflowapi.PriorityOut{}),
+	)
+
+	_ = marshalFunction
+	return svc
+}
+
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel()
+}
+
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	return nil
+}
+
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// doRecord handles marshaling for Record.
+func (svc *Intermediate) doRecord(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Record
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in priorityflowapi.RecordIn
+	flow.ParseState(&in)
+	var out priorityflowapi.RecordOut
+	out.Recorded, err = svc.Record(r.Context(), &flow)
+	if err != nil {
+		return err
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(&flow))
+}
+
+// doPriority handles marshaling for Priority.
+func (svc *Intermediate) doPriority(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Priority
+	graph, err := svc.Priority(r.Context())
+	if err != nil {
+		return err
+	}
+	err = graph.Validate()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(struct {
+		Graph *workflow.Graph `json:"graph"`
+	}{Graph: graph}))
+}

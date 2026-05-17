@@ -21,11 +21,12 @@ import (
 	"encoding/json"
 
 	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/workflow"
 )
 
 // RunAndParse creates a flow, starts it, blocks until it stops, then unmarshals the state into result.
-func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialState any, result any) (status string, err error) {
-	status, state, err := _c.Run(ctx, workflowName, initialState)
+func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions, result any) (status string, err error) {
+	status, state, err := _c.Run(ctx, workflowName, initialState, opts)
 	if err != nil {
 		return status, errors.Trace(err)
 	}

@@ -23,41 +23,46 @@ import (
 	"strings"
 )
 
-// enrichFromServiceFiles walks service.go and intermediate.go to enrich the
-// extracted bundle with information that isn't in intermediate.go's
-// NewIntermediate body. Specifically:
-//   - downstream services (api packages used via NewClient / NewMulticastClient)
-//   - the SQL database flag (database/sql or sequel imports)
-//   - the cloud flag (httpegressapi import)
+// enrichFromSourceFiles walks every non-test .go file in the microservice
+// directory to enrich the extracted bundle with information that isn't in
+// intermediate.go's NewIntermediate body:
 //   - inbound event source aliases resolved to full package paths
 //   - first-sentence godocs for tickers and inbound-event handlers (used as
 //     descriptions when not provided elsewhere)
 //
-// Despite the file name, this function is a side-channel enricher that touches
-// both files; the file is named for historical reasons (service.go is its
-// primary input).
-func enrichFromServiceFiles(path string, x *extracted, ownAPIPkg string) error {
-	mainFile, _, err := parseFile(path)
+// It deliberately does not assume handlers live only in service.go: service.go
+// may be split into transitions.go, scheduling.go, etc., and a ticker or
+// inbound-event handler (and the *api import that names an event source) may
+// live in any of those files. intermediate.go is scanned like any other file.
+// (SQL/cloud detection and downstream-package discovery, which this function
+// used to do off service.go, moved to cmd/gentopology when the JIT cutover
+// dropped those fields from the manifest.)
+func enrichFromSourceFiles(dir string, x *extracted, ownAPIPkg string) error {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
-	intermediatePath := filepath.Join(filepath.Dir(path), "intermediate.go")
-	var intFile *ast.File
-	if _, err := os.Stat(intermediatePath); err == nil {
-		intFile, _, _ = parseFile(intermediatePath)
+	var files []*ast.File
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, _, err := parseFile(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		files = append(files, f)
 	}
 
 	// Collect *api alias → import path so inbound-event entries (whose
 	// `Package` field is initially the alias from intermediate.go) can
-	// be resolved to the actual import path. Other side-effects of
-	// import scanning (SQL/cloud detection, downstream-package
-	// discovery) moved to cmd/gentopology when the JIT cutover dropped
-	// those fields from the manifest.
+	// be resolved to the actual import path.
 	aliasToPath := map[string]string{}
-	for _, f := range []*ast.File{mainFile, intFile} {
-		if f == nil {
-			continue
-		}
+	for _, f := range files {
 		for _, imp := range f.Imports {
 			pathStr := unquote(imp.Path.Value)
 			alias := lastSegment(pathStr)
@@ -81,17 +86,13 @@ func enrichFromServiceFiles(path string, x *extracted, ownAPIPkg string) error {
 	// Collect first-sentence godocs for Service methods, used as descriptions
 	// for tickers and inbound events (whose descriptions don't appear elsewhere).
 	godocs := map[string]string{}
-	collectServiceGodocs := func(f *ast.File) {
-		if f == nil {
-			return
-		}
+	for _, f := range files {
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Recv == nil {
 				continue
 			}
-			recv := receiverTypeName(fn.Recv.List[0].Type)
-			if recv != "Service" {
+			if receiverTypeName(fn.Recv.List[0].Type) != "Service" {
 				continue
 			}
 			if fn.Doc == nil {
@@ -100,8 +101,6 @@ func enrichFromServiceFiles(path string, x *extracted, ownAPIPkg string) error {
 			godocs[fn.Name.Name] = firstSentence(strings.TrimSpace(fn.Doc.Text()))
 		}
 	}
-	collectServiceGodocs(mainFile)
-	collectServiceGodocs(intFile)
 
 	for i := range x.tickers {
 		if x.tickers[i].Description == "" {

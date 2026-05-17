@@ -172,6 +172,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(creditflowapi.VerifyPhoneNumber.Method, creditflowapi.VerifyPhoneNumber.Route),
 		sub.Description(`VerifyPhoneNumber checks the applicant's phone number.`),
 		sub.Task(creditflowapi.VerifyPhoneNumberIn{}, creditflowapi.VerifyPhoneNumberOut{}),
+		sub.TimeBudget(time.Second),
 	)
 	svc.Subscribe( // MARKER: IdentityDecision
 		"IdentityDecision", svc.doIdentityDecision,

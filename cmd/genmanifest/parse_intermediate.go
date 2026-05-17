@@ -366,6 +366,10 @@ func handleSubscribe(call *ast.CallExpr, x *extracted, defs map[string]def, apiP
 			ep.Description = stringArg(c, 0)
 		case "RequiredClaims":
 			ep.RequiredClaims = stringArg(c, 0)
+		case "TimeBudget":
+			if len(c.Args) >= 1 {
+				ep.TimeBudget = renderDurationExpr(c.Args[0])
+			}
 		case "NoQueue":
 			ep.LoadBalancing = "none"
 		case "Queue":

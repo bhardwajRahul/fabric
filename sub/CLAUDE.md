@@ -73,3 +73,17 @@ The connector enforces a stricter set on the inbound request path (see `connecto
 - Brace-enclosed names that are non-empty but not lowercase Go identifiers.
 
 These are enforced at `NewSubscription` time, not at request dispatch. A malformed route fails the `Subscribe` call, not a later request.
+
+### `TimeBudget` is endpoint self-protection, not upstream propagation
+
+`TimeBudget(d)` only shortens the inbound handler's own context deadline, to `min(caller budget, d)`. It is not
+discovered or carried on the wire, so an upstream caller never learns a callee's declared budget and keeps
+waiting its own configured timeout. The value protects the endpoint that declares it, nothing more.
+
+This is acceptable rather than a gap because in the normal case the handler observes `ctx.Done()` and returns
+promptly, so the upstream sees the error well inside its own budget - propagation is achieved through the fast
+return, not through the caller knowing the number. The only residual long wait is a callee that never responds
+at all (a crashed or wedged replica), which is bounded by the caller's own timeout exactly as it was before
+this option existed. The connector applies the clamp in `handleRequest` (after the caller-budget and
+`maxTimeBudget` clamps, before the `networkRoundtrip` floor check); the foreman's per-dispatch ceiling and the
+matching crash-recovery-latency trade-off are documented in `coreservices/foreman/CLAUDE.md`.

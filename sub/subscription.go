@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
@@ -70,6 +71,7 @@ type Subscription struct {
 	Subs           []*transport.Subscription
 	specPath       string
 	RequiredClaims string
+	TimeBudget     time.Duration
 	Type           string
 	Inputs         any
 	Outputs        any

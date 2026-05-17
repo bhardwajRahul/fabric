@@ -97,6 +97,8 @@ To add a migration script, identify the file name with the largest value and cre
 
 Use SQL statements such as `CREATE TABLE` and `ALTER TABLE` to create or alter the schema of the database table. Separate statements with a `;` followed by a new line. Use snake_case for all database identifiers, including column names, index names and table names. Use UPPERCASE for SQL keywords.
 
+When several columns are added to (or modified on) the same table, consolidate them into a single multi-clause `ALTER TABLE` rather than emitting one statement per column. `mysql` and `pgx` accept comma-separated `ADD COLUMN`/`MODIFY COLUMN`/`ALTER COLUMN` clauses; `mssql` takes a single `ADD` (or `ALTER COLUMN`) followed by comma-separated definitions. A consolidated multi-line statement is still one statement as long as it has a single trailing `;` and no internal `;` followed by a newline. `sqlite` is the exception: it supports only one column per `ALTER TABLE`, so its `ADD COLUMN` statements must each remain separate, one per `-- DRIVER: sqlite` block. Consolidation reduces round-trips and keeps the migration atomic per table on the engines that support it.
+
 It is necessary to enter different SQL statements for each of the supported database driver names when they use a different syntax. The prefix `-- DRIVER: drivername` before a statement indicates to run that statement only on the named database: `mysql` (MySQL), `pgx` (Postgres), `mssql` (SQL Server) or `sqlite` (SQLite).
 
 ```sql

@@ -1,3 +1,19 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package subgraphflowapi
 
 import (
@@ -87,18 +103,19 @@ func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 // WorkflowRunner executes a workflow by name with initial state, blocking until termination.
 // foremanapi.Client satisfies this interface.
 type WorkflowRunner interface {
-	Run(ctx context.Context, workflowName string, initialState any) (status string, state map[string]any, err error)
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error)
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.
 // It is primarily intended for integration tests.
 type Executor struct {
-	svc     service.Publisher
-	host    string
-	opts    []pub.Option
-	inFlow  *workflow.Flow
-	outFlow *workflow.Flow
-	runner  WorkflowRunner
+	svc         service.Publisher
+	host        string
+	opts        []pub.Option
+	inFlow      *workflow.Flow
+	outFlow     *workflow.Flow
+	runner      WorkflowRunner
+	flowOptions *workflow.FlowOptions
 }
 
 // NewExecutor creates a new executor proxy to the microservice.
@@ -108,30 +125,36 @@ func NewExecutor(caller service.Publisher) Executor {
 
 // ForHost returns a copy of the executor with a different hostname to be applied to requests.
 func (_c Executor) ForHost(host string) Executor {
-	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithOptions returns a copy of the executor with options to be applied to requests.
 func (_c Executor) WithOptions(opts ...pub.Option) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner}
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithInputFlow returns a copy of the executor with an input flow to use for task execution.
 // The input flow's state is available to the task in addition to the typed input arguments.
 func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner}
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
 // The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
 func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner}
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithWorkflowRunner returns a copy of the executor with a workflow runner for executing workflows.
 // foremanapi.NewClient(svc) satisfies the WorkflowRunner interface.
 func (_c Executor) WithWorkflowRunner(runner WorkflowRunner) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner}
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner, flowOptions: _c.flowOptions}
+}
+
+// WithFlowOptions returns a copy of the executor that creates workflows with the given flow options
+// (priority, fairness key and weight). It has no effect on task execution.
+func (_c Executor) WithFlowOptions(flowOptions *workflow.FlowOptions) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: flowOptions}
 }
 
 // marshalTask supports task execution via the Executor.
@@ -176,8 +199,8 @@ func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, 
 }
 
 // marshalWorkflow supports workflow execution via the Executor.
-func marshalWorkflow(ctx context.Context, runner WorkflowRunner, workflowURL string, in any, out any) (status string, err error) {
-	status, state, err := runner.Run(ctx, workflowURL, in)
+func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *workflow.FlowOptions, workflowURL string, in any, out any) (status string, err error) {
+	status, state, err := runner.Run(ctx, workflowURL, in, flowOptions)
 	if err != nil {
 		return status, err // No trace
 	}
@@ -364,7 +387,7 @@ func (_c Executor) Inner(ctx context.Context, seed string) (innerResult string, 
 		return innerResult, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out InnerOut
-	status, err = marshalWorkflow(ctx, _c.runner, Inner.URL(), InnerIn{Seed: seed}, &out)
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, Inner.URL(), InnerIn{Seed: seed}, &out)
 	return out.InnerResult, status, err
 }
 
@@ -376,6 +399,6 @@ func (_c Executor) Parent(ctx context.Context, seed string) (finalResult string,
 		return finalResult, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out ParentOut
-	status, err = marshalWorkflow(ctx, _c.runner, Parent.URL(), ParentIn{Seed: seed}, &out)
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, Parent.URL(), ParentIn{Seed: seed}, &out)
 	return out.FinalResult, status, err
 }

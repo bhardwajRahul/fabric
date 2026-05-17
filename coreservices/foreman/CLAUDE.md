@@ -72,7 +72,7 @@ Create ──► created ──► Start ──► running ──► completed
 
 **Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. Fields that need to persist across turns must be declared in both `DeclareInputs` and `DeclareOutputs`.
 
-**Enqueue** - Internal endpoint (port `:444`) that adds a step ID to the local worker queue. Load-balanced across foreman replicas to distribute work evenly during fan-out. Enqueue is fire-and-forget - errors are ignored because `pollPendingSteps` recovers any steps that fail to enqueue.
+**Enqueue** - Internal endpoint (port `:444`) that rings the work **doorbell**: it signals that a step is pending and lets the receiving replica decide, from the step's priority relative to its candidate cache, whether to refill or to flush and refill (see "Execution Model"). It does not enqueue a specific step. Load-balanced across foreman replicas. Fire-and-forget - errors are ignored because `pollPendingSteps` rings the local doorbell each cycle and recovers any missed work.
 
 ### Flow Stop Notifications
 
@@ -89,17 +89,128 @@ foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(svc.OnFlowStopped)
 
 ### Execution Model
 
-The foreman uses a **queue-based execution model** with a configurable pool of worker goroutines (default 4). Each worker pops step IDs from a FIFO queue and calls `processStep`:
+The foreman uses a **queue-as-cache execution model** with a configurable pool of worker goroutines
+(`Workers`) and a single refiller goroutine per replica. The in-memory structure (`queue.go`) is a bounded
+`candidateCache`, not a work queue: it holds *hints*, not ownership. Each worker pops a candidate and calls
+`processStep`:
 
-1. Reserve the step (atomic `UPDATE ... WHERE step_id=? AND lease_expires <= NOW`)
+1. Reserve the step (atomic CAS `UPDATE ... WHERE step_id=? AND status='pending' AND not_before<=NOW AND lease_expires<=NOW`)
 2. Check for terminal flow status (abort if cancelled/failed/completed)
 3. Load the flow's graph, config, and actor claims
 4. Execute the task via HTTP call to the task endpoint with a time budget
-5. Persist changes, evaluate transitions, create next steps (in a transaction), enqueue them
+5. Persist changes, evaluate transitions, create next steps (in a transaction), ring the doorbell
 
-Steps enter the queue via `Enqueue` (called by Start, Resume, Retry, processStep, and pollPendingSteps). All enqueue calls go through the distributed `foremanapi.NewClient(svc).Enqueue()` which load-balances across replicas. Enqueue is fire-and-forget - errors are ignored since `pollPendingSteps` recovers any steps that fail to enqueue.
+Acquisition stays the atomic CAS, so a stale or duplicated candidate is harmless: the CAS loser returns `nil`
+and the worker pops the next one. The cache holds hints, never ownership; only the CAS grants a step.
 
-A **timer loop** (`timerLoop`) runs `pollPendingSteps` periodically to recover stuck steps and enqueue steps whose `not_before` time has arrived. The poll interval adapts based on the nearest upcoming step.
+**Selection (two-level priority + fairness).** The refiller, not the worker, decides *what* runs.
+(1) Each shard is scanned for *its* strict-minimum `priority` band's due pending rows in a single SQL
+statement - the band is a `priority=(SELECT MIN(priority) ... due)` subquery, so band and candidates are
+self-consistent within the statement (still not transactional vs concurrent worker CAS claims, which is
+self-correcting via the post-completion refill and the backlog poll). (2) The shards' rows are aggregated:
+the *global* minimum band across shards is taken (strict priority is cluster-wide, not per shard) and only
+rows at that global band form one `fairness_key` population - shards with a worse band contribute nothing
+this batch (only the global-min band is ever materialized - lower-priority bands are never selected until
+the higher one drains, by design). (3) Repeatedly weighted-random pick a key (Efraimidis-Spirakis over the
+*keys*, not the rows) and take that key's *oldest* remaining step until the batch is full - FIFO within a
+`fairness_key`. `created_at` (read as an age, comparable across shards) does two things, both per-key: it
+fixes the key's `fairness_weight` from the key's oldest step (so a tenant cannot self-promote by submitting
+newer high-weight tasks), and it orders dispatch oldest-first within the key - the same step does both. It
+is the only ordering signal comparable across shards: `step_id` is a per-shard auto-increment, so a
+`(shard, step_id)` order would let a brand-new task on a low shard jump an old task on a high shard for the
+*same* tenant (unbounded intra-tenant starvation). The age is `DATE_DIFF_MILLIS(NOW_UTC(), created_at)`
+evaluated on each shard, and `created_at` defaults to that same shard's `NOW_UTC()` at insert (no INSERT
+sets it explicitly) - both terms on one shard clock, so the per-shard clock offset *cancels exactly*: there
+is no inter-shard clock-skew term in `ageMs`. The only residual is the few-millisecond dispersion in *when*
+each shard runs its age query (the per-shard scans run in parallel within one refiller pass via
+`svc.Parallel`), a soft, self-correcting reordering of one tenant's own queue - not a fairness violation
+(the weighted *key* pick, not step order, governs cross-tenant fairness) and not a correctness issue (the
+`processStep` CAS arbitrates acquisition); same-age ties break by `(shard, step_id)` for determinism. The
+pick is re-rolled per step so expected dispatch share is
+proportional to weight and independent of backlog depth or shard layout - fairness is over `fairness_key`,
+never over shards (the reason flat per-row weighted random was rejected: it rewards backlog, the opposite
+of tenant isolation).
+Strict priority means no aging: a fed higher-priority band starves lower bands by design.
+
+**Queue-as-cache, doorbell, single-slot refiller.** `Enqueue` no longer carries a step to run in a queue;
+it is a **doorbell** (`candidateCache.offer`). It resolves the announced step's priority by a PK lookup
+(off the selection path), then takes one of three paths. (1) Empty cache: this replica is idle - request a
+refill so the refiller selects the strictly-best pending step. It deliberately does **not** head-insert the
+first arrival, because an arbitrary-priority step jumping the queue on an idle replica can run before a
+more important one (this exact inversion was observed and is why the empty case defers to the refiller; the
+cost is one refiller scan of idle-wake latency, not zero). (2) Non-empty and not strictly more important
+than the cached band (priority >= floor, equal included): no-op - a steady same-or-lower-priority stream is
+pure cache hits with no blanket requery. (3) Non-empty and strictly more important (priority < floor):
+**head-insert that exact step** so the next pop runs it without waiting a refiller scan, lower the floor,
+wake one waiter, and request a refill to top up the rest of the band. Case 3 is the valuable one - an
+urgent arrival preempting cached lower-priority work - and it deliberately does **not** flush the existing
+candidates: a guiding principle of this dispatcher is that high throughput trumps exact priority ordering.
+Flushing would idle every worker through the refill scan to guarantee zero lower-priority executions after
+a higher-priority arrival; instead the workers keep draining (or run the head-inserted urgent step next)
+and the refiller's wholesale replace re-establishes strict band order within one refill cycle. Exact
+priority ordering is soft anyway - with N replicas each draining independently there is no global order to
+preserve. The CAS in `processStep` still arbitrates acquisition, so a head entry that is stale or
+duplicated across replicas is harmless. The cache is bound to `size` by trimming the tail on insert; a
+trimmed step stays `pending` and is re-selected.
+Each shard is scanned for its own strict-minimum band, but the refiller then aggregates: it takes the
+*global* minimum band across shards and only rows at that global band form one fairness-key population
+(shards with a worse band wait), so strict priority is cluster-wide and fairness is over `fairness_key`,
+never over shards. The cache floor is that single global band. A single refiller goroutine plus a
+buffered(1), never-closed, non-blockingly-sent `refillTrigger` is the single-slot selection gate
+(`MaxClaims` reinterpreted): concurrent requests (worker low-water, timer poll, doorbell) coalesce into at
+most one pending scan, and the send can never panic, even during the shutdown drain.
+
+**One pioneer is sufficient; the head-insert is a bridge, not a per-job fast path.** A head-insert is
+accepted at most once per band-opening: it lowers `floor` to the pioneer's priority, so every subsequent
+arrival at that same band hits `priority >= floor` and is rejected (case 2). That is deliberate and
+correct, not a starvation bug. The pioneer's only job is to bridge the single refiller-cycle gap so the
+*first* urgent step does not eat a refiller scan of latency. Its `requestRefill` makes the refiller scan
+band MIN = the pioneer's priority and `refill()` **wholesale-replace** the cache with the strict, weighted
+batch of that band, *evicting* the cached lower-priority candidates (they stay `pending` and are
+re-selected only when the band drops back). After that one cycle every further high-priority step is served
+correctly and fast by the refiller's strict + weighted selection - no further head-inserts needed. So a
+stream of escalated work is handled well: pioneer #1 bridges, the refiller takes over the whole band. A
+non-pioneer high-priority step that misses the head-insert (stale `floor` in the pre-refill window) is
+**not** stuck behind the low-priority backlog: the refiller selects band MIN, so it is picked up after at
+most ~`lowWater` lower-priority pops plus one scan - a bounded fast-path *miss*, never priority starvation.
+
+**Bounded bridge-window leakage and the weighted-fairness bypass are deliberate, bounded, and
+self-healing.** Between the pioneer head-insert and the asynchronous `refill()` landing, workers keep
+popping the still-cached lower-priority steps. The leak is bounded by ~the worker count, not by the
+backlog: a refiller scan is one DB round-trip while a worker that pops a step is then busy executing it for
+its full duration (much longer than a scan), so each worker leaks at most ~one lower-priority step before
+the replace evicts the rest; the pioneer itself is at the head and is never delayed. Separately, the
+head-insert bypasses the weighted Efraimidis-Spirakis fairness for exactly that one pioneer step: it is the
+*first* work of a just-opened band on this replica (no established weighted distribution there yet to
+violate), it is bounded to one step per escalation by the equal-rejected rule (a burst at the new band
+does not multiply it), and the refiller's next batch restores weighted fairness for the band bulk. Both
+costs are strictly smaller than the cross-replica fairness softness the design already accepts (N replicas
+weighted-sampling independently never sum to an exact global ratio), and both are the deliberate extension
+of "throughput trumps exact ordering" to within-band ordering and fairness. Do not "fix" these by flushing,
+by per-item priority tracking in the cache, or by re-floor-on-pop: each trades the latency win the
+head-insert exists for, adds hot-path state or nondeterminism, and only shaves an already-bounded refiller
+cycle off a path the refiller already backstops.
+
+**Liveness guarantee.** A worker requests a refill *after* `processStep` returns - i.e. after the step has
+left `pending` (acquired or completed) - not at pop time. This is load-bearing: requesting before the CAS let
+the refiller re-select the in-flight step and, under single-slot coalescing, never scan post-completion state,
+wedging a single-worker replica with a backlog. Post-completion the next refiller scan always reflects every
+freed slot, so a coalesced trigger can never wedge while work remains. The worker also requests at the
+low-water mark so draining overlaps refilling on a wide pool. The cache holds 2x the worker count and the
+low-water mark is half of that (one worker count): the 2x buffer keeps workers fed across a refiller scan,
+and the refiller fills a batch up to the full cache capacity.
+
+`pollPendingSteps` no longer enumerates the backlog onto the queue. It recovers expired-lease steps, detects
+orphaned flows, sizes the wake timer to the nearest future `not_before`, and rings the local doorbell each
+cycle. If a due-pending backlog exists it caps the next poll at `backlogPollInterval` (2s) so an idle replica
+that received no doorbell still re-scans promptly - the poll-driven liveness net the old enumerate-and-push
+model provided, without per-step queue stuffing.
+
+The refiller/`MaxClaims` slot and the crash-recovery lease are orthogonal: the slot is an in-memory admission
+gate on running the selection SQL; the lease is the DB-side crash-recovery timer on the `running` step.
+
+A **timer loop** (`timerLoop`) runs `pollPendingSteps` on the adaptive interval (nearest future `not_before`,
+the 2s backlog cap, or `maxPollInterval`).
 
 ### Query Parallelism
 
@@ -188,15 +299,42 @@ which is *less* than the dangling final loop iteration's depth, so `MAX(step_dep
 (no `finalResult`) and `DeclareOutputs` filtering then yielded `{}`. The bug was order-dependent (only when the
 shallow branch lost the fan-in race), which is why `verify/intrathreadgotoflow` failed intermittently. The
 tail-step merge is depth-agnostic: the loop iterations carry `successor_id = taskD` (set by the fan-in cohort-exit
-UPDATE), so only the real terminal step qualifies. `mergeTerminalSteps` returns nil when no completed terminal
-step exists (pre-`7.sql` flows, or a flow force-terminated before anything completed); the caller then falls back
-to the legacy `MAX(step_depth)` merge so `Cancel`/`failStep` snapshots are unaffected.
+UPDATE), so only the real terminal step qualifies. `mergeTerminalSteps` is the *only* final-state path - there is no
+`step_depth` fallback. It is two-tier and depth-free: the completed tail (`successor_id = 0 AND status = completed`)
+for a normally finishing flow; if none, the non-completed tail (`successor_id = 0`, any status) for a flow
+force-terminated by `Cancel`/`failStep` before any step completed - those are the in-flight/entry steps whose
+immutable `state` snapshot is the flow's last-known input (their `changes` are empty), so merging them reproduces
+the snapshot the old `MAX(step_depth)` merge produced, without consulting `step_depth`. An empty map is returned for
+a flow with no steps. Flows predating `7.sql` (no `predecessor_id`/`successor_id`) are not supported - migrations
+run at startup, so every live flow has the DAG columns.
 
 ### Time Budgets
 
-Each step has a `time_budget_ms` that controls the `pub.Timeout` on the task execution HTTP call. The budget is resolved at step creation: the graph's per-task budget (`graph.SetTimeBudget`) takes precedence; otherwise the foreman's `DefaultTimeBudget` config is used (default 2m).
+Each step has a `time_budget_ms` that controls the `pub.Timeout` on the task execution HTTP call. It is the
+foreman's single `TimeBudget` config (default 2m), applied uniformly to every step - `taskTimeBudget()` no
+longer consults the graph. The graph carries no timing: per-task budgets are now declared by the task endpoint
+itself via the framework's `sub.TimeBudget` option, and the connector shortens that handler's inbound context
+deadline to `min(caller budget, declared budget)`. So `TimeBudget` is the *ceiling* the foreman imposes on the
+dispatch call, and `sub.TimeBudget` is the *shorter* bound a task may impose on itself - exactly the
+ingress-proxy request-timeout-ceiling shape, generalized to every task endpoint. `graph.SetTimeBudget` was
+deleted outright; the workflow graph no longer encodes any duration.
 
-The worker lease duration is `time_budget + reservationMargin` (30s). This ensures the lease always outlasts execution, preventing premature recovery by `pollPendingSteps`.
+The worker lease duration is `time_budget + leaseMargin` (30s), i.e. `TimeBudget` ceiling +
+`leaseMargin`. This ensures the lease always outlasts execution, preventing premature recovery by
+`pollPendingSteps`. Accepted trade-off: because the lease is sized to the ceiling rather than per task, a
+*crashed* worker that was running a task with a tight `sub.TimeBudget` is recovered no sooner than
+`ceiling + leaseMargin` instead of `tightBudget + leaseMargin`. The common case is unaffected -
+a hung (not crashed) task is cancelled at its declared bound by the connector, its outbound call returns,
+and the foreman acts immediately; only the rare worker-crash path pays the slower recovery, which is
+acceptable for the simplification of a single uniform lease.
+
+`sub.TimeBudget` is endpoint self-protection, not upstream propagation: the foreman never learns a task's
+declared budget, and nothing on the wire carries it back. A responsive-but-slow task is cancelled at its
+declared bound, returns promptly, and the foreman acts at once - so the dispatch call effectively completes
+in `declared budget + one network hop`, far inside the foreman's ceiling. A task that never responds at all
+(a crashed or wedged replica) is bounded solely by the foreman's `TimeBudget` ceiling on the `pub.Timeout`
+of the dispatch call, which is exactly the hung-downstream behavior that predates `sub.TimeBudget`. The
+option therefore adds no new dispatch-latency hazard; it only lets an endpoint bound its own handler.
 
 ### State Model
 
@@ -217,7 +355,7 @@ Tasks can signal the foreman via control methods on the `Flow` carrier. These ar
 - **`flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool`** - Requests the foreman to re-execute this task with exponential backoff. Returns `true` if a retry will be scheduled (attempts remaining), `false` if exhausted. When `true`, the task should return `nil`. When `false`, the task should return the actual error. The step row is reused (not a new row). The foreman tracks the attempt count in the step's `attempt` column and computes the delay as `min(initialDelay * multiplier^attempt, maxDelay)`. Changes from this execution are preserved, and the foreman merges `state + changes` back into the step's `state` column so the task sees its own prior output on the next attempt via `ParseState`/`GetInt`/etc. This is different from the API-level `Retry`, which creates a new step to replace the failed one.
 - **`flow.RetryNow() bool`** - Shorthand for `flow.Retry(math.MaxInt32, 0, 0, 0)` - retries immediately with no limit. Always returns `true`. The task itself is responsible for deciding when to stop retrying.
 
-**No jitter on retry backoff:** The foreman does not add jitter to the computed backoff delay. The worker pool (`Workers` config, default 4) already throttles concurrency per replica - even if multiple retries fire simultaneously, they queue up in the worker pool rather than overwhelming downstream resources. Adding jitter would increase latency for no throughput benefit in this architecture.
+**No jitter on retry backoff:** The foreman does not add jitter to the computed backoff delay. The worker pool (`Workers` config, default 64) already throttles concurrency per replica - even if multiple retries fire simultaneously, they queue up in the worker pool rather than overwhelming downstream resources. Adding jitter would increase latency for no throughput benefit in this architecture.
 - **`flow.Sleep(duration)`** - The task tells the foreman to delay the next step's execution. Sets the next step's `not_before` timestamp. Useful for rate-limit delays. The timer loop adapts its poll interval to wake up when the sleep expires. Note: sleep delays the *transition to the next step*, not the current step's re-execution. In fan-out, only the last sibling's sleep affects the fan-in point.
 - **`flow.Goto(target)`** - Overrides transition routing. The foreman skips normal condition evaluation and follows the `withGoto` transition to the specified target, if one exists in the graph. Goto transitions are never taken during normal evaluation - only when explicitly requested.
 - **`flow.Interrupt(payload)`** - Pauses execution and parks the flow. The payload is stored in the step's `interrupt_payload` column and propagated up the surgraph chain. The task should return normally after calling Interrupt. The foreman sets the flow to `interrupted` and fires `OnFlowStopped` on the root flow's `notify_hostname`.
@@ -290,7 +428,7 @@ When `SQLDataSourceName` is empty (default in `TESTING` deployment), the foreman
   (`status='running'` → `pending`, `lease_expires=NOW_UTC()`), then calls `shortenNextPoll(time.Now())` to wake
   `pollPendingSteps` immediately. Both halves are load-bearing: `pollPendingSteps` only recovers running steps
   whose lease has *already* expired, and a freshly leased step holds its `time_budget+leaseMargin` lease (minutes,
-  e.g. `DefaultTimeBudget` 2m + `leaseMargin` 30s = 2.5m). Without the lease reset, the immediate poll finds
+  e.g. `TimeBudget` 2m + `leaseMargin` 30s = 2.5m). Without the lease reset, the immediate poll finds
   nothing to do and the step - and the whole flow's fan-in, if the step sat inside a fan-out branch - stalls until
   the lease lapses on its own. The reset is guarded by `WHERE status='running'`: a no-op if contention struck
   before the lease was acquired (still `pending`) or after the step already completed (a later statement failed),
@@ -308,6 +446,66 @@ which is why the `NOW_UTC()` macro must also expand parenthesized. `VARCHAR`/`CH
 literal defaults. The Postgres, SQL Server, and SQLite sections all permit bare literal defaults on their text/JSON
 types, so this constraint is MySQL-only. When editing the schema files, mirror the existing parenthesized form on every
 MySQL `TEXT`/`JSON` column or fresh MySQL deployments will fail to migrate.
+
+### Flow Scheduling (priority / fairness)
+
+`8.sql` adds `priority`, `fairness_key`, `fairness_weight` to **both** `microbus_flows` (authoritative) and
+`microbus_steps` (denormalized). The flow row is the source of truth; the step copy exists so the two-level
+selection query never has to join `microbus_flows` on the hot path - the same split already used for
+`time_budget_ms`/`actor_claims`.
+
+`resolveFlowOptions` resolves a caller's `*workflow.FlowOptions` against the foreman defaults: priority falls
+back to the `DefaultPriority` config, the fairness key falls back to the `tid`/`tenant` actor claim then the
+`""` bucket, and the weight falls back to `1`. The three values are immutable for the life of a flow (no
+`Reprioritize` in v1; switching a flow's fairness key mid-run would be a self-promotion abuse vector).
+`Create`/`CreateTask` resolve from options/claim; `Continue`, `Fork`, and `createSubgraphFlow` **inherit** the
+parent/thread flow's three values (read from its row) rather than re-resolving, so a high-priority parent never
+silently spawns default-priority descendants.
+
+Propagation onto step rows takes one of two shapes, both correct because the flow's values are immutable and
+authoritative:
+
+- Where the resolved values are already in hand (entry step in `createWithGraph`, the `Fork` step, the API
+  `Retry` insert which copies them off the failed step row like `lineage_id`), they are written as literal
+  bind parameters.
+- In the deep `processStep` paths (next-step fan-out and the two fan-in inserts), the values are **not**
+  threaded through the call chain; the insert copies them straight from the owning flow with a scalar
+  subquery `(SELECT priority FROM microbus_flows WHERE flow_id=?)` (and likewise for the other two). The flow
+  row always exists before any of its steps, so this is single-source-of-truth with zero new function
+  parameters. The subquery is a PK lookup, off the hot read path (it runs at step creation, not selection).
+
+The scheduler *reads* `priority` and `fairness_key`/`fairness_weight` via the two-level selection in the
+refiller (see "Execution Model"), backed by `idx_microbus_steps_selection`. `fairness_weight` is read only
+from each key's oldest candidate step. `idx_microbus_steps_saturation` is created but not yet read: the
+per-task `MaxTaskConcurrency` saturated-set exclusion is not wired into selection (a separate future
+backpressure deliverable).
+
+#### Why the scheduling design is shaped this way
+
+These are the load-bearing design decisions behind the mechanics above; the *what* is in "Execution Model"
+and the resolution above, this is the *why*.
+
+- **Priority is a property of the flow, not the task or the workflow type.** A per-task priority is
+  incoherent: step order *within* one flow is dictated by the graph, not by relative urgency. Priority only
+  arbitrates *between* flows competing for workers, so it is resolved once at `Create` and is immutable
+  (`workflow.FlowOptions` is flow-level for the same reason - see `workflow/CLAUDE.md`).
+- **Fairness weight is denormalized at `Create`, never resolved on the selection path.** A resolver hook in
+  the claimer would put synchronous I/O on the hot selection critical section. Instead the weight rides on
+  the step row; when a key's steps carry inconsistent weights the oldest candidate step's weight is used
+  (single-valued selection with no side state), and keeping weights consistent for a key is the caller's
+  responsibility - the framework does not reconcile them.
+- **No per-tenant / per-key metric labels.** Production fairness observability is aggregate-only: the
+  per-priority backlog/age gauges plus a single distinct-fairness-key count. Per-key labels would be
+  unbounded-cardinality (one series per tenant). Empirical weight-share correctness is a test concern (the
+  `fairnessflow` / `shardedflow` fixtures assert the ratio), deliberately not a production metric.
+- **`Workers` is a generous static cap, not the backpressure mechanism.** A worker blocked on an outbound
+  task call is just a goroutine stack plus a socket, so over-provisioning the pool is cheap; throttling a
+  pressured downstream is a separate, deferred per-task-concurrency deliverable, not a function of pool size.
+- **Completion writes are deliberately *not* gated by the refiller/`MaxClaims` slot.** That slot bounds
+  selection only; finishing in-flight work must outrank starting new work, so the post-execution advance
+  (persist changes, transitions, fan-in) is never serialized behind selection. The real contention axis is
+  same-flow fan-in, already serialized by the fan-in transaction plus the lock-contention rewind path; the
+  `CompletionContention` counter exists to decide if an explicit completion bound is ever warranted.
 
 ## Schema Column Catalog
 
@@ -340,6 +538,9 @@ rationale and the meaning of every column live here.
 | `breakpoints` | JSON `map[taskName]string` of `BreakBefore` breakpoints |
 | `created_at` | UTC creation time. Append-only and PK-correlated; the `PurgeExpiredFlows` cursor heuristic and `idx_*_created_at` rely on this |
 | `updated_at` | UTC time of the last status transition; bumped on every state change |
+| `priority` | (`8.sql`) Scheduling priority, integer >= 1, lower runs first. Resolved at `Create` from `FlowOptions` (an explicit priority is >= 1; a 0/unset `FlowOptions.Priority` falls back) else the `DefaultPriority` config; inherited unchanged by `Continue`/`Fork`/subgraph. Immutable after creation |
+| `fairness_key` | (`8.sql`) Fairness bucket, typically a tenant. From `FlowOptions`, else the `tid`/`tenant` actor claim, else `''`. Immutable after creation |
+| `fairness_weight` | (`8.sql`) Relative dispatch share of the `fairness_key`. From `FlowOptions`, else `1` |
 
 #### `microbus_steps`
 
@@ -369,6 +570,9 @@ rationale and the meaning of every column live here.
 | `fan_out_ordinal` | (`6.sql`) This branch's index in its fan-out (forEach array index / static declaration order); fan-in merges in this order so list/sum reducers are deterministic. Retry copies it. `0` = not part of a fan-out |
 | `predecessor_id` | (`7.sql`) Step that ran immediately before this one in the execution DAG. `0` = none (entry/subgraph-entry/fork-entry) |
 | `successor_id` | (`7.sql`) Step that runs immediately after this one. `0` = none (exit) |
+| `priority` | (`8.sql`) Denormalized copy of the owning flow's `priority` for the hot selection path. Copied at every step-insert path so selection never joins `microbus_flows`. Read by the two-level selection |
+| `fairness_key` | (`8.sql`) Denormalized copy of the flow's `fairness_key` |
+| `fairness_weight` | (`8.sql`) Denormalized copy of the flow's `fairness_weight` |
 
 ## Database Indexing Strategy
 
@@ -405,6 +609,8 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 | `idx_microbus_steps_flow_id` | `(flow_id, step_id)` on MySQL; `(flow_id)` on pgx/mssql | Per-flow step queries (history, fan-in siblings, cancel) |
 | `idx_microbus_steps_status` | `(status, updated_at)` - partial on pgx: `WHERE status IN ('pending', 'running')` | `pollPendingSteps` recovery and pending step discovery. Only non-terminal statuses are queried through this index |
 | `idx_microbus_steps_created_at` | `(created_at)` (migration `4.sql`) | Time-window queries; append-only, same minimal-maintenance rationale as the flows index |
+| `idx_microbus_steps_selection` | `(status, priority, fairness_key)` (migration `8.sql`) - partial `WHERE status IN ('pending', 'running')` on pgx/mssql/sqlite, full on mysql | Two-level priority+fairness candidate selection. Read by the refiller (band MIN(priority), then candidate rows by key) |
+| `idx_microbus_steps_saturation` | `(status, task_name)` (migration `8.sql`) - partial as above | Per-task max-concurrency saturated-set aggregate. Created but not yet read (reserved for a future backpressure deliverable) |
 
 ### Data Retention
 
@@ -420,7 +626,7 @@ The foreman uses SQL transactions for multi-statement operations and `lease_expi
 
 ### Worker context: `rootCtx`, not `OnStartup`'s ctx and not `Lifetime()`
 
-All worker and timer database operations run on `svc.rootCtx`, a foreman-owned context created
+All worker, timer, and refiller database operations run on `svc.rootCtx`, a foreman-owned context created
 (`context.WithCancel(context.Background())`) at the top of `OnStartup` and cancelled in `OnShutdown`
 *after* `svc.workers.Wait()` has drained the pool. It is deliberately **not**:
 
@@ -437,33 +643,37 @@ All worker and timer database operations run on `svc.rootCtx`, a foreman-owned c
 The task call is the only place a *cancellable* context is used: `executeTask` receives a
 `taskCtx` derived from `rootCtx` bounded by the step's time budget. So: worker DB ops on the
 foreman lifetime context, a timing-out context only for the outbound task HTTP call. Worker
-termination is driven by `queue.close()` + `svc.workers.Wait()`, not ctx cancellation, so
-cancelling `rootCtx` only after the drain never interrupts an in-flight write.
+termination is driven by `cache.close()` + `svc.workers.Wait()`, not ctx cancellation, so
+cancelling `rootCtx` only after every pool has drained never interrupts an in-flight write.
 
-### Shutdown ordering: drain workers before closing `wakeTimer`
+### Shutdown ordering: drain workers, then timer, then refiller, then cancel
 
 `shortenNextPoll` signals the timer via `select { case svc.wakeTimer <- struct{}{}: default: }`. The
 `default` only guards against a *full* channel - a send on a *closed* channel still panics, even inside a
 `select`. The only callers of `shortenNextPoll` are worker goroutines (`processStep` and its retry/sleep/
-poison paths); `timerLoop` only ever receives from `wakeTimer`. So `OnShutdown` must fully drain the worker
-pool before closing `wakeTimer`:
+poison paths); `timerLoop` only ever receives from `wakeTimer`. So `OnShutdown` drains the worker pool
+before closing `wakeTimer`, then stops the refiller, then cancels `rootCtx`:
 
 ```
-queue.close()        // unblocks workerLoop independently of wakeTimer
-workers.Wait()       // no shortenNextPoll caller remains
+cache.close()        // unblocks blocked candidate pops independently of any channel
+workers.Wait()       // no shortenNextPoll / requestRefill worker caller remains
 close(wakeTimer)     // timerLoop's only termination signal
-timerWorker.Wait()   // timerLoop fully exited
-rootCancel()         // in-flight DB writes already complete
+timerWorker.Wait()   // timerLoop fully exited (last requestRefill caller gone)
+close(refillStop)    // refiller's termination signal
+refiller.Wait()      // refiller fully exited; its DB ops complete
+rootCancel()         // all worker/timer/refiller DB writes already complete
 ```
 
-The timer goroutine therefore lives on its own `timerWorker` WaitGroup, not the worker-pool `workers`
-WaitGroup. If it shared `workers`, the close-then-wait order could not be reordered: `timerLoop` exits only
-when `wakeTimer` closes, so `workers.Wait()` before `close(wakeTimer)` would deadlock. During the
-worker-drain window `timerLoop` may still call `pollPendingSteps` → `queue.push`; `push` does not check
-`closed`, so it is a harmless append onto a queue no worker will pop. The earlier code closed `wakeTimer`
-before `workers.Wait()`, so a worker mid-`processStep` (e.g. the retry-sleep `shortenNextPoll` at the line
-after a 408/ack-timeout failStep) raced the close and panicked `send on closed channel` (caught by
-`workerLoop`'s `errors.CatchPanic`, but spurious and a real ordering hazard).
+The timer and refiller each live on their own WaitGroup (`timerWorker`, `refiller`), separate from the
+worker pool, so the close-then-wait order can be staged: `timerLoop` exits only when `wakeTimer` closes, so
+draining it before `close(wakeTimer)` would deadlock. `refillTrigger` is **never closed** and is only ever
+sent to non-blockingly, so a late coalesced `requestRefill` from the timer's final poll during the drain
+window is a harmless no-op rather than a `send on closed channel` panic - the refiller is stopped by closing
+the *separate* `refillStop` channel instead. A `cache.refill` into the already-closed cache is a no-op, so a
+refiller run still in flight during the drain cannot resurrect a popped-from cache. The earlier (pre-Phase-2)
+code closed `wakeTimer` before `workers.Wait()`, so a worker mid-`processStep` (e.g. the retry-sleep
+`shortenNextPoll` after a 408/ack-timeout failStep) raced the close and panicked (caught by `workerLoop`'s
+`errors.CatchPanic`, but spurious and a real ordering hazard).
 
 ### Transactions
 
@@ -471,7 +681,7 @@ after a 408/ack-timeout failStep) raced the close and panicked `send on closed c
 
 ### Lease-Based Crash Recovery
 
-Transactions don't help when a worker crashes during task execution (an HTTP call outside any transaction). The `lease_expires` column on the microbus_steps table serves as a crash-recovery lease. When a worker reserves a step for execution, it sets `lease_expires` to `NOW + time_budget + reservationMargin`. If the worker crashes, the lease eventually expires and `pollPendingSteps` resets the step to `pending` for re-execution.
+Transactions don't help when a worker crashes during task execution (an HTTP call outside any transaction). The `lease_expires` column on the microbus_steps table serves as a crash-recovery lease. When a worker reserves a step for execution, it sets `lease_expires` to `NOW + time_budget + leaseMargin`. If the worker crashes, the lease eventually expires and `pollPendingSteps` resets the step to `pending` for re-execution.
 
 ### Background Recovery
 

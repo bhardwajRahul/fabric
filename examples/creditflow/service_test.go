@@ -779,7 +779,8 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 				Employers:     []string{"Acme Corp"},
 				CreditScore:   750,
 			},
-		})
+		}, nil)
+
 		assert.NoError(err)
 
 		// Set a breakpoint on the ReviewCredit task (runs after fan-in, before Decision)
@@ -828,7 +829,8 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 				Employers:     []string{"Acme Corp"},
 				CreditScore:   750,
 			},
-		})
+		}, nil)
+
 		assert.NoError(err)
 		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.IdentityDecision.URL(), true)
 		assert.NoError(err)
@@ -926,7 +928,8 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
-		})
+		}, nil)
+
 		assert.NoError(err)
 		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
@@ -944,7 +947,8 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		// Use a breakpoint to pause the flow, then cancel it
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
-		})
+		}, nil)
+
 		assert.NoError(err)
 		err = foremanClient.BreakBefore(ctx, flowKey, "reviewCredit", true)
 		assert.NoError(err)
@@ -1059,7 +1063,7 @@ func BenchmarkCreditFlow_CreditApproval(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant)
+		_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1100,7 +1104,7 @@ func BenchmarkCreditFlow_CreditApprovalParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant)
+			_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
 			if err != nil {
 				b.Fatal(err)
 			}

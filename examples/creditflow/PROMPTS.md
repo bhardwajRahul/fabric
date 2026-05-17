@@ -44,7 +44,7 @@ InitIdentityVerification → (fan-out)
   IdentityDecision → END
 ```
 
-Set `graph.SetTimeBudget(verifyPhoneNumber, 1*time.Second)` on VerifyPhoneNumber to enforce the 1-second deadline.
+Declare a 1-second time budget on the VerifyPhoneNumber task endpoint with `sub.TimeBudget(time.Second)` so the task is cancelled if it exceeds the deadline.
 
 ## Task Endpoints
 

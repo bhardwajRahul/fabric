@@ -154,3 +154,16 @@ The split is enforced by Go's package-private fields, not by an interface, becau
 Under the legacy validator, if it is the *only* outgoing non-`OnError` transition from the source, the flow completes at the source. This is the correct behavior for "fan out over results, none found" cases, but it is also a foot-gun if you forgot a sibling unconditional transition to a default target.
 
 Under the lineage validator (with `SetFanIn`), an empty forEach is not a footgun: the foreman looks up the source's fan-in via `g.FanInFor(source)` and creates that fan-in step directly with empty state. Execution continues past the join naturally.
+
+### `FlowOptions` lives here, not in `foremanapi`
+
+`FlowOptions` (priority, fairness key, fairness weight) is a flow-level scheduling concept - priority is a
+property of the execution, not of any task or graph. It lives in the `workflow` package rather than
+`foremanapi` for a concrete reason: it is referenced by `foremanapi` (`CreateIn`/`RunIn`), by the foreman
+itself, by the generated `WorkflowRunner` interface, and by every workflow-bearing `*api/client.go`'s
+Executor. `foremanapi` already imports `workflow`, and every workflow `*api` package already imports
+`workflow` for `workflow.Flow`, so placing it here reaches every consumer with zero new dependencies and
+without making 40-plus api packages depend on the foreman. The struct is pure data with JSON tags (it rides
+the wire inside `CreateIn`/`RunIn`); it has no methods and the `workflow` package never interprets it - the
+foreman owns all defaulting and resolution (see `coreservices/foreman/CLAUDE.md`). A `nil *FlowOptions` or
+any zero field means "use the foreman default", which is why callers that don't care pass `nil`.

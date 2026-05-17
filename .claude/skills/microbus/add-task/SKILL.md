@@ -75,7 +75,7 @@ Naming for fan-in: when an argument represents a state field that will be merged
 - `list*` - array append, duplicates kept (e.g. `listMessages`, `listEvents`)
 - `set*` - set-style: array union or object merge depending on the value (e.g. `setUsers`, `setTags`)
 
-The character right after the prefix must be uppercase. Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer should return `sumEmploymentFailuresOut: 0 or 1` (its own count), not the running total.
+The character right after the prefix must be uppercase. These prefixes are reserved: do not name an argument `sum*`, `list*`, or `set*` unless it is genuinely a fan-in accumulator, because the reducer for a field is inferred from its name prefix (unless overridden by `graph.SetReducer`), so such a field is silently summed/appended/unioned instead of replaced if it is ever written on parallel branches. For ordinary inputs and outputs, pick a name that does not start with these prefixes (e.g. `files`, `total`, `config`, not `listFiles`, `sumTotal`, `setConfig`). Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer should return `sumEmploymentFailuresOut: 0 or 1` (its own count), not the running total.
 
 #### Step 3: Extend the `ToDo` Interface
 

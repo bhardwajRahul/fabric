@@ -516,6 +516,9 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		budget = c.defaultTimeBudget
 	}
 	budget = min(budget, c.maxTimeBudget)
+	if s.TimeBudget > 0 {
+		budget = min(budget, s.TimeBudget)
+	}
 	frame.Of(httpReq).SetTimeBudget(budget)
 	if budget <= c.networkRoundtrip {
 		return errors.New("timeout", http.StatusRequestTimeout)

@@ -53,6 +53,7 @@ type Endpoint struct {
 	Route          string
 	LoadBalancing  string // "" → omit (default), "none" → NoQueue, custom queue name otherwise
 	RequiredClaims string
+	TimeBudget     string // declared sub.TimeBudget as a compact duration (e.g. "50ms"); "" → omit
 }
 
 // InboundEvent is a hook into another service's outbound event. The

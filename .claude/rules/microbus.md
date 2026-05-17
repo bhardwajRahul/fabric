@@ -14,27 +14,14 @@
 
 ### Reading Framework Design Notes
 
-When you need to understand *why* a Microbus framework package behaves a certain way (not just *how* to use it), read the `CLAUDE.md` file inside that package in the local Go module cache. These files capture design rationale that godoc does not, and they are not bundled into this project.
-
-The framework lives at the version pinned in `go.mod`. To read a package's design notes:
+When you need to understand *why* a Microbus framework package behaves a certain way (not just *how* to use it), read the `CLAUDE.md` file inside that package in the local Go module cache. These files capture design rationale that godoc does not, and they are not bundled into this project. Substitute the package (e.g. `connector`) for `<package>`:
 
 ```bash
 ver=$(go list -m -f '{{.Version}}' github.com/microbus-io/fabric)
 cat "$(go env GOMODCACHE)/github.com/microbus-io/fabric@$ver/<package>/CLAUDE.md"
 ```
 
-For example, to read the design notes for the `connector` package:
-
-```bash
-ver=$(go list -m -f '{{.Version}}' github.com/microbus-io/fabric)
-cat "$(go env GOMODCACHE)/github.com/microbus-io/fabric@$ver/connector/CLAUDE.md"
-```
-
-The module cache is read-only; do not attempt to edit those files. If `go list` reports the framework is not in `go.mod`, the project does not depend on Microbus and these notes do not apply.
-
-## Overview
-
-Microbus is a holistic open source framework for developing, testing, deploying and operating microservices at scale. It combines best-in-class OSS, tooling and best practices into a dramatically simplified engineering experience.
+The module cache is read-only; do not edit those files. If `go list` reports the framework is not in `go.mod`, the project does not depend on Microbus and these notes do not apply.
 
 ## Key Concepts
 
@@ -91,35 +78,14 @@ Functional endpoints use typed Go function signatures for their inputs and outpu
 - **`httpResponseBody`** - Output argument serialized as the sole HTTP response body. Other outputs are excluded.
 - **`httpStatusCode`** - `int` output argument that sets the HTTP status code (defaults to `200`).
 
-These magic arguments are commonly used together to expose a functional endpoint as a REST API:
-
-```go
-// CreateREST is a POST /objects endpoint
-func (svc *Service) CreateREST(ctx context.Context, httpRequestBody *Object) (objKey ObjectKey, httpStatusCode int, err error) {
-	// httpRequestBody is deserialized from the request body
-	objKey, err = svc.Create(ctx, httpRequestBody)
-	if err != nil {
-		return objKey, 0, errors.Trace(err)
-	}
-	return objKey, http.StatusCreated, nil
-}
-
-// LoadREST is a GET /objects/{key} endpoint
-func (svc *Service) LoadREST(ctx context.Context, key ObjectKey) (httpResponseBody *Object, httpStatusCode int, err error) {
-	obj, ok, err := svc.Load(ctx, key)
-	if err != nil {
-		return nil, 0, errors.Trace(err)
-	}
-	if !ok {
-		return nil, http.StatusNotFound, nil
-	}
-	return obj, http.StatusOK, nil
-}
-```
+Used together they expose a functional endpoint as a REST API - e.g. a `POST` create taking
+`httpRequestBody *Object` and returning `(key ObjectKey, httpStatusCode int, err error)` with
+`http.StatusCreated`, or a `GET` load returning `(httpResponseBody *Object, httpStatusCode int, err error)`
+with `http.StatusNotFound` when absent.
 
 ### Authentication and Authorization
 
-Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin`). See the manifest sections below for syntax.
+Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin`); the expression syntax is in Required JWT Claims below.
 
 **IMPORTANT**: If the microservice uses `act.Of(ctx)`, imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
 
@@ -177,187 +143,44 @@ The pattern lets a microservice with multiple manual groups (e.g. a Python venv 
 
 ### Manifest
 
-Each microservice contains a `manifest.yaml` that documents its features. Read all manifests when starting work on a project to build a mental map of the system.
+Each microservice has a `manifest.yaml` documenting the features it *exposes* - its interface contract. Read all
+manifests when starting work to build a map of the system. Outbound dependencies (which microservices it calls),
+database usage, and HTTP egress targets are *not* here - those are derived from source by `cmd/gencreds` (ACL signing)
+and `cmd/gentopology` (topology diagram).
 
-**IMPORTANT**: The manifest describes the code but does not generate it. When changing the code of the microservice, update the manifest to match.
+**IMPORTANT**: Source code is the single source of truth. `manifest.yaml`, `mock.go`, and `mock_test.go` are
+generated artifacts and must never be edited by hand - regenerate from code with `cmd/genmanifest` (manifest) and
+`cmd/genmock` (`mock.go` + `mock_test.go`); the `housekeeping` skill runs both. Hand edits are overwritten on the next
+regeneration. Change the code and regenerate, never the reverse - so you never author manifest YAML, only read it.
 
-#### General
+Top-level sections: `general`, `webs`, `functions`, `outboundEvents`, `inboundEvents`, `configs`, `tickers`,
+`metrics`, `tasks`, `workflows`. Each feature is keyed by its PascalCase name with a `description` and, where
+applicable, a `signature`. The YAML is self-describing; the non-obvious decode rules are:
 
-The `general` section of the manifest describes its general properties.
-
-- The `hostname` must be unique across the application
-- The `frameworkVersion` is the version of the `github.com/microbus-io/fabric` package in `go mod` at the time when the microservice was last edited
-- The `modifiedAt` timestamp records when the manifest was last updated, in RFC 3339 format with the actual current UTC time (not midnight)
-
-The manifest captures only what this microservice *exposes* - its interface contract. Outbound dependencies (which other services it calls), database usage, and HTTP egress targets are not stored here; they're derived from source by `cmd/gencreds` (for ACL signing) and `cmd/gentopology` (for the topology diagram).
-
-```yaml
-general:
-  name: My service
-  hostname: my.service.hostname
-  description: MyService does X.
-  package: github.com/mycompany/myproject/myservice
-  frameworkVersion: 1.23.0
-  modifiedAt: "2025-01-15T14:30:00Z"
-```
-
-#### Webs
-
-The `webs` section of the manifest describes the web handler endpoints of the microservice.
-
-- The `method` must be one of the recognized HTTP methods - `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH` - or `ANY` to indicate that the endpoint handles all methods. Matching is case-insensitive; the framework rejects unknown method tokens at registration time with `405 Method Not Allowed`
-- The `loadBalancing` indicates how requests to this endpoint are distributed among peers:
-  - `default` - load-balanced among peers using the hostname as the queue name
-  - `none` - multicast to all peers (no queue)
-  - a custom queue name (e.g. `worker.pool`) - load-balanced among peers that share the same queue name, and multicast across groups with different queue names. Queue names must match `^[a-zA-Z0-9\.]+$`
-- `requiredClaims` is a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied
-
-```yaml
-webs:
-  MyWeb:
-    description: MyWeb does X.
-    method: GET
-    route: :1234/my-web
-    loadBalancing: default
-    requiredClaims: roles.manager || roles.director
-```
-
-#### Functions
-
-The `functions` section of the manifest describes the functional endpoints (RPCs) of the microservice. Fields `method`, `loadBalancing`, and `requiredClaims` follow the same conventions as webs.
-
-```yaml
-functions:
-  MyFunction:
-    signature: MyFunction(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
-    description: MyFunction does X.
-    method: GET
-    route: /my-function
-    loadBalancing: default
-    requiredClaims: level>5 && !guest
-```
-
-#### Outbound Events
-
-The `outboundEvents` section of the manifest describes the outbound events triggered by the microservice.
-
-```yaml
-outboundEvents:
-  OnMyEvent:
-    signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
-    description: OnMyEvent is triggered when X.
-    method: POST
-    route: :417/on-my-event
-```
-
-#### Inbound Events
-
-The `inboundEvents` section of the manifest describes the inbound events that the microservice is listening to. Fields `loadBalancing` and `requiredClaims` follow the same conventions as webs.
-
-```yaml
-inboundEvents:
-  OnMyEvent:
-    signature: OnMyEvent(argIn1 int, argIn2 MyStruct) (argOut1 map[string]bool, argOut2 bool)
-    description: OnMyEvent is triggered when X.
-    loadBalancing: default
-    requiredClaims: admin || manager
-    package: package/path/of/event/source/microservice
-```
-
-#### Configuration Properties
-
-The `configs` section of the manifest describes the configuration properties of the microservice.
-
-- The `signature` describes the getter of the configuration property, including its return type: `string`, `int`, `float64`, `time.Duration` or `bool`
-- `secret` indicates the value should not be logged
-- `callback` indicates an `OnChanged` callback is triggered when the value changes
-- The `validation` pattern is enforced over the value of the configuration property
-  - `str ^[a-zA-Z0-9]+$` - string that matches a regular expression
-  - `bool` - boolean
-  - `int [0,60]` - integer in range
-  - `float [0.0,1.0)` - floating point number in range
-  - `dur (0s,24h]` - duration in range
-  - `set Red|Green|Blue` - one of a set of options
-  - `url` - URL
-  - `email` - email address
-  - `json` - serialized JSON
-- Range notation: `[` inclusive, `(` exclusive. Either bound can be omitted for open-ended ranges, e.g. `int [1,]` (minimum 1, no maximum) or `dur [,24h]` (no minimum, maximum 24h)
-
-```yaml
-configs:
-  MyConfig:
-    signature: MyConfig() (myConfig int)
-    description: MyConfig is X.
-    validation: int [1,100]
-    default: 10
-    secret: false
-    callback: false
-```
-
-#### Tickers
-
-The `tickers` section of the manifest describes recurring operations of the microservice.
-
-- The `interval` is the duration between iterations
-
-```yaml
-tickers:
-  MyTicker:
-    signature: MyTicker()
-    description: MyTicker does X.
-    interval: 5m
-```
-
-#### Metrics
-
-The `metrics` section of the manifest describes metrics produced by the microservice.
-
-- `signature` describes the value type and labels of the metric
-- The metric `kind` is either `counter`, `gauge` or `histogram`
-- `buckets` are the boundaries of a histogram's buckets
-- `otelName` is the name of the metric in OpenTelemetry
-- `observable` metrics are measured just-in-time
-
-```yaml
-metrics:
-  MyMetric:
-    signature: MyMetric(value int, label1 string, label2 string)
-    description: MyMetric measures X.
-    kind: histogram
-    buckets: [1, 5, 10, 50, 100]
-    otelName: my_metric
-    observable: false
-```
-
-#### Tasks
-
-The `tasks` section of the manifest describes task endpoints used in agentic workflows.
-
-- The `signature` excludes `ctx context.Context`, `flow *workflow.Flow`, and `err error`
-- For output arguments with an `Out` suffix (read-modify-write pattern), include them as-is in the signature
-
-```yaml
-tasks:
-  MyTask:
-    signature: MyTask(inArg1 string, inArg2 float64) (outArg1 bool)
-    description: MyTask does X.
-    route: :428/my-task
-    requiredClaims: roles.manager || roles.director
-```
-
-#### Workflows
-
-The `workflows` section of the manifest describes workflow graph endpoints that define the structure of agentic workflows.
-
-- The `signature` lists the workflow's declared input and output fields, rendered as a valid Go function signature. Input fields (before the return parens) are what the workflow expects in its initial state. Output fields (inside the return parens) are what the workflow produces in its final state. When an output field shares its underlying state-field name with an input (a read-modify-write field), include the `Out` suffix on the output side - the manifest mirrors the Go field names from the workflow's `In`/`Out` structs. Field types are informational - the actual state is untyped JSON.
-
-```yaml
-workflows:
-  MyWorkflow:
-    signature: MyWorkflow(inputField1 string, inputField2 float64) (outputField1 bool)
-    description: MyWorkflow defines the workflow graph for X.
-    route: :428/my-workflow
-```
+- **`general`**: `hostname` is unique across the app; `frameworkVersion` is the `fabric` version at last edit;
+  `modifiedAt` is RFC 3339 UTC at the actual edit time (not midnight).
+- **`method`** (webs/functions/events): one of `GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH`, or `ANY` for
+  all methods. Case-insensitive; unknown tokens are rejected at registration with `405`.
+- **`loadBalancing`**: `default` (load-balanced on the hostname queue), `none` (multicast to all peers), or a custom
+  queue name matching `^[a-zA-Z0-9\.]+$` (load-balanced within the queue, multicast across queues).
+- **`requiredClaims`**: a boolean expression over JWT claims; the request is denied if unmet (syntax in Required JWT
+  Claims above).
+- **`timeBudget`**: per-endpoint max duration declared via the `sub.TimeBudget` option. The framework shortens the
+  inbound deadline to `min(caller budget, declared)` and cancels an over-running handler via its context. Recorded
+  only when declared, and only the declared value (never the deployment-effective one); otherwise the connector
+  default and the foreman `TimeBudget` ceiling apply. Same meaning for tasks.
+- **`signature`**: a valid Go signature. Configs - the getter, return type `string`/`int`/`float64`/
+  `time.Duration`/`bool`. Tasks - excludes `ctx`, `flow *workflow.Flow`, `err`; an `Out`-suffixed output is the
+  read-modify-write pair of its same-named input (see the Naming-Driven Behavior table). Workflows - declared input
+  fields before the parens, output fields inside, an `Out` suffix marking a read-modify-write field; types are
+  informational since state is untyped JSON.
+- **`configs`**: `secret` (never logged), `callback` (`OnChanged` fires on change), `default`, and `validation`:
+  `str <regexp>`, `bool`, `int [0,60]`, `float [0.0,1.0)`, `dur (0s,24h]`, `set Red|Green|Blue`, `url`, `email`,
+  `json`. Range brackets: `[` inclusive, `(` exclusive; omit a bound for open-ended (`int [1,]`, `dur [,24h]`).
+- **`metrics`**: `kind` is `counter`/`gauge`/`histogram`; `buckets` are histogram boundaries; `otelName` is the
+  OpenTelemetry name; `observable` metrics are measured just-in-time.
+- **`tickers`**: `interval` is the duration between iterations.
+- **`inboundEvents`**: `package` is the import path of the event-source microservice.
 
 ### Markers
 
@@ -406,50 +229,21 @@ Use the generated client stub for type-safe communication with downstream micros
 - **`NewMulticastTrigger`** - fires outbound events defined in the microservice's API. Used by the event source to notify subscribers.
 - **`NewHook`** - subscribes to inbound events from another microservice. Used by event sinks to react to events.
 
-If making a one-to-one request/response call, use the standard client.
+Unicast returns a single result; trace and propagate its error:
 
 ```go
-import "package/path/of/downstream/downstreamapi"
-
-func (svc *Service) ProcessOrder(ctx context.Context, orderID string) error {
-	validated, err := downstreamapi.NewClient(svc).ValidateOrder(ctx, orderID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// ...
-	return nil
+validated, err := downstreamapi.NewClient(svc).ValidateOrder(ctx, orderID)
+if err != nil {
+	return errors.Trace(err)
 }
 ```
 
-If making a one-to-many pub/sub call, use the multicast client to iterate through the zero or more responses.
+Multicast (a one-to-many call, or firing an outbound event and awaiting responses) returns an iterator of zero or
+more responses; call `.Get()` on each element for its result and error:
 
 ```go
-import "package/path/of/downstream/downstreamapi"
-
-func (svc *Service) ProcessOrder(ctx context.Context, orderID string) error {
-	for e := range downstreamapi.NewMulticastClient(svc).ValidateOrder(ctx, orderID) {
-		validated, err := e.Get()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		// ...
-	}
-	// ...
-	return nil
-}
-```
-
-To fire an outbound event, use the multicast trigger from within the event source microservice. To fire and forget, call the trigger without iterating over its responses.
-
-```go
-myserviceapi.NewMulticastTrigger(svc).OnOrderCreated(ctx, order)
-```
-
-To fire and wait for responses from event sinks, iterate over the returned sequence.
-
-```go
-for r := range myserviceapi.NewMulticastTrigger(svc).OnOrderCreated(ctx, order) {
-	result, err := r.Get()
+for e := range downstreamapi.NewMulticastClient(svc).ValidateOrder(ctx, orderID) {
+	validated, err := e.Get()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -457,22 +251,10 @@ for r := range myserviceapi.NewMulticastTrigger(svc).OnOrderCreated(ctx, order) 
 }
 ```
 
-To subscribe to an inbound event from another microservice, use the hook. This is typically done in `OnStartup`.
-
-```go
-import "package/path/of/eventsource/eventsourceapi"
-
-func (svc *Service) OnStartup(ctx context.Context) (err error) {
-	hook := eventsourceapi.NewHook(svc)
-	hook.OnOrderCreated(svc.onOrderCreated)
-	return nil
-}
-
-func (svc *Service) onOrderCreated(ctx context.Context, order Order) error {
-	// React to the event...
-	return nil
-}
-```
+Fire-and-forget an outbound event by calling the trigger without ranging over it:
+`myserviceapi.NewMulticastTrigger(svc).OnOrderCreated(ctx, order)`. Subscribe to an inbound event - typically in
+`OnStartup` - with `eventsourceapi.NewHook(svc).OnOrderCreated(svc.onOrderCreated)`, where the handler has the
+event's signature and returns an `error`.
 
 ### Logging
 
@@ -527,79 +309,41 @@ Use `svc.IncrementMyMetric(ctx, delta)` for counters and `svc.RecordMyMetric(ctx
 
 #### Mocking Microservices
 
-A microservice's `Mock` provides type-safe methods for mocking all its endpoints. Add mocks to testing applications in lieu of real microservices.
+A microservice's `Mock` provides type-safe methods for mocking all its endpoints. Build a test app from the
+microservice under test, a `connector.New("tester.client")` (wrapped in the relevant `*api.NewClient`), and mocks
+for its downstream microservices, then `app.RunInTest(t)`:
 
 ```go
-func TestPayment_ChargeUser(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Create a mock of the webpay microservice, mocking its Charge endpoint
-	webpayMock := webpay.NewMock()
-	webpayMock.MockCharge(func(ctx context.Context, userID string, amount int) (success bool, balance int, err error) {
-		return true, 100, nil
-	})
-
-	// Initialize the testers
-	tester := connector.New("tester.client")
-	client := payment.NewClient(tester)
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-		webpayMock,
-	)
-	app.RunInTest(t)
-
-	// ...
-}
+webpayMock := webpay.NewMock()
+webpayMock.MockCharge(func(ctx context.Context, userID string, amount int) (success bool, balance int, err error) {
+	return true, 100, nil
+})
+app := application.New()
+app.Add(
+	// HINT: Add microservices or mocks required for this test
+	svc, tester, webpayMock,
+)
+app.RunInTest(t)
 ```
 
 #### Mocking the HTTP Egress Proxy
 
-Mock the HTTP egress proxy with `httpegress.NewMock()` to avoid real network requests. Extract the proxied request with `http.ReadRequest(bufio.NewReader(r.Body))`.
+Mock the HTTP egress proxy with `httpegress.NewMock()` (added to the test app like any mock) to avoid real network
+requests. In `MockMakeRequest`, extract the proxied request with `http.ReadRequest(bufio.NewReader(r.Body))`, branch
+on its method/URL, and write the response; `defer httpEgressMock.MockMakeRequest(nil)` to reset:
 
 ```go
-func TestMyService_ExternalAPI(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	svc := NewService()
-	httpEgressMock := httpegress.NewMock()
-
-	tester := connector.New("tester.client")
-	client := myserviceapi.NewClient(tester)
-
-	app := application.New()
-	app.Add(
-		svc,
-		httpEgressMock,
-		tester,
-	)
-	app.RunInTest(t)
-
-	t.Run("fetch_data", func(t *testing.T) {
-		httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
-			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
-			if req.Method == "GET" && req.URL.String() == "https://api.example.com/data" {
-				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"status":"ok"}`))
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-			}
-			return nil
-		})
-		defer httpEgressMock.MockMakeRequest(nil)
-
-		// Test against the mock...
-	})
-}
+httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
+	req, _ := http.ReadRequest(bufio.NewReader(r.Body))
+	if req.Method == "GET" && req.URL.String() == "https://api.example.com/data" {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok"}`))
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	return nil
+})
+defer httpEgressMock.MockMakeRequest(nil)
 ```
 
 Only the wrapper's own tests should mock the egress proxy directly. Upstream microservices should mock the wrapper itself using its `NewMock()`.
@@ -714,11 +458,12 @@ Explicit configuration (e.g. `graph.SetReducer`) overrides the convention and is
 
 ### OpenAPI Parameter Descriptions
 
-Two complementary conventions enrich the OpenAPI spec with per-field descriptions, improving documentation quality and LLM tool-calling accuracy.
+Two optional, complementary conventions enrich the OpenAPI spec with per-field descriptions (better docs and LLM
+tool-calling accuracy). Both are extracted by the generator and feed the JSON Schema; absent, descriptions are
+simply empty and the full godoc remains the endpoint description.
 
-#### Godoc `Input:` and `Output:` Sections
-
-When a functional endpoint has non-trivial parameters or results, include structured `Input:` and/or `Output:` sections in its godoc comment. The OpenAPI generator extracts these sections and populates per-field descriptions in the JSON Schema output. The full godoc is also preserved as the endpoint's overall description.
+**Scalar function args** - structured `Input:`/`Output:` sections in the endpoint godoc, one `- name: description`
+line per arg:
 
 ```go
 /*
@@ -730,27 +475,18 @@ Input:
 
 Output:
   - forecast: Daily forecast summaries
-  - confidence: Model confidence score, 0.0 to 1.0
 */
-func (svc *Service) Forecast(ctx context.Context, city string, days int) (forecast []DayForecast, confidence float64, err error)
+func (svc *Service) Forecast(ctx context.Context, city string, days int) (forecast []DayForecast, err error)
 ```
 
-These sections are optional. If absent, the endpoint description is still the full godoc and per-field descriptions are simply empty.
-
-#### `jsonschema` Description Tags on Custom Types
-
-When defining custom struct types used in APIs, add short `jsonschema:"description=..."` tags to each field. The `invopop/jsonschema` library reads these tags and emits `description` fields in the generated JSON Schema, which flow through to the OpenAPI spec.
+**Fields within custom struct types** - short `jsonschema:"description=..."` tags (read by `invopop/jsonschema`):
 
 ```go
 type DayForecast struct {
-    Date    string  `json:"date,omitzero" jsonschema:"description=Date is the forecast date in ISO 8601 format"`
-    High    float64 `json:"high,omitzero" jsonschema:"description=High is the high temperature in Fahrenheit"`
-    Low     float64 `json:"low,omitzero" jsonschema:"description=Low is the low temperature in Fahrenheit"`
-    Summary string  `json:"summary,omitzero" jsonschema:"description=Summary is a brief weather summary"`
+    Date string  `json:"date,omitzero" jsonschema:"description=Date is the forecast date in ISO 8601 format"`
+    High float64 `json:"high,omitzero" jsonschema:"description=High is the high temperature in Fahrenheit"`
 }
 ```
-
-Together, godoc sections cover scalar function arguments while `jsonschema` tags cover fields within complex types.
 
 ## Development Workflow
 
