@@ -50,6 +50,8 @@ The plane prefixes every NATS subject this connector subscribes to or publishes 
 
 Time budget propagates as a duration header (decremented per hop by `networkRoundtrip`), not a deadline timestamp - clocks across replicas are not assumed to be synchronized. A request whose remaining budget falls below one network round-trip errors out as `408 Request Timeout` rather than being dispatched.
 
+That 408 is delivered to the caller as an `OpCodeError` response, not signalled by a bare early `return` from `handleRequest`. `onRequest` acks before it spawns the handler goroutine, so once acked the caller is past the ack-timeout fast-fail and is waiting for a real response; a subscriber that rejected the request but sent nothing back would strand the caller until its own `pub.Timeout`. This bites hardest when the budget is shortened below a round-trip by the subscription's own `sub.TimeBudget` rather than by caller drawdown: the caller's `pub.Timeout` is generous, the caller-side `time.Until(deadline) <= networkRoundtrip` check in `Publish` therefore does not fire, and only the subscriber knows the declared budget is too small - so the subscriber must be the one to report it. The budget rejection feeds `handlerErr` and falls through the shared error-response path (skipping the handler) instead of returning early.
+
 Call depth is propagated similarly, incremented by `Publish` on each outbound hop. The default cap of 64 is a cycle detector - at depth 64 `Publish` returns `508 Loop Detected` synchronously without touching the bus.
 
 ### Ack-or-fail-fast and the LOCAL escape hatch

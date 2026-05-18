@@ -944,6 +944,66 @@ func TestConnector_SubscriptionTimeBudget(t *testing.T) {
 	assert.Equal(con.defaultTimeBudget, longBudget, "a declared budget above the default must not lengthen it")
 }
 
+// TestConnector_SubscriptionTimeBudgetReject verifies that when sub.TimeBudget
+// shortens the budget below a network round-trip, the subscriber rejects the
+// request by sending a 408 error response - so the caller fails fast - rather
+// than acking and then silently dropping it, which strands the caller until its
+// own (possibly much larger) pub.Timeout. Reproduces the foreman/timebudgetflow
+// hang where a 50ms declared budget under a 100ms NATS round-trip wedged a worker
+// for the full TimeBudget ceiling.
+// Not parallel - asserts an upper bound on elapsed time.
+func TestConnector_SubscriptionTimeBudgetReject(t *testing.T) {
+	assert := testarossa.For(t)
+
+	ctx := t.Context()
+
+	handlerCalled := make(chan struct{}, 1)
+	con := New("time.budget.reject.connector")
+	con.Subscribe("Tight",
+		func(w http.ResponseWriter, r *http.Request) error {
+			select {
+			case handlerCalled <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+		sub.At("GET", "/tight"),
+		sub.Web(),
+		sub.TimeBudget(50*time.Millisecond),
+	)
+
+	err := con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// Force the declared 50ms budget below a network round-trip, deterministically
+	// and independent of the transport, so handleRequest takes the reject path.
+	con.networkRoundtrip = 100 * time.Millisecond
+
+	// The caller's own timeout is generous; only the subscriber knows the declared
+	// budget is too small. Pre-fix the caller blocked here until pub.Timeout fired.
+	callerTimeout := 4 * time.Second
+	start := time.Now()
+	_, err = con.Request(ctx,
+		pub.GET("https://time.budget.reject.connector/tight"),
+		pub.Timeout(callerTimeout),
+	)
+	elapsed := time.Since(start)
+
+	assert.Error(err)
+	assert.Equal(http.StatusRequestTimeout, errors.Convert(err).StatusCode)
+	assert.True(elapsed < 2*time.Second,
+		"caller must fail fast on a rejected budget, not block until pub.Timeout (%v); took %v",
+		callerTimeout, elapsed)
+	handlerRan := false
+	select {
+	case <-handlerCalled:
+		handlerRan = true
+	default:
+	}
+	assert.False(handlerRan, "handler must not run when the budget is too small to dispatch")
+}
+
 func BenchmarkConnection_AckRequest(b *testing.B) {
 	ctx := context.Background()
 	// Startup the microservices

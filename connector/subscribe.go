@@ -520,9 +520,7 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		budget = min(budget, s.TimeBudget)
 	}
 	frame.Of(httpReq).SetTimeBudget(budget)
-	if budget <= c.networkRoundtrip {
-		return errors.New("timeout", http.StatusRequestTimeout)
-	}
+	budgetExhausted := budget <= c.networkRoundtrip
 
 	// Integrate fragments together
 	httpReq, err = c.defragRequest(httpReq)
@@ -568,8 +566,14 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 	httpReq = httpReq.WithContext(ctx)
 	httpReq.Header = frame.Of(ctx).Header()
 
+	// A budget too small to dispatch fails fast as 408, routed through the error
+	// response below so the caller is told rather than left to its own pub.Timeout.
+	if budgetExhausted {
+		handlerErr = errors.New("timeout", http.StatusRequestTimeout)
+	}
+
 	// Check actor constraints
-	if s.RequiredClaims != "" {
+	if handlerErr == nil && s.RequiredClaims != "" {
 		actor := httpReq.Header.Get(frame.HeaderActor)
 		if actor == "" || !utils.LooksLikeJWT(actor) {
 			handlerErr = errors.New("", http.StatusUnauthorized)
