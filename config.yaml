@@ -30,3 +30,6 @@ llm.core:
 http.ingress.core:
 #  Ports: 8080
 #  TimeBudget: 20s
+
+petstore.example:
+  # RemoteBaseURL: https://petstore3.swagger.io/api/v3

@@ -70,6 +70,8 @@ The HTTP ingress proxy always blocks inbound requests on ports `:666` and `:888`
 
 Endpoints on `:666` are designated trust roots - their compromise undermines the framework's security guarantees (e.g. minting tokens with arbitrary claims, executing shell commands on the host). Operators grant `:666` publish rights only to explicitly trusted caller bundles via NATS ACLs. Do not place an endpoint on `:666` without confirming it meets the trust-root threshold.
 
+**Port choice is a security decision.** In a standard ingress configuration ports `:443` and `:80` are reachable from outside the mesh through the HTTP ingress proxy, so any endpoint there is world-reachable unless its `requiredClaims` gates it. An operator can lock the proxy down further, but never rely on that: treat an open `:443` endpoint with no `requiredClaims` as public to the internet, and choose it only when the endpoint is genuinely public. Otherwise gate it with `requiredClaims`, and/or place it on an internal-only port (`:444`) so the ingress proxy can never route to it. This matters most for a microservice that holds a stored secret (an API key, a downstream credential) and uses it on the caller's behalf: an ungated `:443` endpoint there is a confused deputy, letting any external caller spend the operator's credential. Decide port and `requiredClaims` together, per endpoint, defaulting to closed.
+
 ### Magic HTTP Arguments
 
 Functional endpoints use typed Go function signatures for their inputs and outputs. Three special argument names - `httpRequestBody`, `httpResponseBody` and `httpStatusCode` - provide direct control over HTTP request/response semantics from within a functional endpoint.
@@ -86,6 +88,8 @@ with `http.StatusNotFound` when absent.
 ### Authentication and Authorization
 
 Microbus uses JWT-based authentication. Endpoints can require specific claims using `requiredClaims` boolean expressions (e.g. `roles.admin`); the expression syntax is in Required JWT Claims below.
+
+Default to closed. An empty `requiredClaims` means anyone who can reach the endpoint may invoke it, which on `:443`/`:80` means the entire internet under a standard ingress configuration (see Ports). Leave `requiredClaims` empty only for an endpoint that is intentionally public; otherwise express the actors permitted to call it. An endpoint that wields a stored secret or performs a privileged side effect must never be both ungated and on an externally reachable port.
 
 **IMPORTANT**: If the microservice uses `act.Of(ctx)`, imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
 

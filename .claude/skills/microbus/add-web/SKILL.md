@@ -49,7 +49,7 @@ Describe the endpoint starting with its name, in Go doc style: `MyWeb does X`. E
 
 #### Step 4: Determine the Required Claims
 
-Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles.manager && level>2`. Leave empty if the endpoint should be accessible by all.
+Determine if the endpoint should be restricted to authorized actors only. Compose a boolean expression over the JWT claims associated with the request that if not met will cause the request to be denied. For example: `roles.manager && level>2`. Default to closed: in a standard ingress configuration an empty `requiredClaims` on a `:443`/`:80` endpoint is reachable by the entire internet. Leave it empty only for an intentionally public endpoint; if the endpoint wields a stored secret or a privileged side effect, it must be gated by `requiredClaims` and/or an internal port. See the Ports and Authentication sections of `.claude/rules/microbus.md`.
 
 #### Step 5: Extend the `ToDo` Interface
 

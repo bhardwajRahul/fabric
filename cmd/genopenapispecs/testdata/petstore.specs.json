@@ -1,0 +1,235 @@
+{
+  "openapiVersion": "3.0.3",
+  "info": {
+    "title": "Pet Store",
+    "version": "1.0.0",
+    "description": "A sample API for exercising the OpenAPI importer."
+  },
+  "remote": {
+    "baseURL": "https://api.petstore.example/v1",
+    "security": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-Api-Key"
+    }
+  },
+  "types": {
+    "Error": {
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "NewPet": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "Pet": {
+      "properties": {
+        "id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "endpoints": [
+    {
+      "name": "ListPets",
+      "feature": "function",
+      "method": "GET",
+      "route": "/pets",
+      "summary": "List all pets",
+      "params": [
+        {
+          "name": "limit",
+          "in": "query",
+          "description": "Maximum number of pets to return.",
+          "schema": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "goType": "int"
+        },
+        {
+          "name": "tags",
+          "in": "query",
+          "schema": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goType": "[]string"
+        }
+      ],
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "schema": {
+          "items": {
+            "$ref": "Pet"
+          },
+          "type": "array"
+        }
+      }
+    },
+    {
+      "name": "CreatePet",
+      "feature": "function",
+      "method": "POST",
+      "route": "/pets",
+      "summary": "Create a pet",
+      "requestBody": {
+        "contentType": "application/json",
+        "required": true,
+        "schema": {
+          "$ref": "NewPet"
+        }
+      },
+      "response": {
+        "status": 201,
+        "contentType": "application/json",
+        "schema": {
+          "$ref": "Pet"
+        }
+      }
+    },
+    {
+      "name": "GetPetsSearch",
+      "feature": "function",
+      "method": "GET",
+      "route": "/pets/search",
+      "summary": "Search pets",
+      "params": [
+        {
+          "name": "q",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "goType": "string"
+        },
+        {
+          "name": "X-Trace",
+          "in": "header",
+          "schema": {
+            "type": "string"
+          },
+          "goType": "string"
+        }
+      ],
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "schema": {
+          "items": {
+            "$ref": "Pet"
+          },
+          "type": "array"
+        }
+      }
+    },
+    {
+      "name": "DeletePet",
+      "feature": "function",
+      "method": "DELETE",
+      "route": "/pets/{petId}",
+      "summary": "Delete a pet",
+      "params": [
+        {
+          "name": "petId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of the pet.",
+          "schema": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "goType": "int64"
+        }
+      ],
+      "response": {
+        "status": 204
+      }
+    },
+    {
+      "name": "GetPetById",
+      "feature": "function",
+      "method": "GET",
+      "route": "/pets/{petId}",
+      "summary": "Get a pet by ID",
+      "params": [
+        {
+          "name": "petId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of the pet.",
+          "schema": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "goType": "int64"
+        }
+      ],
+      "response": {
+        "status": 200,
+        "contentType": "application/json",
+        "schema": {
+          "$ref": "Pet"
+        }
+      }
+    },
+    {
+      "name": "GetPetAvatar",
+      "feature": "web",
+      "method": "GET",
+      "route": "/pets/{petId}/avatar",
+      "summary": "Download the pet's avatar image",
+      "params": [
+        {
+          "name": "petId",
+          "in": "path",
+          "required": true,
+          "description": "The unique identifier of the pet.",
+          "schema": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "goType": "int64"
+        }
+      ],
+      "response": {
+        "status": 200,
+        "contentType": "image/png"
+      }
+    }
+  ]
+}

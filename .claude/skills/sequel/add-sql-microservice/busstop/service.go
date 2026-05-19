@@ -15,6 +15,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
+	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/sequel"
 
 	"github.com/microbus-io/fabric/busstop/busstopapi"
@@ -24,6 +25,7 @@ var (
 	_ context.Context
 	_ http.Request
 	_ errors.TracedError
+	_ *workflow.Flow
 	_ busstopapi.Client
 )
 

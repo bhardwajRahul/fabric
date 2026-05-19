@@ -1,4 +1,4 @@
-package myservice
+package petstore
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
-	"github.com/mycompany/myproject/myservice/myserviceapi"
+	"github.com/microbus-io/fabric/examples/petstore/petstoreapi"
 )
 
 var (
@@ -38,5 +38,5 @@ var (
 	_ *errors.TracedError
 	_ *workflow.Flow
 	_ testarossa.Asserter
-	_ myserviceapi.Client
+	_ petstoreapi.Client
 )
