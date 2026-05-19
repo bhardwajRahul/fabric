@@ -102,3 +102,25 @@ This is why a string `"{"foo":1}"` posted via the egress proxy automatically get
 
 This is what allows the connector's NATS subscriber to call `Add` from its receive callback without sequencing.
 
+### `CertStore` matches on SAN, not on file name
+
+`CertStore` serves TLS certificates by SNI from `{token}-cert.pem` / `{token}-key.pem` pairs in a directory. The file name only pairs a cert with its key (by sharing the full prefix portion before `-cert.pem` / `-key.pem`); certificate matching is done on the parsed leaf's `DNSNames`, not on the file name. The reason is correctness: a Go TLS listener can already select among many certificates per handshake via SNI (`tls.Config.GetCertificate`), and a misnamed file should never be able to cause a wrong-certificate mis-serve. SAN-driven matching makes that impossible by construction, and wildcard plus multi-SAN certificates work without special handling.
+
+The token used for port-default detection is the substring after the **last** `-` in the prefix portion. That makes both `443-cert.pem` and `httpingress-443-cert.pem` resolve to token `"443"`, which lets a deployment that previously used a service-name prefix coexist or migrate without renaming any files. Two files claiming the same numeric token resolve via newest `NotBefore`, same tiebreak as SAN collisions.
+
+Resolution is exact SAN, then wildcard, then the listener's port-named default (a cert whose token parses as the listener's port), then the server-wide default (`cert.pem` + `key.pem`, no token at all). With no match the handshake fails closed - a wrong certificate is worse than a clean handshake failure. The numeric-token convention preserves the legacy "one cert per port" deployment style; the no-token convention exists for a single solution-wide cert (for example a SAN cert covering all public hostnames) that doesn't want to be named after a port.
+
+### `CertStore` reload watches the directory, not the files
+
+`Watch` runs an fsnotify watch on the directory rather than on individual files. Real cert-rotation deployments use atomic-rename or symlink-swap to install new files (Kubernetes secret mounts, certbot), and a file-level watch misses or double-fires on those operations; a directory watch reliably sees the `CREATE`/`RENAME` event for the new entry. Events are filtered to the store's name prefix and the cert/key suffix to ignore unrelated files in the working directory, and debounced for 500ms so the multi-file burst of a single rotation coalesces into one rebuild and a half-written pair is not read mid-rotation.
+
+The pure synchronous `ReloadIfChanged` method exists alongside the goroutine-based `Watch` so that the reload *action* stays unit-testable without timing or goroutines. `Watch` is just the trigger; `ReloadIfChanged` is the action, fingerprint-guarded so spurious events are cheap no-ops. The store's internal index is swapped via `atomic.Pointer` so `Get` (called on every handshake) takes no locks.
+
+### `CertStore` lives in `httpx`, not in the ingress
+
+The cert store is a public package primitive rather than internal to `coreservices/httpingress` because any microservice that terminates TLS - not just core ingresses - has the same correctness needs (SAN-driven matching, dynamic rotation, server-wide default). Putting it in `httpx` lets downstream code wire `tls.Config{GetCertificate: store.GetCertificate(port)}` on its own listener without rewriting the loader. The `CertLogger` interface matches the connector's `LogInfo`/`LogWarn` signatures so a microservice's `*Service` satisfies it directly with no adapter.
+
+The store deliberately takes no service-name parameter. Co-located TLS services in the same process share the cert pool by default - SAN and per-port matching disambiguate which cert wins per handshake, so namespace fencing via a file prefix is rarely necessary. Operators who need real isolation between services point each store at a distinct directory.
+
+Caveat: this only helps consumers whose TLS termination accepts a `tls.Config.GetCertificate` callback. `coreservices/smtpingress` uses `go-guerrilla`, which loads certs from file paths internally and does not expose such a hook, so it cannot consume `CertStore` without forking the SMTP daemon. It continues with the file-path model.
+

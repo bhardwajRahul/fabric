@@ -58,8 +58,9 @@ func TestHttpingress_Incoming(t *testing.T) {
 	svc.SetTimeBudget(time.Second * 2)
 	svc.SetPorts("4040,40443")
 	svc.SetAllowedOrigins("allowed.origin")
-	svc.SetPortMappings("4040:*->*, 40443:*->443")
-	svc.Middleware().Append("HelloGoodbye", middleware.OnRoutePrefix("/greeting:555/", middleware.Group(
+	// Internal :443 is implicit; :5555 is needed by several downstream test services below.
+	svc.SetAllowedInternalPorts("5500, 5555")
+	svc.Middleware().Append("HelloGoodbye", middleware.OnRoutePrefix("/greeting:5555/", middleware.Group(
 		func(next connector.HTTPHandler) connector.HTTPHandler {
 			return func(w http.ResponseWriter, r *http.Request) (err error) {
 				r.Header.Add("Middleware", "Hello")
@@ -149,7 +150,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 					w.Write([]byte("ok"))
 					return nil
 				},
-				sub.At("GET", ":555/ok555"),
+				sub.At("GET", ":5555/ok555"),
 				sub.Web(),
 			)
 			return nil
@@ -233,7 +234,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 					w.Write([]byte("ok"))
 					return nil
 				},
-				sub.At("GET", ":555/ok"),
+				sub.At("GET", ":5555/ok"),
 				sub.Web(),
 			)
 			return nil
@@ -245,16 +246,16 @@ func TestHttpingress_Incoming(t *testing.T) {
 					w.Write([]byte("ok"))
 					return nil
 				},
-				sub.At("GET", ":555/ok"),
+				sub.At("GET", ":5555/ok"),
 				sub.Web(),
 			)
-			c.Subscribe("Ok500",
+			c.Subscribe("Ok5500",
 				func(w http.ResponseWriter, r *http.Request) error {
 					request = r
 					w.Write([]byte("ok"))
 					return nil
 				},
-				sub.At("GET", ":500/ok"),
+				sub.At("GET", ":5500/ok"),
 				sub.Web(),
 			)
 			return nil
@@ -444,35 +445,43 @@ func TestHttpingress_Incoming(t *testing.T) {
 		}
 	})
 
-	t.Run("port_mapping", func(t *testing.T) {
+	t.Run("internal_ports_firewall", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		// External port 4040 grants access to all internal ports
+		// :443 is the implicit default; the path with no port goes there.
 		res, err := httpClient.Get("http://localhost:4040/port.mapping/ok443")
 		if assert.NoError(err) {
 			assert.Equal(http.StatusOK, res.StatusCode)
 		}
-		res, err = httpClient.Get("http://localhost:4040/port.mapping:555/ok555")
+		// :5555 is in AllowedInternalPorts and routes without rewriting.
+		res, err = httpClient.Get("http://localhost:4040/port.mapping:5555/ok555")
 		if assert.NoError(err) {
 			assert.Equal(http.StatusOK, res.StatusCode)
 		}
-		res, err = httpClient.Get("http://localhost:4040/port.mapping:555/ok443")
+		// :5555 is allowed but the requested handler does not exist there.
+		res, err = httpClient.Get("http://localhost:4040/port.mapping:5555/ok443")
 		if assert.NoError(err) {
 			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
 
-		// External port 40443 maps all requests to internal port 443
+		// Same behavior via the second external listener; no port rewriting happens here either.
 		res, err = httpClient.Get("http://localhost:40443/port.mapping/ok443")
 		if assert.NoError(err) {
 			assert.Equal(http.StatusOK, res.StatusCode)
 		}
-		res, err = httpClient.Get("http://localhost:40443/port.mapping:555/ok555")
+		res, err = httpClient.Get("http://localhost:40443/port.mapping:5555/ok555")
+		if assert.NoError(err) {
+			assert.Equal(http.StatusOK, res.StatusCode)
+		}
+		res, err = httpClient.Get("http://localhost:40443/port.mapping:5555/ok443")
 		if assert.NoError(err) {
 			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
-		res, err = httpClient.Get("http://localhost:40443/port.mapping:555/ok443")
+
+		// A port not in AllowedInternalPorts is rejected by the firewall with a 404.
+		res, err = httpClient.Get("http://localhost:4040/port.mapping:556/ok555")
 		if assert.NoError(err) {
-			assert.Equal(http.StatusOK, res.StatusCode)
+			assert.Equal(http.StatusNotFound, res.StatusCode)
 		}
 	})
 
@@ -619,7 +628,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 	t.Run("block_internal_headers", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		req, err := http.NewRequest("GET", "http://localhost:4040/internal.headers:555/ok", nil)
+		req, err := http.NewRequest("GET", "http://localhost:4040/internal.headers:5555/ok", nil)
 		assert.NoError(err)
 		req.Header.Set(frame.HeaderPrefix+"In-Request", "STOP")
 		req.Header.Set(strings.ToUpper(frame.HeaderPrefix)+"In-Request-Upper", "STOP")
@@ -643,7 +652,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 	t.Run("on_route", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		req, err := http.NewRequest("GET", "http://localhost:4040/greeting:555/ok", nil)
+		req, err := http.NewRequest("GET", "http://localhost:4040/greeting:5555/ok", nil)
 		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer 123456")
 		res, err := httpClient.Do(req)
@@ -660,7 +669,7 @@ func TestHttpingress_Incoming(t *testing.T) {
 			}
 		}
 
-		req, err = http.NewRequest("GET", "http://localhost:4040/greeting:500/ok", nil)
+		req, err = http.NewRequest("GET", "http://localhost:4040/greeting:5500/ok", nil)
 		assert.NoError(err)
 		req.Header.Set("Authorization", "Bearer 123456")
 		res, err = httpClient.Do(req)
@@ -882,15 +891,11 @@ func TestHttpingress_ResolveInternalURL(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
-	portMappings := map[string]string{
-		"8080:*": "*",
-		"443:*":  "443",
-		"80:*":   "443",
-	}
-
+	// resolveInternalURL no longer rewrites ports; the path-embedded :port survives. Whether the
+	// internal port is allowed is decided by isInternalPortAllowed downstream, not here.
 	testCases := []string{
-		"https://proxy:8080/service:555/path?arg=val",
-		"https://service:555/path?arg=val",
+		"https://proxy:8080/service:5555/path?arg=val",
+		"https://service:5555/path?arg=val",
 
 		"https://proxy:8080/service:443/path",
 		"https://service/path",
@@ -901,11 +906,11 @@ func TestHttpingress_ResolveInternalURL(t *testing.T) {
 		"https://proxy:8080/service/path",
 		"https://service/path",
 
-		"http://proxy:8080/service:555/path",
-		"https://service:555/path",
+		"http://proxy:8080/service:5555/path",
+		"https://service:5555/path",
 
-		"https://proxy:443/service:555/path",
-		"https://service/path",
+		"https://proxy:443/service:5555/path",
+		"https://service:5555/path",
 
 		"https://proxy:443/service:443/path",
 		"https://service/path",
@@ -921,7 +926,7 @@ func TestHttpingress_ResolveInternalURL(t *testing.T) {
 		assert.NoError(err)
 		u, err := url.Parse(testCases[i+1])
 		assert.NoError(err)
-		ru, err := resolveInternalURL(x, portMappings)
+		ru, err := resolveInternalURL(x)
 		assert.NoError(err)
 		assert.Equal(u, ru)
 	}

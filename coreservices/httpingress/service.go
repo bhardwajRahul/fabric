@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -54,23 +55,31 @@ The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
-	httpServers     map[int]*http.Server
-	mux             sync.Mutex
-	allowedOrigins  map[string]bool
-	portMappings    map[string]string
-	reqMemoryUsed   int64
-	secure443       bool
-	blockedPaths    map[string]bool
-	middleware      *middleware.Chain
-	handler         connector.HTTPHandler
-	bearerTokenMu   sync.RWMutex
-	bearerTokenKeys map[string]ed25519.PublicKey
+	httpServers          map[int]*http.Server
+	certs                *httpx.CertStore
+	mux                  sync.Mutex
+	allowedOrigins       map[string]bool
+	allowedInternalPorts map[int]bool
+	reqMemoryUsed        int64
+	secure443            bool
+	blockedPaths         map[string]bool
+	middleware           *middleware.Chain
+	handler              connector.HTTPHandler
+	bearerTokenMu        sync.RWMutex
+	bearerTokenKeys      map[string]ed25519.PublicKey
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	svc.OnChangedAllowedOrigins(ctx)
-	svc.OnChangedPortMappings(ctx)
+	err = svc.OnChangedPortMappings(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = svc.OnChangedAllowedInternalPorts(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	svc.OnChangedBlockedPaths(ctx)
 
 	// Setup the middleware chain
@@ -81,10 +90,14 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	}
 	svc.LogInfo(ctx, "Middleware", "chain", svc.Middleware().String())
 
+	svc.certs = httpx.NewCertStore("", svc)
+	svc.certs.Load(ctx)
+
 	err = svc.startHTTPServers(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	svc.Go(ctx, svc.certs.Watch)
 
 	// ASCII art fun
 	if svc.Deployment() == connector.LOCAL {
@@ -159,67 +172,114 @@ func (svc *Service) stopHTTPServers(ctx context.Context) (err error) {
 	return lastErr
 }
 
+// portSpec is a single parsed entry of the Ports config.
+type portSpec struct {
+	port int
+	tls  bool
+}
+
+// portCertExists reports whether {prefix}{port}-cert.pem and -key.pem both exist in the working
+// directory. It backs the bare-port TLS auto-detection in parsePorts.
+func portCertExists(port, prefix string) bool {
+	if _, err := os.Stat(prefix + port + "-cert.pem"); err != nil {
+		return false
+	}
+	if _, err := os.Stat(prefix + port + "-key.pem"); err != nil {
+		return false
+	}
+	return true
+}
+
+// parsePorts parses the Ports config grammar: a comma-separated list where each entry is a port
+// optionally followed by a "tls" marker, e.g. "80, 443 tls, 8080". A bare port keeps legacy
+// behavior: TLS iff its legacy port-named cert/key files are present. Port 80 is always plaintext
+// and an explicit "80 tls" is a startup error. Any other marker is ignored.
+func parsePorts(value string) (specs []portSpec, err error) {
+	for _, entry := range strings.Split(value, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		fields := strings.Fields(entry)
+		portInt, convErr := strconv.Atoi(fields[0])
+		if convErr != nil || portInt < 1 || portInt > 65535 {
+			return nil, errors.New("invalid port '%s'", fields[0])
+		}
+		markers := map[string]bool{}
+		for i := 1; i < len(fields); i++ {
+			markers[strings.ToLower(fields[i])] = true
+		}
+		secure := false
+		switch {
+		case portInt == 80:
+			if markers["tls"] {
+				return nil, errors.New("port 80 cannot be TLS")
+			}
+		case markers["tls"]:
+			secure = true
+		default:
+			// Bare port: TLS iff a port-named cert and key pair is present. Mirrors the
+			// httpx.CertStore convention and accepts both the new "{port}-..." form and the
+			// legacy "httpingress-{port}-..." form for backward compatibility.
+			secure = portCertExists(fields[0], "") || portCertExists(fields[0], "httpingress-")
+		}
+		specs = append(specs, portSpec{port: portInt, tls: secure})
+	}
+	return specs, nil
+}
+
 // startHTTPServers starts the HTTP servers for each of the designated ports.
 func (svc *Service) startHTTPServers(ctx context.Context) (err error) {
 	svc.mux.Lock()
 	defer svc.mux.Unlock()
 	svc.httpServers = map[int]*http.Server{}
-	ports := strings.Split(svc.Ports(), ",")
-	for _, port := range ports {
-		port = strings.TrimSpace(port)
-		if port == "" {
-			continue
-		}
-		portInt, err := strconv.Atoi(port)
-		if err != nil || (portInt < 1 || portInt > 65535) {
-			err = errors.New("invalid port '%s'", port)
-			svc.LogError(ctx, "Starting HTTP listener",
-				"port", portInt,
-				"error", err,
-			)
-			return errors.Trace(err)
-		}
 
-		// Look for TLS certs
-		certFile := "httpingress-" + port + "-cert.pem"
-		keyFile := "httpingress-" + port + "-key.pem"
-		secure := true
-		if _, err := os.Stat(certFile); os.IsNotExist(err) {
-			secure = false
-		}
-		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
-			secure = false
-		}
+	specs, err := parsePorts(svc.Ports())
+	if err != nil {
+		svc.LogError(ctx, "Starting HTTP listener", "error", err)
+		return errors.Trace(err)
+	}
 
+	// secure443 drives the SecureRedirect middleware: redirect :80 -> :443 only when 443 is TLS.
+	svc.secure443 = false
+	for _, s := range specs {
+		if s.port == 443 && s.tls {
+			svc.secure443 = true
+		}
+	}
+
+	for _, s := range specs {
 		// https://pkg.go.dev/net/http?utm_source=godoc#Server
 		httpServer := &http.Server{
-			Addr:              ":" + port,
+			Addr:              ":" + strconv.Itoa(s.port),
 			Handler:           svc,
 			ReadHeaderTimeout: svc.ReadHeaderTimeout(),
 			ReadTimeout:       svc.ReadTimeout(),
 			WriteTimeout:      svc.WriteTimeout(),
 			ErrorLog:          newHTTPLogger(svc),
 		}
-		svc.httpServers[portInt] = httpServer
+		if s.tls {
+			httpServer.TLSConfig = &tls.Config{
+				GetCertificate: svc.certs.GetCertificate(s.port),
+			}
+		}
+		svc.httpServers[s.port] = httpServer
 		errChan := make(chan error)
 		calledChan := make(chan bool)
-		if secure {
-			if portInt == 443 {
-				svc.secure443 = true
-			}
+		if s.tls {
 			go func() {
 				close(calledChan)
-				err = httpServer.ListenAndServeTLS(certFile, keyFile)
-				if err != nil {
-					errChan <- errors.Trace(err)
+				e := httpServer.ListenAndServeTLS("", "")
+				if e != nil {
+					errChan <- errors.Trace(e)
 				}
 			}()
 		} else {
 			go func() {
 				close(calledChan)
-				err = httpServer.ListenAndServe()
-				if err != nil {
-					errChan <- errors.Trace(err)
+				e := httpServer.ListenAndServe()
+				if e != nil {
+					errChan <- errors.Trace(e)
 				}
 			}()
 		}
@@ -228,14 +288,14 @@ func (svc *Service) startHTTPServers(ctx context.Context) (err error) {
 		case err = <-errChan:
 			svc.LogError(ctx, "Starting HTTP listener",
 				"error", err,
-				"port", portInt,
-				"secure", secure,
+				"port", s.port,
+				"secure", s.tls,
 			)
 			return errors.Trace(err)
 		case <-time.After(time.Millisecond * 250):
 			svc.LogInfo(ctx, "Started HTTP listener",
-				"port", portInt,
-				"secure", secure,
+				"port", s.port,
+				"secure", s.tls,
 			)
 		}
 	}
@@ -355,34 +415,20 @@ func (svc *Service) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	// Use the first segment of the path as the hostname to contact
-	u, err := resolveInternalURL(r.URL, svc.portMappings)
+	u, err := resolveInternalURL(r.URL)
 	if err != nil {
 		// Ignore requests to invalid internal hostnames, such as via https://example.com/%3Fterms=1 or https://example.com/.env
 		return errors.New("", http.StatusNotFound)
 	}
-	// Disallow requests to internal ports
+	// Apply the internal-port firewall
 	port := 443
-	if u.Scheme == "http" {
-		port = 80
-	}
 	if u.Port() != "" {
 		port, err = strconv.Atoi(u.Port())
 		if err != nil {
 			return errors.New("", http.StatusNotFound)
 		}
 	}
-	switch {
-	case port <= 0 || port >= 65536:
-		// Not a valid port
-		return errors.New("", http.StatusNotFound)
-	case port == 666 || port == 888:
-		// Trust-root and control-plane ports are never reachable via the ingress,
-		// in any deployment mode.
-		return errors.New("", http.StatusNotFound)
-	case port == 80 || port == 443: // HTTP ports are allowed
-		// Allow
-	case port < 1024 && svc.Deployment() == connector.PROD:
-		// Reserved ports are not allowed in PROD
+	if !svc.isInternalPortAllowed(port) {
 		return errors.New("", http.StatusNotFound)
 	}
 	internalURL := u.String()
@@ -486,30 +532,80 @@ func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) { /
 	return nil
 }
 
-// OnChangedPortMappings is triggered when the value of the PortMappings config property changes.
+// OnChangedPortMappings rejects any non-empty value; PortMappings has been removed.
 func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) { // MARKER: PortMappings
-	value := svc.PortMappings() // e.g. "8080:*->*, 443:*->443, 80:*->443"
-	newMappings := map[string]string{}
-	for _, m := range strings.Split(value, ",") {
-		m = strings.TrimSpace(m)
-		if m == "" {
-			continue
-		}
-		external, internal, ok := strings.Cut(m, "->")
-		if !ok {
-			svc.LogWarn(ctx, "Invalid port mapping",
-				"mapping", m,
-			)
-			continue
-		}
-		newMappings[external] = internal
+	if strings.TrimSpace(svc.PortMappings()) != "" {
+		return errors.New(
+			"PortMappings has been removed; use AllowedInternalPorts (got '%s')",
+			svc.PortMappings(),
+		)
 	}
-	svc.portMappings = newMappings
 	return nil
 }
 
-// resolveInternalURL resolves the NATS URL from the external URL.
-func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (natsURL *url.URL, err error) {
+// OnChangedAllowedInternalPorts parses the configured allowlist into svc.allowedInternalPorts.
+func (svc *Service) OnChangedAllowedInternalPorts(ctx context.Context) (err error) { // MARKER: AllowedInternalPorts
+	set, err := parseAllowedInternalPorts(svc.AllowedInternalPorts())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	svc.allowedInternalPorts = set
+	return nil
+}
+
+// parseAllowedInternalPorts parses comma-separated ports and inclusive ranges "N-M". Every port
+// must satisfy 1024 <= port <= 65535.
+func parseAllowedInternalPorts(value string) (map[int]bool, error) {
+	set := map[int]bool{}
+	for _, entry := range strings.Split(value, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		start, end, isRange := strings.Cut(entry, "-")
+		startPort, err := strconv.Atoi(strings.TrimSpace(start))
+		if err != nil {
+			return nil, errors.New("invalid port '%s' in AllowedInternalPorts", entry)
+		}
+		endPort := startPort
+		if isRange {
+			endPort, err = strconv.Atoi(strings.TrimSpace(end))
+			if err != nil {
+				return nil, errors.New("invalid port range '%s' in AllowedInternalPorts", entry)
+			}
+			if endPort < startPort {
+				return nil, errors.New("inverted port range '%s' in AllowedInternalPorts", entry)
+			}
+		}
+		if startPort < 1024 || endPort > 65535 {
+			return nil, errors.New("port '%s' out of range [1024,65535] in AllowedInternalPorts", entry)
+		}
+		for p := startPort; p <= endPort; p++ {
+			set[p] = true
+		}
+	}
+	return set, nil
+}
+
+// isInternalPortAllowed reports whether the firewall permits forwarding to port.
+func (svc *Service) isInternalPortAllowed(port int) bool {
+	if port <= 0 || port > 65535 {
+		return false
+	}
+	if port == 666 || port == 888 {
+		return false
+	}
+	if svc.Deployment() == connector.LOCAL {
+		return true
+	}
+	if port == 443 {
+		return true
+	}
+	return svc.allowedInternalPorts[port]
+}
+
+// resolveInternalURL extracts the internal NATS URL from the external URL.
+func resolveInternalURL(externalURL *url.URL) (natsURL *url.URL, err error) {
 	externalURI := externalURL.RequestURI()
 	if !strings.HasPrefix(externalURI, "/") {
 		externalURI = "/" + externalURI
@@ -519,31 +615,6 @@ func resolveInternalURL(externalURL *url.URL, portMappings map[string]string) (n
 		return nil, errors.Trace(err)
 	}
 	internalURL.Host = strings.ToLower(internalURL.Host)
-	externalPort := externalURL.Port()
-	if externalPort == "" {
-		externalPort = "443"
-	}
-	internalPort := internalURL.Port()
-	mappedInternalPort := internalPort
-	mappingKeys := []string{
-		externalPort + ":" + internalPort,
-		"*:" + internalPort,
-		externalPort + ":*",
-		"*:*",
-	}
-	for _, mappingKey := range mappingKeys {
-		if portMappings[mappingKey] != "" && portMappings[mappingKey] != "*" {
-			mappedInternalPort = portMappings[mappingKey]
-			break
-		}
-	}
-	if mappedInternalPort != internalPort {
-		p := strings.Index(internalURL.Host, ":")
-		if p < 0 {
-			p = len(internalURL.Host)
-		}
-		internalURL.Host = internalURL.Host[:p] + ":" + mappedInternalPort
-	}
 	internalURL.Host = strings.TrimSuffix(internalURL.Host, ":443")
 	return internalURL, nil
 }

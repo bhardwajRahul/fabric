@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/andybalholm/brotli v1.2.1
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invopop/jsonschema v0.14.0
 	github.com/microbus-io/boolexp v1.1.0

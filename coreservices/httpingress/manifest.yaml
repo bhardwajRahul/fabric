@@ -20,7 +20,7 @@ general:
   description: The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.
   package: github.com/microbus-io/fabric/coreservices/httpingress
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T06:35:48Z"
+  modifiedAt: "2026-05-19T22:40:09Z"
 
 configs:
   TimeBudget:
@@ -30,7 +30,11 @@ configs:
     default: 20s
   Ports:
     signature: Ports() (port string)
-    description: Ports is a comma-separated list of HTTP ports on which to listen for requests.
+    description: |-
+      Ports is a comma-separated list of HTTP ports on which to listen for requests. A port may be
+      followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
+      certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
+      files are present. Port 80 is always plaintext.
     default: 8080
     callback: true
   RequestMemoryLimit:
@@ -49,15 +53,19 @@ configs:
   PortMappings:
     signature: PortMappings() (mappings string)
     description: |-
-      PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
-      HTTP port, y is the requested NATS port, and z is the port to serve.
-      An HTTP request https://ingresshost:x/servicehost:y/path is mapped to internal NATS
-      request https://servicehost:z/path .
-      Both x and y can be * to indicate all ports. Setting z to * indicates to serve the requested
-      port y without change. Specific rules take precedence over * rules.
-      The default mapping grants access to all internal ports via HTTP port 8080 but restricts
-      HTTP ports 443 and 80 to only internal port 443.
-    default: 8080:*->*, 443:*->443, 80:*->443
+      PortMappings is REMOVED. The x:y->z port-rewrite model has been replaced by AllowedInternalPorts
+      (internal-port allowlist, no rewrite). Setting this config to any non-empty value causes the
+      microservice to refuse to start, rather than silently ignore an operator's intended posture.
+    callback: true
+  AllowedInternalPorts:
+    signature: AllowedInternalPorts() (ports string)
+    description: |-
+      AllowedInternalPorts is the operator-tunable allowlist of internal destination ports the
+      ingress is willing to forward to, in addition to the implicitly-allowed :443. Entries are
+      comma-separated and may be a single port or an inclusive range "N-M", e.g. "1234, 10000-11000".
+      All entries must satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise.
+      Ports :666 and :888 are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL
+      deployment this config is ignored and every port except :666 and :888 is reachable.
     callback: true
   ReadTimeout:
     signature: ReadTimeout() (timeout time.Duration)

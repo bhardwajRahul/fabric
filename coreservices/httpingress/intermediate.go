@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = httpingressapi.Hostname
-	Version  = 377
+	Version  = 380
 )
 
 // ToDo is implemented by the service or mock.
@@ -60,13 +60,14 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	OnChangedPorts(ctx context.Context) (err error)             // MARKER: Ports
-	OnChangedAllowedOrigins(ctx context.Context) (err error)    // MARKER: AllowedOrigins
-	OnChangedPortMappings(ctx context.Context) (err error)      // MARKER: PortMappings
-	OnChangedReadTimeout(ctx context.Context) (err error)       // MARKER: ReadTimeout
-	OnChangedWriteTimeout(ctx context.Context) (err error)      // MARKER: WriteTimeout
-	OnChangedReadHeaderTimeout(ctx context.Context) (err error) // MARKER: ReadHeaderTimeout
-	OnChangedBlockedPaths(ctx context.Context) (err error)      // MARKER: BlockedPaths
+	OnChangedPorts(ctx context.Context) (err error)                // MARKER: Ports
+	OnChangedAllowedOrigins(ctx context.Context) (err error)       // MARKER: AllowedOrigins
+	OnChangedPortMappings(ctx context.Context) (err error)         // MARKER: PortMappings
+	OnChangedAllowedInternalPorts(ctx context.Context) (err error) // MARKER: AllowedInternalPorts
+	OnChangedReadTimeout(ctx context.Context) (err error)          // MARKER: ReadTimeout
+	OnChangedWriteTimeout(ctx context.Context) (err error)         // MARKER: WriteTimeout
+	OnChangedReadHeaderTimeout(ctx context.Context) (err error)    // MARKER: ReadHeaderTimeout
+	OnChangedBlockedPaths(ctx context.Context) (err error)         // MARKER: BlockedPaths
 }
 
 // NewService creates a new instance of the microservice.
@@ -121,7 +122,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 	svc.DefineConfig( // MARKER: Ports
 		"Ports",
-		cfg.Description(`Ports is a comma-separated list of HTTP ports on which to listen for requests.`),
+		cfg.Description(`Ports is a comma-separated list of HTTP ports on which to listen for requests. A port may be
+followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
+certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
+files are present. Port 80 is always plaintext.`),
 		cfg.DefaultValue(`8080`),
 	)
 	svc.DefineConfig( // MARKER: RequestMemoryLimit
@@ -140,15 +144,20 @@ operators must opt into that explicitly because it combines with credentials.`),
 	)
 	svc.DefineConfig( // MARKER: PortMappings
 		"PortMappings",
-		cfg.Description(`PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
-HTTP port, y is the requested NATS port, and z is the port to serve.
-An HTTP request https://ingresshost:x/servicehost:y/path is mapped to internal NATS
-request https://servicehost:z/path .
-Both x and y can be * to indicate all ports. Setting z to * indicates to serve the requested
-port y without change. Specific rules take precedence over * rules.
-The default mapping grants access to all internal ports via HTTP port 8080 but restricts
-HTTP ports 443 and 80 to only internal port 443.`),
-		cfg.DefaultValue(`8080:*->*, 443:*->443, 80:*->443`),
+		cfg.Description(`PortMappings is REMOVED. The x:y->z port-rewrite model has been replaced by AllowedInternalPorts
+(internal-port allowlist, no rewrite). Setting this config to any non-empty value causes the
+microservice to refuse to start, rather than silently ignore an operator's intended posture.`),
+		cfg.DefaultValue(``),
+	)
+	svc.DefineConfig( // MARKER: AllowedInternalPorts
+		"AllowedInternalPorts",
+		cfg.Description(`AllowedInternalPorts is the operator-tunable allowlist of internal destination ports the
+ingress is willing to forward to, in addition to the implicitly-allowed :443. Entries are
+comma-separated and may be a single port or an inclusive range "N-M", e.g. "1234, 10000-11000".
+All entries must satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise.
+Ports :666 and :888 are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL
+deployment this config is ignored and every port except :666 and :888 is reachable.`),
+		cfg.DefaultValue(``),
 	)
 	svc.DefineConfig( // MARKER: ReadTimeout
 		"ReadTimeout",
@@ -269,6 +278,12 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 			return err // No trace
 		}
 	}
+	if changed("AllowedInternalPorts") { // MARKER: AllowedInternalPorts
+		err = svc.OnChangedAllowedInternalPorts(ctx)
+		if err != nil {
+			return err // No trace
+		}
+	}
 	if changed("ReadTimeout") { // MARKER: ReadTimeout
 		err = svc.OnChangedReadTimeout(ctx)
 		if err != nil {
@@ -317,7 +332,10 @@ func (svc *Intermediate) SetTimeBudget(budget time.Duration) (err error) { // MA
 }
 
 /*
-Ports is a comma-separated list of HTTP ports on which to listen for requests.
+Ports is a comma-separated list of HTTP ports on which to listen for requests. A port may be
+followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
+certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
+files are present. Port 80 is always plaintext.
 */
 func (svc *Intermediate) Ports() (port string) { // MARKER: Ports
 	return svc.Config("Ports")
@@ -326,7 +344,10 @@ func (svc *Intermediate) Ports() (port string) { // MARKER: Ports
 /*
 SetPorts sets the value of the configuration property.
 
-Ports is a comma-separated list of HTTP ports on which to listen for requests.
+Ports is a comma-separated list of HTTP ports on which to listen for requests. A port may be
+followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
+certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
+files are present. Port 80 is always plaintext.
 */
 func (svc *Intermediate) SetPorts(port string) (err error) { // MARKER: Ports
 	return svc.SetConfig("Ports", port)
@@ -373,14 +394,9 @@ func (svc *Intermediate) SetAllowedOrigins(origins string) (err error) { // MARK
 }
 
 /*
-PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
-HTTP port, y is the requested NATS port, and z is the port to serve.
-An HTTP request https://ingresshost:x/servicehost:y/path is mapped to internal NATS
-request https://servicehost:z/path .
-Both x and y can be * to indicate all ports. Setting z to * indicates to serve the requested
-port y without change. Specific rules take precedence over * rules.
-The default mapping grants access to all internal ports via HTTP port 8080 but restricts
-HTTP ports 443 and 80 to only internal port 443.
+PortMappings is DEPRECATED and ignored. The x:y->z port-rewrite model has been replaced by
+AllowedInternalPorts (internal-port allowlist, no rewrite). Setting this config emits a startup
+warning and has no effect on routing.
 */
 func (svc *Intermediate) PortMappings() (mappings string) { // MARKER: PortMappings
 	return svc.Config("PortMappings")
@@ -389,17 +405,38 @@ func (svc *Intermediate) PortMappings() (mappings string) { // MARKER: PortMappi
 /*
 SetPortMappings sets the value of the configuration property.
 
-PortMappings is a comma-separated list of mappings in the form x:y->z where x is the inbound
-HTTP port, y is the requested NATS port, and z is the port to serve.
-An HTTP request https://ingresshost:x/servicehost:y/path is mapped to internal NATS
-request https://servicehost:z/path .
-Both x and y can be * to indicate all ports. Setting z to * indicates to serve the requested
-port y without change. Specific rules take precedence over * rules.
-The default mapping grants access to all internal ports via HTTP port 8080 but restricts
-HTTP ports 443 and 80 to only internal port 443.
+PortMappings is DEPRECATED and ignored. The x:y->z port-rewrite model has been replaced by
+AllowedInternalPorts (internal-port allowlist, no rewrite). Setting this config emits a startup
+warning and has no effect on routing.
 */
 func (svc *Intermediate) SetPortMappings(mappings string) (err error) { // MARKER: PortMappings
 	return svc.SetConfig("PortMappings", mappings)
+}
+
+/*
+AllowedInternalPorts is the operator-tunable allowlist of internal destination ports the ingress is
+willing to forward to, in addition to the implicitly-allowed :443. Entries are comma-separated and
+may be a single port or an inclusive range "N-M", e.g. "1234, 10000-11000". All entries must
+satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise. Ports :666 and :888
+are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL deployment this
+config is ignored and every port except :666 and :888 is reachable.
+*/
+func (svc *Intermediate) AllowedInternalPorts() (ports string) { // MARKER: AllowedInternalPorts
+	return svc.Config("AllowedInternalPorts")
+}
+
+/*
+SetAllowedInternalPorts sets the value of the configuration property.
+
+AllowedInternalPorts is the operator-tunable allowlist of internal destination ports the ingress is
+willing to forward to, in addition to the implicitly-allowed :443. Entries are comma-separated and
+may be a single port or an inclusive range "N-M", e.g. "1234, 10000-11000". All entries must
+satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise. Ports :666 and :888
+are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL deployment this
+config is ignored and every port except :666 and :888 is reachable.
+*/
+func (svc *Intermediate) SetAllowedInternalPorts(ports string) (err error) { // MARKER: AllowedInternalPorts
+	return svc.SetConfig("AllowedInternalPorts", ports)
 }
 
 /*
