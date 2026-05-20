@@ -57,21 +57,54 @@ var (
 	_ fairnessflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestFairnessflow_Fairness(t *testing.T) { // MARKER: Fairness
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// Pin the foreman to a single worker so dispatch is strictly serialized
 		// and the weighted key pick is observable as the dispatch order.
-		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(1) }),
+		foreman.NewService().Init(func(f *foreman.Service) error {
+			f.SetWorkers(1)
+			f.SetSQLConnectionPool(1)
+			return nil
+		}),
 		tester,
 	)
 	app.RunInTest(t)
@@ -116,13 +149,18 @@ func TestFairnessflow_Fairness(t *testing.T) { // MARKER: Fairness
 		// the whole set is committed pending before the worker frees and drains.
 		time.Sleep(400 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		for _, k := range keys {
-			status, _, err := fm.Await(ctx, k)
+			outcome, err = fm.Await(ctx, k)
+
+			status := outcomeStatus(outcome)
 			assert.NoError(err)
-			assert.Expect(status, foremanapi.StatusCompleted)
+			assert.Expect(status, workflow.StatusCompleted)
 		}
 
 		order := svc.Order()

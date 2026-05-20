@@ -33,7 +33,7 @@ import (
 
 // fireFanInDirect creates the FanIn step immediately for an empty-cohort case.
 // Used when a fan-out source produces zero branches (e.g. forEach over an empty array).
-func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *sequel.DB, flowID int, flowToken string, stepID int, stepDepth int, lineageID int, fanInTarget string, graph *workflow.Graph, sleepDur time.Duration) error {
+func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *sequel.DB, flowID int, stepID int, stepDepth int, lineageID int, fanInTarget string, sleepDur time.Duration, priority int, fairnessKey string, fairnessWeight float64) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -67,8 +67,8 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 		return errors.Trace(err)
 	}
 	var ourState, ourChanges map[string]any
-	json.Unmarshal([]byte(ourStateJSON), &ourState)
-	json.Unmarshal([]byte(ourChangesJSON), &ourChanges)
+	unmarshalJSONMap(ourStateJSON, &ourState)
+	unmarshalJSONMap(ourChangesJSON, &ourChanges)
 	mergedState, err := workflow.MergeState(ourState, ourChanges, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -80,8 +80,8 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 	nextTimeBudget := svc.taskTimeBudget()
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
 		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), (SELECT priority FROM microbus_flows WHERE flow_id=?), (SELECT fairness_key FROM microbus_flows WHERE flow_id=?), (SELECT fairness_weight FROM microbus_flows WHERE flow_id=?))",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), lineageID, stepID, sleepMs, flowID, flowID, flowID,
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), lineageID, stepID, sleepMs, priority, fairnessKey, fairnessWeight,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -127,7 +127,7 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 // lineage_id (one frame popped). Its predecessor_id is predecessorStepID (the last cohort member
 // to finish); each cohort exit step's successor_id is set to the fan-in step so the many-to-one
 // fan-in edges are recorded.
-func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID, predecessorStepID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64) (stepID int, err error) {
+func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID, predecessorStepID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64, priority int, fairnessKey string, fairnessWeight float64) (stepID int, err error) {
 	var spawnStateJSON, spawnChangesJSON string
 	var spawnLineageID int
 	err = tx.QueryRowContext(ctx,
@@ -138,8 +138,8 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 		return 0, errors.Trace(err)
 	}
 	var spawnState, spawnChanges map[string]any
-	json.Unmarshal([]byte(spawnStateJSON), &spawnState)
-	json.Unmarshal([]byte(spawnChangesJSON), &spawnChanges)
+	unmarshalJSONMap(spawnStateJSON, &spawnState)
+	unmarshalJSONMap(spawnChangesJSON, &spawnChanges)
 	merged, err := workflow.MergeState(spawnState, spawnChanges, graph.Reducers())
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -159,13 +159,14 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
+		status = strings.TrimSpace(status)
 		// Only completed members contribute state. failed/cancelled/retried/pending/
 		// running are skipped - the fan-in does not escalate on them.
-		if status != foremanapi.StatusCompleted {
+		if status != workflow.StatusCompleted {
 			continue
 		}
 		var changes map[string]any
-		json.Unmarshal([]byte(changesJSON), &changes)
+		unmarshalJSONMap(changesJSON, &changes)
 		merged, err = workflow.MergeState(merged, changes, graph.Reducers())
 		if err != nil {
 			return 0, errors.Trace(err)
@@ -180,8 +181,8 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 	nextTimeBudget := svc.taskTimeBudget()
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
 		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), (SELECT priority FROM microbus_flows WHERE flow_id=?), (SELECT fairness_key FROM microbus_flows WHERE flow_id=?), (SELECT fairness_weight FROM microbus_flows WHERE flow_id=?))",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, predecessorStepID, sleepMs, flowID, flowID, flowID,
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, predecessorStepID, sleepMs, priority, fairnessKey, fairnessWeight,
 	)
 	if err != nil {
 		return 0, errors.Trace(err)

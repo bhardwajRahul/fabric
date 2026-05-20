@@ -8,6 +8,35 @@ general:
   frameworkVersion: 1.28.0
   modifiedAt: "2099-01-01T00:00:00Z"
 
+configs:
+  SecretKey:
+    description: SecretKey is a credential used by the kitchen fixture; never logged.
+    secret: true
+  Threshold:
+    description: Threshold caps the kitchen fixture's in-flight requests.
+    validation: int [1,]
+    default: 10
+    callback: true
+
+metrics:
+  RequestsTotal:
+    signature: RequestsTotal(value int, status string)
+    description: RequestsTotal counts requests handled by the kitchen fixture, labelled by status.
+    kind: counter
+    otelName: kitchen_requests_total
+  QueueDepth:
+    signature: QueueDepth(value int)
+    description: QueueDepth records the current depth of the kitchen queue.
+    kind: gauge
+    otelName: kitchen_queue_depth
+    observable: true
+  LatencySeconds:
+    signature: LatencySeconds(value float64)
+    description: LatencySeconds records request latency in seconds.
+    kind: histogram
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 5]
+    otelName: kitchen_latency_seconds
+
 outboundEvents:
   OnMyEvent:
     signature: OnMyEvent(note string) (ok bool)

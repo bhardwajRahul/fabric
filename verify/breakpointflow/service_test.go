@@ -54,19 +54,48 @@ var (
 	_ breakpointflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestBreakpointflow_Breakpoint(t *testing.T) { // MARKER: Breakpoint
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -92,11 +121,14 @@ func TestBreakpointflow_Breakpoint(t *testing.T) { // MARKER: Breakpoint
 			return
 		}
 
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+
+		status, state := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusInterrupted)
+		assert.Expect(status, workflow.StatusInterrupted)
 		// TaskA ran (stepA in state), TaskB and TaskC did not yet.
 		assert.Expect(state["stepA"], true)
 		assert.Expect(state["stepB"] == nil || state["stepB"] == false, true)
@@ -108,11 +140,14 @@ func TestBreakpointflow_Breakpoint(t *testing.T) { // MARKER: Breakpoint
 			return
 		}
 
-		status, state, err = foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+
+		status, state = outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		// All three steps ran.
 		assert.Expect(state["stepC"], true)
 	})

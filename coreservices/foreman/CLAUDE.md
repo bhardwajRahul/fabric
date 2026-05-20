@@ -58,7 +58,7 @@ Create ──► created ──► Start ──► running ──► completed
 
 **Resume** - Continues an interrupted flow. Walks up the surgraph chain (`surgraphChain`) and down the interrupted subgraph chain (`interruptedSubgraphChain`) to find the leaf interrupted step. Merges resume data into the leaf step's state (not changes) so the task sees it via `ParseState`. Re-parks intermediate surgraph steps, resets the leaf to `pending`, and transitions all flows in the chain to `running`. Can be called on any flow in the chain (root or subgraph) - propagation goes both directions. If multiple fan-out siblings interrupt, each `Resume` handles one sibling; the flow only transitions to `running` when no more interrupted steps remain.
 
-**Fork** - Creates a new flow from an existing flow's checkpoint at a given `step_depth`. The forked flow inherits the parent's graph, config, and actor claims. The step at the fork point is re-created with the merged state (state + changes) plus any overrides, in `created` status. The caller must call `Start` to begin execution. Lineage is tracked via `forked_flow_id` and `forked_step_depth`.
+**Fork** - Creates a new flow from an existing flow's checkpoint at a given `step_depth`. The forked flow inherits the parent's graph and actor claims, but its scheduling (priority, fairness) comes from the caller-supplied `FlowOptions` (resolved like a fresh `Create`), not the parent. A nil opts gets fresh defaults rather than parent inheritance. Fork is primarily a debug/repro tool: the new flow is an independent investigation, so inheriting the parent's priority (which may need to be lowered for a low-priority debug run) would be surprising. The step at the fork point is re-created with the merged state (state + changes) plus any overrides, in `created` status. The caller must call `Start` to begin execution. Lineage is tracked via `forked_flow_id` and `forked_step_depth`.
 
 **Cancel** - Aborts a created, running, or interrupted flow. Uses `surgraphChain` to walk up to the root and `allSubgraphFlows` to walk down to all descendants. Atomically cancels all steps across all flows, computes `final_state` for each flow, and cancels all flows with per-flow `final_state` via CASE - all within a single transaction. Can be called on any flow in the chain (root or subgraph).
 
@@ -70,15 +70,34 @@ Create ──► created ──► Start ──► running ──► completed
 
 **BreakBefore** - Sets or clears a breakpoint that pauses execution before the named task runs. Breakpoints are stored in a `breakpoints` JSON column on the flow row as a `map[string]string` keyed by task name. During `processStep`, if the current task name matches a breakpoint and the step's `breakpoint_hit` flag is false, the foreman interrupts the flow (using the same interrupt propagation as `flow.Interrupt()`) and sets `breakpoint_hit=1` on the step. The flag prevents the breakpoint from re-triggering when the flow is resumed. Breakpoints are inherited by subgraph flows and forked flows.
 
-**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. Fields that need to persist across turns must be declared in both `DeclareInputs` and `DeclareOutputs`.
+**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. Fields that need to persist across turns must be declared in both `DeclareInputs` and `DeclareOutputs`. The new flow's scheduling (priority, fairness) comes from caller-supplied `FlowOptions` like a fresh `Create`; a nil opts uses fresh defaults rather than inheriting from the prior flow.
 
 **Enqueue** - Internal endpoint (port `:444`) that rings the work **doorbell**: it signals that a step is pending and lets the receiving replica decide, from the step's priority relative to its candidate cache, whether to refill or to flush and refill (see "Execution Model"). It does not enqueue a specific step. Load-balanced across foreman replicas. Fire-and-forget - errors are ignored because `pollPendingSteps` rings the local doorbell each cycle and recovers any missed work.
 
+### FlowOutcome and side-channel signals
+
+`Snapshot`, `Await`, and `Run` all return a single `*foremanapi.FlowOutcome` (defined in `foremanapi/flowoutcome.go`). The same struct is the payload of the `OnFlowStopped` outbound event. The shape is:
+
+```go
+type FlowOutcome struct {
+    FlowKey          string
+    Status           string
+    State            map[string]any
+    Error            string         // populated when Status == "failed"
+    InterruptPayload map[string]any // populated when Status == "interrupted"
+    CancelReason     string         // populated when Status == "cancelled"
+}
+```
+
+Side-channel fields are populated only for the matching status. `Run`'s Go-level `error` return is reserved for transport/foreman/timeout failures; a *workflow failure* surfaces as `outcome.Status == "failed"` with `outcome.Error` set, so callers don't have to disambiguate "the workflow rejected my input" from "the foreman is down."
+
+The interrupt path is deliberately split from `State`: `Snapshot` of an `interrupted` flow returns `State` as the merged step snapshot *at the time of the interrupt* and `InterruptPayload` as the raw `flow.Interrupt(payload)` argument. The previous behavior (merging the payload into `State` via the graph's reducers) is gone because the merge was lossy: once folded in, the caller could not tell which fields were the workflow's own state and which were the resume request. Callers that want the merged view can call `workflow.MergeState(out.State, out.InterruptPayload, graph.Reducers())` themselves.
+
 ### Flow Stop Notifications
 
-When a flow is started via `StartNotify(flowKey, notifyHostname)`, the foreman stores the hostname and fires `OnFlowStopped(flowKey, status, snapshot)` events targeted at that hostname when the flow stops - i.e. reaches a terminal status (`completed`, `failed`, `cancelled`) or is `interrupted`. This matches the statuses that `Await` returns on.
+When a flow is started via `StartNotify(flowKey, notifyHostname)`, the foreman stores the hostname and fires `OnFlowStopped(*FlowOutcome)` events targeted at that hostname when the flow stops - i.e. reaches a terminal status (`completed`, `failed`, `cancelled`) or is `interrupted`. This matches the statuses that `Await` returns on.
 
-For terminal statuses, the snapshot contains the flow's `final_state`. For `interrupted`, the snapshot is nil - the caller should use `Snapshot()` to read the current state including the interrupt payload.
+The outcome carries the same fields as a `Snapshot`/`Await` return at the stop point: `State` is the flow's `final_state` for terminal statuses, the leaf step's accumulated state for `interrupted`. `Error`, `InterruptPayload`, and `CancelReason` are populated per Status as documented above.
 
 The notification is fire-and-forget - flow execution never blocks on notification delivery. The `notify_hostname` is set only on the root flow (via `StartNotify`); subgraph flows do not receive direct notifications. Interrupt notifications query the root flow's hostname from the surgraph chain.
 
@@ -86,6 +105,8 @@ Subscriber pattern:
 ```go
 foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(svc.OnFlowStopped)
 ```
+
+Where `svc.OnFlowStopped(ctx context.Context, outcome *foremanapi.FlowOutcome) error` is the handler.
 
 ### Execution Model
 
@@ -216,7 +237,9 @@ the 2s backlog cap, or `maxPollInterval`).
 
 `processStep` is the hot path - it runs for every task in every workflow. To minimize latency when the database is remote, independent queries within `processStep` are executed in parallel using `svc.Parallel`:
 
-- **Step data + flow data** - after acquiring the lease, the step and flow metadata queries run concurrently (the initial query fetches `flow_id` alongside `time_budget_ms` to enable this)
+- **Claim UPDATE + step SELECT** - the lease-acquiring UPDATE and the step-data SELECT run concurrently. The UPDATE only mutates `status` and `lease_expires`; the SELECT reads stable columns (`step_depth`, `task_name`, `state`, `changes`, `breakpoint_hit`, `attempt`, `lineage_id`, `flow_id`, `time_budget_ms`) that the UPDATE never touches, so they race-read safely. The lease size comes from the foreman's in-memory `TimeBudget` config rather than from the step row, removing the dependency that previously forced a serial pre-SELECT.
+- **Flow data** - runs after the parallel claim+SELECT block returns, since it depends on the `flow_id` the step SELECT just produced. Net: two serial DB round-trips on the hot path (claim+step in parallel, then flow), down from three.
+- **Fan-in sibling counts** - the unfinished and failed sibling COUNT queries run concurrently
 - **Fan-in sibling counts** - the unfinished and failed sibling COUNT queries run concurrently
 - **Subgraph status counts** - the active and completed subgraph COUNT queries run concurrently
 
@@ -319,14 +342,20 @@ dispatch call, and `sub.TimeBudget` is the *shorter* bound a task may impose on 
 ingress-proxy request-timeout-ceiling shape, generalized to every task endpoint. `graph.SetTimeBudget` was
 deleted outright; the workflow graph no longer encodes any duration.
 
-The worker lease duration is `time_budget + leaseMargin` (30s), i.e. `TimeBudget` ceiling +
-`leaseMargin`. This ensures the lease always outlasts execution, preventing premature recovery by
-`pollPendingSteps`. Accepted trade-off: because the lease is sized to the ceiling rather than per task, a
-*crashed* worker that was running a task with a tight `sub.TimeBudget` is recovered no sooner than
-`ceiling + leaseMargin` instead of `tightBudget + leaseMargin`. The common case is unaffected -
-a hung (not crashed) task is cancelled at its declared bound by the connector, its outbound call returns,
-and the foreman acts immediately; only the rare worker-crash path pays the slower recovery, which is
-acceptable for the simplification of a single uniform lease.
+The worker lease duration is the foreman's current `TimeBudget` config + `leaseMargin` (30s), read from
+in-memory config rather than from the step row. This lets `processStep` claim the step without an upfront
+SELECT to read the step's `time_budget_ms`: the dispatch-timeout value is read in the parallel block below
+the claim UPDATE, but the lease size is set from the live config. The lease always outlasts execution,
+preventing premature recovery by `pollPendingSteps`. Accepted trade-off: because the lease is sized to the
+ceiling rather than per task, a *crashed* worker that was running a task with a tight `sub.TimeBudget` is
+recovered no sooner than `ceiling + leaseMargin` instead of `tightBudget + leaseMargin`. The common case is
+unaffected - a hung (not crashed) task is cancelled at its declared bound by the connector, its outbound
+call returns, and the foreman acts immediately; only the rare worker-crash path pays the slower recovery,
+which is acceptable for the simplification of a single uniform lease. A separate trade-off applies if the
+operator decreases `TimeBudget` mid-flight below the largest in-flight step's stored `time_budget_ms`: the
+new (shorter) lease may expire before the (longer) dispatch completes, causing `pollPendingSteps` to
+re-dispatch the step. Steps that are not idempotent under re-dispatch should not coexist with such
+config changes - the same constraint that already applies to any other lease-expiry recovery path.
 
 `sub.TimeBudget` is endpoint self-protection, not upstream propagation: the foreman never learns a task's
 declared budget, and nothing on the wire carries it back. A responsive-but-slow task is cancelled at its
@@ -335,6 +364,20 @@ in `declared budget + one network hop`, far inside the foreman's ceiling. A task
 (a crashed or wedged replica) is bounded solely by the foreman's `TimeBudget` ceiling on the `pub.Timeout`
 of the dispatch call, which is exactly the hung-downstream behavior that predates `sub.TimeBudget`. The
 option therefore adds no new dispatch-latency hazard; it only lets an endpoint bound its own handler.
+
+### Flow lifetime is workflow-author's responsibility
+
+The framework does not impose or enforce a flow-level deadline. Picking a max-lifetime value that
+fits both a 1-hour batch and a 30-day human-approval workflow is impossible, and a knob whose
+default value is "no deadline" is just surface area without a customer. Workflows that need a
+lifetime bound implement it in workflow-author space: a guard task that reads `flow.CreatedAt()`
+and returns `errors.New("…", 408)` when too much time has elapsed; a `flow.Retry` loop that
+exhausts after a chosen bound; an `OnTimeout` transition to a "give up" handler; or an external
+caller scheduling a `Cancel` at the cutoff. All four are strictly more flexible than a hard
+framework-level "deadline exceeded" failStep.
+
+`Flow.CreatedAt()` and `Flow.UpdatedAt()` are populated by the orchestrator on every dispatch, so
+the elapsed-time guard pattern is one method call away inside any task.
 
 ### State Model
 
@@ -447,6 +490,78 @@ literal defaults. The Postgres, SQL Server, and SQLite sections all permit bare 
 types, so this constraint is MySQL-only. When editing the schema files, mirror the existing parenthesized form on every
 MySQL `TEXT`/`JSON` column or fresh MySQL deployments will fail to migrate.
 
+### Database Choice and Configuration
+
+The foreman speaks four SQL dialects via the `sequel` package: SQLite, MySQL/MariaDB, PostgreSQL, and SQL Server. All
+four pass the verify suite, but they behave very differently under the foreman's concurrent INSERT/UPDATE load. Pick
+the engine by deployment shape, not by familiarity.
+
+**PostgreSQL — recommended for production.** MVCC means concurrent INSERTs do not lock each other on secondary
+indexes; there are no gap locks at the default `READ COMMITTED` isolation; and the foreman's fan-out/fan-in pattern
+(many parallel INSERTs against the same shard's `microbus_steps`) runs without deadlocks at any concurrency the
+workers themselves can produce. Use Postgres 13+ for `JSONB` and the framework's partial indexes
+(`idx_microbus_steps_status`, `idx_microbus_steps_selection`, etc.). No special tuning required for correctness; for
+throughput, raise `max_connections` to at least `(NumShards * MaxOpenConnsPerShard)` (each foreman replica multiplies
+its open connections by the shard count) and `shared_buffers` to about 25% of host RAM.
+
+**MySQL / MariaDB — supported, but expect tuning.** InnoDB at the default `REPEATABLE READ` isolation takes next-key
+locks (row + gap) on every secondary-index touch. Two concurrent flow creations on the same shard can deadlock when
+their INSERTs lock overlapping ranges of `idx_microbus_steps_selection (status, priority, fairness_key)` or
+`idx_microbus_steps_saturation (status, task_name)` in different orders; InnoDB then aborts one with
+`Error 1213 (40001) Deadlock found when trying to get lock`. This is normal InnoDB behavior, not a foreman bug -
+`createWithGraph` retries on `sequel.IsLockContentionError` so the deadlock is invisible to callers most of the time,
+but a sustained deadlock rate degrades throughput and inflates p99 latency. To minimize it:
+
+- **`transaction-isolation = READ-COMMITTED`** in `my.cnf` (`[mysqld]` section). Drops gap locks entirely; the only
+  cost is that range queries no longer see a frozen snapshot, which the foreman does not rely on. This single setting
+  is the largest deadlock-rate reduction available and is the recommended default for any MariaDB/MySQL deployment
+  hosting foreman.
+- **`innodb_autoinc_lock_mode = 2`** (interleaved). Removes the table-level AUTO-INC lock on plain INSERTs. Safe
+  with `binlog_format = ROW` (the only sane modern setting). If you must keep statement-based replication,
+  leave at the default `1` and accept the auto-inc serialization.
+- **`innodb_lock_wait_timeout`** at 5-10s (default 50s). The foreman's lock-contention retry path needs the engine
+  to give up promptly; a long timeout turns a transient contention into a stall.
+- **`innodb_deadlock_detect = ON`** (the default). Do not disable - deadlocks are how InnoDB recovers from the lock
+  cycles the foreman's workload creates.
+- **Per-shard databases.** `SQLDataSourceName` must contain `%d` when `NumShards > 1` (e.g. `microbus_%d`), and
+  every `microbus_N` database must exist before foreman startup. The framework creates the schema via migrations
+  but does not `CREATE DATABASE`. Sharding raises aggregate throughput by partitioning the auto-inc and secondary
+  index contention across N independent tablespaces.
+- **MariaDB version.** 10.5+ is required for `JSON` column type compatibility with the schema in `1.sql`. 10.6+
+  is recommended; older versions accept the DDL but have less mature deadlock detection.
+
+**SQL Server.** Snapshot isolation (`READ_COMMITTED_SNAPSHOT ON` at the database level) gives Postgres-like
+non-blocking reads and eliminates most deadlock risk. Enable it once on each shard database:
+`ALTER DATABASE microbus_N SET READ_COMMITTED_SNAPSHOT ON;`. Without this, SQL Server's default pessimistic locking
+behaves like MySQL's REPEATABLE READ for INSERT contention. No other tuning is mandatory.
+
+**SQLite — testing and single-instance dev only.** Single-writer at the database level means deadlocks are
+structurally impossible (the engine serializes all writes), but throughput tops out around one transaction at a
+time. `sequel.OpenTesting` is used automatically when `Deployment == TESTING` and `SQLDataSourceName` is empty;
+the DSN is `file:shard_%d` so each shard is a separate in-memory database. The `_pragma=busy_timeout(1000)` that
+sequel injects is what keeps the four foreman workers from immediately failing on `SQLITE_BUSY` during fan-out;
+do not remove it. Do not run SQLite in production - the single-writer ceiling will be the bottleneck before
+anything else.
+
+**Sharding guidance.** `NumShards` partitions flows across separate databases (or separate schemas on the same
+engine). Shard count should equal or exceed the steady-state number of concurrent flow-creating threads divided by
+the per-shard write contention the engine tolerates. Rough sizing:
+
+| Engine | Concurrent INSERT/sec per shard before contention | Suggested NumShards |
+|---|---|---|
+| PostgreSQL | 1000+ | 1-4 |
+| SQL Server (RCSI) | 500-1000 | 2-4 |
+| MariaDB/MySQL (RC) | 200-500 | 4-8 |
+| MariaDB/MySQL (RR) | 50-200 | 8-16 |
+
+`NumShards` can grow at runtime via `OnChangedNumShards`; it cannot shrink (old shards drain naturally as their
+flows complete). Increasing it adds new shards immediately, but existing flows stay on their original shard.
+
+**Connection pool sizing.** The `sequel` package opens a connection pool per shard. The foreman's hot path uses
+~3-5 connections per active step (claim UPDATE + step SELECT + flow SELECT + transition INSERTs). Size each
+shard's `MaxOpenConns` to roughly `Workers * 4 / NumShards`, with a floor of 10. Undersized pools cause workers
+to serialize on `db.BeginTx` waits, which looks like throttling but is just connection starvation.
+
 ### Flow Scheduling (priority / fairness)
 
 `8.sql` adds `priority`, `fairness_key`, `fairness_weight` to **both** `microbus_flows` (authoritative) and
@@ -468,17 +583,19 @@ authoritative:
 - Where the resolved values are already in hand (entry step in `createWithGraph`, the `Fork` step, the API
   `Retry` insert which copies them off the failed step row like `lineage_id`), they are written as literal
   bind parameters.
-- In the deep `processStep` paths (next-step fan-out and the two fan-in inserts), the values are **not**
-  threaded through the call chain; the insert copies them straight from the owning flow with a scalar
-  subquery `(SELECT priority FROM microbus_flows WHERE flow_id=?)` (and likewise for the other two). The flow
-  row always exists before any of its steps, so this is single-source-of-truth with zero new function
-  parameters. The subquery is a PK lookup, off the hot read path (it runs at step creation, not selection).
+- In the deep `processStep` paths (next-step fan-out and the two fan-in inserts), the values are read once
+  per step execution as part of the parallel flow-row SELECT at the top of `processStep`, then threaded
+  through the call chain into the INSERTs as literal bind parameters. The previous design used scalar
+  subqueries `(SELECT priority FROM microbus_flows WHERE flow_id=?)` inline in each INSERT to keep the call
+  chain narrow, but at N-way fan-out that meant 3N PK lookups per step. Threading the values through pays
+  three extra columns on the flow SELECT (which already runs in parallel with the step SELECT) and zero
+  per-child overhead.
 
 The scheduler *reads* `priority` and `fairness_key`/`fairness_weight` via the two-level selection in the
 refiller (see "Execution Model"), backed by `idx_microbus_steps_selection`. `fairness_weight` is read only
-from each key's oldest candidate step. `idx_microbus_steps_saturation` is created but not yet read: the
-per-task `MaxTaskConcurrency` saturated-set exclusion is not wired into selection (a separate future
-backpressure deliverable).
+from each key's oldest candidate step. `idx_microbus_steps_saturation` is read by the adaptive backpressure
+controller (`limiting.go`, see "Adaptive Per-Task Concurrency" below) to compute the cross-shard
+`SUM(running)` per task that gates the saturated-set exclusion in `runRefill`.
 
 #### Why the scheduling design is shaped this way
 
@@ -500,12 +617,276 @@ and the resolution above, this is the *why*.
   `fairnessflow` / `shardedflow` fixtures assert the ratio), deliberately not a production metric.
 - **`Workers` is a generous static cap, not the backpressure mechanism.** A worker blocked on an outbound
   task call is just a goroutine stack plus a socket, so over-provisioning the pool is cheap; throttling a
-  pressured downstream is a separate, deferred per-task-concurrency deliverable, not a function of pool size.
+  pressured downstream is the adaptive per-task dispatch-rate control in `backpressure.go`, not a function
+  of pool size (see "Adaptive Per-Task Concurrency" below).
+- **`SQLConnectionPool` defaults to 8 per shard, with `MaxIdle == MaxOpen`.** Workers spend most of their
+  time waiting on the outbound task HTTP call, not holding a SQL connection - the DB-only segments of
+  `processStep` are short. So the per-shard pool needs only a small absolute number of connections to keep
+  the workers fed without queuing on the pool, even at higher worker counts. `MaxIdle == MaxOpen` matters
+  more than the absolute number: Go's `database/sql` closes connections back down to MaxIdle when load
+  drops, and under bursty load the close/reopen churn (TCP+TLS+auth per cycle) dominates over the time
+  spent actually executing queries. Empirically on the creditflow parallel benchmark, pool=4 hits ~67% CPU
+  utilization, pool=8 hits ~85%, pool=16 hits ~92%, and pool=32 regresses (added pool-mutex contention
+  with no usable extra concurrency); the curve is also nearly flat between Workers=32 and Workers=64 at
+  pool=8, which is why the default is a fixed 8 rather than proportional to `Workers`. The override is
+  effective in practice because the foreman usually owns its own DSN (refCount stays at 1, so sequel's
+  sqrt-based auto-sizing does not re-fire after init), but if another microservice in the same bundle
+  opens the same DSN as foreman, sequel's `adjustConnectionLimits` runs again and silently undoes the
+  override - a fragility worth knowing about. Operators with a different workload mix (longer DB-hold,
+  larger shards, more aggressive throughput target) should tune the config explicitly.
 - **Completion writes are deliberately *not* gated by the refiller/`MaxClaims` slot.** That slot bounds
   selection only; finishing in-flight work must outrank starting new work, so the post-execution advance
   (persist changes, transitions, fan-in) is never serialized behind selection. The real contention axis is
-  same-flow fan-in, already serialized by the fan-in transaction plus the lock-contention rewind path; the
-  `CompletionContention` counter exists to decide if an explicit completion bound is ever warranted.
+  same-flow fan-in, already serialized by the fan-in transaction plus the lock-contention rewind path. No
+  explicit completion bound is needed - lock contention on the completion write is essentially a SQLite-only
+  phenomenon (MySQL/Postgres transactions are short and steps-first-then-flow lock-ordered), and the rewind
+  path in `processStep`'s defer already recovers it without an admission gate.
+
+### Adaptive Per-Task Concurrency
+
+A soft, cluster-wide cap on per-task **dispatch rate** (ops/sec), with the rate discovered from
+observed backpressure rather than configured. Lives in `backpressure.go`; the `runRefill`
+integration sits in `scheduling.go`; the 429 ingestion in the dispatch error path of
+`execution.go`. The controller controls *rate*; concurrent in-flight count is incidental (the
+worker pool sets a separate hard ceiling, and concurrency for a given rate is governed by
+Little's Law: `c = rate * latency`). The section title says "concurrency" for historical
+continuity - the original design controlled concurrent count; the unit is ops/sec everywhere
+below.
+
+**Why a controller and not a config.** A static per-task cap is wrong the moment the downstream
+autoscales: too low and the cluster underutilizes; too high and the cluster overwhelms. An operator
+who *does* know the right number per task has no way to keep it current. `MaxTaskConcurrency` and the
+related `sub.MaxConcurrency` lever were both rejected for this reason - a hardcoded value defeats the
+controller it would feed (the downstream would emit 429 at exactly that count forever, so the
+controller could never discover that capacity grew). A wrapper microservice that wants to self-limit
+can do so internally using its own Microbus config (which is runtime-tunable), emitting 429 above its
+threshold; from the foreman's side this looks like any other organic 429.
+
+**Why rate and not concurrent count.** Most real-world 429-emitting backends are rate-bounded
+(third-party APIs publishing "100 req/sec per key", etc.), not concurrency-bounded. A concurrent-count
+controller has a structural floor problem with short tasks against tight rate budgets: at rate budget
+`R` req/sec and dispatch latency `L`, the matching concurrent cap is `c = R*L`. For `R=10`, `L=10ms`,
+`c=0.1` - below the controller's `minLimit=1` floor. The controller stays pinned at 1 concurrent and
+issues 100 req/sec, ten times the budget. Switching to a rate controller pushes the floor into
+*ops/sec* units, which matches the typical lower bound on real APIs (1 RPS) gracefully.
+
+The symmetric failure mode of a rate controller is **variable-latency concurrency-bounded backends**:
+a DB pool of 10 sees its task latency double; the rate that fit yesterday now over-saturates
+concurrency. The controller still recovers via 429 feedback (re-cuts the rate to compensate), but its
+model is wrong-shaped for that case. We accept this trade as a better default.
+
+**The throttle library does the per-call gating.** Each task has its own
+`*github.com/microbus-io/throttle.Throttle` (sliding-window counter, 1s window, ~64 bytes per task).
+The throttle has two jobs: count emitted dispatches so a 429 can be anchored to the actual emission
+rate, and gate further dispatches when the rate exceeds the controller's current opinion. The
+throttle is created lazily at first dispatch (`valveCommit`); the gating limit is `SetLimit`ed lazily
+at each peek/commit from the CUBIC curve's current value. Allows are at commit time; peeks gate the
+filter pass in `runRefill`. With the throttle owning admission, the previous design's cross-shard
+`countTasks` is off the hot path; it now feeds only the `TaskConcurrencyRunning` observable gauge.
+
+**Additive-decrease per 429, re-anchored at burst start.** `valveRegulate` decrements `wCong` by
+exactly 1 on each observed 429. A burst of N 429s in tight succession compounds linearly to a cut
+of N - the exact overage the downstream just rejected. The throttle's `Peek().observed` is read at
+each call, but only the *first* 429 of a fresh burst (tCong older than one throttle window) uses
+it to re-anchor wCong upward to the actual emission rate; subsequent 429s in the same burst just
+decrement. The re-anchor matters because the CUBIC curve has been growing the effective rate above
+the last cut's `wCong` while the task was running cleanly - a 429 at the recovered rate would
+otherwise cut from a stale-low wCong by 1, barely a cut.
+
+**The increase is a pure function, not an action.** N replicas running independent additive-
+increase loops over one downstream do not sum to the true limit; they oscillate. Electing one
+writer is its own coordination problem (queue groups dedupe consumers per message, not the ticker
+that owns the increase). Resolution: make the increase a pure function of `(wCong, tCong)` and
+wall-clock. Every replica computes the same value from the same anchor; "doing the increase" is
+not an action anyone performs.
+
+**The convergent register.** The only shared mutable state is `(wCong, tCong)` per task, gossiped
+over `SyncValve`. The merge is "latest `tCong` wins, smaller `wCong` on tie" - associative,
+commutative, idempotent, so it tolerates reorder, duplication, and loss. A missed cut self-heals:
+the over-admitting replica eats its own 429 and re-cuts. No periodic `Reconcile` broadcast in v1;
+add only if logs show staleness is a problem.
+
+**Sender-stamps `tCong`, not receiver.** The whole design rests on every replica computing the same
+`recover(wCong, tCong, now)`. Receiver-local stamping would make each replica's curve advance by a
+different `now - tCong`, defeating convergence. Cross-replica clock skew on a single foreman cluster
+(typically same datacenter, NTP-synced) is milliseconds; the curve operates over seconds. The skew is
+negligible relative to the curve.
+
+**Cross-task priority inversion is accepted.** When a high-priority flow's next task is rate-limited,
+that flow is delayed (its step stays pending) while lower-priority flows whose next task is
+unconstrained proceed. The `runRefill` multi-band loop walks past a wholly-saturated band rather than
+idling the cluster. Unbounded priority would defeat the purpose: an urgent flow cannot conjure
+downstream capacity. The flow is delayed, not failed - the 429 path bounces the step to `pending`
+with `not_before = NOW_UTC()`, never to `failed`.
+
+**Each replica is independent; no peer count, no rate division.** With the per-replica throttle,
+each replica sees only its own dispatches and its own 429s, so the `wCong` it cuts to is *already*
+the per-replica rate. There is nothing to divide. The cluster aggregate is the sum of independent
+per-replica controllers, each of which converges to its own share of the downstream's budget via
+its own 429 feedback. Asymmetric load across replicas produces asymmetric `wCong` values, which is
+correct - a replica that emits more should have a tighter rate. The earlier `Sonar` / `peerCount`
+ticker that fed an explicit rate division was vestigial from the cluster-wide DB-count design and
+has been removed.
+
+**Why no `Retry-After` parsing in v1.** The Microbus error reconstitution converts non-2xx responses
+to errors and does not preserve response headers across that boundary. A wrapper microservice that
+genuinely wants per-step backoff timing for a known third-party rate limit should call
+`flow.Sleep(retryAfter)` inside the task handler, which routes through the existing `not_before`
+machinery and is already correct. From the foreman side a 429 just cuts the valve; the throttle
+gates the next dispatch. Retry-After parsing becomes feasible if the framework grows header
+preservation, or via a sidecar mechanism.
+
+**No startup snapshot pull.** The map starts empty; a restarted replica admits unconstrained
+until its first 429 anchors a point (and the gossip joins it to the cluster view). The transient
+over-admission window is bounded by the worker pool. Adaptive limiters re-learn from observed
+backpressure; they don't persist state across reboots.
+
+**The recovery curve is TCP CUBIC** (RFC 9438). `recoverRate` evaluates
+`w(t) = cubicC*(t-K)^3 + wMax`, where `K = cbrt(wMax * cubicBeta / cubicC)` and
+`wMax = wCong / (1 - cubicBeta)`. Below `K` the curve is concave (fast reclaim back toward the
+known-good `wMax`); above `K` it is convex (gentle probing for new capacity above the pre-cut
+estimate). At `t=0` it equals `wCong`; at `t=K` it equals `wMax`. The shape and the parameter pair
+`(cubicBeta, cubicC)` come straight from TCP CUBIC for the same reason: aggressive recovery of
+known headroom, cautious exploration of unknown headroom. The `cubic` prefix on both constants is
+the provenance signal - any reader who needs the math can read the RFC.
+
+**The recovered rate is clamped to `[1, MaxInt]`.** The floor prevents recovery deadlock (with
+the rate at zero, no step can dispatch, no 429 can fire, and the cube term never lifts the curve).
+The ceiling is overflow insurance only - a long-idle valve's convex `cubicC * delta^3` term grows
+without bound, and the `int(...)` conversion wraps. The ceiling is deliberately not a backpressure
+mechanism: a task that genuinely has no downstream limit must remain effectively unconstrained.
+The Per-Task Rate-Limit Grafana panel uses a log y-axis so the cut state (1-1000) and the
+unbounded state (limit at the ceiling) both render legibly on one chart.
+
+**Curve constants are package-level constants, not configs.** `cubicBeta` (0.01) and `cubicC`
+(0.05) live as `const` in `backpressure.go`'s `recoverRate`. `cubicBeta` is now used only as the
+curve's `wMax / wCong` ratio (recovery target sits just above wCong); the *cut depth* is a fixed
+1 op/sec per 429. The throttle window is similarly fixed at 1 second - the controller converges
+on whatever rate the downstream tolerates regardless of the downstream's stated unit (per-second,
+per-minute, per-hour are all just rate ÷ second after enough convergence). Earlier configs
+`CubicBeta`/`CubicC`/`CongestionDebounce` were a coupled triple without an operator story for
+picking any one in isolation; demoting them removed the footgun.
+
+**The bounced step has no added `not_before` delay.** A 429 returns the step to `pending` with
+`not_before = NOW_UTC()`. The throttle is the gate, not the row: the re-attempted dispatch hits
+`valvePeek` which consults the throttle, and unless the throttle has room the step waits. The
+throttle stays full for the rest of the current window after a burst, so the bounced step won't
+keep eating dispatches against a still-overrun ceiling.
+
+**`runRefill`'s band loop is unbounded.** The loop walks priority bands ascending until either
+admittable work is found (admit and break) or `scanBand` returns `MaxInt` (no more pending work
+anywhere). An earlier `BandFallthroughLimit = 4` cap was removed because it didn't actually bound
+worst-case behavior - giving up early just deferred the same scan to the next refill, while
+introducing a stall failure mode if more than the cap's worth of bands were simultaneously
+saturated (workers would idle indefinitely while bands deeper than the cap still had admissible
+work). Each iteration is one parallel `scanBand` call (one indexed query per shard), and the
+total work scales with the number of distinct priority values in the system.
+
+**Fairness within a key is FIFO among admissible steps, not absolute FIFO.** Within a fairness key
+(per-tenant bucket), the refiller walks the bucket's steps in oldest-first order but skips past any
+step whose task's throttle currently refuses. The skipped step stays pending and is re-considered
+on the next refill once the throttle has room (window rotation, ceiling raised by recovery, or
+in-flight work drained). This preserves the existing "strict-FIFO within a fairness key" invariant
+for the admissible subset, while preventing head-of-line blocking: one rate-limited task in a
+tenant's queue does not freeze the tenant's admissible work for other tasks. The weight assigned
+to a fairness key follows the same rule - taken from the oldest *admissible* step.
+
+### Per-Task Breaker (404 ack-timeouts)
+
+A separate per-task circuit breaker rides alongside the valve in `breaker.go`. The valve handles
+429 backpressure ("the downstream is overloaded"); the breaker handles 404 ack-timeouts ("no one
+is home"). Both gate at the same `admittable()` closure in `runRefill`; the breaker check runs
+first so a tripped task short-circuits without consulting the valve at all.
+
+**Why per-task and not per-step.** A per-step exponential backoff (the obvious first answer) is
+structurally wrong because it scales with backlog depth: with 100 flows blocked on a 404'ing task,
+every refill cycle would dispatch all 100 and bounce them all on their individual exponential
+schedules - an avalanche that displaces work for healthy tasks. The throttle has to live at the
+*task name* level so one schedule governs all blocked flows.
+
+**The breaker is the gate; `not_before` carries no throttling load while tripped.** A 404-bounced
+step goes back to `pending` with `not_before = NOW_UTC()` and no added delay. While the breaker
+is tripped, `breakerAdmits` is the only mechanism that gates dispatch for that task; the N
+blocked rows for it sit with `not_before` in the past indefinitely and the refill short-circuits
+at the in-memory check before any candidate logic. This is the central simplification over a
+per-step-backoff design and the load-bearing reason that probe recovery doesn't need a
+dam-release UPDATE: the N-1 still-blocked rows are already due, so the next refill picks them up
+under normal priority/fairness as soon as the breaker flips closed.
+
+**Detection is the literal `ack timeout:` prefix.** The connector's unicast publisher synthesizes
+the `404 Not Found` for an unacknowledged request as `errors.New("ack timeout: %s", req.Canonical())`
+in `connector/publish.go`. A 404 from a subscriber that actually ran (e.g. a wrapped REST API
+returning "not found") does *not* carry that prefix, so the breaker only fires for genuine
+transport-level "no subscriber" 404s. The detection check in `executeTask` is therefore the
+`StatusCode == 404 && strings.HasPrefix(err.Error(), "ack timeout")` pair, and a handler-emitted
+404 falls through to OnError/failStep like any other error.
+
+**Trip on the first 404.** Any single `ack timeout:` flips the breaker to tripped - no
+consecutive-nack counter, no threshold to tune. The cost of an over-trip is exactly one
+`breakerInitialProbeDelay` (100ms) of added latency on the next dispatch attempt for that task:
+trip -> 100ms wait -> probe -> success (when the blip was transient) -> close. The cost of an
+under-trip would be the avalanche. With the cost of a false trip pinned to ~one probe interval,
+there is no reason to delay tripping; matches the TCP analogy where one loss event triggers
+congestion response. A flaky downstream produces frequent trip/close oscillation which shows up
+cleanly in `microbus_task_breaker_trips_total` - useful operational signal, not a bug.
+
+**Probe schedule is local, exponential, capped.** When tripped, the breaker admits at most one
+probe per refill cycle per replica, gated on `now >= nextProbeAt`. The schedule advances by
+`probeBackoff(probeAttempt+1) = breakerInitialProbeDelay * 2^probeAttempt` (capped at
+`breakerMaxProbeDelay`) on each admission. `nextProbeAt` and `probeAttempt` are deliberately
+*not* gossiped; each replica probes on its own schedule. The soft-cap overshoot of one probe
+per replica per probe-window across the cluster is acceptable. All four constants
+(`breakerInitialProbeDelay` = 100ms, `breakerProbeMultiplier`
+= 2.0, `breakerMaxProbeDelay` = 1m, trip-after-first) live in `breaker.go` rather than configs:
+the 100ms initial makes one-off blips nearly invisible, the 1m cap bounds recovery-detection
+latency, and the values are short enough that test fixtures run in real time without config
+overrides. Sequence: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 51.2s, 60s,
+60s, ... ; full convergence to the cap takes ~2 minutes of continuous failure.
+
+**`breakerAdmits` is read-only; `breakerProbeCommitted` advances the schedule.** `runRefill`
+calls `admittable(taskName)` twice per refill cycle - once filtering rows into fairness
+buckets, once re-checking at the bucket head. An admit-with-side-effect predicate would
+advance `probeAttempt` and `nextProbeAt` on the first call and then reject itself on the
+second (since `now < nextProbeAt` after the freshly-advanced anchor), so the probe step
+would never reach the batch and the breaker would never recover. The split keeps the
+predicate pure and moves the schedule advance to the single point where the step actually
+commits to the batch. `breakerProbeCommitted` also calls `shortenNextPoll(nextProbeAt)` so
+the poll timer wakes at the next probe time regardless of the default 2s `backlogPollInterval`
+- without this, the breaker schedule would be clamped to the polling cadence rather than
+honoring the exponential curve.
+
+**`TripBreaker` gossips only the trip event, payload-free.** The wire is just `(taskName)` -
+no timestamp, no state field. Each peer stamps `time.Now()` on receipt and seeds its local
+probe schedule from that moment. Cross-replica clock skew (NTP-synced, same datacenter;
+milliseconds) is negligible against the probe timescale (100ms to 1m), and the slight stagger
+from per-replica stamping actually helps spread probes naturally across the cluster. A trip
+received while already tripped is a no-op (we don't refresh the schedule, because that would
+arbitrarily reset `probeAttempt` and undo accumulated backoff).
+
+**Closures are deliberately NOT gossiped.** A replica that probes successfully drops its local
+`trippedAt` to zero and closes silently. Peers keep their own gate until their own probe
+succeeds. This is the load-bearing simplification on top of the valve's design: instead of one
+replica's success thundering-herd-releasing N replicas' worth of pent-up backlog onto the
+just-recovered downstream, the cluster ramps gradually as each replica's staggered probe
+schedule fires. Worst-case full cluster recovery is bounded by `breakerMaxProbeDelay` = 1m. The
+shape is analogous to TCP slow-start: aggressive on cut, gentle on recovery.
+
+The state is collapsed to a single `trippedAt time.Time` field that doubles as the indicator
+(zero = closed). No bool, no constants for the state value. The gossip merge is just "set my
+trippedAt if I was closed" - idempotent under re-receipt, no convergence-rule reasoning needed.
+
+**No auto-give-up on a forever-tripped breaker.** Flow lifetime is workflow-author's
+responsibility - same argument as the "Flow lifetime is workflow-author's responsibility"
+section. A breaker that has been tripped for hours might be a long maintenance window, in which
+case the workflow's own elapsed-time guard (if any) is the right arbiter. Operator visibility
+comes from `microbus_task_breaker_state{task_name}` and `microbus_task_breaker_probes_total
+{task_name, outcome}`; bulk remediation (cancel everything blocked on task X) is operator
+surface area that's not yet built, and is deliberately out of scope for the breaker itself.
+
+**5xx is not the breaker's business.** A 5xx response means the downstream exists and answered
+with a server error - that is a task-level decision (use `flow.Retry`, an `onError` transition,
+or just propagate as flow failure). Same applies to any non-2xx, non-404, non-429. The breaker
+is specifically for "no one home" via the `ack timeout:` prefix.
 
 ## Schema Column Catalog
 
@@ -536,11 +917,14 @@ rationale and the meaning of every column live here.
 | `notify_hostname` | Set by `StartNotify`; `OnFlowStopped` fires here when the flow stops. `''` = no notification |
 | `final_state` | JSON state computed at termination, filtered through the graph's `DeclareOutputs` |
 | `breakpoints` | JSON `map[taskName]string` of `BreakBefore` breakpoints |
-| `created_at` | UTC creation time. Append-only and PK-correlated; the `PurgeExpiredFlows` cursor heuristic and `idx_*_created_at` rely on this |
-| `updated_at` | UTC time of the last status transition; bumped on every state change |
+| `created_at` | UTC creation time. Append-only and PK-correlated; `idx_*_created_at` relies on this for time-window queries. Surfaced to tasks via `Flow.CreatedAt()` for elapsed-time guards |
+| `updated_at` | UTC time of the last status transition; bumped on every state change. Surfaced to tasks via `Flow.UpdatedAt()` |
 | `priority` | (`8.sql`) Scheduling priority, integer >= 1, lower runs first. Resolved at `Create` from `FlowOptions` (an explicit priority is >= 1; a 0/unset `FlowOptions.Priority` falls back) else the `DefaultPriority` config; inherited unchanged by `Continue`/`Fork`/subgraph. Immutable after creation |
 | `fairness_key` | (`8.sql`) Fairness bucket, typically a tenant. From `FlowOptions`, else the `tid`/`tenant` actor claim, else `''`. Immutable after creation |
 | `fairness_weight` | (`8.sql`) Relative dispatch share of the `fairness_key`. From `FlowOptions`, else `1` |
+| `error` | (`9.sql`) Task error string for `failed` flows. Written by `failStep` to every flow in the surgraph chain in the same UPDATE that sets `status='failed'`; the existing `WHERE status NOT IN (terminal)` clause makes the write first-failure-wins for the flow row even under concurrent sibling failures. `''` for non-failed flows. Surfaced as `FlowOutcome.Error` |
+| `cancel_reason` | (`9.sql`) Reason string passed to `Cancel(flowKey, reason)`. Written to every flow in the cancellation chain (root + descendants) in the same UPDATE that sets `status='cancelled'`, gated by the same WHERE-clause for first-cancel-wins semantics. `''` when no reason was given or for non-cancelled flows. Surfaced as `FlowOutcome.CancelReason` |
+| `tenant_id` | (`9.sql`) Tenant identifier read from `frame.Of(ctx).Tenant()` at flow creation. `0` is the no-tenant sentinel (returned by `Tenant()` when no actor is on the frame or the actor has no `tid`/`tenant` claim). Inherited by subgraph (worker context has no frame) and Fork (matches Fork's actor_claims inheritance). `Continue` and `CreateTask` read from the caller's frame like `Create`. Immutable after creation. Filterable via `Query.TenantID` for operator multi-tenant queries. |
 
 #### `microbus_steps`
 
@@ -586,7 +970,6 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 
 3. **Partial indexes for PostgreSQL.** Where only non-terminal statuses are queried through an index (e.g., `pollPendingSteps`), PostgreSQL uses a partial index filtered to `status IN ('pending', 'running')`. This keeps the index tiny regardless of table size. MySQL and SQL Server use the full composite index since they lack partial index support.
 
-4. **PK-ordered scans for bulk operations.** The `PurgeExpiredFlows` ticker walks the `microbus_flows` table by primary key in ascending order, using `created_at` as a cursor-stop heuristic (since PK order correlates with creation time). This avoids full table scans and unindexed column filters.
 
 ### Index Catalog
 
@@ -614,45 +997,67 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 
 ### Data Retention
 
-The `PurgeExpiredFlows` ticker runs every 24 hours and deletes terminated flows older than `RetentionDays` (default 0 = disabled). It uses a hybrid approach:
-- Scans `microbus_flows` by PK in batches of 1000 (PK-ordered, no full scan)
-- Stops when `created_at` exceeds the retention cutoff (PK-order heuristic). This assumes auto-increment IDs correlate with creation time, which holds per shard since each shard has an independent auto-increment sequence. Flows are never migrated between shards.
-- Protects recently-active flows by also checking `updated_at` (a flow resumed yesterday won't be purged even if created months ago)
-- Deletes steps first (by `flow_id` index), then flows
+The foreman does not auto-purge flows. Workflows are durable and every flow row remains
+potentially-resurrectable: an `interrupted` flow via `Resume`, a `completed` flow via `Continue`
+into the same thread, a `failed`/`cancelled` flow via `Fork` from a checkpoint. Killing rows on a
+fixed timer would silently break any of these patterns, and no single retention policy fits both a
+1-hour batch job and a 30-day human-approval workflow.
+
+For operator-driven retention the foreman exposes two endpoints:
+
+- **`Delete(flowKey)`** removes one flow and its steps in a transaction. Refuses to act on a
+  running flow (409). Subgraph children, forked flows, and thread descendants are left dangling
+  (their parent references become stale rows); this matches the framework's stance that
+  `Continue`/`Fork` lineage is best-effort and not guaranteed across operator-driven retention.
+- **`Purge(Query)`** bulk-deletes flows matching the query, except running. Same `Query` shape
+  as `List` (Status, WorkflowName, ThreadKey, TaskName, OlderThan, Shard, Limit). Capped at
+  10000 flows per call; returns the count of flows actually deleted. The non-running guard is
+  enforced inside the DELETE so a flow that transitions to running between SELECT and DELETE
+  cannot be deleted out from under its workers.
+
+Both endpoints share `queryClauses` with `List` so the filter semantics are identical across
+read and write paths. The typical operator pattern is `Purge(Query{Status: "completed",
+OlderThan: 30*24*time.Hour})` on a cron. DB-side partitioning/TTL remains an alternative for
+high-volume environments.
+
+The `Query.TaskName` filter joins `microbus_steps` on `step_id` and matches the current step's
+`task_name`. Useful for "list/purge flows blocked on tripped-breaker task X." Excludes
+fan-out flows (`step_id=0`) since they have no single current task.
+
+The `Query.OlderThan` and `Query.NewerThan` filters are database-anchored: they become
+`f.updated_at < DATE_ADD_MILLIS(NOW_UTC(), -ms)` and `f.updated_at >= DATE_ADD_MILLIS(NOW_UTC(),
+-ms)` respectively. No client/database clock-skew reasoning. They compose: `OlderThan: 1*h,
+NewerThan: 24*h` yields "updated between 1 hour and 24 hours ago."
+
+The `Query.TenantID` filter narrows to a single tenant. Useful for multi-tenant operator views.
+Tenant 0 (no-tenant) is the framework's sentinel; the filter treats 0 as "no filter," so operators
+wanting only the no-tenant flows have to grep client-side. In practice, tenant=0 flows are background
+or unauthenticated operations and rarely the target of a tenant query.
 
 ## Concurrency and Crash Recovery
 
 The foreman uses SQL transactions for multi-statement operations and `lease_expires` for crash recovery.
 
-### Worker context: `rootCtx`, not `OnStartup`'s ctx and not `Lifetime()`
+### Worker context: `svc.Lifetime()`
 
-All worker, timer, and refiller database operations run on `svc.rootCtx`, a foreman-owned context created
-(`context.WithCancel(context.Background())`) at the top of `OnStartup` and cancelled in `OnShutdown`
-*after* `svc.workers.Wait()` has drained the pool. It is deliberately **not**:
+Workers, the timer goroutine, and the refiller all share `svc.Lifetime()` as their root context.
+The connector creates the lifetime ctx before `OnStartup` runs and cancels it only *after*
+`OnShutdown` returns and the soft drain elapses (see `connector/CLAUDE.md` "Shutdown's ordering,
+drain budget, and the dlru offload window"). The foreman drains its workers, timer, and refiller
+inside `OnShutdown` before returning, so by the time the connector cancels the lifetime ctx every
+DB operation has already committed. In-flight writes are never interrupted by ctx cancellation.
 
-- `OnStartup`'s `ctx` argument - that ctx is request/startup-scoped; if it were cancelled while a
-  flow was mid-flight, a fan-in/step/cohort write would abort and strand the flow in `running`
-  (no fan-in fires, `Await` waits forever). This was the suspected cause of an intermittent
-  "deadlock" report; the real culprit turned out to be a too-short synchronous `Run`/`Await`
-  request timeout, but the ctx coupling was a latent hazard regardless and is now removed.
-- `svc.Lifetime()` - per `connector/CLAUDE.md`, `lifetimeCtx` is created *between* `OnStartup`
-  returning and control-sub activation, so during `OnStartup` `svc.Lifetime()` is still the
-  construction-time `context.Background()`. Capturing it there would not give the real
-  cancellable lifetime ctx.
+The only place a *cancellable*, time-bounded ctx is used is the outbound task HTTP call: `executeTask`
+derives `taskCtx` from `svc.Lifetime()` with the step's `time_budget_ms`. That's `pub.Timeout` on the
+dispatch, not a guard on the foreman's own DB writes.
 
-The task call is the only place a *cancellable* context is used: `executeTask` receives a
-`taskCtx` derived from `rootCtx` bounded by the step's time budget. So: worker DB ops on the
-foreman lifetime context, a timing-out context only for the outbound task HTTP call. Worker
-termination is driven by `cache.close()` + `svc.workers.Wait()`, not ctx cancellation, so
-cancelling `rootCtx` only after every pool has drained never interrupts an in-flight write.
-
-### Shutdown ordering: drain workers, then timer, then refiller, then cancel
+### Shutdown ordering: drain workers, then timer, then refiller
 
 `shortenNextPoll` signals the timer via `select { case svc.wakeTimer <- struct{}{}: default: }`. The
 `default` only guards against a *full* channel - a send on a *closed* channel still panics, even inside a
 `select`. The only callers of `shortenNextPoll` are worker goroutines (`processStep` and its retry/sleep/
 poison paths); `timerLoop` only ever receives from `wakeTimer`. So `OnShutdown` drains the worker pool
-before closing `wakeTimer`, then stops the refiller, then cancels `rootCtx`:
+before closing `wakeTimer`, then stops the refiller, and returns:
 
 ```
 cache.close()        // unblocks blocked candidate pops independently of any channel
@@ -661,7 +1066,7 @@ close(wakeTimer)     // timerLoop's only termination signal
 timerWorker.Wait()   // timerLoop fully exited (last requestRefill caller gone)
 close(refillStop)    // refiller's termination signal
 refiller.Wait()      // refiller fully exited; its DB ops complete
-rootCancel()         // all worker/timer/refiller DB writes already complete
+// OnShutdown returns; connector cancels svc.Lifetime() after the soft drain.
 ```
 
 The timer and refiller each live on their own WaitGroup (`timerWorker`, `refiller`), separate from the
@@ -681,7 +1086,7 @@ code closed `wakeTimer` before `workers.Wait()`, so a worker mid-`processStep` (
 
 ### Lease-Based Crash Recovery
 
-Transactions don't help when a worker crashes during task execution (an HTTP call outside any transaction). The `lease_expires` column on the microbus_steps table serves as a crash-recovery lease. When a worker reserves a step for execution, it sets `lease_expires` to `NOW + time_budget + leaseMargin`. If the worker crashes, the lease eventually expires and `pollPendingSteps` resets the step to `pending` for re-execution.
+Transactions don't help when a worker crashes during task execution (an HTTP call outside any transaction). The `lease_expires` column on the microbus_steps table serves as a crash-recovery lease. When a worker reserves a step for execution, it sets `lease_expires` to `NOW + TimeBudget + leaseMargin` (using the foreman's current in-memory config, see "Time Budgets" above). If the worker crashes, the lease eventually expires and `pollPendingSteps` resets the step to `pending` for re-execution.
 
 ### Background Recovery
 
@@ -779,20 +1184,47 @@ Transactions don't help when a worker crashes during task execution (an HTTP cal
 
 The foreman supports distributing flows across multiple database shards to scale write throughput and reduce index contention. The `NumShards` config (default `1`) controls the number of shards.
 
+**Shards are 1-indexed.** Valid shard indices are `1..NumShards`; `0` is reserved as a sentinel meaning "no shard / all shards" (used by `Query.Shard` to opt into all-shards mode). The DSN's `%d` substitution, the leading number in flow keys (`{shard}-{flowID}-{token}`), the `Query.Shard` filter, and the `ShardInfo` endpoint's index all use the same 1-based convention. Internally `svc.dbs` is a 0-based Go slice and `svc.shard(n)` translates: it bounds-checks `n >= 1 && n <= len(svc.dbs)` and returns `svc.dbs[n-1]`. Per-call slices indexed by shard (e.g. `succeeded []bool`, `perShard [][]row`) are sized `numShards+1` so they can be accessed directly with 1-based indices, leaving slot 0 unused; this avoids per-access `-1` translation noise in the hot path.
+
 **Shard routing:** External flow IDs encode the shard number: `{shard}-{flowID}-{token}`. Every operation parses the shard from the flow ID and routes to the correct database connection via `svc.shard(n)`.
 
 **Shard affinity:** Subgraph flows and forked flows are created on the same shard as their parent. This avoids cross-shard references during active execution (subgraph completion) and history reconstruction (fork lineage). Only top-level flow creation picks a random shard.
 
 **Polling and purging:** All replicas poll all shards for pending steps and purge expired flows across all shards. The atomic CAS update on step acquisition ensures correctness when multiple replicas race.
 
+**Cross-shard fan-out is always parallel, never sequential.** Any operation that touches every shard builds a per-shard job slice and dispatches via `svc.Parallel(jobs...)`. Sequential `for s := 0; s < numDBShards(); s++` loops are forbidden because total latency would grow linearly with `NumShards`: at 8 shards a remote-DB query that costs 10ms per shard becomes 80ms wall-clock, large enough to push the refiller and the Prometheus scrape past their cadence and to lengthen `processStep` enough that worker pool throughput drops. The parallel shape stays at single-shard latency regardless of shard count, which is the load-bearing property of the sharding design.
+
+**The foreman is not shard-fault-tolerant by design.** Every cross-shard fan-out site fails the whole call on any shard's error. A partial-tolerance attempt was considered and rejected: real outages mostly manifest as hangs, not errors, so the fanned-out call blocks until ctx timeout regardless of how the helper folds results; classifying which errors signal "shard down" vs. transient/data errors is driver-specific and brittle; and a helper that *claims* partial tolerance while only delivering it in a narrow subset of failure modes is worse than no tolerance at all because it lies to operators about the system's resilience.
+
+The five cross-shard fan-out sites (`countTasks`, `pollPendingSteps`, `scanPriorityBand`, `OnObserveStepsPending`, `OnObserveStepsOldestPendingAgeSeconds`) share one helper, `svc.eachShard(ctx, op)` in `database.go`. The op is invoked once per shard with the resolved `*sequel.DB` and the 1-based shard index; any non-nil return fails the whole call via `svc.Parallel`'s first-non-nil semantics. The op's concurrency contract is "write only to slot N of any per-shard accumulator you captured" - disjoint-slot writes are safe without locking; shared aggregates (e.g. `pollPendingSteps`'s `nearestDelay`) need the op's own mutex. New cross-shard fan-out sites should use `eachShard`; sites with per-shard error reporting through their own API surface (`ShardInfo`) call `svc.Parallel` directly because they want every shard's result independently.
+
+Each cross-shard caller retries on its next natural cycle: `pollPendingSteps` on the next timer tick, `scanPriorityBand` on the next refill, the metric observers on the next Prometheus scrape, `countTasks` on the next caller-driven invocation. A transient shard hiccup heals itself within one cycle; a persistent shard outage degrades the whole foreman, loudly. The trade is intentional: the foreman trusts the SQL connection pool to surface unhealthy connections as fast errors and the operator to keep shards reachable. Degraded behavior outside that contract is acceptable as long as it surfaces as operation-level errors in logs and metrics rather than silent data loss.
+
+**`List` uses per-shard pagination, not cross-shard global order.** Each shard returns up to
+`ceil(limit/numShards)` rows ordered by its own `flow_id DESC`; the aggregate is presented
+shard-grouped. Sorting cross-shard by raw `created_at` would compare different SQL servers'
+clocks (NTP drift), and sorting by computed age would fluctuate with per-shard network latency
+to each query, so neither produces a stable order. Sorting by `flow_id` alone is also broken
+because a shard with fewer flows has lower flow_ids than a shard with more - the original code's
+"sort by FlowKey string descending" put shard 2's smallest flow above shard 1's largest. The
+shard-grouped presentation gives up the global newest-first illusion in exchange for
+deterministic order that doesn't wobble between calls; callers needing global newest-first can
+sort client-side using a signal they trust. Pagination uses an opaque cursor: `ListOut.NextCursor`
+encodes each shard's smallest-returned `flow_id` as `s=fid,s=fid,...`, and the next call passes
+it back as `Query.Cursor`. A flow inserted on any shard after a page is returned has a `flow_id`
+strictly higher than that shard's cursor and therefore does not appear on subsequent pages of an
+in-flight pagination - fresh inserts only land on a fresh first page.
+
+`List` is **strict by design**: any shard error fails the whole call, so a silent shard outage can't
+hide as an incomplete result set. The "I need to debug the surviving shards" use case is served by the
+composition of `ShardInfo` + `List(Shard=N)`: the operator calls `ShardInfo` to identify healthy shards
+(it never fails - per-shard errors are reported in the per-shard entry), then `List(Shard=N)` against
+each healthy shard. The per-shard path is the debug escape hatch; keeping the default strict prevents
+silent shard-loss in normal use. Making the default partial-tolerant would only buy a silent-degradation
+hazard that callers couldn't distinguish from a complete result.
+
+
 **Dynamic expansion:** `NumShards` can increase at runtime via `OnChangedNumShards`. New shards are opened, migrated, and immediately available. Shrinking is rejected - old shards drain naturally as their flows complete.
 
 **DSN format:** When `NumShards > 1`, the `SQLDataSourceName` must contain `%d` which is replaced with the shard index (0-based). In testing mode (SQLite), each shard gets a separate in-memory database via a unique test ID suffix.
 
-#### PurgeExpiredFlows
-
-**Write order:** Delete steps (by `flow_id`) → delete flow.
-
-**Partial failure:** If the process crashes after deleting steps but before deleting the flow, the flow remains as an orphan with no steps. The next purge cycle deletes it.
-
-**Verdict:** Self-healing.

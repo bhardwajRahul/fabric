@@ -96,12 +96,11 @@ func (c *Connector) Publish(ctx context.Context, options ...pub.Option) iter.Seq
 	}
 	outboundFrame := frame.Of(req.Header)
 
-	// Copy X-Forwarded headers (set by ingress proxy), baggage, clock shift, actor, and Accept-Language headers
+	// Copy X-Forwarded headers (set by ingress proxy), baggage, actor, and Accept-Language headers
 	for k, vv := range inboundFrame.Header() {
 		if strings.HasPrefix(k, "X-Forwarded-") ||
 			strings.HasPrefix(k, frame.HeaderBaggagePrefix) ||
 			k == "Accept-Language" ||
-			k == frame.HeaderClockShift ||
 			k == frame.HeaderActor {
 			for _, v := range vv {
 				outboundFrame.Header().Add(k, v)

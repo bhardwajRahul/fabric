@@ -58,16 +58,20 @@ func TestConditionalflow_Conditional(t *testing.T) { // MARKER: Conditional
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := conditionalflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -78,7 +82,7 @@ func TestConditionalflow_Conditional(t *testing.T) { // MARKER: Conditional
 		branch, status, err := exec.Conditional(ctx, 80)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			branch, "high",
 		)
 	})
@@ -89,7 +93,7 @@ func TestConditionalflow_Conditional(t *testing.T) { // MARKER: Conditional
 		branch, status, err := exec.Conditional(ctx, 20)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			branch, "low",
 		)
 	})
@@ -101,7 +105,7 @@ func TestConditionalflow_Conditional(t *testing.T) { // MARKER: Conditional
 		branch, status, err := exec.Conditional(ctx, 50)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			branch, "high",
 		)
 	})

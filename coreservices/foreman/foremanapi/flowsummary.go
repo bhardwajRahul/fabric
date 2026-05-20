@@ -16,11 +16,14 @@ limitations under the License.
 
 package foremanapi
 
-// FlowSummary is a summary of a flow for listing purposes.
+// FlowSummary is a summary of a flow for listing purposes. The heavy side-channel fields
+// (State, InterruptPayload) are omitted; callers needing them follow up with Snapshot.
 type FlowSummary struct {
 	FlowKey      string `json:"flowKey,omitzero"`
 	ThreadKey    string `json:"threadKey,omitzero"`
 	WorkflowName string `json:"workflowName,omitzero"`
 	Status       string `json:"status,omitzero"`
 	TaskName     string `json:"taskName,omitzero"`
+	Error        string `json:"error,omitzero"`
+	CancelReason string `json:"cancelReason,omitzero"`
 }

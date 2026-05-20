@@ -46,12 +46,9 @@ This is the framework's "the actor header is for JWTs only" boundary - anything 
 
 `Tenant()` looks for `tid` first, then `tenant`. The fallback exists for compatibility across identity providers that use one name or the other. If your access-token issuer emits a different field, parse the actor yourself and read the field directly - `Tenant()` is a convenience for the two known conventions, not a general API.
 
-### Wire formats are not all the same
+### `Microbus-Time-Budget` wire format
 
-Two duration headers, two different wire formats:
-
-- **`Microbus-Time-Budget`** is stored as a Go duration string (`budget.String()`, e.g. `"5ms"`, `"1h30m"`), parsed via `time.ParseDuration` on read. The accessor still accepts a bare integer for backward compatibility - older frames serialized as a millisecond count round-trip cleanly. Sub-millisecond `SetTimeBudget(0)` (or any non-positive duration) deletes the header. Each hop reads the budget, subtracts elapsed network time, and writes a fresh `String()` form; the parse cost per hop is negligible compared to the cost of the actual network round-trip the budget is gating.
-- **`Microbus-Clock-Shift`** is stored as a Go duration string (`shift.String()`, e.g. `"1h30m"`), read with `time.ParseDuration`. Clock shift is rarely modified in flight, so the human-readable form is fine.
+**`Microbus-Time-Budget`** is stored as a Go duration string (`budget.String()`, e.g. `"5ms"`, `"1h30m"`), parsed via `time.ParseDuration` on read. The accessor still accepts a bare integer for backward compatibility - older frames serialized as a millisecond count round-trip cleanly. Sub-millisecond `SetTimeBudget(0)` (or any non-positive duration) deletes the header. Each hop reads the budget, subtracts elapsed network time, and writes a fresh `String()` form; the parse cost per hop is negligible compared to the cost of the actual network round-trip the budget is gating.
 
 ### `Fragment()` returns `(1, 1)` on any parse failure
 

@@ -139,3 +139,13 @@ func (svc *Service) AltHostFn(ctx context.Context) (err error) { // MARKER: AltH
 func (svc *Service) OnSomething(ctx context.Context, detail string) (ok bool, err error) {
 	return true, nil
 }
+
+// OnObserveQueueDepth records the gauge just-in-time.
+func (svc *Service) OnObserveQueueDepth(ctx context.Context) (err error) { // MARKER: QueueDepth
+	return svc.RecordQueueDepth(ctx, 0)
+}
+
+// OnChangedThreshold is the callback fired when the Threshold config changes.
+func (svc *Service) OnChangedThreshold(ctx context.Context) (err error) { // MARKER: Threshold
+	return nil
+}

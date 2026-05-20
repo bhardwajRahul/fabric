@@ -270,7 +270,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			usage.Turns, 1,
 			usage.OutputTokens, 5,
 		)
@@ -315,7 +315,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, toolSchema, nil)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			usage.Turns, 2,
 		)
 		// After two turns (with a fan-in round in between), the final assistant reply lands.

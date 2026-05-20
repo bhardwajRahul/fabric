@@ -282,27 +282,31 @@ The Foreman core service orchestrates workflow execution. Use `foremanapi.NewCli
 ```go
 import "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 
-// Run a workflow synchronously (create + start + await).
-// The final argument is *workflow.FlowOptions; pass nil for defaults.
-status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
+// Run a workflow synchronously (create + start + await). Returns a *workflow.FlowOutcome with
+// Status, State, plus the populated side-channel for terminal/parked statuses (Error when
+// Status="failed", InterruptPayload when Status="interrupted", CancelReason when Status="cancelled").
+// The Go-level err is for transport/foreman/timeout failures only; a workflow that fails surfaces
+// as outcome.Status == "failed" with outcome.Error populated.
+outcome, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
 
 // Fine-grained control
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
 err = foremanapi.NewClient(svc).Start(ctx, flowID)
-status, state, err := foremanapi.NewClient(svc).Await(ctx, flowID)
+outcome, err = foremanapi.NewClient(svc).Await(ctx, flowID)
 
 // Inspect a running flow
-status, state, err := foremanapi.NewClient(svc).Snapshot(ctx, flowID)
+outcome, err := foremanapi.NewClient(svc).Snapshot(ctx, flowID)
 
-// Cancel a flow
-err = foremanapi.NewClient(svc).Cancel(ctx, flowID)
+// Cancel a flow; the reason is recorded on every flow in the chain as outcome.CancelReason.
+err = foremanapi.NewClient(svc).Cancel(ctx, flowID, "user requested")
 
 // Resume an interrupted flow with new data
 err = foremanapi.NewClient(svc).Resume(ctx, flowID, resumeData)
 
 // Continue a thread with new input (multi-turn pattern)
-// The threadKey can be any flowKey belonging to the thread; Continue finds the latest completed flow
-newFlowID, err := foremanapi.NewClient(svc).Continue(ctx, threadKey, additionalState)
+// The threadKey can be any flowKey belonging to the thread; Continue finds the latest completed flow.
+// The final argument is *workflow.FlowOptions; pass nil for defaults.
+newFlowID, err := foremanapi.NewClient(svc).Continue(ctx, threadKey, additionalState, nil)
 err = foremanapi.NewClient(svc).Start(ctx, newFlowID)
 ```
 

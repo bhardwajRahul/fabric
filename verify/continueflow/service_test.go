@@ -54,19 +54,48 @@ var (
 	_ continueflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestContinueflow_Counting(t *testing.T) { // MARKER: Counting
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -83,16 +112,18 @@ func TestContinueflow_Counting(t *testing.T) { // MARKER: Counting
 		if !assert.NoError(err) {
 			return
 		}
-		status, state, err := foremanClient.Await(ctx, flowKey1)
+		outcome, err := foremanClient.Await(ctx, flowKey1)
+
+		status, state := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		// counter advanced 0 -> 1
 		assert.Expect(state["counter"], 1.0) // JSON unmarshal turns ints into float64
 
 		// Turn 2: continue from the thread, no additional state.
-		flowKey2, err := foremanClient.Continue(ctx, flowKey1, map[string]any{})
+		flowKey2, err := foremanClient.Continue(ctx, flowKey1, map[string]any{}, nil)
 		if !assert.NoError(err) {
 			return
 		}
@@ -100,11 +131,13 @@ func TestContinueflow_Counting(t *testing.T) { // MARKER: Counting
 		if !assert.NoError(err) {
 			return
 		}
-		status, state, err = foremanClient.Await(ctx, flowKey2)
+		outcome, err = foremanClient.Await(ctx, flowKey2)
+
+		status, state = outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		// counter advanced 1 -> 2 by carrying forward across the Continue boundary
 		assert.Expect(state["counter"], 2.0)
 	})

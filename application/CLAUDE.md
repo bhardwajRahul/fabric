@@ -18,7 +18,7 @@ Shutdown reverses this: groups shut down in reverse order, services within each 
 
 The retry exists for the case where one service is required to be up before another can start. The classic motivator was an anti-pattern in which microservices declared SQL foreign keys against another service's tables, so service B's startup would fail until service A had created its schema. The framework's preferred design is the opposite: a service should start regardless of its peers and fail at runtime when a missing dependency is actually needed, not at startup. The retry behavior is a safety net for the older patterns and for genuine boot-order races (NATS not yet up, etc.), not a feature to lean on.
 
-`Run` allots 20 seconds for the entire `Startup`. `RunInTest` allots 8 seconds. So an unhealthy service in tests will hold up the whole suite for 8s before failing.
+`Run` allots 120 seconds for `Startup` and 24 seconds for `Shutdown` by default (overridable via `MICROBUS_STARTUP_TIME_BUDGET` / `MICROBUS_SHUTDOWN_TIME_BUDGET`). `RunInTest` allots 8 seconds for each. So an unhealthy service in tests will hold up the whole suite for 8s before failing.
 
 ### `RunInTest` overrides plane and deployment *at run time*
 
@@ -33,9 +33,9 @@ The override happens before `Startup`, so individual `s.SetPlane(...)` calls a t
 
 `t.Cleanup(shutdown)` is registered *before* `Startup` is called. If startup fails halfway through (some services started, others didn't), the cleanup still runs and `Shutdown` walks the groups in reverse, shutting down whatever managed to come up. `Run` has no equivalent - a failed `Startup` from `Run` leaves any started services running, and the caller is expected to handle that or just exit the process.
 
-### `RunInTest`'s 8s budget vs `Run`'s 20s
+### `RunInTest`'s 8s budget vs `Run`'s 120s/24s
 
-`RunInTest` uses 8-second budgets for both startup and shutdown; `Run` uses 20s. The shorter budget is feasible because tests run on the in-process short-circuit transport (no NATS round-trip on co-located calls) and there are no cold-start dependencies to wait for. The looser 20s in `Run` is sized to absorb the retry-until-deadline behavior in production cold boots.
+`RunInTest` uses 8-second budgets for both startup and shutdown; `Run` defaults to 120s startup and 24s shutdown. The shorter test budget is feasible because tests run on the in-process short-circuit transport (no NATS round-trip on co-located calls) and there are no cold-start dependencies to wait for. `Run`'s 120s startup absorbs production cold-boot work (cache warm, ML model load, slow dependency wait); the 24s shutdown sits below the k8s 30s default `terminationGracePeriodSeconds` so the container exits cleanly before SIGKILL.
 
 ### Plane / deployment are app-level, hostname is service-level
 

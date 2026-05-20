@@ -21,6 +21,7 @@ package foreman
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
@@ -32,30 +33,36 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockCreate                           func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                      // MARKER: Create
-	mockStart                            func(ctx context.Context, flowKey string) (err error)                                                                                         // MARKER: Start
-	mockStartNotify                      func(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                                  // MARKER: StartNotify
-	mockSnapshot                         func(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                                                    // MARKER: Snapshot
-	mockResume                           func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                         // MARKER: Resume
-	mockFork                             func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                                  // MARKER: Fork
-	mockCancel                           func(ctx context.Context, flowKey string) (err error)                                                                                         // MARKER: Cancel
-	mockHistory                          func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                            // MARKER: History
-	mockRetry                            func(ctx context.Context, flowKey string) (err error)                                                                                         // MARKER: Retry
-	mockList                             func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)                                                 // MARKER: List
-	mockCreateTask                       func(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                                                      // MARKER: CreateTask
-	mockEnqueue                          func(ctx context.Context, shard int, stepID int) (err error)                                                                                  // MARKER: Enqueue
-	mockAwait                            func(ctx context.Context, flowKey string) (status string, state map[string]any, err error)                                                    // MARKER: Await
-	mockNotifyStatusChange               func(ctx context.Context, flowKey string, status string) (err error)                                                                          // MARKER: NotifyStatusChange
-	mockBreakBefore                      func(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                                          // MARKER: BreakBefore
-	mockRun                              func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error) // MARKER: Run
-	mockContinue                         func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                               // MARKER: Continue
-	mockHistoryMermaid                   func(w http.ResponseWriter, r *http.Request) (err error)                                                                                      // MARKER: HistoryMermaid
-	mockPurgeExpiredFlows                func(ctx context.Context) (err error)                                                                                                         // MARKER: PurgeExpiredFlows
-	mockOnObserveQueueDepth              func(ctx context.Context) (err error)                                                                                                         // MARKER: QueueDepth
-	mockOnObservePendingStepsByPriority  func(ctx context.Context) (err error)                                                                                                         // MARKER: PendingStepsByPriority
-	mockOnObserveOldestPendingAgeSeconds func(ctx context.Context) (err error)                                                                                                         // MARKER: OldestPendingAgeSeconds
-	mockOnObserveDistinctFairnessKeys    func(ctx context.Context) (err error)                                                                                                         // MARKER: DistinctFairnessKeys
-	mockOnChangedNumShards               func(ctx context.Context) (err error)                                                                                                         // MARKER: NumShards
+	mockCreate                                func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                // MARKER: Create
+	mockStart                                 func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Start
+	mockStartNotify                           func(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                            // MARKER: StartNotify
+	mockSnapshot                              func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                    // MARKER: Snapshot
+	mockResume                                func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                   // MARKER: Resume
+	mockFork                                  func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error)                // MARKER: Fork
+	mockCancel                                func(ctx context.Context, flowKey string, reason string) (err error)                                                                    // MARKER: Cancel
+	mockHistory                               func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                      // MARKER: History
+	mockRetry                                 func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Retry
+	mockList                                  func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                        // MARKER: List
+	mockDelete                                func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Delete
+	mockPurge                                 func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                              // MARKER: Purge
+	mockShardInfo                             func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                 // MARKER: ShardInfo
+	mockCreateTask                            func(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                                                // MARKER: CreateTask
+	mockEnqueue                               func(ctx context.Context, shard int, stepID int) (err error)                                                                            // MARKER: Enqueue
+	mockAwait                                 func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                    // MARKER: Await
+	mockNotifyStatusChange                    func(ctx context.Context, flowKey string, status string) (err error)                                                                    // MARKER: NotifyStatusChange
+	mockBreakBefore                           func(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                                    // MARKER: BreakBefore
+	mockRun                                   func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
+	mockContinue                              func(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)             // MARKER: Continue
+	mockHistoryMermaid                        func(w http.ResponseWriter, r *http.Request) (err error)                                                                                // MARKER: HistoryMermaid
+	mockSyncValve                             func(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error)                                                      // MARKER: SyncValve
+	mockTripBreaker                           func(ctx context.Context, taskName string) (err error)                                                                                  // MARKER: TripBreaker
+	mockOnObserveStepsQueueDepth              func(ctx context.Context) (err error)                                                                                                   // MARKER: StepsQueueDepth
+	mockOnObserveStepsPending                 func(ctx context.Context) (err error)                                                                                                   // MARKER: StepsPending
+	mockOnObserveStepsOldestPendingAgeSeconds func(ctx context.Context) (err error)                                                                                                   // MARKER: StepsOldestPendingAgeSeconds
+	mockOnObserveTaskRateLimit                func(ctx context.Context) (err error)                                                                                                   // MARKER: TaskRateLimit
+	mockOnObserveTaskConcurrencyRunning       func(ctx context.Context) (err error)                                                                                                   // MARKER: TaskConcurrencyRunning
+	mockOnObserveTaskBreakerState             func(ctx context.Context) (err error)                                                                                                   // MARKER: TaskBreakerState
+	mockOnChangedNumShards                    func(ctx context.Context) (err error)                                                                                                   // MARKER: NumShards
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -122,17 +129,17 @@ func (svc *Mock) StartNotify(ctx context.Context, flowKey string, notifyHostname
 }
 
 // MockSnapshot sets up a mock handler for Snapshot.
-func (svc *Mock) MockSnapshot(handler func(ctx context.Context, flowKey string) (status string, state map[string]any, err error)) *Mock { // MARKER: Snapshot
+func (svc *Mock) MockSnapshot(handler func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)) *Mock { // MARKER: Snapshot
 	svc.mockSnapshot = handler
 	return svc
 }
 
 // Snapshot executes the mock handler.
-func (svc *Mock) Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Snapshot
+func (svc *Mock) Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Snapshot
 	if svc.mockSnapshot != nil {
-		status, state, err = svc.mockSnapshot(ctx, flowKey)
+		outcome, err = svc.mockSnapshot(ctx, flowKey)
 	}
-	return status, state, errors.Trace(err)
+	return outcome, errors.Trace(err)
 }
 
 // MockResume sets up a mock handler for Resume.
@@ -150,29 +157,29 @@ func (svc *Mock) Resume(ctx context.Context, flowKey string, resumeData any) (er
 }
 
 // MockFork sets up a mock handler for Fork.
-func (svc *Mock) MockFork(handler func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)) *Mock { // MARKER: Fork
+func (svc *Mock) MockFork(handler func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error)) *Mock { // MARKER: Fork
 	svc.mockFork = handler
 	return svc
 }
 
 // Fork executes the mock handler.
-func (svc *Mock) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
+func (svc *Mock) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Fork
 	if svc.mockFork != nil {
-		newFlowKey, err = svc.mockFork(ctx, stepKey, stateOverrides)
+		newFlowKey, err = svc.mockFork(ctx, stepKey, stateOverrides, opts)
 	}
 	return newFlowKey, errors.Trace(err)
 }
 
 // MockCancel sets up a mock handler for Cancel.
-func (svc *Mock) MockCancel(handler func(ctx context.Context, flowKey string) (err error)) *Mock { // MARKER: Cancel
+func (svc *Mock) MockCancel(handler func(ctx context.Context, flowKey string, reason string) (err error)) *Mock { // MARKER: Cancel
 	svc.mockCancel = handler
 	return svc
 }
 
 // Cancel executes the mock handler.
-func (svc *Mock) Cancel(ctx context.Context, flowKey string) (err error) { // MARKER: Cancel
+func (svc *Mock) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
 	if svc.mockCancel != nil {
-		err = svc.mockCancel(ctx, flowKey)
+		err = svc.mockCancel(ctx, flowKey, reason)
 	}
 	return errors.Trace(err)
 }
@@ -206,17 +213,59 @@ func (svc *Mock) Retry(ctx context.Context, flowKey string) (err error) { // MAR
 }
 
 // MockList sets up a mock handler for List.
-func (svc *Mock) MockList(handler func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error)) *Mock { // MARKER: List
+func (svc *Mock) MockList(handler func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)) *Mock { // MARKER: List
 	svc.mockList = handler
 	return svc
 }
 
 // List executes the mock handler.
-func (svc *Mock) List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error) { // MARKER: List
+func (svc *Mock) List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error) { // MARKER: List
 	if svc.mockList != nil {
-		flows, err = svc.mockList(ctx, query)
+		flows, nextCursor, err = svc.mockList(ctx, query)
 	}
-	return flows, errors.Trace(err)
+	return flows, nextCursor, errors.Trace(err)
+}
+
+// MockDelete sets up a mock handler for Delete.
+func (svc *Mock) MockDelete(handler func(ctx context.Context, flowKey string) (err error)) *Mock { // MARKER: Delete
+	svc.mockDelete = handler
+	return svc
+}
+
+// Delete executes the mock handler.
+func (svc *Mock) Delete(ctx context.Context, flowKey string) (err error) { // MARKER: Delete
+	if svc.mockDelete != nil {
+		err = svc.mockDelete(ctx, flowKey)
+	}
+	return errors.Trace(err)
+}
+
+// MockPurge sets up a mock handler for Purge.
+func (svc *Mock) MockPurge(handler func(ctx context.Context, query foremanapi.Query) (deleted int, err error)) *Mock { // MARKER: Purge
+	svc.mockPurge = handler
+	return svc
+}
+
+// Purge executes the mock handler.
+func (svc *Mock) Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error) { // MARKER: Purge
+	if svc.mockPurge != nil {
+		deleted, err = svc.mockPurge(ctx, query)
+	}
+	return deleted, errors.Trace(err)
+}
+
+// MockShardInfo sets up a mock handler for ShardInfo.
+func (svc *Mock) MockShardInfo(handler func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)) *Mock { // MARKER: ShardInfo
+	svc.mockShardInfo = handler
+	return svc
+}
+
+// ShardInfo executes the mock handler.
+func (svc *Mock) ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error) { // MARKER: ShardInfo
+	if svc.mockShardInfo != nil {
+		shards, err = svc.mockShardInfo(ctx)
+	}
+	return shards, errors.Trace(err)
 }
 
 // MockCreateTask sets up a mock handler for CreateTask.
@@ -248,17 +297,17 @@ func (svc *Mock) Enqueue(ctx context.Context, shard int, stepID int) (err error)
 }
 
 // MockAwait sets up a mock handler for Await.
-func (svc *Mock) MockAwait(handler func(ctx context.Context, flowKey string) (status string, state map[string]any, err error)) *Mock { // MARKER: Await
+func (svc *Mock) MockAwait(handler func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)) *Mock { // MARKER: Await
 	svc.mockAwait = handler
 	return svc
 }
 
 // Await executes the mock handler.
-func (svc *Mock) Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Await
+func (svc *Mock) Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Await
 	if svc.mockAwait != nil {
-		status, state, err = svc.mockAwait(ctx, flowKey)
+		outcome, err = svc.mockAwait(ctx, flowKey)
 	}
-	return status, state, errors.Trace(err)
+	return outcome, errors.Trace(err)
 }
 
 // MockNotifyStatusChange sets up a mock handler for NotifyStatusChange.
@@ -290,29 +339,29 @@ func (svc *Mock) BreakBefore(ctx context.Context, flowKey string, taskName strin
 }
 
 // MockRun sets up a mock handler for Run.
-func (svc *Mock) MockRun(handler func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error)) *Mock { // MARKER: Run
+func (svc *Mock) MockRun(handler func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)) *Mock { // MARKER: Run
 	svc.mockRun = handler
 	return svc
 }
 
 // Run executes the mock handler.
-func (svc *Mock) Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error) { // MARKER: Run
+func (svc *Mock) Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
 	if svc.mockRun != nil {
-		status, state, err = svc.mockRun(ctx, workflowName, initialState, opts)
+		outcome, err = svc.mockRun(ctx, workflowName, initialState, opts)
 	}
-	return status, state, errors.Trace(err)
+	return outcome, errors.Trace(err)
 }
 
 // MockContinue sets up a mock handler for Continue.
-func (svc *Mock) MockContinue(handler func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)) *Mock { // MARKER: Continue
+func (svc *Mock) MockContinue(handler func(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)) *Mock { // MARKER: Continue
 	svc.mockContinue = handler
 	return svc
 }
 
 // Continue executes the mock handler.
-func (svc *Mock) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
+func (svc *Mock) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Continue
 	if svc.mockContinue != nil {
-		newFlowKey, err = svc.mockContinue(ctx, threadKey, additionalState)
+		newFlowKey, err = svc.mockContinue(ctx, threadKey, additionalState, opts)
 	}
 	return newFlowKey, errors.Trace(err)
 }
@@ -331,72 +380,114 @@ func (svc *Mock) HistoryMermaid(w http.ResponseWriter, r *http.Request) (err err
 	return errors.Trace(err)
 }
 
-// MockPurgeExpiredFlows sets up a mock handler for PurgeExpiredFlows.
-func (svc *Mock) MockPurgeExpiredFlows(handler func(ctx context.Context) (err error)) *Mock { // MARKER: PurgeExpiredFlows
-	svc.mockPurgeExpiredFlows = handler
+// MockSyncValve sets up a mock handler for SyncValve.
+func (svc *Mock) MockSyncValve(handler func(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error)) *Mock { // MARKER: SyncValve
+	svc.mockSyncValve = handler
 	return svc
 }
 
-// PurgeExpiredFlows executes the mock handler.
-func (svc *Mock) PurgeExpiredFlows(ctx context.Context) (err error) { // MARKER: PurgeExpiredFlows
-	if svc.mockPurgeExpiredFlows != nil {
-		err = svc.mockPurgeExpiredFlows(ctx)
+// SyncValve executes the mock handler.
+func (svc *Mock) SyncValve(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error) { // MARKER: SyncValve
+	if svc.mockSyncValve != nil {
+		err = svc.mockSyncValve(ctx, taskName, wCong, tCong)
 	}
 	return errors.Trace(err)
 }
 
-// MockOnObserveQueueDepth sets up a mock handler for OnObserveQueueDepth.
-func (svc *Mock) MockOnObserveQueueDepth(handler func(ctx context.Context) (err error)) *Mock { // MARKER: QueueDepth
-	svc.mockOnObserveQueueDepth = handler
+// MockTripBreaker sets up a mock handler for TripBreaker.
+func (svc *Mock) MockTripBreaker(handler func(ctx context.Context, taskName string) (err error)) *Mock { // MARKER: TripBreaker
+	svc.mockTripBreaker = handler
 	return svc
 }
 
-// OnObserveQueueDepth executes the mock handler.
-func (svc *Mock) OnObserveQueueDepth(ctx context.Context) (err error) { // MARKER: QueueDepth
-	if svc.mockOnObserveQueueDepth != nil {
-		err = svc.mockOnObserveQueueDepth(ctx)
+// TripBreaker executes the mock handler.
+func (svc *Mock) TripBreaker(ctx context.Context, taskName string) (err error) { // MARKER: TripBreaker
+	if svc.mockTripBreaker != nil {
+		err = svc.mockTripBreaker(ctx, taskName)
 	}
 	return errors.Trace(err)
 }
 
-// MockOnObservePendingStepsByPriority sets up a mock handler for OnObservePendingStepsByPriority.
-func (svc *Mock) MockOnObservePendingStepsByPriority(handler func(ctx context.Context) (err error)) *Mock { // MARKER: PendingStepsByPriority
-	svc.mockOnObservePendingStepsByPriority = handler
+// MockOnObserveStepsQueueDepth sets up a mock handler for OnObserveStepsQueueDepth.
+func (svc *Mock) MockOnObserveStepsQueueDepth(handler func(ctx context.Context) (err error)) *Mock { // MARKER: StepsQueueDepth
+	svc.mockOnObserveStepsQueueDepth = handler
 	return svc
 }
 
-// OnObservePendingStepsByPriority executes the mock handler.
-func (svc *Mock) OnObservePendingStepsByPriority(ctx context.Context) (err error) { // MARKER: PendingStepsByPriority
-	if svc.mockOnObservePendingStepsByPriority != nil {
-		err = svc.mockOnObservePendingStepsByPriority(ctx)
+// OnObserveStepsQueueDepth executes the mock handler.
+func (svc *Mock) OnObserveStepsQueueDepth(ctx context.Context) (err error) { // MARKER: StepsQueueDepth
+	if svc.mockOnObserveStepsQueueDepth != nil {
+		err = svc.mockOnObserveStepsQueueDepth(ctx)
 	}
 	return errors.Trace(err)
 }
 
-// MockOnObserveOldestPendingAgeSeconds sets up a mock handler for OnObserveOldestPendingAgeSeconds.
-func (svc *Mock) MockOnObserveOldestPendingAgeSeconds(handler func(ctx context.Context) (err error)) *Mock { // MARKER: OldestPendingAgeSeconds
-	svc.mockOnObserveOldestPendingAgeSeconds = handler
+// MockOnObserveStepsPending sets up a mock handler for OnObserveStepsPending.
+func (svc *Mock) MockOnObserveStepsPending(handler func(ctx context.Context) (err error)) *Mock { // MARKER: StepsPending
+	svc.mockOnObserveStepsPending = handler
 	return svc
 }
 
-// OnObserveOldestPendingAgeSeconds executes the mock handler.
-func (svc *Mock) OnObserveOldestPendingAgeSeconds(ctx context.Context) (err error) { // MARKER: OldestPendingAgeSeconds
-	if svc.mockOnObserveOldestPendingAgeSeconds != nil {
-		err = svc.mockOnObserveOldestPendingAgeSeconds(ctx)
+// OnObserveStepsPending executes the mock handler.
+func (svc *Mock) OnObserveStepsPending(ctx context.Context) (err error) { // MARKER: StepsPending
+	if svc.mockOnObserveStepsPending != nil {
+		err = svc.mockOnObserveStepsPending(ctx)
 	}
 	return errors.Trace(err)
 }
 
-// MockOnObserveDistinctFairnessKeys sets up a mock handler for OnObserveDistinctFairnessKeys.
-func (svc *Mock) MockOnObserveDistinctFairnessKeys(handler func(ctx context.Context) (err error)) *Mock { // MARKER: DistinctFairnessKeys
-	svc.mockOnObserveDistinctFairnessKeys = handler
+// MockOnObserveStepsOldestPendingAgeSeconds sets up a mock handler for OnObserveStepsOldestPendingAgeSeconds.
+func (svc *Mock) MockOnObserveStepsOldestPendingAgeSeconds(handler func(ctx context.Context) (err error)) *Mock { // MARKER: StepsOldestPendingAgeSeconds
+	svc.mockOnObserveStepsOldestPendingAgeSeconds = handler
 	return svc
 }
 
-// OnObserveDistinctFairnessKeys executes the mock handler.
-func (svc *Mock) OnObserveDistinctFairnessKeys(ctx context.Context) (err error) { // MARKER: DistinctFairnessKeys
-	if svc.mockOnObserveDistinctFairnessKeys != nil {
-		err = svc.mockOnObserveDistinctFairnessKeys(ctx)
+// OnObserveStepsOldestPendingAgeSeconds executes the mock handler.
+func (svc *Mock) OnObserveStepsOldestPendingAgeSeconds(ctx context.Context) (err error) { // MARKER: StepsOldestPendingAgeSeconds
+	if svc.mockOnObserveStepsOldestPendingAgeSeconds != nil {
+		err = svc.mockOnObserveStepsOldestPendingAgeSeconds(ctx)
+	}
+	return errors.Trace(err)
+}
+
+// MockOnObserveTaskRateLimit sets up a mock handler for OnObserveTaskRateLimit.
+func (svc *Mock) MockOnObserveTaskRateLimit(handler func(ctx context.Context) (err error)) *Mock { // MARKER: TaskRateLimit
+	svc.mockOnObserveTaskRateLimit = handler
+	return svc
+}
+
+// OnObserveTaskRateLimit executes the mock handler.
+func (svc *Mock) OnObserveTaskRateLimit(ctx context.Context) (err error) { // MARKER: TaskRateLimit
+	if svc.mockOnObserveTaskRateLimit != nil {
+		err = svc.mockOnObserveTaskRateLimit(ctx)
+	}
+	return errors.Trace(err)
+}
+
+// MockOnObserveTaskConcurrencyRunning sets up a mock handler for OnObserveTaskConcurrencyRunning.
+func (svc *Mock) MockOnObserveTaskConcurrencyRunning(handler func(ctx context.Context) (err error)) *Mock { // MARKER: TaskConcurrencyRunning
+	svc.mockOnObserveTaskConcurrencyRunning = handler
+	return svc
+}
+
+// OnObserveTaskConcurrencyRunning executes the mock handler.
+func (svc *Mock) OnObserveTaskConcurrencyRunning(ctx context.Context) (err error) { // MARKER: TaskConcurrencyRunning
+	if svc.mockOnObserveTaskConcurrencyRunning != nil {
+		err = svc.mockOnObserveTaskConcurrencyRunning(ctx)
+	}
+	return errors.Trace(err)
+}
+
+// MockOnObserveTaskBreakerState sets up a mock handler for OnObserveTaskBreakerState.
+func (svc *Mock) MockOnObserveTaskBreakerState(handler func(ctx context.Context) (err error)) *Mock { // MARKER: TaskBreakerState
+	svc.mockOnObserveTaskBreakerState = handler
+	return svc
+}
+
+// OnObserveTaskBreakerState executes the mock handler.
+func (svc *Mock) OnObserveTaskBreakerState(ctx context.Context) (err error) { // MARKER: TaskBreakerState
+	if svc.mockOnObserveTaskBreakerState != nil {
+		err = svc.mockOnObserveTaskBreakerState(ctx)
 	}
 	return errors.Trace(err)
 }

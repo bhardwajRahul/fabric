@@ -45,7 +45,6 @@ const (
 	HeaderOpCode        = HeaderPrefix + "Op-Code"
 	HeaderQueue         = HeaderPrefix + "Queue"
 	HeaderFragment      = HeaderPrefix + "Fragment"
-	HeaderClockShift    = HeaderPrefix + "Clock-Shift"
 	HeaderLocality      = HeaderPrefix + "Locality"
 	HeaderActor         = HeaderPrefix + "Actor"
 
@@ -368,41 +367,6 @@ func (f Frame) SetFragment(index int, max int) {
 		f.h.Del(HeaderFragment)
 	} else {
 		f.h.Set(HeaderFragment, strconv.Itoa(index)+"/"+strconv.Itoa(max))
-	}
-}
-
-// ClockShift returns the time offset set in the frame.
-// Time offsets are used during testing to offset the clock of a transaction.
-// A positive offset moves the clock into the future.
-// A negative offset moves the clock into the past.
-func (f Frame) ClockShift() time.Duration {
-	s := f.h.Get(HeaderClockShift)
-	if s == "" {
-		return 0
-	}
-	d, _ := time.ParseDuration(s)
-	return d
-}
-
-// SetClockShift sets the clock shift in the frame.
-// A clock shift enables time-coordinated testing across microservices.
-// A positive offset shifts the clock into the future.
-// A negative offset shifts the clock into the past.
-func (f Frame) SetClockShift(shift time.Duration) {
-	if shift == 0 {
-		f.h.Del(HeaderClockShift)
-	} else {
-		f.h.Set(HeaderClockShift, shift.String())
-	}
-}
-
-// IncrementClockShift adds to the clock offset in the frame.
-// A clock shift enables time-coordinated testing across microservices.
-// A positive offset shifts the clock into the future.
-// A negative offset shifts the clock into the past.
-func (f Frame) IncrementClockShift(increment time.Duration) {
-	if increment != 0 {
-		f.SetClockShift(f.ClockShift() + increment)
 	}
 }
 

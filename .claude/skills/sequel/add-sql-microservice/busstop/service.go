@@ -167,10 +167,12 @@ func (svc *Service) openDatabase(ctx context.Context) (err error) {
 		dataSourceName = "file:local.sqlite"
 	}
 	if svc.Deployment() == connector.TESTING {
-		svc.db, err = sequel.OpenTesting(driverName, dataSourceName, svc.Plane())
-	} else {
-		svc.db, err = sequel.Open(driverName, dataSourceName)
+		dataSourceName, err = sequel.CreateTestingDatabase(driverName, dataSourceName, svc.Plane())
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
+	svc.db, err = sequel.OpenSingleton(driverName, dataSourceName)
 	if err != nil {
 		return errors.Trace(err)
 	}

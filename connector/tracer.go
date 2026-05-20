@@ -83,27 +83,28 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 	}
+	if exp == nil {
+		return nil // Disables tracing without overhead
+	}
 
 	var sp sdktrace.SpanProcessor
 	switch c.deployment {
 	case LOCAL, TESTING, LAB:
-		if exp == nil {
-			return nil // Disables tracing without overhead
-		}
 		sp = sdktrace.NewBatchSpanProcessor(exp)
 	default: // PROD
-		if exp == nil {
-			return nil // Disables tracing without overhead
-		}
 		// Trace only explicitly selected transactions
 		c.traceProcessor = newSelectiveProcessor(exp, 8192) // Approx 10MB per microservice
 		sp = c.traceProcessor
+	}
+	namespace := c.Plane()
+	if c.deployment == TESTING {
+		namespace = "testing"
 	}
 	c.traceProvider = sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.ParentBased(newMuffler())),
 		sdktrace.WithSpanProcessor(sp),
 		sdktrace.WithResource(resource.NewSchemaless(
-			attribute.String("service.namespace", c.Plane()),
+			attribute.String("service.namespace", namespace),
 			attribute.String("service.name", c.Hostname()),
 			attribute.Int("service.version", c.Version()),
 			attribute.String("service.instance.id", c.ID()),

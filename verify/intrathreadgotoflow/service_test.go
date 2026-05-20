@@ -58,16 +58,20 @@ func TestIntrathreadgotoflow_IntraThreadGoto(t *testing.T) { // MARKER: IntraThr
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := intrathreadgotoflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -78,7 +82,7 @@ func TestIntrathreadgotoflow_IntraThreadGoto(t *testing.T) { // MARKER: IntraThr
 		final, status, err := exec.IntraThreadGoto(ctx, 3)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			final, "stamped/3",
 		)
 	})

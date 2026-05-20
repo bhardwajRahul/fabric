@@ -63,8 +63,10 @@ func TestDocextractionflow_DocExtraction(t *testing.T) { // MARKER: DocExtractio
 	// parallel tests starves CPU and pushes per-task dispatches past their time budget.
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	// The synchronous Run blocks on a single request whose context bounds Await.
 	// This workflow legitimately runs long (2-5s per chunk across many pages, plus
@@ -73,13 +75,19 @@ func TestDocextractionflow_DocExtraction(t *testing.T) { // MARKER: DocExtractio
 	foremanClient := foremanapi.NewClient(tester).WithOptions(pub.Timeout(5 * time.Minute))
 	exec := docextractionflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// 4 workers. The simulated OCR latency is small (50-150ms/chunk), so wall time
 		// stays well within the test budget at this worker count even on a contended
 		// runner; the count is not load-bearing for correctness.
-		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(4) }),
+		foreman.NewService().Init(func(f *foreman.Service) error {
+			f.SetWorkers(4)
+			f.SetSQLConnectionPool(4)
+			return nil
+		}),
 		tester,
 	)
 	app.RunInTest(t)
@@ -97,7 +105,7 @@ func TestDocextractionflow_DocExtraction(t *testing.T) { // MARKER: DocExtractio
 		docTranscription, pageCount, status, err := exec.DocExtraction(ctx, pdf)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 		)
 		// 5-22 pages, every one transcribed; nested fan-in preserves one line per page.
 		assert.Expect(pageCount >= 5 && pageCount <= 22, true)

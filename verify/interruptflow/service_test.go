@@ -54,19 +54,48 @@ var (
 	_ interruptflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestInterruptflow_Interruptor(t *testing.T) { // MARKER: Interruptor
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -85,11 +114,13 @@ func TestInterruptflow_Interruptor(t *testing.T) { // MARKER: Interruptor
 		}
 
 		// Await for the flow to stop. It should stop at interrupted, not completed.
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusInterrupted)
+		assert.Expect(status, workflow.StatusInterrupted)
 
 		// Resume with the missing userInput. AwaitInput re-runs and falls through.
 		err = foremanClient.Resume(ctx, flowKey, map[string]any{"userInput": "world"})
@@ -98,11 +129,13 @@ func TestInterruptflow_Interruptor(t *testing.T) { // MARKER: Interruptor
 		}
 
 		// Await again. Now the flow should complete and the result should be "Hello, world".
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+		status, state := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		assert.Expect(state["result"], "Hello, world")
 	})
 }

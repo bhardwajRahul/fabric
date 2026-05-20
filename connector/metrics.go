@@ -108,17 +108,21 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 
 	intervalMillis, _ := strconv.Atoi(env.Get("OTEL_METRIC_EXPORT_INTERVAL"))
 	if intervalMillis <= 0 {
-		if c.Deployment() == LOCAL {
+		if c.Deployment() == LOCAL || c.Deployment() == TESTING {
 			intervalMillis = 15000
 		} else {
 			intervalMillis = 60000
 		}
 	}
 
+	namespace := c.Plane()
+	if c.deployment == TESTING {
+		namespace = "testing"
+	}
 	options := []sdkmetric.Option{
 		sdkmetric.WithResource(resource.NewSchemaless(
 			// https://opentelemetry.io/docs/specs/semconv/attributes-registry/service/
-			attribute.String("service.namespace", c.Plane()),
+			attribute.String("service.namespace", namespace),
 			attribute.String("service.name", c.Hostname()),
 			attribute.Int("service.version", c.Version()),
 			attribute.String("service.instance.id", c.ID()),
@@ -239,7 +243,7 @@ func (c *Connector) observeMetricsJustInTime(ctx context.Context) error {
 		return nil
 	}
 
-	uptime := max(c.Now(ctx).Sub(c.startupTime), 0)
+	uptime := max(time.Since(c.startupTime), 0)
 	_ = c.RecordGauge(ctx, "microbus_uptime_duration_seconds", uptime.Seconds())
 	_ = c.RecordGauge(ctx, "microbus_cache_elements", float64(c.distribCache.LocalCache().Len()))
 	_ = c.RecordGauge(ctx, "microbus_cache_memory_bytes", float64(c.distribCache.LocalCache().Weight()))

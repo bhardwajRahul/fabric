@@ -274,6 +274,15 @@ Every call to an endpoint is automatically wrapped with a trace span. The span c
 
 Use `svc.Go(ctx, func)` to launch a goroutine in the context of a microservice. Use `svc.Parallel(func1, func2, ...)` to launch multiple goroutines and wait for all to complete.
 
+For long-lived background work that should run for the whole microservice lifetime (worker pools,
+refillers, model warmers, periodic reconcilers), launch raw goroutines from `OnStartup` passing
+`svc.Lifetime()` as the root context. `svc.Lifetime()` is valid by the time `OnStartup` runs and
+stays valid through `OnShutdown`; the framework cancels it only after `OnShutdown` returns. Track
+your goroutines with a `sync.WaitGroup` and drain them inside `OnShutdown` before returning, so
+in-flight work finishes cleanly before the lifetime ctx is cancelled. Don't capture `OnStartup`'s
+`ctx` argument for this — it's bounded by the startup time budget and will be cancelled out from
+under long-running goroutines.
+
 ### Making HTTP Web Requests
 
 HTTP requests to the web should use the HTTP egress proxy rather than the standard Go `http.Client`.
@@ -292,11 +301,10 @@ Add the HTTP egress proxy to the main app in `main/main.go`, if not already adde
 
 ### Miscellaneous
 
-- **Current Time**: Use `svc.Now(ctx)` to get the current time rather than `time.Now()`
-- **Sleeping**: Use `svc.Sleep(ctx, dur)` rather than `time.Sleep(dur)`. It returns early if `ctx` or the
-  microservice's lifetime is canceled, returning the canceling context's error (`context.Canceled` or
-  `context.DeadlineExceeded`), traced, or `nil` if the full duration elapsed. Propagate a non-nil return so a
-  canceled or shutting-down operation stops promptly instead of blocking and continuing as if it had slept:
+- **Sleeping**: `svc.Sleep(ctx, dur)` returns early if `ctx` or the microservice's lifetime is canceled,
+  returning the canceling context's error (`context.Canceled` or `context.DeadlineExceeded`), traced, or `nil` if
+  the full duration elapsed. Propagate a non-nil return so a canceled or shutting-down operation stops promptly
+  instead of blocking and continuing as if it had slept:
 
   ```go
   err := svc.Sleep(ctx, dur)

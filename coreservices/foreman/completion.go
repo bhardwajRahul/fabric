@@ -39,20 +39,21 @@ func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgra
 		return "", errors.Trace(err)
 	}
 
-	// The subgraph flow inherits the surgraph flow's priority and fairness.
-	var inherited flowSchedule
+	// The subgraph flow inherits the surgraph flow's priority, fairness, and tenant.
+	var inherited workflow.FlowOptions
+	var parentTenantID int
 	err = db.QueryRowContext(ctx,
-		"SELECT priority, fairness_key, fairness_weight FROM microbus_flows WHERE flow_id=?",
+		"SELECT priority, fairness_key, fairness_weight, tenant_id FROM microbus_flows WHERE flow_id=?",
 		surgraphFlowID,
-	).Scan(&inherited.priority, &inherited.fairnessKey, &inherited.fairnessWeight)
+	).Scan(&inherited.Priority, &inherited.FairnessKey, &inherited.FairnessWeight, &parentTenantID)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
-	// Create the subgraph flow via createWithGraph (reuses flow+step INSERT logic)
-	// Filter the parent state through the subgraph's declared inputs.
+	// Create the subgraph flow via createWithGraph (reuses flow+step INSERT logic). Filter the
+	// parent state through the subgraph's declared inputs.
 	subgraphState := workflow.FilterState(surgraphState, subgraphGraph.Inputs())
-	subgraphFlowKey, err = svc.createWithGraph(ctx, shardNum, subgraphWorkflowName, subgraphGraph, subgraphState, 0, "", inherited)
+	subgraphFlowKey, err = svc.createWithGraph(ctx, shardNum, subgraphWorkflowName, subgraphGraph, subgraphState, 0, "", &inherited)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -62,10 +63,10 @@ func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgra
 	}
 
 	// Set surgraph linkage (including step_id for unambiguous lookup in completeSurgraphFlow),
-	// override actor claims / trace parent, and copy breakpoints from surgraph.
+	// override actor claims / trace parent, copy breakpoints, inherit tenant.
 	_, err = db.ExecContext(ctx,
-		"UPDATE microbus_flows SET surgraph_flow_id=?, surgraph_step_depth=?, surgraph_step_id=?, actor_claims=?, trace_parent=?, breakpoints=?, updated_at=NOW_UTC() WHERE flow_id=?",
-		surgraphFlowID, surgraphStepDepth, surgraphStepID, actorClaimsJSON, traceParent, breakpointsJSON, subgraphFlowID,
+		"UPDATE microbus_flows SET surgraph_flow_id=?, surgraph_step_depth=?, surgraph_step_id=?, actor_claims=?, trace_parent=?, breakpoints=?, tenant_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
+		surgraphFlowID, surgraphStepDepth, surgraphStepID, actorClaimsJSON, traceParent, breakpointsJSON, parentTenantID, subgraphFlowID,
 	)
 	if err != nil {
 		// Edge case. The subgraph flow will remain orphaned and eventually purged
@@ -85,7 +86,7 @@ func (svc *Service) allSubgraphFlows(ctx context.Context, shardNum int, flowID i
 	for len(current) > 0 {
 		placeholders := strings.Repeat("?,", len(current)-1) + "?"
 		args := append([]any{}, current...)
-		args = append(args, foremanapi.StatusCompleted, foremanapi.StatusFailed, foremanapi.StatusCancelled)
+		args = append(args, workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled)
 		rows, err := db.QueryContext(ctx,
 			"SELECT flow_id, flow_token FROM microbus_flows WHERE surgraph_flow_id IN ("+placeholders+") AND status NOT IN (?, ?, ?)",
 			args...,
@@ -123,7 +124,7 @@ func (svc *Service) completeFlowSequential(ctx context.Context, shardNum int, db
 	}
 	_, err = db.ExecContext(ctx,
 		"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id=?",
-		foremanapi.StatusCompleted, stepID,
+		workflow.StatusCompleted, stepID,
 	)
 	return errors.Trace(err)
 }
@@ -192,7 +193,7 @@ func (svc *Service) mergeTerminalSteps(ctx context.Context, db sequel.Executor, 
 	// Primary: the completed tail of a normally finishing flow.
 	merged, found, err := merge(
 		"SELECT state, changes FROM microbus_steps WHERE flow_id=? AND successor_id=0 AND status=? ORDER BY step_id",
-		flowID, foremanapi.StatusCompleted,
+		flowID, workflow.StatusCompleted,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -254,8 +255,8 @@ func (svc *Service) completeFlow(ctx context.Context, shardNum int, flowID int, 
 
 	res, err := db.ExecContext(ctx,
 		"UPDATE microbus_flows SET status=?, final_state=?, updated_at=NOW_UTC() WHERE flow_id=? AND status NOT IN (?, ?, ?)",
-		foremanapi.StatusCompleted, finalStateJSON, flowID,
-		foremanapi.StatusCompleted, foremanapi.StatusFailed, foremanapi.StatusCancelled,
+		workflow.StatusCompleted, finalStateJSON, flowID,
+		workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled,
 	)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -265,19 +266,21 @@ func (svc *Service) completeFlow(ctx context.Context, shardNum int, flowID int, 
 		// Another goroutine or replica already terminated this flow
 		return false, nil
 	}
-	svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "to", foremanapi.StatusCompleted)
-	svc.IncrementFlowsTerminated(ctx, 1, workflowName, foremanapi.StatusCompleted)
+	svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "to", workflow.StatusCompleted)
+	svc.IncrementFlowsTerminated(ctx, 1, workflowName, workflow.StatusCompleted)
 	compositeID := fmt.Sprintf("%d-%d-%s", shardNum, flowID, flowToken)
 	if notifyHostname != "" {
 		var finalState map[string]any
 		if err := json.Unmarshal([]byte(finalStateJSON), &finalState); err == nil {
-			raw := workflow.NewRawFlow()
-			raw.SetRawState(finalState)
-			foremanapi.NewMulticastTrigger(svc).ForHost(notifyHostname).OnFlowStopped(ctx, compositeID, foremanapi.StatusCompleted, raw.RawState())
+			foremanapi.NewMulticastTrigger(svc).ForHost(notifyHostname).OnFlowStopped(ctx, &workflow.FlowOutcome{
+				FlowKey: compositeID,
+				Status:  workflow.StatusCompleted,
+				State:   finalState,
+			})
 		}
 	}
 	// Wake up all Await callers across all replicas
-	foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, foremanapi.StatusCompleted)
+	foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, workflow.StatusCompleted)
 
 	// Propagate completion back to the surgraph
 	var surgraphFlowID int
@@ -319,7 +322,7 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 				// Deterministic lookup by primary key.
 				err := db.QueryRowContext(ctx,
 					"SELECT changes FROM microbus_steps WHERE step_id=? AND status=?",
-					surgraphStepID, foremanapi.StatusRunning,
+					surgraphStepID, workflow.StatusRunning,
 				).Scan(&surgraphStepChangesJSON)
 				if errors.Is(err, sql.ErrNoRows) {
 					surgraphStepID = 0 // Already handled (e.g. cancelled or failed)
@@ -333,7 +336,7 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 			const surgraphParkedLeaseThresholdMs = 60 * 60 * 1000 // 1 hour
 			err := db.QueryRowContext(ctx,
 				"SELECT step_id, changes FROM microbus_steps WHERE flow_id=? AND step_depth=? AND status=? AND lease_expires > DATE_ADD_MILLIS(NOW_UTC(), ?)",
-				surgraphFlowID, surgraphStepDepth, foremanapi.StatusRunning, surgraphParkedLeaseThresholdMs,
+				surgraphFlowID, surgraphStepDepth, workflow.StatusRunning, surgraphParkedLeaseThresholdMs,
 			).Scan(&surgraphStepID, &surgraphStepChangesJSON)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil // Another worker already handled this surgraph step
@@ -350,7 +353,7 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 		func() error {
 			err := db.QueryRowContext(ctx,
 				"SELECT graph FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND workflow_name=? AND status=?",
-				surgraphFlowID, surgraphStepDepth, subgraphWorkflowName, foremanapi.StatusCompleted,
+				surgraphFlowID, surgraphStepDepth, subgraphWorkflowName, workflow.StatusCompleted,
 			).Scan(&subgraphGraphJSON)
 			return errors.Trace(err)
 		},
@@ -414,7 +417,7 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 	// For dynamic subgraphs, the task re-runs and sees the merged state.
 	_, err = db.ExecContext(ctx,
 		"UPDATE microbus_steps SET status=?, state=?, changes=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
-		foremanapi.StatusPending, string(mergedStateJSON), string(mergedChangesJSON), surgraphStepID,
+		workflow.StatusPending, string(mergedStateJSON), string(mergedChangesJSON), surgraphStepID,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -449,7 +452,7 @@ func (svc *Service) interruptedSubgraphChain(ctx context.Context, shardNum int, 
 		var stepDepth int
 		err = db.QueryRowContext(ctx,
 			"SELECT step_id, step_depth FROM microbus_steps WHERE flow_id=? AND status=? ORDER BY updated_at LIMIT_OFFSET(1, 0)",
-			currentFlowID, foremanapi.StatusInterrupted,
+			currentFlowID, workflow.StatusInterrupted,
 		).Scan(&stepID, &stepDepth)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
@@ -461,7 +464,7 @@ func (svc *Service) interruptedSubgraphChain(ctx context.Context, shardNum int, 
 		var subFlowToken string
 		err = db.QueryRowContext(ctx,
 			"SELECT flow_id, flow_token FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND status=?",
-			currentFlowID, stepDepth, foremanapi.StatusInterrupted,
+			currentFlowID, stepDepth, workflow.StatusInterrupted,
 		).Scan(&subFlowID, &subFlowToken)
 		if err == sql.ErrNoRows {
 			// No child subgraph - this is the leaf step
@@ -593,7 +596,7 @@ func (svc *Service) failStep(ctx context.Context, shardNum int, stepID int, flow
 	errMsg := taskErr.Error()
 	_, err = tx.ExecContext(ctx,
 		"UPDATE microbus_steps SET status=?, error=?, updated_at=NOW_UTC() WHERE step_id=?",
-		foremanapi.StatusFailed, errMsg, stepID,
+		workflow.StatusFailed, errMsg, stepID,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -603,7 +606,7 @@ func (svc *Service) failStep(ctx context.Context, shardNum int, stepID int, flow
 	if len(chainStepIDs) > 0 {
 		stepPlaceholders := strings.Repeat("?,", len(chainStepIDs)-1) + "?"
 		subgraphErr := "subgraph failed"
-		stepArgs := append([]any{foremanapi.StatusFailed, subgraphErr}, chainStepIDs...)
+		stepArgs := append([]any{workflow.StatusFailed, subgraphErr}, chainStepIDs...)
 		_, err = tx.ExecContext(ctx,
 			"UPDATE microbus_steps SET status=?, error=?, updated_at=NOW_UTC() WHERE step_id IN ("+stepPlaceholders+")",
 			stepArgs...,
@@ -623,7 +626,9 @@ func (svc *Service) failStep(ctx context.Context, shardNum int, stepID int, flow
 		finalStates[i] = fs
 	}
 
-	// Fail all flows in the chain with their computed final_state via CASE
+	// Fail all flows in the chain with their computed final_state via CASE.
+	// error is set in the same UPDATE; the WHERE-clause status guard makes it first-failure-wins
+	// for the flow row (concurrent sibling failStep calls find the row already terminal and no-op).
 	flowPlaceholders := strings.Repeat("?,", len(chainFlowIDs)-1) + "?"
 	caseClause := "CASE"
 	flowArgs := []any{}
@@ -632,11 +637,11 @@ func (svc *Service) failStep(ctx context.Context, shardNum int, stepID int, flow
 		flowArgs = append(flowArgs, fid, finalStates[i])
 	}
 	caseClause += " END"
-	flowArgs = append(flowArgs, foremanapi.StatusFailed)
+	flowArgs = append(flowArgs, workflow.StatusFailed, errMsg)
 	flowArgs = append(flowArgs, chainFlowIDs...)
-	flowArgs = append(flowArgs, foremanapi.StatusCompleted, foremanapi.StatusFailed, foremanapi.StatusCancelled)
+	flowArgs = append(flowArgs, workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled)
 	_, err = tx.ExecContext(ctx,
-		"UPDATE microbus_flows SET final_state="+caseClause+", status=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status NOT IN (?, ?, ?)",
+		"UPDATE microbus_flows SET final_state="+caseClause+", status=?, error=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status NOT IN (?, ?, ?)",
 		flowArgs...,
 	)
 	if err != nil {
@@ -658,16 +663,19 @@ func (svc *Service) failStep(ctx context.Context, shardNum int, stepID int, flow
 	if rootNotifyHostname != "" {
 		var finalState map[string]any
 		if err := json.Unmarshal([]byte(finalStates[rootIdx]), &finalState); err == nil {
-			raw := workflow.NewRawFlow()
-			raw.SetRawState(finalState)
-			foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, rootCompositeID, foremanapi.StatusFailed, raw.RawState())
+			foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, &workflow.FlowOutcome{
+				FlowKey: rootCompositeID,
+				Status:  workflow.StatusFailed,
+				State:   finalState,
+				Error:   errMsg,
+			})
 		}
 	}
 	for i, cid := range chainCompositeIDs {
-		svc.LogInfo(ctx, "Flow status transition", "flow", chainFlowIDs[i], "to", foremanapi.StatusFailed)
-		foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, cid, foremanapi.StatusFailed)
+		svc.LogInfo(ctx, "Flow status transition", "flow", chainFlowIDs[i], "to", workflow.StatusFailed)
+		foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, cid, workflow.StatusFailed)
 	}
 
-	svc.IncrementStepsExecuted(ctx, 1, taskName, foremanapi.StatusFailed)
+	svc.IncrementStepsExecuted(ctx, 1, taskName, workflow.StatusFailed)
 	return nil
 }

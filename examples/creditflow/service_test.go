@@ -632,7 +632,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 			approved, creditVerified, sumEmploymentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...})
 			assert.Expect(
 				err, nil,
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, expectedApproved,
 			)
 		})
@@ -652,7 +652,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, true,
 				creditVerified, true,
 				identityVerified, true,
@@ -674,7 +674,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, false,
 			)
 		}
@@ -694,7 +694,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, true,
 				creditVerified, true,
 			)
@@ -715,7 +715,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, true,
 				creditVerified, true,
 			)
@@ -736,7 +736,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, false,
 			)
 		}
@@ -755,7 +755,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		})
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				approved, false,
 				identityVerified, false,
 			)
@@ -792,10 +792,12 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Wait for the flow to hit the breakpoint (interrupted status)
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status, state := outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusInterrupted,
+			status, workflow.StatusInterrupted,
 			state["creditVerified"], true, // The flow should be paused before Decision, so creditVerified should be set from prior steps
 		)
 
@@ -804,10 +806,12 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Wait for completion
-		status, state, err = foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+		status, state = outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["approved"], true,
 		)
 	})
@@ -840,20 +844,24 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// The subgraph breakpoint propagates up - the parent flow becomes interrupted
-		status, _, err := foremanClient.Await(ctx, flowKey)
-		if !assert.Expect(err, nil, status, foremanapi.StatusInterrupted) {
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
+		if !assert.Expect(err, nil, status, workflow.StatusInterrupted) {
 			return
 		}
 
 		// Cancel the parent flow - cancellation cascades to the subgraph
-		err = foremanClient.Cancel(ctx, flowKey)
+		err = foremanClient.Cancel(ctx, flowKey, "")
 		assert.NoError(err)
 
 		// Verify the parent is cancelled
-		parentStatus, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+		parentStatus := outcomeStatus(outcome)
 		assert.Expect(
 			err, nil,
-			parentStatus, foremanapi.StatusCancelled,
+			parentStatus, workflow.StatusCancelled,
 		)
 	})
 
@@ -892,8 +900,11 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 	notifyCh := make(chan notification, 10)
 	assert := testarossa.For(t)
 	unsub, err := foremanapi.NewHook(tester).ForHost(tester.Hostname()).OnFlowStopped(
-		func(ctx context.Context, flowKey string, status string, snapshot map[string]any) (err error) {
-			notifyCh <- notification{flowKey: flowKey, status: status, snapshot: snapshot}
+		func(ctx context.Context, outcome *workflow.FlowOutcome) (err error) {
+			if outcome == nil {
+				return nil
+			}
+			notifyCh <- notification{flowKey: outcome.FlowKey, status: outcome.Status, snapshot: outcome.State}
 			return nil
 		},
 	)
@@ -934,8 +945,8 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowKey, foremanapi.StatusCompleted)
-		assert.Expect(n.status, foremanapi.StatusCompleted)
+		n := waitForNotification(assert, flowKey, workflow.StatusCompleted)
+		assert.Expect(n.status, workflow.StatusCompleted)
 		assert.NotNil(n.snapshot)
 	})
 
@@ -957,14 +968,14 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		assert.NoError(err)
 
 		// Wait for breakpoint interrupt notification
-		waitForNotification(assert, flowKey, foremanapi.StatusInterrupted)
+		waitForNotification(assert, flowKey, workflow.StatusInterrupted)
 
 		// Cancel the flow
-		err = foremanClient.Cancel(ctx, flowKey)
+		err = foremanClient.Cancel(ctx, flowKey, "")
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowKey, foremanapi.StatusCancelled)
-		assert.Expect(n.status, foremanapi.StatusCancelled)
+		n := waitForNotification(assert, flowKey, workflow.StatusCancelled)
+		assert.Expect(n.status, workflow.StatusCancelled)
 		assert.NotNil(n.snapshot)
 	})
 
@@ -1063,20 +1074,22 @@ func BenchmarkCreditFlow_CreditApproval(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
+		outcome, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
+
+		_ = outcomeStatus(outcome)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 
 	/*
-		MySQL: approx 15 workflows/sec or 165 tasks/sec
+		Postgres: approx 12.8 workflows/sec or 141 tasks/sec
 
 		goos: darwin
 		goarch: arm64
 		pkg: github.com/microbus-io/fabric/examples/creditflow
 		cpu: Apple M1 Pro
-		BenchmarkCreditFlow_CreditApproval-10    	      16	  67107253 ns/op	 1392209 B/op	   18969 allocs/op
+		BenchmarkCreditFlow_CreditApproval-10    	      13	  78078000 ns/op	 1831651 B/op	   23091 allocs/op
 	*/
 }
 
@@ -1104,7 +1117,9 @@ func BenchmarkCreditFlow_CreditApprovalParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
+			outcome, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
+
+			_ = outcomeStatus(outcome)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1112,12 +1127,20 @@ func BenchmarkCreditFlow_CreditApprovalParallel(b *testing.B) {
 	})
 
 	/*
-		MySQL: approx 333 workflows/sec or 3660 tasks/sec
+		Postgres: approx 38.5 workflows/sec or 424 tasks/sec
 
 		goos: darwin
 		goarch: arm64
 		pkg: github.com/microbus-io/fabric/examples/creditflow
 		cpu: Apple M1 Pro
-		BenchmarkCreditFlow_CreditApprovalParallel-10    	     37	  29589952 ns/op	 1208531 B/op	   17993 allocs/op
+		BenchmarkCreditFlow_CreditApprovalParallel-10    	     39	  25952910 ns/op	 1589837 B/op	   20449 allocs/op
+
+		SQLite: approx 110 workflows/sec or 1206 tasks/sec
+
+		goos: darwin
+		goarch: arm64
+		pkg: github.com/microbus-io/fabric/examples/creditflow
+		cpu: Apple M1 Pro
+		BenchmarkCreditFlow_CreditApprovalParallel-10    	    150	   9121310 ns/op	 1395101 B/op	   19108 allocs/op
 	*/
 }

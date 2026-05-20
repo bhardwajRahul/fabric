@@ -18,6 +18,7 @@ package workflow
 
 import (
 	"maps"
+	"time"
 )
 
 // RawFlow wraps Flow with additional methods used by the foreman orchestrator.
@@ -84,4 +85,11 @@ func (f *RawFlow) ClearControl() {
 // a task so that Retry can check whether attempts are exhausted.
 func (f *RawFlow) SetAttempt(attempt int) {
 	f.attempt = attempt
+}
+
+// SetTimestamps records the flow row's createdAt and updatedAt. Called by the orchestrator
+// before dispatching a task so the task can read them via Flow.CreatedAt() and Flow.UpdatedAt().
+func (f *RawFlow) SetTimestamps(createdAt, updatedAt time.Time) {
+	f.createdAt = createdAt
+	f.updatedAt = updatedAt
 }

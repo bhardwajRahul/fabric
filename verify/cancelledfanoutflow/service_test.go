@@ -56,6 +56,31 @@ var (
 )
 
 // asInt coerces a state map value (absent -> nil, JSON number -> float64) to int.
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func asInt(v any) int {
 	switch n := v.(type) {
 	case nil:
@@ -73,18 +98,26 @@ func TestCancelledfanoutflow_CancelledFanOut(t *testing.T) { // MARKER: Cancelle
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// Pin the foreman to a single worker. SetConfig is only permitted once the
 		// connector is in the TESTING deployment, so it must run via .Init (which
 		// fires during connector init) rather than a bare post-creation call.
-		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(1) }),
+		foreman.NewService().Init(func(f *foreman.Service) error {
+			f.SetWorkers(1)
+			f.SetSQLConnectionPool(1)
+			return nil
+		}),
 		tester,
 	)
 	app.RunInTest(t)
@@ -104,13 +137,16 @@ func TestCancelledfanoutflow_CancelledFanOut(t *testing.T) { // MARKER: Cancelle
 		// The single worker picks up exactly one branch, which then blocks for 2s.
 		// Cancel after 1s, while that branch is mid-sleep.
 		time.Sleep(1 * time.Second)
-		err = fm.Cancel(ctx, flowKey)
+		err = fm.Cancel(ctx, flowKey, "")
 		assert.NoError(err)
 
-		status, state, err := fm.Await(ctx, flowKey)
+		outcome, err := fm.Await(ctx, flowKey)
+
+
+		status, state := outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCancelled,
+			status, workflow.StatusCancelled,
 		)
 		// Only the branch the lone worker picked up entered execution; the other
 		// two were cancelled while still pending and never ran.
@@ -131,14 +167,18 @@ func TestCancelledfanoutflow_AwaitTimeoutDoesNotInvalidate(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -158,17 +198,19 @@ func TestCancelledfanoutflow_AwaitTimeoutDoesNotInvalidate(t *testing.T) {
 		// Await with a context that expires while A/B/C are still sleeping (~2s),
 		// forcing the synchronous Await path to abort mid-flight.
 		shortCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
-		_, _, errShort := fm.Await(shortCtx, flowKey)
+		_, errShort := fm.Await(shortCtx, flowKey)
 		cancel()
 		assert.Expect(errShort != nil, true) // deadline exceeded; flow still running
 
 		// A fresh Await must still see the flow complete correctly. If a cancelled
 		// ctx had broken a foreman write mid-fan-in, this would hang or return a
 		// non-terminal/corrupted result.
-		status, state, err := fm.Await(ctx, flowKey)
+		outcome, err := fm.Await(ctx, flowKey)
+
+		status, state := outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 		)
 		assert.Expect(asInt(state["sumExecuted"]), 3) // A+B+C all contributed; fan-in intact
 	})

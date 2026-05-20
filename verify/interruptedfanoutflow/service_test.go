@@ -55,6 +55,31 @@ var (
 )
 
 // asInt coerces a state map value (absent -> nil, JSON number -> float64) to int.
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func asInt(v any) int {
 	switch n := v.(type) {
 	case nil:
@@ -72,15 +97,19 @@ func TestInterruptedfanoutflow_InterruptedFanOut(t *testing.T) { // MARKER: Inte
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -99,10 +128,12 @@ func TestInterruptedfanoutflow_InterruptedFanOut(t *testing.T) { // MARKER: Inte
 
 		// B interrupts on its first run; the fan-in never reaches all three
 		// arrivals, so the flow parks as interrupted.
-		status, _, err := fm.Await(ctx, flowKey)
+		outcome, err := fm.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusInterrupted,
+			status, workflow.StatusInterrupted,
 		)
 
 		// Resume B with resumed=true. It re-runs, falls through, contributes 1.
@@ -111,10 +142,13 @@ func TestInterruptedfanoutflow_InterruptedFanOut(t *testing.T) { // MARKER: Inte
 			return
 		}
 
-		status, state, err := fm.Await(ctx, flowKey)
+		outcome, err = fm.Await(ctx, flowKey)
+
+
+		status, state := outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 		)
 		// A + B + C each contributed 1 via the sum* reducer at fan-in.
 		assert.Expect(asInt(state["sumExecuted"]), 3)

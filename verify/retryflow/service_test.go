@@ -58,16 +58,20 @@ func TestRetryflow_Retry(t *testing.T) { // MARKER: Retry
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := retryflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -79,7 +83,7 @@ func TestRetryflow_Retry(t *testing.T) { // MARKER: Retry
 		finalAttempts, status, err := exec.Retry(ctx, 3)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			finalAttempts, 3,
 		)
 	})
@@ -93,6 +97,6 @@ func TestRetryflow_Retry(t *testing.T) { // MARKER: Retry
 
 		_, status, err := exec.Retry(ctx, 10)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusFailed)
+		assert.Expect(status, workflow.StatusFailed)
 	})
 }

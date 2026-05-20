@@ -44,7 +44,7 @@ var updateGoldens = flag.Bool("update", false, "rewrite committed manifest.yaml 
 // asserts the salient fields it pulls out. The test is intentionally narrow:
 // it exercises the extraction logic against a service that has the full
 // cross-section of features (description, functions, web, outbound event,
-// configs, metrics with observable, ticker, downstream).
+// configs, metrics with observable, downstream).
 func TestExtract_Foreman(t *testing.T) {
 	assert := testarossa.For(t)
 	dir := repoPath(t, "coreservices/foreman")
@@ -59,11 +59,6 @@ func TestExtract_Foreman(t *testing.T) {
 	assert.True(len(x.webs) == 1 && x.webs[0].Name == "HistoryMermaid", "expected one web (HistoryMermaid), got %+v", x.webs)
 	// Outbound event detected.
 	assert.True(len(x.outboundEvents) == 1 && x.outboundEvents[0].Name == "OnFlowStopped", "expected OnFlowStopped outbound event, got %+v", x.outboundEvents)
-	// Ticker description picked up from godoc.
-	if len(x.tickers) != 1 {
-		t.Fatalf("expected 1 ticker, got %d", len(x.tickers))
-	}
-	assert.Contains(x.tickers[0].Description, "deletes terminated flows", "ticker description missing")
 	// Configs include the secret one and the callback one.
 	var foundSecret, foundCallback bool
 	for _, c := range x.configs {
@@ -76,14 +71,14 @@ func TestExtract_Foreman(t *testing.T) {
 	}
 	assert.True(foundSecret, "expected SQLDataSourceName secret=true")
 	assert.True(foundCallback, "expected NumShards callback=true")
-	// QueueDepth metric is observable.
+	// StepsQueueDepth metric is observable.
 	var foundObs bool
 	for _, m := range x.metrics {
-		if m.Name == "QueueDepth" && m.Observable {
+		if m.Name == "StepsQueueDepth" && m.Observable {
 			foundObs = true
 		}
 	}
-	assert.True(foundObs, "expected QueueDepth observable=true")
+	assert.True(foundObs, "expected StepsQueueDepth observable=true")
 }
 
 // TestExtract_CreditFlow exercises the task and workflow extraction paths,

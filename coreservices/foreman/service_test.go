@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
@@ -55,8 +57,6 @@ var (
 
 // MARKER: Cancel
 
-// MARKER: PurgeExpiredFlows
-
 // MARKER: CreateTask
 
 // MARKER: Await
@@ -66,6 +66,31 @@ var (
 // MARKER: History
 
 // MARKER: Continue
+
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
 
 func TestForeman_LowLevel(t *testing.T) {
 	t.Parallel()
@@ -78,7 +103,7 @@ func TestForeman_LowLevel(t *testing.T) {
 	app.Add(svc, newTestWorkflowSvc(), tester)
 	app.RunInTest(t)
 
-	db, err := svc.shard(0)
+	db, err := svc.shard(1) // shards are 1-based
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +115,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.NoError(err)
 		shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
 		assert.NoError(err)
-		assert.Equal(0, shardNum)
+		assert.Equal(1, shardNum)
 
 		// Verify flow row
 		var status, workflowName, graphJSON, actorClaimsJSON, traceParent, notifyHostname, finalState, breakpointsJSON, threadToken string
@@ -103,7 +128,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.Expect(
 			len(flowToken) > 0, true,
 			workflowName, "https://test.workflow.host:428/my-workflow",
-			status, foremanapi.StatusCreated,
+			strings.TrimSpace(status), workflow.StatusCreated,
 			stepID > 0, true,
 			forkedFlowID, 0,
 			forkedStepDepth, 0,
@@ -132,7 +157,7 @@ func TestForeman_LowLevel(t *testing.T) {
 			stepDepth, 1,
 			len(stepToken) > 0, true,
 			taskName, "taskA",
-			stepStatus, foremanapi.StatusCreated,
+			strings.TrimSpace(stepStatus), workflow.StatusCreated,
 			changesJSON, "{}",
 			interruptPayloadJSON, "{}",
 			gotoNext, "",
@@ -161,20 +186,20 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Verify flow transitioned to running
 		var status string
 		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&status)
-		assert.Equal(foremanapi.StatusRunning, status)
+		assert.Equal(workflow.StatusRunning, strings.TrimSpace(status))
 
 		// Wait for completion
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
 		assert.NoError(err)
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
-			state["result"], "hello world",
+			outcome.Status, workflow.StatusCompleted,
+			outcome.State["result"], "hello world",
 		)
 
 		// Verify flow row is completed with filtered final_state
 		var finalStateJSON string
 		db.QueryRowContext(ctx, "SELECT status, final_state FROM microbus_flows WHERE flow_id=?", flowID).Scan(&status, &finalStateJSON)
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, strings.TrimSpace(status))
 		var finalState map[string]any
 		assert.NoError(json.Unmarshal([]byte(finalStateJSON), &finalState))
 		assert.Equal("hello world", finalState["result"])
@@ -184,7 +209,7 @@ func TestForeman_LowLevel(t *testing.T) {
 
 		// Verify all steps are completed
 		var stepCount int
-		db.QueryRowContext(ctx, "SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND status=?", flowID, foremanapi.StatusCompleted).Scan(&stepCount)
+		db.QueryRowContext(ctx, "SELECT COUNT(*) FROM microbus_steps WHERE flow_id=? AND status=?", flowID, workflow.StatusCompleted).Scan(&stepCount)
 		assert.Equal(2, stepCount)
 	})
 
@@ -211,15 +236,16 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.NoError(err)
 		_, flowID, _, _ := parseFlowKey(flowKey)
 
-		err = foremanClient.Cancel(ctx, flowKey)
+		err = foremanClient.Cancel(ctx, flowKey, "test cancel")
 		assert.NoError(err)
 
-		// Verify flow and step are cancelled
-		var flowStatus, stepStatus string
-		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus)
-		assert.Equal(foremanapi.StatusCancelled, flowStatus)
+		// Verify flow and step are cancelled, and cancel_reason is recorded
+		var flowStatus, cancelReason, stepStatus string
+		db.QueryRowContext(ctx, "SELECT status, cancel_reason FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus, &cancelReason)
+		assert.Equal(workflow.StatusCancelled, strings.TrimSpace(flowStatus))
+		assert.Equal("test cancel", strings.TrimSpace(cancelReason))
 		db.QueryRowContext(ctx, "SELECT status FROM microbus_steps WHERE flow_id=? ORDER BY step_id DESC LIMIT_OFFSET(1, 0)", flowID).Scan(&stepStatus)
-		assert.Equal(foremanapi.StatusCancelled, stepStatus)
+		assert.Equal(workflow.StatusCancelled, strings.TrimSpace(stepStatus))
 	})
 
 	t.Run("break_before", func(t *testing.T) {
@@ -242,15 +268,17 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Start and verify it interrupts at task-b
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Equal(foremanapi.StatusInterrupted, status)
+		assert.Equal(workflow.StatusInterrupted, status)
 
 		// Verify the interrupted step has breakpoint_hit=1
 		var breakpointHit int
 		db.QueryRowContext(ctx,
 			"SELECT breakpoint_hit FROM microbus_steps WHERE flow_id=? AND status=?",
-			flowID, foremanapi.StatusInterrupted,
+			flowID, workflow.StatusInterrupted,
 		).Scan(&breakpointHit)
 		assert.Equal(1, breakpointHit)
 	})
@@ -268,22 +296,24 @@ func TestForeman_LowLevel(t *testing.T) {
 
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Equal(foremanapi.StatusInterrupted, status)
+		assert.Equal(workflow.StatusInterrupted, status)
 
 		// Verify flow is interrupted
 		var flowStatus string
 		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus)
-		assert.Equal(foremanapi.StatusInterrupted, flowStatus)
+		assert.Equal(workflow.StatusInterrupted, strings.TrimSpace(flowStatus))
 
 		// Verify the interrupted step has the interrupt payload
 		var stepStatus, interruptPayloadJSON string
 		db.QueryRowContext(ctx,
 			"SELECT status, interrupt_payload FROM microbus_steps WHERE flow_id=? AND status=?",
-			flowID, foremanapi.StatusInterrupted,
+			flowID, workflow.StatusInterrupted,
 		).Scan(&stepStatus, &interruptPayloadJSON)
-		assert.Equal(foremanapi.StatusInterrupted, stepStatus)
+		assert.Equal(workflow.StatusInterrupted, strings.TrimSpace(stepStatus))
 		var payload map[string]any
 		assert.NoError(json.Unmarshal([]byte(interruptPayloadJSON), &payload))
 		assert.Equal("more data", payload["request"])
@@ -291,17 +321,19 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Resume with needInput=false so task-b completes normally
 		err = foremanClient.Resume(ctx, flowKey, map[string]any{"needInput": false})
 		assert.NoError(err)
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+		status, state := outcomeStatusState(outcome)
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				state["result"], "hello world",
 			)
 		}
 
 		// Verify flow is completed in the database
 		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus)
-		assert.Equal(foremanapi.StatusCompleted, flowStatus)
+		assert.Equal(workflow.StatusCompleted, strings.TrimSpace(flowStatus))
 	})
 
 	t.Run("fork", func(t *testing.T) {
@@ -312,9 +344,11 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.NoError(err)
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 
 		// Get history to find a step key
 		steps, err := foremanClient.History(ctx, flowKey)
@@ -324,7 +358,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		stepKey := steps[0].StepKey // First step (task-a)
 
 		// Fork from that step with state overrides
-		forkedFlowKey, err := foremanClient.Fork(ctx, stepKey, map[string]any{"input": "forked"})
+		forkedFlowKey, err := foremanClient.Fork(ctx, stepKey, map[string]any{"input": "forked"}, nil)
 		assert.NoError(err)
 		_, forkedFlowID, _, _ := parseFlowKey(forkedFlowKey)
 
@@ -337,7 +371,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		).Scan(&forkedStatus, &forkedWorkflowName, &forkedFlowIDRef, &forkedStepDepth)
 		_, origFlowID, _, _ := parseFlowKey(flowKey)
 		assert.Expect(
-			forkedStatus, foremanapi.StatusCreated,
+			strings.TrimSpace(forkedStatus), workflow.StatusCreated,
 			forkedWorkflowName, "https://test.workflow.host:428/my-workflow",
 			forkedFlowIDRef, origFlowID,
 			forkedStepDepth, steps[0].StepDepth,
@@ -353,10 +387,12 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Run the forked flow and verify it completes
 		err = foremanClient.Start(ctx, forkedFlowKey)
 		assert.NoError(err)
-		status, fState, err := foremanClient.Await(ctx, forkedFlowKey)
+		outcome, err = foremanClient.Await(ctx, forkedFlowKey)
+
+		status, fState := outcomeStatusState(outcome)
 		if assert.NoError(err) {
 			assert.Expect(
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				fState["result"], "hello world",
 			)
 		}
@@ -370,9 +406,11 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.NoError(err)
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 
 		_, firstFlowID, firstFlowToken, _ := parseFlowKey(flowKey)
 
@@ -384,7 +422,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.Equal(firstFlowToken, strings.TrimSpace(threadToken))
 
 		// Continue with additional state
-		newFlowKey, err := foremanClient.Continue(ctx, flowKey, map[string]any{"extra": "data"})
+		newFlowKey, err := foremanClient.Continue(ctx, flowKey, map[string]any{"extra": "data"}, nil)
 		assert.NoError(err)
 		_, newFlowID, _, _ := parseFlowKey(newFlowKey)
 
@@ -392,7 +430,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		var newStatus, newWorkflowName string
 		db.QueryRowContext(ctx, "SELECT status, workflow_name FROM microbus_flows WHERE flow_id=?", newFlowID).Scan(&newStatus, &newWorkflowName)
 		assert.Expect(
-			newStatus, foremanapi.StatusCreated,
+			strings.TrimSpace(newStatus), workflow.StatusCreated,
 			newWorkflowName, "https://test.workflow.host:428/my-workflow",
 		)
 
@@ -503,9 +541,11 @@ func TestForeman_Start(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, _, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 }
 
 func TestForeman_StartNotify(t *testing.T) {
@@ -525,9 +565,11 @@ func TestForeman_StartNotify(t *testing.T) {
 	}
 	err = client.StartNotify(ctx, flowKey, "my.notify.host")
 	assert.NoError(err)
-	status, _, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 }
 
 func TestForeman_Cancel(t *testing.T) {
@@ -545,12 +587,15 @@ func TestForeman_Cancel(t *testing.T) {
 	if !assert.NoError(err) {
 		return
 	}
-	err = client.Cancel(ctx, flowKey)
+	err = client.Cancel(ctx, flowKey, "")
 	assert.NoError(err)
 
-	status, _, err := client.Snapshot(ctx, flowKey)
+	outcome, err := client.Snapshot(ctx, flowKey)
+
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCancelled, status)
+	assert.Equal(workflow.StatusCancelled, status)
 }
 
 func TestForeman_Resume(t *testing.T) {
@@ -571,17 +616,21 @@ func TestForeman_Resume(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, _, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusInterrupted, status)
+	assert.Equal(workflow.StatusInterrupted, status)
 
 	// Resume
 	err = client.Resume(ctx, flowKey, map[string]any{"needInput": false})
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, flowKey)
+	outcome, err = client.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "hello world",
 		)
 	}
@@ -612,7 +661,7 @@ func TestForeman_Fork(t *testing.T) {
 	if !assert.NoError(err) || !assert.True(len(steps) >= 1) {
 		return
 	}
-	forkedKey, err := client.Fork(ctx, steps[0].StepKey, map[string]any{"input": "forked"})
+	forkedKey, err := client.Fork(ctx, steps[0].StepKey, map[string]any{"input": "forked"}, nil)
 	if !assert.NoError(err) {
 		return
 	}
@@ -620,10 +669,12 @@ func TestForeman_Fork(t *testing.T) {
 	// Run the forked flow
 	err = client.Start(ctx, forkedKey)
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, forkedKey)
+	outcome, err := client.Await(ctx, forkedKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "hello world",
 		)
 	}
@@ -649,17 +700,21 @@ func TestForeman_BreakBefore(t *testing.T) {
 
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, _, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusInterrupted, status)
+	assert.Equal(workflow.StatusInterrupted, status)
 
 	// Resume past the breakpoint
 	err = client.Resume(ctx, flowKey, nil)
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, flowKey)
+	outcome, err = client.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "hello world",
 		)
 	}
@@ -682,9 +737,11 @@ func TestForeman_CreateTask(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("hello", state["result"])
 	}
 }
@@ -706,18 +763,22 @@ func TestForeman_Snapshot(t *testing.T) {
 	}
 
 	// Snapshot of created flow
-	status, _, err := client.Snapshot(ctx, flowKey)
+	outcome, err := client.Snapshot(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCreated, status)
+	assert.Equal(workflow.StatusCreated, status)
 
 	// Run to completion and snapshot again
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
 	client.Await(ctx, flowKey)
-	status, state, err := client.Snapshot(ctx, flowKey)
+	outcome, err = client.Snapshot(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "hello world",
 		)
 	}
@@ -746,9 +807,9 @@ func TestForeman_History(t *testing.T) {
 	if assert.NoError(err) {
 		assert.Equal(2, len(steps))
 		assert.Equal("taskA", steps[0].TaskName)
-		assert.Equal(foremanapi.StatusCompleted, steps[0].Status)
+		assert.Equal(workflow.StatusCompleted, steps[0].Status)
 		assert.Equal("taskB", steps[1].TaskName)
-		assert.Equal(foremanapi.StatusCompleted, steps[1].Status)
+		assert.Equal(workflow.StatusCompleted, steps[1].Status)
 		assert.True(steps[0].StepKey != "")
 		assert.True(steps[1].StepKey != "")
 	}
@@ -770,7 +831,7 @@ func TestForeman_List(t *testing.T) {
 	assert := testarossa.For(t)
 
 	// List created flows
-	flows, err := client.List(ctx, foremanapi.Query{Status: foremanapi.StatusCreated})
+	flows, _, err := client.List(ctx, foremanapi.Query{Status: workflow.StatusCreated})
 	if assert.NoError(err) {
 		assert.True(len(flows) >= 2)
 	}
@@ -779,14 +840,14 @@ func TestForeman_List(t *testing.T) {
 	client.Start(ctx, flowKey1)
 	client.Await(ctx, flowKey1)
 
-	flows, err = client.List(ctx, foremanapi.Query{Status: foremanapi.StatusCompleted})
+	flows, _, err = client.List(ctx, foremanapi.Query{Status: workflow.StatusCompleted})
 	if assert.NoError(err) {
 		assert.True(len(flows) >= 1)
 	}
 
 	// Cancel the other
-	client.Cancel(ctx, flowKey2)
-	flows, err = client.List(ctx, foremanapi.Query{Status: foremanapi.StatusCancelled})
+	client.Cancel(ctx, flowKey2, "")
+	flows, _, err = client.List(ctx, foremanapi.Query{Status: workflow.StatusCancelled})
 	if assert.NoError(err) {
 		assert.True(len(flows) >= 1)
 	}
@@ -843,17 +904,21 @@ func TestForeman_Retry(t *testing.T) {
 	}
 	err = retryClient.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, _, err := retryClient.Await(ctx, flowKey)
+	outcome, err := retryClient.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusFailed, status)
+	assert.Equal(workflow.StatusFailed, status)
 
 	// Retry the failed step
 	err = retryClient.Retry(ctx, flowKey)
 	assert.NoError(err)
-	status, state, err := retryClient.Await(ctx, flowKey)
+	outcome, err = retryClient.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "recovered",
 		)
 	}
@@ -870,10 +935,13 @@ func TestForeman_Run(t *testing.T) {
 	app.RunInTest(t)
 	assert := testarossa.For(t)
 
-	status, state, err := client.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"}, nil)
+	outcome, err := client.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"}, nil)
+
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
 		assert.Expect(
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			state["result"], "hello world",
 		)
 	}
@@ -897,51 +965,59 @@ func TestForeman_Continue(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, _, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status := outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 
 	// The flowKey returned by Create is also the threadKey
 	threadKey := flowKey
 
 	// Continue using the threadKey (which is the first flow's key)
-	newFlowKey, err := client.Continue(ctx, threadKey, map[string]any{"extra": "data"})
+	newFlowKey, err := client.Continue(ctx, threadKey, map[string]any{"extra": "data"}, nil)
 	if !assert.NoError(err) {
 		return
 	}
 	err = client.Start(ctx, newFlowKey)
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, newFlowKey)
+	outcome, err = client.Await(ctx, newFlowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if !assert.NoError(err) {
 		return
 	}
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 	assert.Equal("hello world", state["result"])
 
 	// Continue again using the original threadKey (not the intermediate flowKey)
-	thirdFlowKey, err := client.Continue(ctx, threadKey, map[string]any{"turn": 3})
+	thirdFlowKey, err := client.Continue(ctx, threadKey, map[string]any{"turn": 3}, nil)
 	if !assert.NoError(err) {
 		return
 	}
 	err = client.Start(ctx, thirdFlowKey)
 	assert.NoError(err)
-	status, _, err = client.Await(ctx, thirdFlowKey)
+	outcome, err = client.Await(ctx, thirdFlowKey)
+
+	status = outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 
 	// Continue using an intermediate flowKey (should also work)
-	fourthFlowKey, err := client.Continue(ctx, newFlowKey, map[string]any{"turn": 4})
+	fourthFlowKey, err := client.Continue(ctx, newFlowKey, map[string]any{"turn": 4}, nil)
 	if !assert.NoError(err) {
 		return
 	}
 	err = client.Start(ctx, fourthFlowKey)
 	assert.NoError(err)
-	status, _, err = client.Await(ctx, fourthFlowKey)
+	outcome, err = client.Await(ctx, fourthFlowKey)
+
+	status = outcomeStatus(outcome)
 	assert.NoError(err)
-	assert.Equal(foremanapi.StatusCompleted, status)
+	assert.Equal(workflow.StatusCompleted, status)
 
 	// List by thread should show all 4 flows
-	flows, err := client.List(ctx, foremanapi.Query{ThreadKey: threadKey})
+	flows, _, err := client.List(ctx, foremanapi.Query{ThreadKey: threadKey})
 	if assert.NoError(err) {
 		assert.Equal(4, len(flows))
 		// All should share the same ThreadKey
@@ -1041,9 +1117,11 @@ func TestForeman_ErrorTransition(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, state, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("success via task-b", state["result"])
 	}
 
@@ -1054,9 +1132,11 @@ func TestForeman_ErrorTransition(t *testing.T) {
 	}
 	err = client.Start(ctx, flowKey)
 	assert.NoError(err)
-	status, state, err = client.Await(ctx, flowKey)
+	outcome, err = client.Await(ctx, flowKey)
+
+	status, state = outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("handled: task-a failed intentionally", state["result"])
 	}
 }
@@ -1196,12 +1276,15 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	status, state, err := client.Run(runCtx, mainWorkflow, nil, nil)
+	outcome, err := client.Run(runCtx, mainWorkflow, nil, nil)
+
+
+	status, state := outcomeStatusState(outcome)
 	if !assert.NoError(err) {
 		return
 	}
 	assert.Expect(
-		status, foremanapi.StatusCompleted,
+		status, workflow.StatusCompleted,
 		state["result"], expectedResult,
 	)
 }
@@ -1330,12 +1413,15 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	status, state, err := client.Run(runCtx, mainWorkflow, nil, nil)
+	outcome, err := client.Run(runCtx, mainWorkflow, nil, nil)
+
+
+	status, state := outcomeStatusState(outcome)
 	if !assert.NoError(err) {
 		return
 	}
 	assert.Expect(
-		status, foremanapi.StatusCompleted,
+		status, workflow.StatusCompleted,
 		state["result"], expectedValue,
 		state["outA"], "from-A",
 		state["outB"], "from-B",
@@ -1451,9 +1537,11 @@ func TestForeman_OnTimeoutTransition(t *testing.T) {
 		return
 	}
 	assert.NoError(client.Start(ctx, flowKey))
-	status, state, err := client.Await(ctx, flowKey)
+	outcome, err := client.Await(ctx, flowKey)
+
+	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("timeout", state["handled"])
 	}
 
@@ -1466,9 +1554,11 @@ func TestForeman_OnTimeoutTransition(t *testing.T) {
 		return
 	}
 	assert.NoError(client.Start(ctx, flowKey))
-	status, state, err = client.Await(ctx, flowKey)
+	outcome, err = client.Await(ctx, flowKey)
+
+	status, state = outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("err", state["handled"])
 	}
 
@@ -1478,9 +1568,362 @@ func TestForeman_OnTimeoutTransition(t *testing.T) {
 		return
 	}
 	assert.NoError(client.Start(ctx, flowKey))
-	status, state, err = client.Await(ctx, flowKey)
+	outcome, err = client.Await(ctx, flowKey)
+
+	status, state = outcomeStatusState(outcome)
 	if assert.NoError(err) {
-		assert.Equal(foremanapi.StatusCompleted, status)
+		assert.Equal(workflow.StatusCompleted, status)
 		assert.Equal("taskB", state["handled"])
 	}
+}
+
+// TestForeman_ShardInfo verifies that the ShardInfo endpoint returns one entry
+// per shard with a 1-based index, a non-zero latency, and the correct row
+// counts after seeding step/flow rows into each shard.
+func TestForeman_ShardInfo(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	const numShards = 3
+
+	svc := NewService().Init(func(s *Service) error {
+		if err := s.SetSQLDataSourceName("file:shardinfo%d?mode=memory&cache=shared"); err != nil {
+			return err
+		}
+		return s.SetNumShards(numShards)
+	})
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	assert := testarossa.For(t)
+
+	// Seed one step row on each shard so the row counts are non-trivial. Shards
+	// are 1-based; svc.dbs is a 0-based slice.
+	for i := 1; i <= numShards; i++ {
+		db, err := svc.shard(i)
+		if !assert.NoError(err) {
+			return
+		}
+		_, err = db.ExecContext(ctx,
+			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lease_expires, priority, fairness_key, fairness_weight)"+
+				" VALUES (?, 1, ?, ?, '{}', ?, 60000, DATE_ADD_MILLIS(NOW_UTC(), 60000), 1, '', 1)",
+			1, "stok", "shard_info_task", workflow.StatusRunning,
+		)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	shards, err := fm.ShardInfo(ctx)
+	if !assert.NoError(err) {
+		return
+	}
+	if !assert.Equal(numShards, len(shards)) {
+		return
+	}
+	for i, s := range shards {
+		assert.Equal(i+1, s.Shard) // 1-based
+		assert.Equal("", s.Error)
+		assert.Equal(1, s.Steps)
+		// LatencyMs and Flows are non-negative; we don't assert exact values to
+		// avoid flakiness.
+		assert.True(s.LatencyMs >= 0)
+		assert.True(s.Flows >= 0)
+	}
+}
+
+// TestForeman_List_QueryShard verifies that setting Query.Shard restricts
+// List to a single shard's flows.
+func TestForeman_List_QueryShard(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	const numShards = 3
+
+	svc := NewService().Init(func(s *Service) error {
+		if err := s.SetSQLDataSourceName("file:listshard%d?mode=memory&cache=shared"); err != nil {
+			return err
+		}
+		return s.SetNumShards(numShards)
+	})
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	assert := testarossa.For(t)
+
+	// Create enough flows to cover several pages and exercise multiple shards.
+	for range 24 {
+		_, err := fm.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+
+	// Query each shard individually and assert every returned FlowKey carries
+	// that shard's prefix.
+	for s := 1; s <= numShards; s++ {
+		flows, _, err := fm.List(ctx, foremanapi.Query{
+			Status: workflow.StatusCreated,
+			Shard:  s,
+			Limit:  100,
+		})
+		if !assert.NoError(err) {
+			return
+		}
+		prefix := strconv.Itoa(s) + "-"
+		for _, f := range flows {
+			assert.True(strings.HasPrefix(f.FlowKey, prefix))
+		}
+	}
+
+	// Out-of-range shard is rejected.
+	_, _, err := fm.List(ctx, foremanapi.Query{Shard: numShards + 1})
+	assert.Error(err)
+}
+
+// TestForeman_List_CrossShardPagination verifies that List uses per-shard
+// pagination (per-shard limit + per-shard flow_id cursors), so:
+//   - all inserted flows are returned across pages with no duplicates and no
+//     missing rows;
+//   - a flow inserted on any shard mid-pagination does not appear on the next
+//     page (its flow_id is above that shard's cursor).
+//
+// We deliberately do not assert a global newest-first order; presentation is
+// shard-grouped because cross-shard time comparison is too noisy to depend on.
+func TestForeman_List_CrossShardPagination(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	const numShards = 2
+
+	svc := NewService().Init(func(s *Service) error {
+		if err := s.SetSQLDataSourceName("file:listpage%d?mode=memory&cache=shared"); err != nil {
+			return err
+		}
+		return s.SetNumShards(numShards)
+	})
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	assert := testarossa.For(t)
+
+	mustCreate := func() string {
+		fk, err := fm.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) {
+			return ""
+		}
+		return fk
+	}
+	const total = 12
+	allKeys := map[string]bool{}
+	for range total {
+		allKeys[mustCreate()] = true
+	}
+
+	// Page through. With numShards=2 and limit=4, each page fetches up to 2
+	// from each shard. Three pages of 4 should exhaust the 12; an empty
+	// NextCursor signals end-of-results.
+	const pageSize = 4
+	seen := map[string]int{}
+	cursor := ""
+	for pages := 0; pages < total; pages++ { // generous upper bound
+		flows, next, err := fm.List(ctx, foremanapi.Query{
+			Status: workflow.StatusCreated,
+			Limit:  pageSize,
+			Cursor: cursor,
+		})
+		if !assert.NoError(err) {
+			return
+		}
+		for _, f := range flows {
+			seen[f.FlowKey]++
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	// Every inserted flow appears exactly once.
+	assert.Equal(total, len(seen))
+	for fk := range allKeys {
+		assert.Equal(1, seen[fk])
+	}
+	for fk := range seen {
+		assert.True(allKeys[fk])
+	}
+
+	// Mid-pagination insert: take page 1, insert a new flow, take page 2 with
+	// the page-1 cursor. The fresh flow must not appear on page 2 because its
+	// flow_id is above its shard's cursor in the encoded NextCursor.
+	flows, firstCursor, err := fm.List(ctx, foremanapi.Query{
+		Status: workflow.StatusCreated,
+		Limit:  pageSize,
+	})
+	if !assert.NoError(err) {
+		return
+	}
+	_ = flows
+	freshKey := mustCreate()
+	page2, _, err := fm.List(ctx, foremanapi.Query{
+		Status: workflow.StatusCreated,
+		Limit:  pageSize,
+		Cursor: firstCursor,
+	})
+	if !assert.NoError(err) {
+		return
+	}
+	for _, f := range page2 {
+		assert.NotEqual(freshKey, f.FlowKey)
+	}
+}
+
+
+func TestForeman_Delete(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	t.Run("delete_created_flow", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flowKey, err := fm.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		err = fm.Delete(ctx, flowKey)
+		assert.NoError(err)
+		_, err = fm.Snapshot(ctx, flowKey)
+		assert.Error(err) // Should be 404 not found after delete
+	})
+
+	t.Run("delete_terminal_flow", func(t *testing.T) {
+		assert := testarossa.For(t)
+		outcome, err := fm.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) || !assert.NotNil(outcome) {
+			return
+		}
+		assert.Equal(workflow.StatusCompleted, outcome.Status)
+		err = fm.Delete(ctx, outcome.FlowKey)
+		assert.NoError(err)
+	})
+
+	t.Run("delete_nonexistent", func(t *testing.T) {
+		assert := testarossa.For(t)
+		// Use a syntactically valid but nonexistent flow key on shard 1
+		err := fm.Delete(ctx, "1-99999999-deadbeefdeadbeefdeadbeefdeadbeef")
+		assert.Error(err)
+	})
+}
+
+func TestForeman_Purge(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	assert := testarossa.For(t)
+
+	// Create 5 flows in created state and run 3 to completion.
+	for range 5 {
+		_, err := fm.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) {
+			return
+		}
+	}
+	for range 3 {
+		outcome, err := fm.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		if !assert.NoError(err) || !assert.NotNil(outcome) {
+			return
+		}
+		assert.Equal(workflow.StatusCompleted, outcome.Status)
+	}
+
+	t.Run("purge_by_status_completed", func(t *testing.T) {
+		assert := testarossa.For(t)
+		deleted, err := fm.Purge(ctx, foremanapi.Query{Status: workflow.StatusCompleted})
+		assert.NoError(err)
+		assert.Equal(3, deleted)
+		// Verify all completed flows are gone.
+		flows, _, err := fm.List(ctx, foremanapi.Query{Status: workflow.StatusCompleted, Limit: 100})
+		assert.NoError(err)
+		assert.Equal(0, len(flows))
+	})
+
+	t.Run("purge_remaining_created", func(t *testing.T) {
+		assert := testarossa.For(t)
+		deleted, err := fm.Purge(ctx, foremanapi.Query{Status: workflow.StatusCreated})
+		assert.NoError(err)
+		assert.Equal(5, deleted)
+	})
+}
+
+func TestForeman_Query_TenantID(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	tester := connector.New("tester.client")
+	fm := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+
+	assert := testarossa.For(t)
+
+	// Create flows under three different tenants using actor claims with the tid claim.
+	createWithTenant := func(tid int) string {
+		fCtx := frame.CloneContext(ctx)
+		frame.Of(fCtx).SetActor(map[string]any{"tid": tid})
+		flowKey, err := fm.Create(fCtx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+		assert.NoError(err)
+		return flowKey
+	}
+	for range 2 {
+		createWithTenant(101)
+	}
+	for range 3 {
+		createWithTenant(202)
+	}
+	// One flow without a tenant (no actor) - tenant_id defaults to 0.
+	_, err := fm.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{}, nil)
+	assert.NoError(err)
+
+	// Filter by tenant.
+	t.Run("tenant_101", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flows, _, err := fm.List(ctx, foremanapi.Query{TenantID: 101, Limit: 100})
+		assert.NoError(err)
+		assert.Equal(2, len(flows))
+	})
+	t.Run("tenant_202", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flows, _, err := fm.List(ctx, foremanapi.Query{TenantID: 202, Limit: 100})
+		assert.NoError(err)
+		assert.Equal(3, len(flows))
+	})
+	t.Run("no_tenant_filter_returns_all", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flows, _, err := fm.List(ctx, foremanapi.Query{Limit: 100})
+		assert.NoError(err)
+		assert.True(len(flows) >= 6)
+	})
 }

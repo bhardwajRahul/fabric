@@ -58,16 +58,20 @@ func TestFanouterrorflow_FanOutError(t *testing.T) { // MARKER: FanOutError
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := fanouterrorflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -81,7 +85,7 @@ func TestFanouterrorflow_FanOutError(t *testing.T) { // MARKER: FanOutError
 
 		_, status, err := exec.FanOutError(ctx)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 	})
 
 	t.Run("handler_runs_and_state_reaches_taskE", func(t *testing.T) {
@@ -96,7 +100,7 @@ func TestFanouterrorflow_FanOutError(t *testing.T) { // MARKER: FanOutError
 		recovered, status, err := exec.FanOutError(ctx)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			recovered, true,
 		)
 	})

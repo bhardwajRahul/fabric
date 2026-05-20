@@ -151,7 +151,6 @@ type Executor interface {
 
 // Timer are actions related to time management.
 type Timer interface {
-	Now(ctx context.Context) time.Time
 	Sleep(ctx context.Context, duration time.Duration) error
 }
 

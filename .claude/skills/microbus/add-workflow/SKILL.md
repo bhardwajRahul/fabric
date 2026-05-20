@@ -231,7 +231,7 @@ Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microse
 
 Append the integration test to `service_test.go`. The test includes the foreman service in the app to enable end-to-end workflow execution.
 
-Ensure that `"github.com/microbus-io/fabric/coreservices/foreman"` and `"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"` are imported in `service_test.go`. Add them if not already present.
+Ensure that `"github.com/microbus-io/fabric/coreservices/foreman"`, `"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"`, and `"github.com/microbus-io/fabric/workflow"` are imported in `service_test.go`. Add them if not already present. (foreman is needed to add the foreman microservice to the test bundle, foremanapi for `NewClient`, and workflow for the status constants like `workflow.StatusCompleted`.)
 
 ```go
 func TestMyService_MyWorkflow(t *testing.T) { // MARKER: MyWorkflow
@@ -267,7 +267,7 @@ func TestMyService_MyWorkflow(t *testing.T) { // MARKER: MyWorkflow
 			outputField1, outputField2, status, err := exec.MyWorkflow(ctx, inputField1, inputField2)
 			assert.Expect(
 				err, nil,
-				status, foremanapi.StatusCompleted,
+				status, workflow.StatusCompleted,
 				outputField1, expectedValue1,
 				outputField2, expectedValue2,
 			)
@@ -292,7 +292,7 @@ t.Run("test_case_name", func(t *testing.T) {
 	outputField1, outputField2, status, err := exec.MyWorkflow(ctx, inputField1, inputField2)
 	assert.Expect(
 		err, nil,
-		status, foremanapi.StatusCompleted,
+		status, workflow.StatusCompleted,
 		outputField1, expectedValue1,
 		outputField2, expectedValue2,
 	)

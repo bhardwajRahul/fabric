@@ -18,6 +18,7 @@ package foreman
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -71,7 +72,6 @@ func (svc *Service) fetchGraph(ctx context.Context, workflowName string) (*workf
 func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (err error) {
 	defer func() {
 		if sequel.IsLockContentionError(err) {
-			svc.IncrementCompletionContention(ctx, 1)
 			// The step row was not updated. If this worker had already leased it,
 			// expire the lease and reset it to pending so the immediate poll can
 			// re-enqueue it now. Without this the step keeps its full
@@ -81,7 +81,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			if db, derr := svc.shard(shardNum); derr == nil {
 				db.ExecContext(ctx,
 					"UPDATE microbus_steps SET status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-					foremanapi.StatusPending, stepID, foremanapi.StatusRunning,
+					workflow.StatusPending, stepID, workflow.StatusRunning,
 				)
 			}
 			// Trigger an immediate poll cycle to recover it rather than waiting up
@@ -93,33 +93,16 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Read the step's time budget and flow_id to compute lease duration and enable parallel loading
-	var timeBudgetMs int
-	var flowID int
-	err = db.QueryRowContext(ctx,
-		"SELECT time_budget_ms, flow_id FROM microbus_steps WHERE step_id=?",
-		stepID,
-	).Scan(&timeBudgetMs, &flowID)
-	if err != nil {
-		return nil // Step doesn't exist or was deleted
-	}
-	leaseMs := timeBudgetMs + int(leaseMargin.Milliseconds())
+	// Lease is sized to the foreman's current TimeBudget config + leaseMargin
+	// rather than the step's stored time_budget_ms, so the lease can be set
+	// without an upfront SELECT. The per-step time_budget_ms is read in the
+	// parallel block below for the dispatch timeout. Assumes the operator does
+	// not decrease TimeBudget mid-flight below the largest in-flight step's
+	// budget; if they do, in-flight leases may expire before completion and
+	// trigger pollPendingSteps recovery.
+	leaseMs := int(svc.TimeBudget().Milliseconds() + leaseMargin.Milliseconds())
 
-	// Try to acquire the step by atomically transitioning it from pending to running
-	res, err := db.ExecContext(ctx,
-		"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
-			" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
-		foremanapi.StatusRunning, leaseMs, stepID, foremanapi.StatusPending,
-	)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return nil // Already claimed or not yet due
-	}
-
-	// Load step data and flow data in parallel
+	var n int64
 	var stepDepth int
 	var taskName string
 	var stateJSON string
@@ -127,6 +110,78 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var breakpointHit bool
 	var attempt int
 	var lineageID int
+	var flowID int
+	var timeBudgetMs int
+	switch db.DriverName() {
+	case "pgx", "sqlite":
+		// Single round-trip claim+read: UPDATE ... RETURNING. The CAS predicate
+		// gates the claim, so an unmatched UPDATE yields ErrNoRows from Scan.
+		err = db.QueryRowContext(ctx,
+			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
+				" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()"+
+				" RETURNING step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms",
+			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
+		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+		if err == sql.ErrNoRows {
+			n = 0
+			err = nil
+		} else if err == nil {
+			n = 1
+		}
+	case "mssql":
+		// SQL Server uses OUTPUT INSERTED.* between SET and WHERE; same single-
+		// round-trip semantics as RETURNING.
+		err = db.QueryRowContext(ctx,
+			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
+				" OUTPUT INSERTED.step_depth, INSERTED.task_name, INSERTED.state, INSERTED.changes, INSERTED.breakpoint_hit, INSERTED.attempt, INSERTED.lineage_id, INSERTED.flow_id, INSERTED.time_budget_ms"+
+				" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
+			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
+		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+		if err == sql.ErrNoRows {
+			n = 0
+			err = nil
+		} else if err == nil {
+			n = 1
+		}
+	default:
+		err = svc.Parallel(
+			func() error {
+				// Atomic claim. WHERE clause gates: only one worker wins.
+				res, err := db.ExecContext(ctx,
+					"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
+						" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
+					workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
+				)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				n, _ = res.RowsAffected()
+				return nil
+			},
+			func() error {
+				// The UPDATE only mutates status and lease_expires; the columns read
+				// here are stable for the row's lifetime, so this race-reads safely.
+				err := db.QueryRowContext(ctx,
+					"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms FROM microbus_steps WHERE step_id=?",
+					stepID,
+				).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+				if err == sql.ErrNoRows {
+					return nil
+				}
+				return errors.Trace(err)
+			},
+		)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if n == 0 {
+		return nil // Already claimed or not yet due
+	}
+	if flowID == 0 {
+		return nil // Step row gone
+	}
+
 	var flowToken string
 	var flowStatus string
 	var workflowName string
@@ -135,22 +190,15 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var traceParent string
 	var notifyHostname string
 	var breakpointsJSON string
-	err = svc.Parallel(
-		func() error {
-			err := db.QueryRowContext(ctx,
-				"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id FROM microbus_steps WHERE step_id=?",
-				stepID,
-			).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID)
-			return errors.Trace(err)
-		},
-		func() error {
-			err := db.QueryRowContext(ctx,
-				"SELECT flow_token, status, workflow_name, graph, actor_claims, trace_parent, notify_hostname, breakpoints FROM microbus_flows WHERE flow_id=?",
-				flowID,
-			).Scan(&flowToken, &flowStatus, &workflowName, &graphJSON, &actorClaimsJSON, &traceParent, &notifyHostname, &breakpointsJSON)
-			return errors.Trace(err)
-		},
-	)
+	var flowCreatedAt time.Time
+	var flowUpdatedAt time.Time
+	var flowPriority int
+	var flowFairnessKey string
+	var flowFairnessWeight float64
+	err = db.QueryRowContext(ctx,
+		"SELECT flow_token, status, workflow_name, graph, actor_claims, trace_parent, notify_hostname, breakpoints, created_at, updated_at, priority, fairness_key, fairness_weight FROM microbus_flows WHERE flow_id=?",
+		flowID,
+	).Scan(&flowToken, &flowStatus, &workflowName, &graphJSON, &actorClaimsJSON, &traceParent, &notifyHostname, &breakpointsJSON, &flowCreatedAt, &flowUpdatedAt, &flowPriority, &flowFairnessKey, &flowFairnessWeight)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -159,7 +207,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	// If this worker claimed the step before the step update, catch it here.
 	flowStatus = strings.TrimSpace(flowStatus)
 	flowToken = strings.TrimSpace(flowToken)
-	if flowStatus == foremanapi.StatusCancelled || flowStatus == foremanapi.StatusFailed || flowStatus == foremanapi.StatusCompleted {
+	if flowStatus == workflow.StatusCancelled || flowStatus == workflow.StatusFailed || flowStatus == workflow.StatusCompleted {
 		_, err = db.ExecContext(ctx,
 			"UPDATE microbus_steps SET status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
 			flowStatus, stepID,
@@ -167,23 +215,29 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		return errors.Trace(err)
 	}
 
-	// Deserialize graph
-	var graph workflow.Graph
-	err = json.Unmarshal([]byte(graphJSON), &graph)
-	if err != nil {
-		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-		return errors.Trace(err)
+	// Deserialize graph (or reuse the cached parse - graphJSON is frozen at
+	// flow creation, so every step of the same flow sees identical bytes).
+	graphKey := graphCacheKey{shard: shardNum, flowID: flowID}
+	graph, cached := svc.graphCache.Load(graphKey)
+	if !cached {
+		graph = &workflow.Graph{}
+		err = json.Unmarshal([]byte(graphJSON), graph)
+		if err != nil {
+			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
+			return errors.Trace(err)
+		}
+		svc.graphCache.Store(graphKey, graph)
 	}
 
 	// Build the Flow carrier
 	var state map[string]any
-	err = json.Unmarshal([]byte(stateJSON), &state)
+	err = unmarshalJSONMap(stateJSON, &state)
 	if err != nil {
 		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 		return errors.Trace(err)
 	}
 	var priorChanges map[string]any
-	err = json.Unmarshal([]byte(priorChangesJSON), &priorChanges)
+	err = unmarshalJSONMap(priorChangesJSON, &priorChanges)
 	if err != nil {
 		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 		return errors.Trace(err)
@@ -200,12 +254,13 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	flow.SetRawState(mergedInputState)
 	flow.SetRawChanges(priorChanges)
 	flow.SetAttempt(attempt)
+	flow.SetTimestamps(flowCreatedAt, flowUpdatedAt)
 
 	// Check breakpoints: pause before executing the task if a breakpoint matches.
 	// Skip if this step already hit a breakpoint (breakpoint_hit flag prevents re-triggering on Resume).
 	if !breakpointHit {
 		var breakpoints map[string]string
-		err := json.Unmarshal([]byte(breakpointsJSON), &breakpoints)
+		err := unmarshalJSONMap(breakpointsJSON, &breakpoints)
 		if err != nil {
 			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 			return errors.Trace(err)
@@ -237,8 +292,8 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 
 			// Interrupt all flows in the chain
 			flowPlaceholders := strings.Repeat("?,", len(chainFlowIDs)-1) + "?"
-			flowArgs := append([]any{foremanapi.StatusInterrupted}, chainFlowIDs...)
-			flowArgs = append(flowArgs, foremanapi.StatusRunning, foremanapi.StatusInterrupted)
+			flowArgs := append([]any{workflow.StatusInterrupted}, chainFlowIDs...)
+			flowArgs = append(flowArgs, workflow.StatusRunning, workflow.StatusInterrupted)
 			_, err = tx.ExecContext(ctx,
 				"UPDATE microbus_flows SET status=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status IN (?, ?)",
 				flowArgs...,
@@ -251,8 +306,8 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			// Interrupt all steps in the chain (current step + parked surgraph steps)
 			allStepIDs := append([]any{stepID}, chainStepIDs...)
 			stepPlaceholders := strings.Repeat("?,", len(allStepIDs)-1) + "?"
-			stepArgs := append([]any{foremanapi.StatusInterrupted}, allStepIDs...)
-			stepArgs = append(stepArgs, foremanapi.StatusRunning, foremanapi.StatusInterrupted)
+			stepArgs := append([]any{workflow.StatusInterrupted}, allStepIDs...)
+			stepArgs = append(stepArgs, workflow.StatusRunning, workflow.StatusInterrupted)
 			_, err = tx.ExecContext(ctx,
 				"UPDATE microbus_steps SET status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id IN ("+stepPlaceholders+") AND status IN (?, ?)",
 				stepArgs...,
@@ -279,7 +334,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 
 			// Notify status change for all flows in the chain (outside the transaction)
 			for _, compositeID := range chainCompositeIDs {
-				foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, foremanapi.StatusInterrupted)
+				foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, workflow.StatusInterrupted)
 			}
 			// Fire OnFlowStopped on the root flow's notify hostname (if set)
 			rootFlowID := chainFlowIDs[len(chainFlowIDs)-1]
@@ -288,10 +343,13 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			db.QueryRowContext(ctx, "SELECT notify_hostname FROM microbus_flows WHERE flow_id=?", rootFlowID).Scan(&rootNotifyHostname)
 			rootNotifyHostname = strings.TrimSpace(rootNotifyHostname)
 			if rootNotifyHostname != "" {
-				foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, rootCompositeID, foremanapi.StatusInterrupted, nil)
+				foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, &workflow.FlowOutcome{
+					FlowKey: rootCompositeID,
+					Status:  workflow.StatusInterrupted,
+				})
 			}
 
-			svc.IncrementStepsExecuted(ctx, 1, taskName, foremanapi.StatusInterrupted)
+			svc.IncrementStepsExecuted(ctx, 1, taskName, workflow.StatusInterrupted)
 			return nil
 		}
 	}
@@ -307,11 +365,11 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	defer taskSpan.End()
 
 	var resultFlow *workflow.RawFlow
-	var currentFlowStatus string
 	var actorClaims map[string]any
 	errorRouted := false
 	errStatusCode := 0
 	var actorToken string
+	var execErr error
 
 	// Subgraph handling: if the task is a subgraph, create and start a subgraph flow
 	// instead of executing it as an HTTP task. The surgraph step stays running with
@@ -330,14 +388,14 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status IN (?, ?, ?)",
 					flowID, stepDepth, stepID,
-					foremanapi.StatusCreated, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
+					workflow.StatusCreated, workflow.StatusRunning, workflow.StatusInterrupted,
 				).Scan(&activeSubgraphCount)
 				return errors.Trace(err)
 			},
 			func() error {
 				err := db.QueryRowContext(ctx,
 					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status=?",
-					flowID, stepDepth, stepID, foremanapi.StatusCompleted,
+					flowID, stepDepth, stepID, workflow.StatusCompleted,
 				).Scan(&completedSubgraphCount)
 				return errors.Trace(err)
 			},
@@ -355,7 +413,7 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		if activeSubgraphCount == 0 {
 			// No subgraph flow exists yet - create and start one. The subgraph workflow URL comes from the node's URL,
 			// not its name (these may differ if the node was registered with an explicit name via AddSubgraph(name, url)).
-			subgraphURL := dispatchURLOf(&graph, taskName)
+			subgraphURL := dispatchURLOf(graph, taskName)
 			subgraphGraph, err := svc.fetchGraph(ctx, subgraphURL)
 			if err != nil {
 				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
@@ -385,10 +443,10 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		// - Surgraph cancelled -> Cancel cascades to subgraph flow via cancelSubgraphFlows
 		// The subgraph flow's own steps have normal short leases, so pollPendingSteps
 		// recovers it if the foreman crashes after creating it.
-		parkMs := max(svc.RetentionDays(), 1) * 24 * 60 * 60 * 1000
+		parkMs := surgraphParkLease.Milliseconds()
 		_, err = db.ExecContext(ctx,
 			"UPDATE microbus_steps SET lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-			parkMs, stepID, foremanapi.StatusRunning,
+			parkMs, stepID, workflow.StatusRunning,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -397,7 +455,8 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	}
 
 	// Mint an access token from the original actor's claims
-	if err = json.Unmarshal([]byte(actorClaimsJSON), &actorClaims); err != nil {
+	err = unmarshalJSONMap(actorClaimsJSON, &actorClaims)
+	if err != nil {
 		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
 		return errors.Trace(err)
 	}
@@ -417,26 +476,41 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	// via the graph so a node can address a different URL than its name (used when the
 	// same task is reused at multiple positions in the graph).
 	svc.LogDebug(ctx, "Executing task", "task", taskName, "flow", workflowName)
-	resultFlow, err = svc.executeTask(taskCtx, dispatchURLOf(&graph, taskName), flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
-	if err != nil {
-		// Record the input state on the span
-		inputState, mergeErr := workflow.MergeState(state, priorChanges, nil)
-		if mergeErr != nil {
-			return errors.Trace(mergeErr)
+	resultFlow, execErr = svc.executeTask(taskCtx, dispatchURLOf(graph, taskName), flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
+	if execErr != nil {
+		// 429 -> the step is bounced back to pending, not failed.
+		// Runs before the OnError check: the task never saw this 429.
+		if errors.StatusCode(execErr) == http.StatusTooManyRequests {
+			err := svc.handleBackpressure(ctx, shardNum, stepID, taskName, workflowName)
+			return errors.Trace(err)
+		}
+		// 404 ack-timeout -> the step is bounced; the breaker, not the step,
+		// gates the retry. A handler-emitted 404 lacks the prefix and falls
+		// through.
+		if errors.StatusCode(execErr) == http.StatusNotFound && strings.HasPrefix(execErr.Error(), "ack timeout") {
+			err := svc.handleAckTimeout(ctx, shardNum, stepID, taskName, workflowName)
+			return errors.Trace(err)
+		}
+		// Record the input state on the span. Use a distinct name so the
+		// dispatch err (driving OnError/OnTimeout routing below) is not
+		// shadowed by a nil from a successful MergeState.
+		inputState, err := workflow.MergeState(state, priorChanges, nil)
+		if err != nil {
+			return errors.Trace(err)
 		}
 		for k, v := range inputState {
 			taskSpan.SetAttributes("workflow.state."+k, v)
 		}
-		taskSpan.SetError(err)
+		taskSpan.SetError(execErr)
 
 		// Check for error transition before failing the flow
 		if _, ok := graph.ErrorTransition(taskName); ok {
-			svc.LogDebug(ctx, "Task error routed", "task", taskName, "flow", workflowName, "error", err)
+			svc.LogDebug(ctx, "Task error routed", "task", taskName, "flow", workflowName, "error", execErr)
 			taskSpan.SetAttributes("workflow.command", "onError")
 			errorRouted = true
 
 			// Serialize the error as a TracedError into a synthetic result flow
-			tracedErr := errors.Convert(err)
+			tracedErr := errors.Convert(execErr)
 			errStatusCode = tracedErr.StatusCode
 			resultFlow = workflow.NewRawFlow()
 			resultFlow.SetRawState(state)
@@ -445,33 +519,37 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			goto postExecution
 		}
 
-		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-		return errors.Trace(err)
+		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, execErr, taskName)
+		return errors.Trace(execErr)
 	}
 
-	// Check if the flow was cancelled while the task was running
-	err = db.QueryRowContext(ctx,
-		"SELECT status FROM microbus_flows WHERE flow_id=?",
-		flowID,
-	).Scan(&currentFlowStatus)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	currentFlowStatus = strings.TrimSpace(currentFlowStatus)
-	if currentFlowStatus == foremanapi.StatusCancelled {
-		// Even if this errors out, the next iteration will detect that the flow is cancelled.
-		db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id=?",
-			foremanapi.StatusCancelled, stepID,
-		)
-		return nil
-	}
+	// Close the breaker if this dispatch was a probe; no-op otherwise.
+	svc.breakerClose(ctx, taskName)
+
+	// Concurrent-cancel race is handled by two downstream guards instead of a
+	// dedicated SELECT here: the step-complete UPDATE below gates on
+	// status!=cancelled, so a Cancel that already cancelled this step is a
+	// harmless no-op; and any next steps created by the transition evaluation
+	// are caught by the terminal-flow check at the top of processStep on their
+	// first execution. The step we just ran is recorded as completed (the task
+	// did run), which is more faithful to history than overwriting it with
+	// cancelled.
 
 postExecution:
 	// Accumulate this execution's changes on top of prior changes.
 	// The state column is invariant; all mutations accumulate in the changes column.
-	accumulatedChanges, _ := workflow.MergeState(priorChanges, resultFlow.RawChanges(), nil)
-	changesJSON, _ := json.Marshal(accumulatedChanges)
+	// Short-circuit when the task produced no new changes: the accumulated set is
+	// just the prior set, and its JSON is already in priorChangesJSON.
+	var accumulatedChanges map[string]any
+	var changesJSON []byte
+	rawChanges := resultFlow.RawChanges()
+	if len(rawChanges) == 0 {
+		accumulatedChanges = priorChanges
+		changesJSON = []byte(priorChangesJSON)
+	} else {
+		accumulatedChanges, _ = workflow.MergeState(priorChanges, rawChanges, nil)
+		changesJSON, _ = json.Marshal(accumulatedChanges)
+	}
 
 	// Fail the step if multiple competing control signals are set.
 	// Sleep is excluded - it modifies timing, not control flow.
@@ -519,8 +597,8 @@ postExecution:
 
 		// Interrupt all flows in the chain
 		flowPlaceholders := strings.Repeat("?,", len(chainFlowIDs)-1) + "?"
-		flowArgs := append([]any{foremanapi.StatusInterrupted}, chainFlowIDs...)
-		flowArgs = append(flowArgs, foremanapi.StatusRunning, foremanapi.StatusInterrupted)
+		flowArgs := append([]any{workflow.StatusInterrupted}, chainFlowIDs...)
+		flowArgs = append(flowArgs, workflow.StatusRunning, workflow.StatusInterrupted)
 		_, err = tx.ExecContext(ctx,
 			"UPDATE microbus_flows SET status=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status IN (?, ?)",
 			flowArgs...,
@@ -532,9 +610,9 @@ postExecution:
 		// Interrupt all steps in the chain, persisting changes on the current step via CASE
 		allStepIDs := append([]any{stepID}, chainStepIDs...)
 		stepPlaceholders := strings.Repeat("?,", len(allStepIDs)-1) + "?"
-		stepArgs := []any{stepID, string(changesJSON), foremanapi.StatusInterrupted}
+		stepArgs := []any{stepID, string(changesJSON), workflow.StatusInterrupted}
 		stepArgs = append(stepArgs, allStepIDs...)
-		stepArgs = append(stepArgs, foremanapi.StatusRunning, foremanapi.StatusInterrupted)
+		stepArgs = append(stepArgs, workflow.StatusRunning, workflow.StatusInterrupted)
 		_, err = tx.ExecContext(ctx,
 			"UPDATE microbus_steps SET changes=CASE WHEN step_id=? THEN ? ELSE changes END, status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id IN ("+stepPlaceholders+") AND status IN (?, ?)",
 			stepArgs...,
@@ -565,7 +643,7 @@ postExecution:
 
 		// Notify status change for all flows in the chain (outside the transaction)
 		for _, compositeID := range chainCompositeIDs {
-			foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, foremanapi.StatusInterrupted)
+			foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, workflow.StatusInterrupted)
 		}
 		// Fire OnFlowStopped on the root flow's notify hostname (if set)
 		rootFlowID := chainFlowIDs[len(chainFlowIDs)-1]
@@ -574,10 +652,14 @@ postExecution:
 		db.QueryRowContext(ctx, "SELECT notify_hostname FROM microbus_flows WHERE flow_id=?", rootFlowID).Scan(&rootNotifyHostname)
 		rootNotifyHostname = strings.TrimSpace(rootNotifyHostname)
 		if rootNotifyHostname != "" {
-			foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, rootCompositeID, foremanapi.StatusInterrupted, nil)
+			foremanapi.NewMulticastTrigger(svc).ForHost(rootNotifyHostname).OnFlowStopped(ctx, &workflow.FlowOutcome{
+				FlowKey:          rootCompositeID,
+				Status:           workflow.StatusInterrupted,
+				InterruptPayload: interruptPayload,
+			})
 		}
 
-		svc.IncrementStepsExecuted(ctx, 1, taskName, foremanapi.StatusInterrupted)
+		svc.IncrementStepsExecuted(ctx, 1, taskName, workflow.StatusInterrupted)
 		return nil
 	}
 
@@ -595,7 +677,7 @@ postExecution:
 		// and the task will see its prior changes via the merged state built by the flow builder.
 		_, err = db.ExecContext(ctx,
 			"UPDATE microbus_steps SET changes=?, updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-			string(changesJSON), stepID, foremanapi.StatusRunning,
+			string(changesJSON), stepID, workflow.StatusRunning,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -635,10 +717,10 @@ postExecution:
 		}
 
 		// Park the step: extend lease far into the future
-		parkMs := max(svc.RetentionDays(), 1) * 24 * 60 * 60 * 1000
+		parkMs := surgraphParkLease.Milliseconds()
 		_, err = db.ExecContext(ctx,
 			"UPDATE microbus_steps SET lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-			parkMs, stepID, foremanapi.StatusRunning,
+			parkMs, stepID, workflow.StatusRunning,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -678,7 +760,7 @@ postExecution:
 		// On the next attempt, the flow builder merges state+changes so the task sees everything.
 		_, err = db.ExecContext(ctx,
 			"UPDATE microbus_steps SET status=?, changes=?, attempt=?, not_before=DATE_ADD_MILLIS(NOW_UTC(), ?), lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
-			foremanapi.StatusPending, string(changesJSON), attempt+1, retrySleepMs, stepID,
+			workflow.StatusPending, string(changesJSON), attempt+1, retrySleepMs, stepID,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -701,13 +783,13 @@ postExecution:
 		svc.IncrementStepsExecuted(ctx, 1, taskName, "error_routed")
 	} else {
 		svc.LogDebug(ctx, "Task completed", "task", taskName, "flow", workflowName)
-		svc.IncrementStepsExecuted(ctx, 1, taskName, foremanapi.StatusCompleted)
+		svc.IncrementStepsExecuted(ctx, 1, taskName, workflow.StatusCompleted)
 		taskSpan.SetAttributes("workflow.command", "next")
 	}
 	gotoTarget := resultFlow.GotoRequested()
 	stepRes, err := db.ExecContext(ctx,
 		"UPDATE microbus_steps SET status=?, changes=?, goto_next=?, updated_at=NOW_UTC() WHERE step_id=? AND status!=?",
-		foremanapi.StatusCompleted, string(changesJSON), gotoTarget, stepID, foremanapi.StatusCancelled,
+		workflow.StatusCompleted, string(changesJSON), gotoTarget, stepID, workflow.StatusCancelled,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -722,8 +804,8 @@ postExecution:
 		// arrivals (no state contribution) so the FanIn isn't blocked waiting for them.
 		res, err := db.ExecContext(ctx,
 			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE flow_id=? AND lineage_id=? AND step_id!=? AND status IN (?, ?, ?)",
-			foremanapi.StatusCancelled, flowID, lineageID, stepID,
-			foremanapi.StatusPending, foremanapi.StatusRunning, foremanapi.StatusInterrupted,
+			workflow.StatusCancelled, flowID, lineageID, stepID,
+			workflow.StatusPending, workflow.StatusRunning, workflow.StatusInterrupted,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -744,9 +826,9 @@ postExecution:
 
 	var nextTasks []nextStep
 	if errorRouted {
-		nextTasks, err = svc.evaluateErrorTransitions(&graph, taskName, resultFlow, errStatusCode)
+		nextTasks, err = svc.evaluateErrorTransitions(graph, taskName, resultFlow, errStatusCode)
 	} else {
-		nextTasks, err = svc.evaluateTransitions(&graph, taskName, resultFlow)
+		nextTasks, err = svc.evaluateTransitions(graph, taskName, resultFlow)
 	}
 	if err != nil {
 		svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
@@ -772,7 +854,7 @@ postExecution:
 		if fanInTarget == "" {
 			return svc.completeFlowSequential(ctx, shardNum, db, flowID, flowToken, stepID, notifyHostname, workflowName)
 		}
-		return svc.fireFanInDirect(ctx, shardNum, db, flowID, flowToken, stepID, stepDepth, lineageID, fanInTarget, &graph, sleepDur)
+		return svc.fireFanInDirect(ctx, shardNum, db, flowID, stepID, stepDepth, lineageID, fanInTarget, sleepDur, flowPriority, flowFairnessKey, flowFairnessWeight)
 	}
 
 	if cohortSize == 0 {
@@ -815,19 +897,12 @@ postExecution:
 		return errors.Trace(err)
 	}
 
-	// Compute the children's input state from our state+changes.
-	var ourStateJSON, ourChangesJSON string
-	err = tx.QueryRowContext(ctx,
-		"SELECT state, changes FROM microbus_steps WHERE step_id=?",
-		stepID,
-	).Scan(&ourStateJSON, &ourChangesJSON)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	var ourState, ourChanges map[string]any
-	json.Unmarshal([]byte(ourStateJSON), &ourState)
-	json.Unmarshal([]byte(ourChangesJSON), &ourChanges)
-	childInputState, err := workflow.MergeState(ourState, ourChanges, nil)
+	// Compute the children's input state from our state+changes using in-memory
+	// values: state is invariant after step creation (loaded in the parallel
+	// block at the top of processStep), and changes is what we just wrote one
+	// statement above via UPDATE microbus_steps SET changes=?. Re-reading them
+	// from the row would just return these same values.
+	childInputState, err := workflow.MergeState(state, accumulatedChanges, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -852,8 +927,8 @@ postExecution:
 		// execution-DAG edge is recorded on the child side (covers linear and fan-out).
 		newStepID, err := tx.InsertReturnID(ctx, "step_id",
 			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), (SELECT priority FROM microbus_flows WHERE flow_id=?), (SELECT fairness_key FROM microbus_flows WHERE flow_id=?), (SELECT fairness_weight FROM microbus_flows WHERE flow_id=?))",
-			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), foremanapi.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, i, stepID, sleepMs, flowID, flowID, flowID,
+				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, i, stepID, sleepMs, flowPriority, flowFairnessKey, flowFairnessWeight,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -908,7 +983,7 @@ postExecution:
 			"arrivals", arrivals, "size", size, "fire", fire, "fanInTask", fanInTaskName,
 			"byStep", stepID, "task", taskName, "lineage", lineageID, "push", isPushTransition)
 		if fire {
-			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, stepID, fanInTaskName, &graph, sleepMs)
+			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, stepID, fanInTaskName, graph, sleepMs, flowPriority, flowFairnessKey, flowFairnessWeight)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -934,10 +1009,8 @@ postExecution:
 
 	if sleepDur > 0 {
 		svc.shortenNextPoll(time.Now().Add(sleepDur))
-	} else {
-		for _, id := range newStepIDs {
-			foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, id)
-		}
+	} else if len(newStepIDs) > 0 {
+		foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, newStepIDs[0])
 	}
 	return nil
 }
@@ -948,6 +1021,17 @@ postExecution:
 // the task handler runs.
 func (svc *Service) taskTimeBudget() time.Duration {
 	return svc.TimeBudget()
+}
+
+// unmarshalJSONMap decodes a JSON-object column into a map, fast-pathing the
+// "{}" sentinel that is the schema default for empty JSON columns. For an
+// empty or "{}" input the destination is left at its zero value (nil),
+// which len/range/maps.Copy and workflow.MergeState all treat as empty.
+func unmarshalJSONMap[V any](s string, dst *map[string]V) error {
+	if s == "" || s == "{}" {
+		return nil
+	}
+	return json.Unmarshal([]byte(s), dst)
 }
 
 // executeTask sends the flow to a task endpoint and returns the resulting flow.

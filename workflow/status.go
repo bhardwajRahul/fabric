@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package foremanapi
+package workflow
 
 const (
 	StatusCreated     = "created"     // Flow/step exists but has not been started

@@ -24,59 +24,61 @@ import (
 	"github.com/microbus-io/fabric/workflow"
 )
 
-// RunAndParse creates a flow, starts it, blocks until it stops, then unmarshals the state into result.
-func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions, result any) (status string, err error) {
-	status, state, err := _c.Run(ctx, workflowName, initialState, opts)
+// RunAndParse creates a flow, starts it, blocks until it stops, then unmarshals the outcome's State into result.
+// Returns the full workflow.FlowOutcome alongside any unmarshal error; inspect outcome.Status / outcome.Error to learn
+// whether the workflow succeeded.
+func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions, result any) (outcome *workflow.FlowOutcome, err error) {
+	outcome, err = _c.Run(ctx, workflowName, initialState, opts)
 	if err != nil {
-		return status, errors.Trace(err)
+		return outcome, errors.Trace(err)
 	}
-	if result != nil && state != nil {
-		data, err := json.Marshal(state)
+	if result != nil && outcome != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 		err = json.Unmarshal(data, result)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 	}
-	return status, nil
+	return outcome, nil
 }
 
-// AwaitAndParse blocks until the flow stops, then unmarshals the state into result.
-func (_c Client) AwaitAndParse(ctx context.Context, flowKey string, result any) (status string, err error) {
-	status, state, err := _c.Await(ctx, flowKey)
+// AwaitAndParse blocks until the flow stops, then unmarshals the outcome's State into result.
+func (_c Client) AwaitAndParse(ctx context.Context, flowKey string, result any) (outcome *workflow.FlowOutcome, err error) {
+	outcome, err = _c.Await(ctx, flowKey)
 	if err != nil {
-		return status, errors.Trace(err)
+		return outcome, errors.Trace(err)
 	}
-	if result != nil && state != nil {
-		data, err := json.Marshal(state)
+	if result != nil && outcome != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 		err = json.Unmarshal(data, result)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 	}
-	return status, nil
+	return outcome, nil
 }
 
-// SnapshotAndParse returns the current status and unmarshals the state into result.
-func (_c Client) SnapshotAndParse(ctx context.Context, flowKey string, result any) (status string, err error) {
-	status, state, err := _c.Snapshot(ctx, flowKey)
+// SnapshotAndParse returns the current outcome and unmarshals its State into result.
+func (_c Client) SnapshotAndParse(ctx context.Context, flowKey string, result any) (outcome *workflow.FlowOutcome, err error) {
+	outcome, err = _c.Snapshot(ctx, flowKey)
 	if err != nil {
-		return status, errors.Trace(err)
+		return outcome, errors.Trace(err)
 	}
-	if result != nil && state != nil {
-		data, err := json.Marshal(state)
+	if result != nil && outcome != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 		err = json.Unmarshal(data, result)
 		if err != nil {
-			return status, errors.Trace(err)
+			return outcome, errors.Trace(err)
 		}
 	}
-	return status, nil
+	return outcome, nil
 }

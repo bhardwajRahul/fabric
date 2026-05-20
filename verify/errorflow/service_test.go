@@ -59,16 +59,20 @@ func TestErrorflow_Error(t *testing.T) { // MARKER: Error
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := errorflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -79,7 +83,7 @@ func TestErrorflow_Error(t *testing.T) { // MARKER: Error
 		finalResult, status, err := exec.Error(ctx, "ok")
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			finalResult, "final:normal",
 		)
 	})
@@ -89,7 +93,7 @@ func TestErrorflow_Error(t *testing.T) { // MARKER: Error
 
 		finalResult, status, err := exec.Error(ctx, "fail")
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		// finalResult is "final:recovered:triggered failure\nstatusCode=500\n..."; check prefix
 		assert.Expect(strings.HasPrefix(finalResult, "final:recovered:triggered failure"), true)
 	})

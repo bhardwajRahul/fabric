@@ -58,16 +58,20 @@ func TestGotoflow_Goto(t *testing.T) { // MARKER: Goto
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := gotoflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -79,7 +83,7 @@ func TestGotoflow_Goto(t *testing.T) { // MARKER: Goto
 		finalLoops, status, err := exec.Goto(ctx, 1)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			finalLoops, 1,
 		)
 	})
@@ -92,7 +96,7 @@ func TestGotoflow_Goto(t *testing.T) { // MARKER: Goto
 		finalLoops, status, err := exec.Goto(ctx, 3)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			finalLoops, 3,
 		)
 	})
@@ -102,16 +106,20 @@ func TestGotoflow_BadGoto(t *testing.T) { // MARKER: BadGoto
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := gotoflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -123,6 +131,6 @@ func TestGotoflow_BadGoto(t *testing.T) { // MARKER: BadGoto
 
 		_, status, err := exec.BadGoto(ctx)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusFailed)
+		assert.Expect(status, workflow.StatusFailed)
 	})
 }

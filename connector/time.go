@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/trc"
 	"github.com/microbus-io/fabric/utils"
@@ -195,13 +194,6 @@ func (c *Connector) runTicker(job *tickerCallback) {
 			}
 		}
 	}()
-}
-
-// Now returns the current time in the UTC timezone.
-// The time may be offset if the context was a clock shift was set on the context using the frame.
-func (c *Connector) Now(ctx context.Context) time.Time {
-	offset := frame.Of(ctx).ClockShift()
-	return time.Now().UTC().Add(offset)
 }
 
 // Sleep pauses the current goroutine for the specified duration,

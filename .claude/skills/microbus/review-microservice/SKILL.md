@@ -52,7 +52,6 @@ Also check the reverse: are there MARKERs in `intermediate.go` or `mock.go` that
 
 Grep the hand-written `.go` files (same set as Step 1) for violations of Microbus framework conventions:
 
-- **`time.Now()`** - must be `svc.Now(ctx)` in handlers and methods that receive a context
 - **`http.Client`, `http.Get`, `http.Post`, `http.DefaultClient`** - outbound HTTP must go through the HTTP egress proxy (`httpegressapi`)
 - **Bare goroutines** - `go func` or `go ` followed by a function call must use `svc.Go(ctx, func)` instead
 - **`fmt.Errorf`** - must use `errors.New` instead

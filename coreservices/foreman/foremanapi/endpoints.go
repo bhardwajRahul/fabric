@@ -17,6 +17,8 @@ limitations under the License.
 package foremanapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/workflow"
 )
@@ -73,8 +75,7 @@ type SnapshotIn struct { // MARKER: Snapshot
 
 // SnapshotOut are the output arguments of Snapshot.
 type SnapshotOut struct { // MARKER: Snapshot
-	Status string         `json:"status,omitzero"`
-	State  map[string]any `json:"state,omitzero"`
+	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
 // ResumeIn are the input arguments of Resume.
@@ -89,8 +90,9 @@ type ResumeOut struct { // MARKER: Resume
 
 // ForkIn are the input arguments of Fork.
 type ForkIn struct { // MARKER: Fork
-	StepKey        string `json:"stepKey,omitzero"`
-	StateOverrides any    `json:"stateOverrides,omitzero"`
+	StepKey        string                `json:"stepKey,omitzero"`
+	StateOverrides any                   `json:"stateOverrides,omitzero"`
+	Opts           *workflow.FlowOptions `json:"opts,omitzero"`
 }
 
 // ForkOut are the output arguments of Fork.
@@ -101,6 +103,7 @@ type ForkOut struct { // MARKER: Fork
 // CancelIn are the input arguments of Cancel.
 type CancelIn struct { // MARKER: Cancel
 	FlowKey string `json:"flowKey,omitzero"`
+	Reason  string `json:"reason,omitzero"`
 }
 
 // CancelOut are the output arguments of Cancel.
@@ -126,6 +129,26 @@ type RetryIn struct { // MARKER: Retry
 type RetryOut struct { // MARKER: Retry
 }
 
+// DeleteIn are the input arguments of Delete.
+type DeleteIn struct { // MARKER: Delete
+	FlowKey string `json:"flowKey,omitzero"`
+}
+
+// DeleteOut are the output arguments of Delete.
+type DeleteOut struct { // MARKER: Delete
+}
+
+// PurgeIn are the input arguments of Purge.
+type PurgeIn struct { // MARKER: Purge
+	Query Query `json:"query,omitzero"`
+}
+
+// PurgeOut are the output arguments of Purge.
+type PurgeOut struct { // MARKER: Purge
+	// Deleted is the count of flows actually deleted (excluding running flows skipped by the guard).
+	Deleted int `json:"deleted,omitzero"`
+}
+
 // ListIn are the input arguments of List.
 type ListIn struct { // MARKER: List
 	Query Query `json:"query,omitzero"`
@@ -134,6 +157,9 @@ type ListIn struct { // MARKER: List
 // ListOut are the output arguments of List.
 type ListOut struct { // MARKER: List
 	Flows []FlowSummary `json:"flows,omitzero"`
+	// NextCursor is the opaque pagination cursor for the next page; pass it back as Query.Cursor.
+	// Empty when every shard has been drained.
+	NextCursor string `json:"nextCursor,omitzero"`
 }
 
 // CreateTaskIn are the input arguments of CreateTask.
@@ -164,8 +190,7 @@ type AwaitIn struct { // MARKER: Await
 
 // AwaitOut are the output arguments of Await.
 type AwaitOut struct { // MARKER: Await
-	Status string         `json:"status,omitzero"`
-	State  map[string]any `json:"state,omitzero"`
+	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
 // NotifyStatusChangeIn are the input arguments of NotifyStatusChange.
@@ -198,14 +223,14 @@ type RunIn struct { // MARKER: Run
 
 // RunOut are the output arguments of Run.
 type RunOut struct { // MARKER: Run
-	Status string         `json:"status,omitzero"`
-	State  map[string]any `json:"state,omitzero"`
+	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
 // ContinueIn are the input arguments of Continue.
 type ContinueIn struct { // MARKER: Continue
-	ThreadKey       string `json:"threadKey,omitzero"`
-	AdditionalState any    `json:"additionalState,omitzero"`
+	ThreadKey       string                `json:"threadKey,omitzero"`
+	AdditionalState any                   `json:"additionalState,omitzero"`
+	Opts            *workflow.FlowOptions `json:"opts,omitzero"`
 }
 
 // ContinueOut are the output arguments of Continue.
@@ -213,15 +238,56 @@ type ContinueOut struct { // MARKER: Continue
 	NewFlowKey string `json:"newFlowKey,omitzero"`
 }
 
+// SyncValveIn are the input arguments of SyncValve.
+type SyncValveIn struct { // MARKER: SyncValve
+	TaskName string    `json:"taskName,omitzero"`
+	WCong    int       `json:"wCong,omitzero"`
+	TCong    time.Time `json:"tCong,omitzero"`
+}
+
+// SyncValveOut are the output arguments of SyncValve.
+type SyncValveOut struct { // MARKER: SyncValve
+}
+
+// TripBreakerIn are the input arguments of TripBreaker.
+type TripBreakerIn struct { // MARKER: TripBreaker
+	TaskName string `json:"taskName,omitzero"`
+}
+
+// TripBreakerOut are the output arguments of TripBreaker.
+type TripBreakerOut struct { // MARKER: TripBreaker
+}
+
 // OnFlowStoppedIn are the input arguments of OnFlowStopped.
 type OnFlowStoppedIn struct { // MARKER: OnFlowStopped
-	FlowKey  string         `json:"flowKey,omitzero"`
-	Status   string         `json:"status,omitzero"`
-	Snapshot map[string]any `json:"snapshot,omitzero"`
+	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
 // OnFlowStoppedOut are the output arguments of OnFlowStopped.
 type OnFlowStoppedOut struct { // MARKER: OnFlowStopped
+}
+
+// ShardSummary carries per-shard health and size information, returned by the ShardInfo endpoint.
+type ShardSummary struct { // MARKER: ShardInfo
+	// Shard is the 1-based shard index.
+	Shard int `json:"shard,omitzero"`
+	// Error is the error string from probing this shard, empty when the probe succeeded.
+	Error string `json:"error,omitzero"`
+	// LatencyMs is the round-trip time of a `SELECT 1` query against this shard, in milliseconds.
+	LatencyMs int `json:"latencyMs,omitzero"`
+	// Steps is the row count of microbus_steps on this shard.
+	Steps int `json:"steps,omitzero"`
+	// Flows is the row count of microbus_flows on this shard.
+	Flows int `json:"flows,omitzero"`
+}
+
+// ShardInfoIn are the input arguments of ShardInfo.
+type ShardInfoIn struct { // MARKER: ShardInfo
+}
+
+// ShardInfoOut are the output arguments of ShardInfo.
+type ShardInfoOut struct { // MARKER: ShardInfo
+	Shards []ShardSummary `json:"shards,omitzero"`
 }
 
 var (
@@ -236,6 +302,8 @@ var (
 	History            = Def{Method: "GET", Route: ":444/history"}               // MARKER: History
 	Retry              = Def{Method: "POST", Route: ":444/retry"}                // MARKER: Retry
 	List               = Def{Method: "GET", Route: ":444/list"}                  // MARKER: List
+	Delete             = Def{Method: "POST", Route: ":444/delete"}               // MARKER: Delete
+	Purge              = Def{Method: "POST", Route: ":444/purge"}                // MARKER: Purge
 	CreateTask         = Def{Method: "POST", Route: ":444/create-task"}          // MARKER: CreateTask
 	Enqueue            = Def{Method: "POST", Route: ":444/enqueue"}              // MARKER: Enqueue
 	Await              = Def{Method: "POST", Route: ":444/wait-for-stop"}        // MARKER: Await
@@ -244,5 +312,8 @@ var (
 	Run                = Def{Method: "POST", Route: ":444/run"}                  // MARKER: Run
 	Continue           = Def{Method: "POST", Route: ":444/continue"}             // MARKER: Continue
 	HistoryMermaid     = Def{Method: "GET", Route: ":444/history-mermaid"}       // MARKER: HistoryMermaid
+	SyncValve     = Def{Method: "POST", Route: ":444/sync-valve"}      // MARKER: SyncValve
+	TripBreaker        = Def{Method: "POST", Route: ":444/trip-breaker"}         // MARKER: TripBreaker
 	OnFlowStopped      = Def{Method: "POST", Route: ":417/on-flow-terminated"}   // MARKER: OnFlowStopped
+	ShardInfo          = Def{Method: "GET", Route: ":444/shard-info"}            // MARKER: ShardInfo
 )

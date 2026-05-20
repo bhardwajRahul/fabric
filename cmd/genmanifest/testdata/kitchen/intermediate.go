@@ -64,6 +64,8 @@ type ToDo interface {
 	SelfPing(ctx context.Context) (err error)                            // MARKER: SelfPing
 	AltHostFn(ctx context.Context) (err error)                           // MARKER: AltHostFn
 	OnSomething(ctx context.Context, detail string) (ok bool, err error) // MARKER: OnSomething
+	OnObserveQueueDepth(ctx context.Context) (err error)                 // MARKER: QueueDepth
+	OnChangedThreshold(ctx context.Context) (err error)                  // MARKER: Threshold
 }
 
 // NewService creates a new instance of the microservice.
@@ -122,17 +124,42 @@ func NewIntermediate(impl ToDo) *Intermediate {
 
 	weirdapi.NewHook(svc).OnSomething(impl.OnSomething) // MARKER: OnSomething
 
+	// HINT: Add metrics here
+	svc.DescribeCounter("kitchen_requests_total", "RequestsTotal counts requests handled by the kitchen fixture, labelled by status.")            // MARKER: RequestsTotal
+	svc.DescribeGauge("kitchen_queue_depth", "QueueDepth records the current depth of the kitchen queue.")                                         // MARKER: QueueDepth
+	svc.DescribeHistogram("kitchen_latency_seconds", "LatencySeconds records request latency in seconds.", []float64{0.01, 0.05, 0.1, 0.5, 1, 5}) // MARKER: LatencySeconds
+
+	// HINT: Add configs here
+	svc.DefineConfig( // MARKER: SecretKey
+		"SecretKey",
+		cfg.Description(`SecretKey is a credential used by the kitchen fixture; never logged.`),
+		cfg.Secret(),
+	)
+	svc.DefineConfig( // MARKER: Threshold
+		"Threshold",
+		cfg.Description(`Threshold caps the kitchen fixture's in-flight requests.`),
+		cfg.DefaultValue(`10`),
+		cfg.Validation(`int [1,]`),
+	)
+
 	_ = marshalFunction
 	return svc
 }
 
 // doOnObserveMetrics is called when metrics are produced.
 func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
-	return svc.Parallel()
+	return svc.Parallel(
+		func() (err error) { return svc.OnObserveQueueDepth(ctx) }, // MARKER: QueueDepth
+	)
 }
 
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	if changed("Threshold") { // MARKER: Threshold
+		if err := svc.OnChangedThreshold(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
 	return nil
 }
 
@@ -184,4 +211,27 @@ func (svc *Intermediate) doAltHostFn(w http.ResponseWriter, r *http.Request) (er
 		return err
 	})
 	return err
+}
+
+/*
+IncrementRequestsTotal counts requests handled by the kitchen fixture, labelled by status.
+*/
+func (svc *Intermediate) IncrementRequestsTotal(ctx context.Context, value int, status string) (err error) { // MARKER: RequestsTotal
+	return svc.IncrementCounter(ctx, "kitchen_requests_total", float64(value),
+		"status", utils.AnyToString(status),
+	)
+}
+
+/*
+RecordQueueDepth records the current depth of the kitchen queue.
+*/
+func (svc *Intermediate) RecordQueueDepth(ctx context.Context, value int) (err error) { // MARKER: QueueDepth
+	return svc.RecordGauge(ctx, "kitchen_queue_depth", float64(value))
+}
+
+/*
+RecordLatencySeconds records request latency in seconds.
+*/
+func (svc *Intermediate) RecordLatencySeconds(ctx context.Context, value float64) (err error) { // MARKER: LatencySeconds
+	return svc.RecordHistogram(ctx, "kitchen_latency_seconds", value)
 }

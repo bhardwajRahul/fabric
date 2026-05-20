@@ -20,7 +20,7 @@ general:
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T23:57:55Z"
+  modifiedAt: "2026-05-23T22:51:29Z"
 
 configs:
   SQLDataSourceName:
@@ -32,11 +32,6 @@ configs:
     description: Workers is the number of concurrent workers that process flow steps.
     validation: int [1,]
     default: 64
-  RetentionDays:
-    signature: RetentionDays() (retentionDays int)
-    description: RetentionDays is the number of days to retain terminated flows and their steps. Set to 0 to disable purging.
-    validation: int [0,]
-    default: 0
   TimeBudget:
     signature: TimeBudget() (budget time.Duration)
     description: TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
@@ -53,15 +48,20 @@ configs:
     validation: int [1,]
     default: 1
     callback: true
+  SQLConnectionPool:
+    signature: SQLConnectionPool() (value int)
+    description: SQLConnectionPool is the number of database connections kept open per shard.
+    validation: int [1,]
+    default: 8
 
 metrics:
   FlowsStarted:
-    signature: FlowsStarted(value int, workflowName string)
+    signature: FlowsStarted(value int, workflow string)
     description: FlowsStarted counts the number of flows that have been started.
     kind: counter
     otelName: microbus_flows_started_total
   FlowsTerminated:
-    signature: FlowsTerminated(value int, workflowName string, status string)
+    signature: FlowsTerminated(value int, workflow string, status string)
     description: FlowsTerminated counts the number of flows that have reached a terminal status.
     kind: counter
     otelName: microbus_flows_terminated_total
@@ -70,50 +70,76 @@ metrics:
     description: StepsExecuted counts the number of steps that have been executed.
     kind: counter
     otelName: microbus_steps_executed_total
-  QueueDepth:
-    signature: QueueDepth(value int)
-    description: QueueDepth records the number of steps waiting in the local worker queue.
+  StepsQueueDepth:
+    signature: StepsQueueDepth(value int)
+    description: StepsQueueDepth records the number of steps waiting in the local worker queue.
     kind: gauge
-    otelName: microbus_queue_depth
+    otelName: microbus_steps_queue_depth
     observable: true
   StepsRecovered:
     signature: StepsRecovered(value int)
     description: StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.
     kind: counter
     otelName: microbus_steps_recovered_total
-  PendingStepsByPriority:
-    signature: PendingStepsByPriority(value int, priority string)
-    description: PendingStepsByPriority records the number of due pending steps in each priority band.
+  StepsPending:
+    signature: StepsPending(value int, priority string)
+    description: StepsPending records the number of due pending steps in each priority band.
     kind: gauge
-    otelName: microbus_pending_steps_by_priority
+    otelName: microbus_steps_pending
     observable: true
-  OldestPendingAgeSeconds:
-    signature: OldestPendingAgeSeconds(value int, priority string)
-    description: OldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.
+  StepsOldestPendingAgeSeconds:
+    signature: StepsOldestPendingAgeSeconds(value int, priority string)
+    description: StepsOldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.
     kind: gauge
-    otelName: microbus_oldest_pending_age_seconds
+    otelName: microbus_steps_oldest_pending_age_seconds
     observable: true
-  DistinctFairnessKeys:
-    signature: DistinctFairnessKeys(value int)
-    description: DistinctFairnessKeys records the number of distinct fairness keys in the most recent refill selection.
+  StepsFairnessKeys:
+    signature: StepsFairnessKeys(value int, priority string)
+    description: StepsFairnessKeys records the number of distinct fairness keys in the most recent refill selection at the given priority band.
     kind: gauge
-    otelName: microbus_distinct_fairness_keys
-    observable: true
-  ClaimWaitSeconds:
-    signature: ClaimWaitSeconds(value float64)
-    description: ClaimWaitSeconds records how long a worker waited for a candidate before executing a step.
-    kind: histogram
-    buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]
-    otelName: microbus_claim_wait_seconds
-  CompletionContention:
-    signature: CompletionContention(value int)
-    description: CompletionContention counts lock-contention rewinds on the post-execution advance write.
+    otelName: microbus_steps_fairness_keys
+  StepsSkippedSaturated:
+    signature: StepsSkippedSaturated(value int, task string)
+    description: StepsSkippedSaturated counts the number of step admissions skipped because the task was at its current rate-limit ceiling.
     kind: counter
-    otelName: microbus_completion_contention_total
+    otelName: microbus_steps_skipped_saturated_total
+  TaskRateLimit:
+    signature: TaskRateLimit(value int, task string)
+    description: TaskRateLimit records the current adaptive per-task dispatch-rate ceiling (ops/sec) derived from the gossiped congestion point.
+    kind: gauge
+    otelName: microbus_task_rate_limit
+    observable: true
+  TaskConcurrencyRunning:
+    signature: TaskConcurrencyRunning(value int, task string)
+    description: TaskConcurrencyRunning records the cluster-wide number of running steps per task; pairs with TaskRateLimit on one panel.
+    kind: gauge
+    otelName: microbus_task_concurrency_running
+    observable: true
+  TaskRateCuts:
+    signature: TaskRateCuts(value int, task string)
+    description: TaskRateCuts counts the additive-decrease cuts to the per-task rate ceiling triggered by a 429 from a task dispatch.
+    kind: counter
+    otelName: microbus_task_rate_cuts_total
+  TaskBreakerTrips:
+    signature: TaskBreakerTrips(value int, task string)
+    description: TaskBreakerTrips counts the number of times a per-task circuit breaker transitioned to tripped on consecutive 404 ack-timeouts.
+    kind: counter
+    otelName: microbus_task_breaker_trips_total
+  TaskBreakerProbes:
+    signature: TaskBreakerProbes(value int, task string, outcome string)
+    description: TaskBreakerProbes counts probe attempts against a tripped per-task circuit breaker, labelled by outcome (success or failure).
+    kind: counter
+    otelName: microbus_task_breaker_probes_total
+  TaskBreakerState:
+    signature: TaskBreakerState(value int, task string)
+    description: "TaskBreakerState records the current state of each per-task circuit breaker: 0 = closed (admitting), 1 = tripped (blocked)."
+    kind: gauge
+    otelName: microbus_task_breaker_state
+    observable: true
 
 outboundEvents:
   OnFlowStopped:
-    signature: OnFlowStopped(flowKey string, status string, snapshot map[string]any)
+    signature: OnFlowStopped(outcome *workflow.FlowOutcome)
     description: OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) to receive notifications for flows started with StartNotify.
     method: POST
     route: :417/on-flow-terminated
@@ -135,7 +161,7 @@ functions:
     method: ANY
     route: :444/start-notify
   Snapshot:
-    signature: Snapshot(flowKey string) (status string, state map[string]any)
+    signature: Snapshot(flowKey string) (outcome *workflow.FlowOutcome)
     description: Snapshot returns the current status and state of a flow.
     method: GET
     route: :444/snapshot
@@ -145,12 +171,12 @@ functions:
     method: POST
     route: :444/resume
   Fork:
-    signature: Fork(stepKey string, stateOverrides any) (newFlowKey string)
+    signature: Fork(stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string)
     description: Fork creates a new flow from an existing step's checkpoint.
     method: POST
     route: :444/fork
   Cancel:
-    signature: Cancel(flowKey string)
+    signature: Cancel(flowKey string, reason string)
     description: Cancel cancels a flow that is not yet in a terminal status.
     method: POST
     route: :444/cancel
@@ -165,10 +191,25 @@ functions:
     method: POST
     route: :444/retry
   List:
-    signature: List(query Query) (flows []FlowSummary)
-    description: List queries flows by status or workflow name. Results are ordered newest first. Set CursorFlowKey in the query to paginate.
+    signature: List(query Query) (flows []FlowSummary, nextCursor string)
+    description: List queries flows by status or workflow name. Set Query.Cursor to the previous call's NextCursor to paginate.
     method: GET
     route: :444/list
+  Delete:
+    signature: Delete(flowKey string)
+    description: Delete removes a flow and its steps from the database. The flow must not be running. Subgraph, fork, and thread lineage references become dangling.
+    method: POST
+    route: :444/delete
+  Purge:
+    signature: Purge(query Query) (deleted int)
+    description: Purge deletes flows matching the query, except those currently running. Capped at 10000 flows per call.
+    method: POST
+    route: :444/purge
+  ShardInfo:
+    signature: ShardInfo() (shards []ShardSummary)
+    description: ShardInfo returns per-shard health (latency, row counts, error) for every database shard.
+    method: GET
+    route: :444/shard-info
   CreateTask:
     signature: CreateTask(taskName string, initialState any) (flowKey string)
     description: CreateTask creates a flow that executes a single task and then terminates, without starting it.
@@ -180,7 +221,7 @@ functions:
     method: POST
     route: :444/enqueue
   Await:
-    signature: Await(flowKey string) (status string, state map[string]any)
+    signature: Await(flowKey string) (outcome *workflow.FlowOutcome)
     description: Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.
     method: POST
     route: :444/wait-for-stop
@@ -196,24 +237,30 @@ functions:
     method: POST
     route: :444/break-before
   Run:
-    signature: Run(workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any)
+    signature: Run(workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome)
     description: Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.
     method: POST
     route: :444/run
   Continue:
-    signature: Continue(threadKey string, additionalState any) (newFlowKey string)
+    signature: Continue(threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string)
     description: Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
     method: POST
     route: :444/continue
+  SyncValve:
+    signature: SyncValve(taskName string, wCong int, tCong time.Time)
+    description: SyncValve broadcasts a per-task congestion point so every replica's admission limit converges from the same anchor.
+    method: POST
+    route: :444/sync-valve
+    loadBalancing: none
+  TripBreaker:
+    signature: TripBreaker(taskName string)
+    description: TripBreaker fires a per-task breaker trip to peer foreman replicas. Each peer stamps its own clock on receipt; closures are not gossiped.
+    method: POST
+    route: :444/trip-breaker
+    loadBalancing: none
 
 webs:
   HistoryMermaid:
     description: HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.
     method: GET
     route: :444/history-mermaid
-
-tickers:
-  PurgeExpiredFlows:
-    signature: PurgeExpiredFlows()
-    description: PurgeExpiredFlows deletes terminated flows and their steps that have exceeded the retention period.
-    interval: 24h

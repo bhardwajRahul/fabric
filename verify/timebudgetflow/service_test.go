@@ -58,16 +58,20 @@ func TestTimebudgetflow_TimeBudget(t *testing.T) { // MARKER: TimeBudget
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := timebudgetflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -77,6 +81,6 @@ func TestTimebudgetflow_TimeBudget(t *testing.T) { // MARKER: TimeBudget
 
 		_, status, err := exec.TimeBudget(ctx)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusFailed)
+		assert.Expect(status, workflow.StatusFailed)
 	})
 }

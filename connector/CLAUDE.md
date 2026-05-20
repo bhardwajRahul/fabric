@@ -17,7 +17,7 @@ Subscriptions activate in deliberate waves, not all at once:
 2. **Control subs** (`:888/ping`, `/config-refresh`, `/metrics`, `/trace`, `/on-new-subs`, `/openapi.json`) activate *after* `OnStartup` returns - the control plane is not exposed until the service has finished its own init.
 3. **User business subs** activate after the control subs, via `activateSubs` which skips any sub marked `sub.Manual`. User-owned manual subs (Python venv handlers, etc.) come on-bus when user code calls `Connector.ActivateSubscription` - typically from inside `OnStartup` once a backing resource is ready, or from a recovery path on `410 Gone`.
 
-Tickers start only after `phase` reaches `startedUp`. The lifetime context (`lifetimeCtx`) is created between `OnStartup` and the control-sub activation, which is why `OnStartup` must use the `ctx` argument rather than `c.Lifetime()`.
+Tickers start only after `phase` reaches `startedUp`. The lifetime context (`lifetimeCtx`) is created immediately after the transport connects, *before* `OnStartup` runs, so user code can pass `c.Lifetime()` to long-lived goroutines launched from `OnStartup` (worker pools, refillers, ML workers) without rolling its own root context. The lifetime ctx stays valid through `OnShutdown` and is cancelled only after `OnShutdown` returns and the soft drain has elapsed - see "Shutdown's two-phase drain" below.
 
 ### Manual subscriptions and the dlru tag
 
@@ -27,14 +27,23 @@ User code uses the same `sub.Manual()` mechanism for any subscription whose back
 
 In `TESTING` deployment the `sub.Manual` flag is ignored: `activateSubs` brings every registered subscription on-bus, and `deactivateAutoSubs` takes them all off-bus on shutdown. This keeps mocks reachable in `application.RunInTest` without per-test setup - tests typically swap the backing resource for a mock, so the "wait for resource ready, then activate" idiom that real `OnStartup` code uses doesn't run. The carve-out is scoped to `TESTING`; `LOCAL`, `LAB`, and `PROD` retain the manual-stay-off-bus behavior.
 
-### Shutdown's two-phase drain and the dlru offload window
+### Shutdown's ordering, drain budget, and the dlru offload window
 
-`Shutdown` reverses Startup with two important asymmetries:
+`Shutdown` runs in three blocks: prepare, drain, mandatory teardown.
 
-- **dlru subs stay active *through* OnShutdown.** User shutdown code can still hit `DistribCache`. Other manual subs (user-owned groups) are the user's responsibility to deactivate inside `OnShutdown` if needed.
-- **dlru subs go down inside `dlru.Close` itself, *before* the offload pass.** `Cache.Close` deactivates its own `/all` and `/rescue` subscriptions first and only then offloads to peers, so rescue PUTs route only to peers — the sender's own queue group is already gone and entries can't loop back into this about-to-be-discarded cache. The connector just calls `Close`; the cache owns the ordering.
+1. **Prepare.** Stop tickers; deactivate auto subscriptions (inbound business requests stop). Manual subscriptions (dlru's `:888/dcache/...` plus anything user-tagged) stay on-bus.
+2. **`OnShutdown(ctx)`.** Runs *before* any drain. `c.Lifetime()` is still valid, dlru is still up, the transport is still connected, outbound calls work, `svc.Go` can still launch goroutines. User code that owns long-lived workers drains them here (the foreman, for example, drains its worker pool, timer, and refiller in strict order before returning).
+3. **Soft drain.** Cooperatively polls `pendingOps` until it reaches zero, bounded by the partition of the remaining ctx budget. `pendingOps` counts in-flight requests, ticker invocations, and goroutines launched via `Go` / `Parallel`. Anything launched with bare `go` is invisible to this counter.
+4. **Cancel lifetime ctx.** The escalation step. Goroutines still running observe `Lifetime().Done()` and should exit promptly.
+5. **Hard drain.** A short tail (capped at 2s) for cancellation-aware goroutines to exit after seeing it.
+6. **Mandatory teardown.** Closes dlru, unsubscribes the response sub, disconnects the transport, flushes OTel. These steps run on `context.WithoutCancel(ctx)` wrapped in a 2-second `teardownBudget`, so they are never preempted by the caller's deadline expiring upstream - a missed flush or skipped offload would silently lose data.
 
-The 8-second pre-cancel drain plus 4-second post-cancel drain is implemented as two `pendingOps` polling loops. `pendingOps` counts in-flight requests, ticker invocations, and goroutines launched via `Go` / `Parallel`. Anything launched with the bare `go` keyword is invisible to this counter and may be killed mid-flight when the lifetime context cancels.
+dlru-specific asymmetries:
+
+- **dlru subs stay active *through* OnShutdown.** User shutdown code can still hit `DistribCache`.
+- **dlru subs go down inside `dlru.Close` itself, *before* the offload pass.** `Cache.Close` deactivates its own `/all` and `/rescue` subscriptions first and only then offloads to peers, so rescue PUTs route only to peers - the sender's own queue group is already gone and entries can't loop back into this about-to-be-discarded cache. The connector just calls `Close`; the cache owns the ordering.
+
+Drain budget partitioning (`shutdownDrainBudgets`): if the caller ctx has a deadline, `remaining = time.Until(deadline) - teardownBudget`; hard drain is `min(remaining/4, 2s)` floored at 100ms; soft drain is what's left. Without a deadline the fixed defaults are 8s soft and 2s hard, matching the pre-refactor behavior. `application.Run` reads `MICROBUS_SHUTDOWN_TIME_BUDGET` (default 24s, deliberately below k8s's 30s `terminationGracePeriodSeconds`) and `MICROBUS_STARTUP_TIME_BUDGET` (default 120s, no comparable k8s ceiling so the budget targets headroom for cache warmup / model load / slow dependency wait) and applies them as deadlines on the ctx it passes to `Shutdown` / `Startup`.
 
 ### Plane is a NATS-level isolation prefix
 
@@ -152,7 +161,6 @@ Outgoing requests do *not* inherit the inbound request's full header set. `Publi
 
 - `X-Forwarded-*` (set by the ingress proxy)
 - `Accept-Language`
-- The clock-shift header
 - The actor (access token) header
 - Any header with the baggage prefix
 
@@ -160,7 +168,7 @@ This is a security boundary, not an oversight. Internal control headers (`Microb
 
 ### `Go` and `Parallel` decouple goroutines from the request that started them
 
-`c.Go(ctx, fn)` clones the *frame* of `ctx` (so baggage, clock shift, and actor flow), copies the trace span, but parents the new goroutine on `c.Lifetime()` rather than `ctx`. The goroutine therefore outlives the originating request but is cancelled by Shutdown. `Parallel` follows the same accounting via `pendingOps` so the shutdown drain waits for it.
+`c.Go(ctx, fn)` clones the *frame* of `ctx` (so baggage and actor flow), copies the trace span, but parents the new goroutine on `c.Lifetime()` rather than `ctx`. The goroutine therefore outlives the originating request but is cancelled by Shutdown. `Parallel` follows the same accounting via `pendingOps` so the shutdown drain waits for it.
 
 ### `:888` control surface
 

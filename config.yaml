@@ -21,8 +21,8 @@ my.service:
   Example: value
 
 foreman.core:
-  # RetentionDays: 0
-  # Workers: 64
+  Workers: 64
+  # SQLConnectionPool: 8
 
 llm.core:
   # MaxToolRounds: 10

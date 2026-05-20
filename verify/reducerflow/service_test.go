@@ -59,16 +59,20 @@ func TestReducerflow_Reducer(t *testing.T) { // MARKER: Reducer
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := reducerflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -78,7 +82,7 @@ func TestReducerflow_Reducer(t *testing.T) { // MARKER: Reducer
 
 		sum, list, set, status, err := exec.Reducer(ctx)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		// sum* numeric add: 10 + 20 + 30
 		assert.Expect(sum, 60)
 		// list* append: order is by updated_at/step_id; sort to compare contents

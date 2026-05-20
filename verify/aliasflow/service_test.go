@@ -54,20 +54,49 @@ var (
 	_ aliasflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestAliasflow_Alias(t *testing.T) { // MARKER: Alias
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := aliasflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -78,7 +107,7 @@ func TestAliasflow_Alias(t *testing.T) { // MARKER: Alias
 		path, status, err := exec.Alias(ctx, "")
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			path, "ABC",
 		)
 	})
@@ -89,7 +118,7 @@ func TestAliasflow_Alias(t *testing.T) { // MARKER: Alias
 		path, status, err := exec.Alias(ctx, "alt")
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			path, "BD",
 		)
 	})
@@ -106,11 +135,13 @@ func TestAliasflow_Alias(t *testing.T) { // MARKER: Alias
 		if !assert.NoError(err) {
 			return
 		}
-		status, _, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status := outcomeStatus(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 
 		history, err := foremanClient.History(ctx, flowKey)
 		if !assert.NoError(err) {
@@ -136,11 +167,13 @@ func TestAliasflow_Alias(t *testing.T) { // MARKER: Alias
 		if !assert.NoError(err) {
 			return
 		}
-		status, _, err = foremanClient.Await(ctx, flowKey)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+
+		status = outcomeStatus(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 
 		history, err = foremanClient.History(ctx, flowKey)
 		if !assert.NoError(err) {

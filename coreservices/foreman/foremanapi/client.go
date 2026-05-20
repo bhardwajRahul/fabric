@@ -22,6 +22,7 @@ import (
 	"iter"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
@@ -103,7 +104,7 @@ func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 // WorkflowRunner executes a workflow by name with initial state, blocking until termination.
 // foremanapi.Client satisfies this interface.
 type WorkflowRunner interface {
-	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error)
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.
@@ -200,12 +201,19 @@ func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, 
 
 // marshalWorkflow supports workflow execution via the Executor.
 func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *workflow.FlowOptions, workflowURL string, in any, out any) (status string, err error) {
-	status, state, err := runner.Run(ctx, workflowURL, in, flowOptions)
+	outcome, err := runner.Run(ctx, workflowURL, in, flowOptions)
 	if err != nil {
+		if outcome != nil {
+			status = outcome.Status
+		}
 		return status, err // No trace
 	}
-	if out != nil && state != nil {
-		data, err := json.Marshal(state)
+	if outcome == nil {
+		return "", nil
+	}
+	status = outcome.Status
+	if out != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
 		if err != nil {
 			return status, errors.Trace(err)
 		}
@@ -422,13 +430,13 @@ func (_c Client) StartNotify(ctx context.Context, flowKey string, notifyHostname
 type SnapshotResponse multicastResponse // MARKER: Snapshot
 
 // Get unpacks the return arguments of Snapshot.
-func (_res *SnapshotResponse) Get() (status string, state map[string]any, err error) { // MARKER: Snapshot
+func (_res *SnapshotResponse) Get() (outcome *workflow.FlowOutcome, err error) { // MARKER: Snapshot
 	_d := _res.data.(*SnapshotOut)
-	return _d.Status, _d.State, _res.err
+	return _d.Outcome, _res.err
 }
 
 /*
-Snapshot returns the current status and state of a flow.
+Snapshot returns the current outcome of a flow.
 */
 func (_c MulticastClient) Snapshot(ctx context.Context, flowKey string) iter.Seq[*SnapshotResponse] { // MARKER: Snapshot
 	_in := SnapshotIn{FlowKey: flowKey}
@@ -446,13 +454,13 @@ func (_c MulticastClient) Snapshot(ctx context.Context, flowKey string) iter.Seq
 }
 
 /*
-Snapshot returns the current status and state of a flow.
+Snapshot returns the current outcome of a flow.
 */
-func (_c Client) Snapshot(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Snapshot
+func (_c Client) Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Snapshot
 	_in := SnapshotIn{FlowKey: flowKey}
 	_out := SnapshotOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Snapshot.Method, Snapshot.Route, &_in, &_out)
-	return _out.Status, _out.State, err // No trace
+	return _out.Outcome, err // No trace
 }
 
 /*
@@ -484,10 +492,12 @@ func (_res *ForkResponse) Get() (newFlowKey string, err error) { // MARKER: Fork
 }
 
 /*
-Fork creates a new flow from an existing step's checkpoint.
+Fork creates a new flow from an existing step's checkpoint. opts supplies the new flow's
+scheduling and lifetime (priority, fairness, deadline); a nil opts uses fresh defaults rather
+than inheriting from the parent. Fork is primarily a debug/repro tool.
 */
-func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrides any) iter.Seq[*ForkResponse] { // MARKER: Fork
-	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
+func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) iter.Seq[*ForkResponse] { // MARKER: Fork
+	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides, Opts: opts}
 	_out := ForkOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
 	return func(yield func(*ForkResponse) bool) {
@@ -502,29 +512,33 @@ func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrid
 }
 
 /*
-Fork creates a new flow from an existing step's checkpoint.
+Fork creates a new flow from an existing step's checkpoint. opts supplies the new flow's
+scheduling and lifetime (priority, fairness, deadline); a nil opts uses fresh defaults rather
+than inheriting from the parent. Fork is primarily a debug/repro tool.
 */
-func (_c Client) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
-	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
+func (_c Client) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Fork
+	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides, Opts: opts}
 	_out := ForkOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
 	return _out.NewFlowKey, err // No trace
 }
 
 /*
-Cancel cancels a flow that is not yet in a terminal status.
+Cancel cancels a flow that is not yet in a terminal status. The reason string is recorded on
+every flow in the chain as cancel_reason.
 */
-func (_c MulticastClient) Cancel(ctx context.Context, flowKey string) iter.Seq[*multicastResponse] { // MARKER: Cancel
-	_in := CancelIn{FlowKey: flowKey}
+func (_c MulticastClient) Cancel(ctx context.Context, flowKey string, reason string) iter.Seq[*multicastResponse] { // MARKER: Cancel
+	_in := CancelIn{FlowKey: flowKey, Reason: reason}
 	_out := CancelOut{}
 	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, Cancel.Method, Cancel.Route, &_in, &_out)
 }
 
 /*
-Cancel cancels a flow that is not yet in a terminal status.
+Cancel cancels a flow that is not yet in a terminal status. The reason string is recorded on
+every flow in the chain as cancel_reason.
 */
-func (_c Client) Cancel(ctx context.Context, flowKey string) (err error) { // MARKER: Cancel
-	_in := CancelIn{FlowKey: flowKey}
+func (_c Client) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
+	_in := CancelIn{FlowKey: flowKey, Reason: reason}
 	_out := CancelOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Cancel.Method, Cancel.Route, &_in, &_out)
 	return err // No trace
@@ -590,13 +604,13 @@ func (_c Client) Retry(ctx context.Context, flowKey string) (err error) { // MAR
 type ListResponse multicastResponse // MARKER: List
 
 // Get unpacks the return arguments of List.
-func (_res *ListResponse) Get() (flows []FlowSummary, err error) { // MARKER: List
+func (_res *ListResponse) Get() (flows []FlowSummary, nextCursor string, err error) { // MARKER: List
 	_d := _res.data.(*ListOut)
-	return _d.Flows, _res.err
+	return _d.Flows, _d.NextCursor, _res.err
 }
 
 /*
-List queries flows by status or workflow name. Results are ordered newest first. Set CursorFlowKey in the query to paginate.
+List queries flows by status or workflow name. Set Query.Cursor to the previous call's NextCursor to paginate.
 */
 func (_c MulticastClient) List(ctx context.Context, query Query) iter.Seq[*ListResponse] { // MARKER: List
 	_in := ListIn{Query: query}
@@ -614,13 +628,111 @@ func (_c MulticastClient) List(ctx context.Context, query Query) iter.Seq[*ListR
 }
 
 /*
-List queries flows by status or workflow name. Results are ordered newest first. Set CursorFlowKey in the query to paginate.
+List queries flows by status or workflow name with per-shard pagination. Set Query.Cursor to the
+previous call's NextCursor to paginate; an empty NextCursor signals end-of-results.
 */
-func (_c Client) List(ctx context.Context, query Query) (flows []FlowSummary, err error) { // MARKER: List
+func (_c Client) List(ctx context.Context, query Query) (flows []FlowSummary, nextCursor string, err error) { // MARKER: List
 	_in := ListIn{Query: query}
 	_out := ListOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, List.Method, List.Route, &_in, &_out)
-	return _out.Flows, err // No trace
+	return _out.Flows, _out.NextCursor, err // No trace
+}
+
+/*
+Delete removes a flow and its steps from the database. The flow must not be running.
+Subgraph, fork, and thread lineage references become dangling.
+*/
+func (_c MulticastClient) Delete(ctx context.Context, flowKey string) iter.Seq[*multicastResponse] { // MARKER: Delete
+	_in := DeleteIn{FlowKey: flowKey}
+	_out := DeleteOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, Delete.Method, Delete.Route, &_in, &_out)
+}
+
+/*
+Delete removes a flow and its steps from the database. The flow must not be running.
+Subgraph, fork, and thread lineage references become dangling.
+*/
+func (_c Client) Delete(ctx context.Context, flowKey string) (err error) { // MARKER: Delete
+	_in := DeleteIn{FlowKey: flowKey}
+	_out := DeleteOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Delete.Method, Delete.Route, &_in, &_out)
+	return err // No trace
+}
+
+// PurgeResponse packs the response of Purge.
+type PurgeResponse multicastResponse // MARKER: Purge
+
+// Get unpacks the return arguments of Purge.
+func (_res *PurgeResponse) Get() (deleted int, err error) { // MARKER: Purge
+	_d := _res.data.(*PurgeOut)
+	return _d.Deleted, _res.err
+}
+
+/*
+Purge deletes flows matching the query, except those currently running. Capped at 10000
+flows per call. Returns the count of flows actually deleted.
+*/
+func (_c MulticastClient) Purge(ctx context.Context, query Query) iter.Seq[*PurgeResponse] { // MARKER: Purge
+	_in := PurgeIn{Query: query}
+	_out := PurgeOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Purge.Method, Purge.Route, &_in, &_out)
+	return func(yield func(*PurgeResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*PurgeResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+Purge deletes flows matching the query, except those currently running. Capped at 10000
+flows per call. Returns the count of flows actually deleted.
+*/
+func (_c Client) Purge(ctx context.Context, query Query) (deleted int, err error) { // MARKER: Purge
+	_in := PurgeIn{Query: query}
+	_out := PurgeOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Purge.Method, Purge.Route, &_in, &_out)
+	return _out.Deleted, err // No trace
+}
+
+// ShardInfoResponse packs the response of ShardInfo.
+type ShardInfoResponse multicastResponse // MARKER: ShardInfo
+
+// Get unpacks the return arguments of ShardInfo.
+func (_res *ShardInfoResponse) Get() (shards []ShardSummary, err error) { // MARKER: ShardInfo
+	_d := _res.data.(*ShardInfoOut)
+	return _d.Shards, _res.err
+}
+
+/*
+ShardInfo returns per-shard health (latency, row counts, error) for every database shard.
+*/
+func (_c MulticastClient) ShardInfo(ctx context.Context) iter.Seq[*ShardInfoResponse] { // MARKER: ShardInfo
+	_in := ShardInfoIn{}
+	_out := ShardInfoOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, ShardInfo.Method, ShardInfo.Route, &_in, &_out)
+	return func(yield func(*ShardInfoResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*ShardInfoResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+ShardInfo returns per-shard health (latency, row counts, error) for every database shard.
+*/
+func (_c Client) ShardInfo(ctx context.Context) (shards []ShardSummary, err error) { // MARKER: ShardInfo
+	_in := ShardInfoIn{}
+	_out := ShardInfoOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, ShardInfo.Method, ShardInfo.Route, &_in, &_out)
+	return _out.Shards, err // No trace
 }
 
 // CreateTaskResponse packs the response of CreateTask.
@@ -683,13 +795,13 @@ func (_c Client) Enqueue(ctx context.Context, shard int, stepID int) (err error)
 type AwaitResponse multicastResponse // MARKER: Await
 
 // Get unpacks the return arguments of Await.
-func (_res *AwaitResponse) Get() (status string, state map[string]any, err error) { // MARKER: Await
+func (_res *AwaitResponse) Get() (outcome *workflow.FlowOutcome, err error) { // MARKER: Await
 	_d := _res.data.(*AwaitOut)
-	return _d.Status, _d.State, _res.err
+	return _d.Outcome, _res.err
 }
 
 /*
-Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.
+Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the workflow.FlowOutcome.
 */
 func (_c MulticastClient) Await(ctx context.Context, flowKey string) iter.Seq[*AwaitResponse] { // MARKER: Await
 	_in := AwaitIn{FlowKey: flowKey}
@@ -707,13 +819,13 @@ func (_c MulticastClient) Await(ctx context.Context, flowKey string) iter.Seq[*A
 }
 
 /*
-Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the status and snapshot.
+Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the workflow.FlowOutcome.
 */
-func (_c Client) Await(ctx context.Context, flowKey string) (status string, state map[string]any, err error) { // MARKER: Await
+func (_c Client) Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Await
 	_in := AwaitIn{FlowKey: flowKey}
 	_out := AwaitOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Await.Method, Await.Route, &_in, &_out)
-	return _out.Status, _out.State, err // No trace
+	return _out.Outcome, err // No trace
 }
 
 /*
@@ -758,13 +870,15 @@ func (_c Client) BreakBefore(ctx context.Context, flowKey string, taskName strin
 type RunResponse multicastResponse // MARKER: Run
 
 // Get unpacks the return arguments of Run.
-func (_res *RunResponse) Get() (status string, state map[string]any, err error) { // MARKER: Run
+func (_res *RunResponse) Get() (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
 	_d := _res.data.(*RunOut)
-	return _d.Status, _d.State, _res.err
+	return _d.Outcome, _res.err
 }
 
 /*
-Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.
+Run creates a new flow, starts it, and blocks until it stops. Returns the terminal workflow.FlowOutcome.
+A workflow failure surfaces as outcome.Status="failed" with outcome.Error populated; the Go-level
+error return is for transport/foreman/timeout failures only.
 */
 func (_c MulticastClient) Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) iter.Seq[*RunResponse] { // MARKER: Run
 	_in := RunIn{WorkflowName: workflowName, InitialState: initialState, Opts: opts}
@@ -782,13 +896,15 @@ func (_c MulticastClient) Run(ctx context.Context, workflowName string, initialS
 }
 
 /*
-Run creates a new flow, starts it, and blocks until it stops. Returns the terminal status and state.
+Run creates a new flow, starts it, and blocks until it stops. Returns the terminal workflow.FlowOutcome.
+A workflow failure surfaces as outcome.Status="failed" with outcome.Error populated; the Go-level
+error return is for transport/foreman/timeout failures only.
 */
-func (_c Client) Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error) { // MARKER: Run
+func (_c Client) Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
 	_in := RunIn{WorkflowName: workflowName, InitialState: initialState, Opts: opts}
 	_out := RunOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Run.Method, Run.Route, &_in, &_out)
-	return _out.Status, _out.State, err // No trace
+	return _out.Outcome, err // No trace
 }
 
 // ContinueResponse packs the response of Continue.
@@ -801,11 +917,13 @@ func (_res *ContinueResponse) Get() (newFlowKey string, err error) { // MARKER: 
 }
 
 /*
-Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers.
-The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
+Continue creates a new flow from the latest completed flow in a thread, merged with additional state using
+the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the
+same thread and is returned in created status. opts supplies the new flow's scheduling and lifetime
+(priority, fairness, deadline); a nil opts uses fresh defaults rather than inheriting from the prior flow.
 */
-func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additionalState any) iter.Seq[*ContinueResponse] { // MARKER: Continue
-	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
+func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) iter.Seq[*ContinueResponse] { // MARKER: Continue
+	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState, Opts: opts}
 	_out := ContinueOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Continue.Method, Continue.Route, &_in, &_out)
 	return func(yield func(*ContinueResponse) bool) {
@@ -820,11 +938,13 @@ func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additi
 }
 
 /*
-Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers.
-The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
+Continue creates a new flow from the latest completed flow in a thread, merged with additional state using
+the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the
+same thread and is returned in created status. opts supplies the new flow's scheduling and lifetime
+(priority, fairness, deadline); a nil opts uses fresh defaults rather than inheriting from the prior flow.
 */
-func (_c Client) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
-	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
+func (_c Client) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Continue
+	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState, Opts: opts}
 	_out := ContinueOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Continue.Method, Continue.Route, &_in, &_out)
 	return _out.NewFlowKey, err // No trace
@@ -860,6 +980,42 @@ func (_c MulticastClient) HistoryMermaid(ctx context.Context, relativeURL string
 	)
 }
 
+/*
+SyncValve broadcasts a per-task congestion point so every replica's
+admission limit converges from the same anchor.
+*/
+func (_c MulticastClient) SyncValve(ctx context.Context, taskName string, wCong int, tCong time.Time) iter.Seq[*multicastResponse] { // MARKER: SyncValve
+	_in := SyncValveIn{TaskName: taskName, WCong: wCong, TCong: tCong}
+	_out := SyncValveOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, SyncValve.Method, SyncValve.Route, &_in, &_out)
+}
+
+/*
+SyncValve broadcasts a per-task congestion point so every replica's
+admission limit converges from the same anchor.
+*/
+func (_c Client) SyncValve(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error) { // MARKER: SyncValve
+	_in := SyncValveIn{TaskName: taskName, WCong: wCong, TCong: tCong}
+	_out := SyncValveOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, SyncValve.Method, SyncValve.Route, &_in, &_out)
+	return err // No trace
+}
+
+// TripBreaker fires a per-task breaker trip to peer foreman replicas.
+func (_c MulticastClient) TripBreaker(ctx context.Context, taskName string) iter.Seq[*multicastResponse] { // MARKER: TripBreaker
+	_in := TripBreakerIn{TaskName: taskName}
+	_out := TripBreakerOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, TripBreaker.Method, TripBreaker.Route, &_in, &_out)
+}
+
+// TripBreaker fires a per-task breaker trip to peer foreman replicas.
+func (_c Client) TripBreaker(ctx context.Context, taskName string) (err error) { // MARKER: TripBreaker
+	_in := TripBreakerIn{TaskName: taskName}
+	_out := TripBreakerOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, TripBreaker.Method, TripBreaker.Route, &_in, &_out)
+	return err // No trace
+}
+
 // OnFlowStoppedResponse packs the response of OnFlowStopped.
 type OnFlowStoppedResponse multicastResponse // MARKER: OnFlowStopped
 
@@ -871,8 +1027,8 @@ func (_res *OnFlowStoppedResponse) Get() (err error) { // MARKER: OnFlowStopped
 /*
 OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) to receive notifications for flows started with StartNotify.
 */
-func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, flowKey string, status string, snapshot map[string]any) iter.Seq[*OnFlowStoppedResponse] { // MARKER: OnFlowStopped
-	_in := OnFlowStoppedIn{FlowKey: flowKey, Status: status, Snapshot: snapshot}
+func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, outcome *workflow.FlowOutcome) iter.Seq[*OnFlowStoppedResponse] { // MARKER: OnFlowStopped
+	_in := OnFlowStoppedIn{Outcome: outcome}
 	_out := OnFlowStoppedOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnFlowStopped.Method, OnFlowStopped.Route, &_in, &_out)
 	return func(yield func(*OnFlowStoppedResponse) bool) {
@@ -889,12 +1045,12 @@ func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, flowKey string, st
 /*
 OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) to receive notifications for flows started with StartNotify.
 */
-func (c Hook) OnFlowStopped(handler func(ctx context.Context, flowKey string, status string, snapshot map[string]any) (err error)) (unsub func() error, err error) { // MARKER: OnFlowStopped
+func (c Hook) OnFlowStopped(handler func(ctx context.Context, outcome *workflow.FlowOutcome) (err error)) (unsub func() error, err error) { // MARKER: OnFlowStopped
 	doOnFlowStopped := func(w http.ResponseWriter, r *http.Request) error {
 		var in OnFlowStoppedIn
 		var out OnFlowStoppedOut
 		err = marshalFunction(w, r, OnFlowStopped.Route, &in, &out, func(_ any, _ any) error {
-			err = handler(r.Context(), in.FlowKey, in.Status, in.Snapshot)
+			err = handler(r.Context(), in.Outcome)
 			return err
 		})
 		return err // No trace

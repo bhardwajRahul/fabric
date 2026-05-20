@@ -170,9 +170,20 @@ func (app *Application) Interrupt() {
 }
 
 // Run starts up all microservices included in this app, waits for interrupt, then shuts them down.
-// Microservices are give 20 seconds to start and shutdown. For finer timeout control, use [Startup] and [Shutdown].
+// Defaults: 120 seconds for startup and 24 seconds for shutdown. The 24-second shutdown budget sits
+// under Kubernetes' 30-second default terminationGracePeriodSeconds, leaving ~6 seconds for the
+// runtime and orchestrator to finalize before SIGKILL. Kubernetes does not impose a comparable
+// hard ceiling on startup (startup probes and progressDeadlineSeconds are operator-tuned and much
+// longer), so 120 seconds gives microservices headroom to warm caches, load ML models, or wait on
+// slow dependencies. Override either via the env vars MICROBUS_STARTUP_TIME_BUDGET /
+// MICROBUS_SHUTDOWN_TIME_BUDGET. The chosen budget is applied as a deadline on the ctx passed to
+// each microservice's OnStartup / OnShutdown.
+// For programmatic control, use [Application.Startup] and [Application.Shutdown] directly.
 func (app *Application) Run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	startupBudget := envDurationOrDefault("MICROBUS_STARTUP_TIME_BUDGET", 120*time.Second)
+	shutdownBudget := envDurationOrDefault("MICROBUS_SHUTDOWN_TIME_BUDGET", 24*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), startupBudget)
 	err := errors.CatchPanic(func() error {
 		return app.Startup(ctx)
 	})
@@ -182,7 +193,7 @@ func (app *Application) Run() error {
 	}
 	app.WaitForInterrupt()
 
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second*20)
+	ctx, cancel = context.WithTimeout(context.Background(), shutdownBudget)
 	err = errors.CatchPanic(func() error {
 		return app.Shutdown(ctx)
 	})
@@ -191,6 +202,21 @@ func (app *Application) Run() error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// envDurationOrDefault reads a duration env var via the env package, falling back to def when
+// unset or unparseable. Unparseable values are silently treated as unset so a typo never
+// reduces the budget to zero.
+func envDurationOrDefault(name string, def time.Duration) time.Duration {
+	v := env.Get(name)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
 }
 
 // RunInTest starts up all microservices included in this app, waits for the test to finish, then shuts them down.

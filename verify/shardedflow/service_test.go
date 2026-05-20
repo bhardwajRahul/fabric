@@ -58,16 +58,45 @@ var (
 	_ shardedflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// 8 shards + 1 worker: top-level Create scatters flows randomly across
 		// the 8 shards, so correctness here proves the refiller aggregates all
@@ -75,15 +104,10 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		// %d DSN is required when NumShards>1; in TESTING it is still an
 		// isolated in-memory SQLite per (shard, test). SetConfig only in .Init.
 		foreman.NewService().Init(func(f *foreman.Service) error {
-			err := f.SetSQLDataSourceName("file:sharded%d?mode=memory&cache=shared")
-			if err != nil {
-				return err
-			}
-			err = f.SetNumShards(8)
-			if err != nil {
-				return err
-			}
-			return f.SetWorkers(1)
+			f.SetNumShards(8)
+			f.SetWorkers(1)
+			f.SetSQLConnectionPool(1)
+			return nil
 		}),
 		tester,
 	)
@@ -103,9 +127,11 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 	}
 	awaitAll := func(assert *testarossa.Asserter, keys []string) {
 		for _, k := range keys {
-			status, _, err := fm.Await(ctx, k)
+			outcome, err := fm.Await(ctx, k)
+
+			status := outcomeStatus(outcome)
 			assert.NoError(err)
-			assert.True(status == foremanapi.StatusCompleted)
+			assert.True(status == workflow.StatusCompleted)
 		}
 	}
 
@@ -126,9 +152,12 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		}
 		time.Sleep(300 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		awaitAll(assert, keys)
 
 		order := svc.Order()
@@ -152,9 +181,12 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		}
 		time.Sleep(300 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		awaitAll(assert, append(highs, low))
 
 		order := svc.Order()
@@ -191,9 +223,12 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		}
 		time.Sleep(400 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		awaitAll(assert, keys)
 
 		order := svc.Order()
@@ -228,11 +263,12 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 
 	t.Run("random_shard_distribution", func(t *testing.T) {
 		assert := testarossa.For(t)
-		// Create-time sharding is rand.IntN(NumShards). Create (do NOT Start, so
-		// the flows stay inert in 'created' - no dispatch, no drain) and parse
-		// the shard from the flowKey prefix ("{shard}-{flowID}-{token}").
+		// Create-time sharding is rand.IntN(NumShards)+1 (1-based). Create (do NOT
+		// Start, so the flows stay inert in 'created' - no dispatch, no drain) and
+		// parse the shard from the flowKey prefix ("{shard}-{flowID}-{token}").
+		// Shards are 1-indexed; counts[0] stays unused.
 		const m = 400
-		counts := make([]int, 8)
+		counts := make([]int, 9)
 		for i := 0; i < m; i++ {
 			flowKey, err := fm.Create(ctx, shardedflowapi.Sharded.URL(),
 				map[string]any{"tag": "d", "delayMs": 0}, nil)
@@ -243,7 +279,7 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 			if !assert.NoError(err) {
 				return
 			}
-			if assert.True(shard >= 0 && shard < 8) {
+			if assert.True(shard >= 1 && shard <= 8) {
 				counts[shard]++
 			}
 		}
@@ -251,7 +287,8 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		// ~5-sigma bands: effectively flake-free, but a gross skew (e.g. all on
 		// one shard) still fails.
 		mean := m / 8
-		for _, c := range counts {
+		for s := 1; s <= 8; s++ {
+			c := counts[s]
 			assert.True(c > 0)       // every shard is used
 			assert.True(c >= mean/3) // ~uniform lower bound (~16)
 			assert.True(c <= mean*3) // ~uniform upper bound (~150)
@@ -300,9 +337,12 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 			time.Sleep(12 * time.Millisecond) // exceed DATETIME(3) resolution
 		}
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		awaitAll(assert, keys)
 
 		order := svc.Order()

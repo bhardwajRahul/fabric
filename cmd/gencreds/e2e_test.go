@@ -37,6 +37,8 @@ import (
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/testarossa"
 
+	"github.com/microbus-io/fabric/coreservices/configurator"
+
 	kitchen "github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen"
 	weird "github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird"
 
@@ -188,19 +190,20 @@ func TestE2E_OperatorModeKitchenWeird(t *testing.T) {
 
 	kitchenDir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
 	weirdDir := repoPath(t, "cmd/genmanifest/testdata/weird")
+	configuratorDir := repoPath(t, "coreservices/configurator")
 
 	// Run gencreds in-process. Output dir is "." which is the nested tmp
 	// (now CWD), so the resulting <hostname>_nats.creds files are exactly
 	// where transport.Open will find them via Phase A.5's lookup chain.
 	if err := run(config{
-		manifests:  kitchenDir + "," + weirdDir,
+		manifests:  kitchenDir + "," + weirdDir + "," + configuratorDir,
 		signingKey: e2e.keyPath,
 		out:        ".",
 		plane:      e2e.plane,
 	}); err != nil {
 		t.Fatalf("gencreds run: %v", err)
 	}
-	for _, host := range []string{"kitchen.fixture", "weird.fixture"} {
+	for _, host := range []string{"kitchen.fixture", "weird.fixture", "configurator.core"} {
 		if _, err := os.Stat(host + "_nats.creds"); err != nil {
 			t.Fatalf("expected %s_nats.creds in cwd: %v", host, err)
 		}
@@ -214,10 +217,12 @@ func TestE2E_OperatorModeKitchenWeird(t *testing.T) {
 
 	weirdSvc := weird.NewService()
 	kitchenSvc := kitchen.NewService()
+	configSvc := configurator.NewService()
 
 	app := application.New()
-	app.Add(weirdSvc)   // group 0: weird must be up before kitchen calls it
-	app.Add(kitchenSvc) // group 1
+	app.Add(configSvc)  // group 0: configurator answers kitchen/weird config refresh on startup
+	app.Add(weirdSvc)   // group 1: weird must be up before kitchen calls it
+	app.Add(kitchenSvc) // group 2
 
 	startCtx, startCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer startCancel()

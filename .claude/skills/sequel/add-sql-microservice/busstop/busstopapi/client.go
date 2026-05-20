@@ -89,7 +89,7 @@ func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 // WorkflowRunner executes a workflow by name with initial state, blocking until termination.
 // foremanapi.Client satisfies this interface.
 type WorkflowRunner interface {
-	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error)
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)
 }
 
 // Executor runs tasks and workflows synchronously, blocking until termination.
@@ -186,12 +186,19 @@ func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, 
 
 // marshalWorkflow supports workflow execution via the Executor.
 func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *workflow.FlowOptions, workflowURL string, in any, out any) (status string, err error) {
-	status, state, err := runner.Run(ctx, workflowURL, in, flowOptions)
+	outcome, err := runner.Run(ctx, workflowURL, in, flowOptions)
 	if err != nil {
-		return status, err // No trace
+		if outcome != nil {
+			return outcome.Status, err // No trace
+		}
+		return "", err // No trace
 	}
-	if out != nil && state != nil {
-		data, err := json.Marshal(state)
+	if outcome == nil {
+		return "", nil
+	}
+	status = outcome.Status
+	if out != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
 		if err != nil {
 			return status, errors.Trace(err)
 		}

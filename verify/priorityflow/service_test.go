@@ -55,22 +55,58 @@ var (
 	_ priorityflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestPriorityflow_Priority(t *testing.T) { // MARKER: Priority
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers.
+	// The test bypasses the generated executor (exec.Priority) because that call
+	// blocks until completion; observing priority-ordered dispatch requires many
+	// flows to be pending simultaneously, so it drives the foreman directly.
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// Pin the foreman to a single worker. SetConfig is only permitted once the
 		// connector is in the TESTING deployment, so it must run via .Init (which
 		// fires during connector init) rather than a bare post-creation call.
-		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetWorkers(1) }),
+		foreman.NewService().Init(func(f *foreman.Service) error {
+			f.SetWorkers(1)
+			f.SetSQLConnectionPool(1)
+			return nil
+		}),
 		tester,
 	)
 	app.RunInTest(t)
@@ -115,13 +151,18 @@ func TestPriorityflow_Priority(t *testing.T) { // MARKER: Priority
 		// Ensure every test flow is committed pending before the holder frees.
 		time.Sleep(300 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		for _, k := range keys {
-			status, _, err := fm.Await(ctx, k)
+			outcome, err = fm.Await(ctx, k)
+
+			status := outcomeStatus(outcome)
 			assert.NoError(err)
-			assert.Expect(status, foremanapi.StatusCompleted)
+			assert.Expect(status, workflow.StatusCompleted)
 		}
 
 		// Strict priority ascending, then creation order within a priority.
@@ -150,13 +191,18 @@ func TestPriorityflow_Priority(t *testing.T) { // MARKER: Priority
 
 		time.Sleep(300 * time.Millisecond)
 
-		status, _, err := fm.Await(ctx, holder)
+		outcome, err := fm.Await(ctx, holder)
+
+
+		status := outcomeStatus(outcome)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		for _, k := range append(highs, low) {
-			status, _, err := fm.Await(ctx, k)
+			outcome, err = fm.Await(ctx, k)
+
+			status := outcomeStatus(outcome)
 			assert.NoError(err)
-			assert.Expect(status, foremanapi.StatusCompleted)
+			assert.Expect(status, workflow.StatusCompleted)
 		}
 
 		order := svc.Order()

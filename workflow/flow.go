@@ -51,6 +51,11 @@ type Flow struct {
 	backoffInitialDelay    time.Duration
 	backoffDelayMultiplier float64
 	backoffMaxDelay        time.Duration
+
+	// Flow lifecycle timestamps, populated by the orchestrator on dispatch.
+	// Useful to a task implementing its own elapsed-time / lifetime guard.
+	createdAt time.Time
+	updatedAt time.Time
 }
 
 // NewFlow creates a new Flow with initialized maps.
@@ -120,6 +125,21 @@ func (f *Flow) Has(key string) bool {
 // Fields are matched by their JSON tag names. Fields in state that are not in the struct are ignored.
 func (f *Flow) ParseState(target any) error {
 	return parseMapInto(f.state, target)
+}
+
+// CreatedAt returns the wall-clock time at which the flow was created. Useful for tasks that
+// want to implement their own elapsed-time guard (e.g. "if time.Since(flow.CreatedAt()) > 24h
+// then return an error to fail the workflow"). Zero when called outside a dispatched task or
+// when the orchestrator has not populated it.
+func (f *Flow) CreatedAt() time.Time {
+	return f.createdAt
+}
+
+// UpdatedAt returns the wall-clock time of the flow row's last status transition. Useful for
+// tasks that want to gate on "how long since the flow last advanced." Zero when called outside
+// a dispatched task or when the orchestrator has not populated it.
+func (f *Flow) UpdatedAt() time.Time {
+	return f.updatedAt
 }
 
 // --- State mutation ---
@@ -447,6 +467,8 @@ type flowJSON struct {
 	BackoffInitialDelay    time.Duration  `json:"backoffInitialDelay,omitzero"`
 	BackoffDelayMultiplier float64        `json:"backoffDelayMultiplier,omitzero"`
 	BackoffMaxDelay        time.Duration  `json:"backoffMaxDelay,omitzero"`
+	CreatedAt              time.Time      `json:"createdAt,omitzero"`
+	UpdatedAt              time.Time      `json:"updatedAt,omitzero"`
 }
 
 // MarshalJSON serializes the Flow including private fields.
@@ -466,6 +488,8 @@ func (f *Flow) MarshalJSON() ([]byte, error) {
 		BackoffInitialDelay:    f.backoffInitialDelay,
 		BackoffDelayMultiplier: f.backoffDelayMultiplier,
 		BackoffMaxDelay:        f.backoffMaxDelay,
+		CreatedAt:              f.createdAt,
+		UpdatedAt:              f.updatedAt,
 	})
 }
 
@@ -489,5 +513,7 @@ func (f *Flow) UnmarshalJSON(data []byte) error {
 	f.backoffInitialDelay = wire.BackoffInitialDelay
 	f.backoffDelayMultiplier = wire.BackoffDelayMultiplier
 	f.backoffMaxDelay = wire.BackoffMaxDelay
+	f.createdAt = wire.CreatedAt
+	f.updatedAt = wire.UpdatedAt
 	return nil
 }

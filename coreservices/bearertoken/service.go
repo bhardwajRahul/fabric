@@ -188,7 +188,7 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 		return "", errors.New("no signing key configured", http.StatusServiceUnavailable)
 	}
 
-	now := svc.Now(ctx)
+	now := time.Now().UTC()
 
 	// Convert claims to map via JSON round-trip
 	jwtClaims := jwt.MapClaims{}

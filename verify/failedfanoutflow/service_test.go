@@ -58,16 +58,20 @@ func TestFailedfanoutflow_FailedFanOut(t *testing.T) { // MARKER: FailedFanOut
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := failedfanoutflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -80,6 +84,6 @@ func TestFailedfanoutflow_FailedFanOut(t *testing.T) { // MARKER: FailedFanOut
 		// outcome status, not a transport error, so err is nil.
 		_, _, status, err := exec.FailedFanOut(ctx)
 		assert.NoError(err)
-		assert.Expect(status, foremanapi.StatusFailed)
+		assert.Expect(status, workflow.StatusFailed)
 	})
 }

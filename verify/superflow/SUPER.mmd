@@ -1,0 +1,24 @@
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
+    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+
+    _title{{"super"}}:::term --> _start
+    t2@{ shape: st-rect, label: "taskC" }
+    t3@{ shape: trap-t, label: "taskD" }
+    t4@{ shape: trap-t, label: "taskE" }
+    _start(( )):::term --> t0["taskA"]:::task
+    t0 --> t1["taskB"]:::task
+    t1 -->|"for each in items"| t2
+    t2 -->|"fan-in"| t3
+    t2 -->|"onError"| t6["errorHandler"]:::task
+    t6 -->|"fan-in"| t3
+    t3 -->|"if useSubgraph == true"| t7[["superSubCall"]]:::sub
+    t3 -->|"if useSubgraph != true; fan-in"| t4
+    t7 -->|"fan-in"| t4
+    t4 -->|"goto"| t5["taskZ"]:::task
+    t4 --> _end(( )):::term
+    t5 --> _end(( )):::term
+    class t2 task
+    class t3 task
+    class t4 task

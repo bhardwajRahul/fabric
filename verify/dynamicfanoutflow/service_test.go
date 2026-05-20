@@ -58,16 +58,20 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := dynamicfanoutflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -78,7 +82,7 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 		count, status, err := exec.DynamicFanOut(ctx, []string{"x", "y", "z"})
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			count, 3,
 		)
 	})
@@ -89,7 +93,7 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 		count, status, err := exec.DynamicFanOut(ctx, []string{"only"})
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			count, 1,
 		)
 	})
@@ -102,7 +106,7 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 		count, status, err := exec.DynamicFanOut(ctx, []string{})
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			count, 0,
 		)
 	})

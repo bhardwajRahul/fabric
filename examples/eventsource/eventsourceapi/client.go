@@ -365,15 +365,23 @@ func (c Hook) OnRegistered(handler func(ctx context.Context, email string) (err 
 	return func() error { return c.svc.Unsubscribe(name) }, nil
 }
 
+// WorkflowRunner executes a workflow by name with initial state, blocking until termination.
+// foremanapi.Client satisfies this interface.
+type WorkflowRunner interface {
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)
+}
+
 // Executor runs tasks and workflows synchronously, blocking until termination.
 // It is primarily intended for integration tests. Production code should use
 // the foreman Client to create and start flows asynchronously.
 type Executor struct {
-	svc     service.Publisher
-	host    string
-	opts    []pub.Option
-	inFlow  *workflow.Flow
-	outFlow *workflow.Flow
+	svc         service.Publisher
+	host        string
+	opts        []pub.Option
+	inFlow      *workflow.Flow
+	outFlow     *workflow.Flow
+	runner      WorkflowRunner
+	flowOptions *workflow.FlowOptions
 }
 
 // NewExecutor creates a new executor proxy to the microservice.
@@ -383,24 +391,36 @@ func NewExecutor(caller service.Publisher) Executor {
 
 // ForHost returns a copy of the executor with a different hostname to be applied to requests.
 func (_c Executor) ForHost(host string) Executor {
-	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow}
+	return Executor{svc: _c.svc, host: host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithOptions returns a copy of the executor with options to be applied to requests.
 func (_c Executor) WithOptions(opts ...pub.Option) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow}
+	return Executor{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...), inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithInputFlow returns a copy of the executor with an input flow to use for task execution.
 // The input flow's state is available to the task in addition to the typed input arguments.
 func (_c Executor) WithInputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow}
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: flow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: _c.flowOptions}
 }
 
 // WithOutputFlow returns a copy of the executor with an output flow to populate after task execution.
 // The output flow captures the full flow state including control signals (Goto, Retry, Interrupt, Sleep).
 func (_c Executor) WithOutputFlow(flow *workflow.Flow) Executor {
-	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow}
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: flow, runner: _c.runner, flowOptions: _c.flowOptions}
+}
+
+// WithWorkflowRunner returns a copy of the executor with a workflow runner for executing workflows.
+// foremanapi.NewClient(svc) satisfies the WorkflowRunner interface.
+func (_c Executor) WithWorkflowRunner(runner WorkflowRunner) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: runner, flowOptions: _c.flowOptions}
+}
+
+// WithFlowOptions returns a copy of the executor that creates workflows with the given flow options
+// (priority, fairness key and weight). It has no effect on task execution.
+func (_c Executor) WithFlowOptions(flowOptions *workflow.FlowOptions) Executor {
+	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: flowOptions}
 }
 
 // marshalTask supports task execution via the Executor.
@@ -441,4 +461,30 @@ func marshalTask(ctx context.Context, svc service.Publisher, opts []pub.Option, 
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// marshalWorkflow supports workflow execution via the Executor.
+func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *workflow.FlowOptions, workflowURL string, in any, out any) (status string, err error) {
+	outcome, err := runner.Run(ctx, workflowURL, in, flowOptions)
+	if err != nil {
+		if outcome != nil {
+			return outcome.Status, err // No trace
+		}
+		return "", err // No trace
+	}
+	if outcome == nil {
+		return "", nil
+	}
+	status = outcome.Status
+	if out != nil && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+		err = json.Unmarshal(data, out)
+		if err != nil {
+			return status, errors.Trace(err)
+		}
+	}
+	return status, nil
 }

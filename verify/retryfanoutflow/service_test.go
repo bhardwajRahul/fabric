@@ -58,16 +58,20 @@ func TestRetryfanoutflow_RetryFanOut(t *testing.T) { // MARKER: RetryFanOut
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := retryfanoutflowapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -90,7 +94,7 @@ func TestRetryfanoutflow_RetryFanOut(t *testing.T) { // MARKER: RetryFanOut
 		listResult, status, err := exec.RetryFanOut(ctx, input)
 		assert.Expect(
 			err, nil,
-			status, foremanapi.StatusCompleted,
+			status, workflow.StatusCompleted,
 			listResult, want,
 		)
 	})

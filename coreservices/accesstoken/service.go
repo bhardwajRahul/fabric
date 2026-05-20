@@ -99,7 +99,7 @@ func (svc *Service) generateKey(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 	kid := utils.RandomIdentifier(16)
-	now := svc.Now(ctx)
+	now := time.Now().UTC()
 
 	svc.mu.Lock()
 	svc.previousKey = svc.currentKey
@@ -124,7 +124,7 @@ func (svc *Service) RotateKey(ctx context.Context) (err error) { // MARKER: Rota
 		err = svc.generateKey(ctx)
 		return errors.Trace(err)
 	}
-	if svc.Now(ctx).Sub(current.createdAt) < svc.KeyRotationInterval() {
+	if time.Since(current.createdAt) < svc.KeyRotationInterval() {
 		return nil
 	}
 	err = svc.generateKey(ctx)
@@ -149,7 +149,7 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 		lifetime = svc.DefaultTokenLifetime()
 	}
 	lifetime = min(lifetime, svc.MaxTokenLifetime())
-	now := svc.Now(ctx)
+	now := time.Now().UTC()
 	exp := now.Add(lifetime)
 
 	// Convert claims to map via JSON round-trip

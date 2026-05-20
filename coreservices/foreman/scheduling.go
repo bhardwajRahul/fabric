@@ -22,145 +22,98 @@ import (
 	"math/rand/v2"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/sequel"
 
-	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 )
 
-// flowSchedule carries the resolved priority and fairness of a flow, denormalized
-// onto the flow row and every one of its step rows.
-type flowSchedule struct {
-	priority       int
-	fairnessKey    string
-	fairnessWeight float64
-}
-
-// resolveFlowOptions resolves caller-supplied flow options against the foreman's
-// defaults: priority falls back to the DefaultPriority config, the fairness key
-// falls back to the tid/tenant actor claim then the "" bucket, and the fairness
-// weight falls back to 1.
-func (svc *Service) resolveFlowOptions(ctx context.Context, opts *workflow.FlowOptions) flowSchedule {
-	sched := flowSchedule{priority: svc.DefaultPriority(), fairnessWeight: 1}
+// resolveFlowOptions applies the foreman's defaults to caller-supplied options and returns a
+// populated copy.
+func (svc *Service) resolveFlowOptions(ctx context.Context, opts *workflow.FlowOptions) *workflow.FlowOptions {
+	resolved := &workflow.FlowOptions{Priority: svc.DefaultPriority(), FairnessWeight: 1}
 	if opts != nil {
 		if opts.Priority > 0 {
-			sched.priority = opts.Priority
+			resolved.Priority = opts.Priority
 		}
 		if opts.FairnessWeight > 0 {
-			sched.fairnessWeight = opts.FairnessWeight
+			resolved.FairnessWeight = opts.FairnessWeight
 		}
-		sched.fairnessKey = opts.FairnessKey
+		resolved.FairnessKey = opts.FairnessKey
 	}
-	if sched.fairnessKey == "" {
+	if resolved.FairnessKey == "" {
 		if tid, _ := frame.Of(ctx).Tenant(); tid != 0 {
-			sched.fairnessKey = strconv.Itoa(tid)
+			resolved.FairnessKey = strconv.Itoa(tid)
 		}
 	}
-	return sched
+	return resolved
 }
 
-// runRefill performs the two-level priority+fairness selection and replaces the
-// candidate cache with a fresh fair batch. It runs only on the single refiller
-// goroutine, so at most one selection scan is ever in flight per replica.
-//
-// Each shard is scanned independently (independent databases) for its own
-// strict-minimum priority band's due pending rows. The shards' rows are then
-// aggregated into one population: the global minimum band is taken across
-// shards (strict priority is cluster-wide, not per shard), and only rows at
-// that global band participate - shards whose band is worse contribute nothing
-// this batch. Over that single population, repeatedly weighted-random pick a
-// fairness key (Efraimidis-Spirakis over the keys, not the rows) and take that
-// key's globally-oldest remaining step, until the batch is full or exhausted.
-// Re-picking per step makes the expected dispatch share proportional to weight
-// and independent of backlog depth or shard layout - fairness is over
-// fairness_key, never over shards. "Oldest" is by created_at (step_id is
-// per-shard and not comparable across shards); ties broken by (shard, step_id).
-//
-// Acquisition stays the atomic CAS in processStep, so the cache only reorders;
-// it never grants ownership.
-func (svc *Service) runRefill(ctx context.Context) error {
-	type candRow struct {
-		stepID int
-		shard  int
-		key    string
-		weight float64
-		ageMs  float64 // DATE_DIFF_MILLIS(NOW, created_at); larger = older
-	}
+// candidateRow is a candidate step considered for admission.
+type candidateRow struct {
+	stepID int
+	shard  int
+	task   string
+	key    string
+	weight float64
+	ageMs  float64 // DATE_DIFF_MILLIS(NOW, created_at); larger = older
+}
+
+// scanPriorityBand returns the rows of the next priority band above prevBand, summed
+// across shards. Returns math.MaxInt when no work remains. Any shard's error fails the whole
+// call; the refiller retries on its next cycle.
+func (svc *Service) scanPriorityBand(ctx context.Context, prevBand int) (int, []candidateRow, error) {
 	type shardResult struct {
 		band int
-		rows []candRow
+		rows []candidateRow
 	}
-
 	numShards := svc.numDBShards()
-	results := make([]*shardResult, numShards)
-	jobs := make([]func() error, numShards)
-	for i := range jobs {
-		shardIdx := i
-		jobs[i] = func() (err error) {
-			db, err := svc.shard(shardIdx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			// One statement: the subquery selects the strict-minimum priority band
-			// over due pending steps, the outer reads that band's candidate rows
-			// (every returned row's priority equals the band). The subquery and
-			// outer are self-consistent within the statement. It is still not
-			// transactional vs concurrent worker CAS claims (a step may be
-			// claimed right after this read), which is self-correcting via the
-			// post-completion refill request and the backlog poll, so no
-			// transaction is needed. When nothing is due, MIN is NULL, the
-			// priority= comparison is UNKNOWN, and zero rows return. created_at is
-			// read as an age (ms) so it is comparable across shards: it both fixes
-			// each fairness_key's weight from that key's oldest step and orders
-			// dispatch oldest-first within the key (step_id is per-shard only).
-			rows, err := db.QueryContext(ctx,
-				"SELECT step_id, fairness_key, fairness_weight, priority, DATE_DIFF_MILLIS(NOW_UTC(), created_at) FROM microbus_steps"+
-					" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()"+
-					" AND priority=(SELECT MIN(priority) FROM microbus_steps"+
-					" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC())"+
-					" ORDER BY step_id",
-				foremanapi.StatusPending, foremanapi.StatusPending,
-			)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			defer rows.Close()
-			var sr *shardResult
-			for rows.Next() {
-				var c candRow
-				var prio int
-				if err := rows.Scan(&c.stepID, &c.key, &c.weight, &prio, &c.ageMs); err != nil {
-					return errors.Trace(err)
-				}
-				if c.weight <= 0 {
-					c.weight = 1
-				}
-				c.shard = shardIdx
-				if sr == nil {
-					sr = &shardResult{band: prio} // every row's priority == the band (subquery MIN)
-				}
-				sr.rows = append(sr.rows, c)
-			}
-			if err := rows.Err(); err != nil {
-				return errors.Trace(err)
-			}
-			if sr != nil {
-				results[shardIdx] = sr // nothing due => sr nil => shard contributes nothing
-			}
-			return nil
+	results := make([]*shardResult, numShards+1)
+	err := svc.eachShard(ctx, func(ctx context.Context, db *sequel.DB, shard int) error {
+		rows, err := db.QueryContext(ctx,
+			"SELECT step_id, task_name, fairness_key, fairness_weight, priority, DATE_DIFF_MILLIS(NOW_UTC(), created_at) FROM microbus_steps"+
+				" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?"+
+				" AND priority=(SELECT MIN(priority) FROM microbus_steps"+
+				" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?)"+
+				" ORDER BY step_id",
+			workflow.StatusPending, prevBand, workflow.StatusPending, prevBand,
+		)
+		if err != nil {
+			return errors.Trace(err)
 		}
-	}
-	err := svc.Parallel(jobs...)
+		defer rows.Close()
+		var sr *shardResult
+		for rows.Next() {
+			var c candidateRow
+			var prio int
+			err := rows.Scan(&c.stepID, &c.task, &c.key, &c.weight, &prio, &c.ageMs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if c.weight <= 0 {
+				c.weight = 1
+			}
+			c.shard = shard
+			if sr == nil {
+				sr = &shardResult{band: prio} // every row's priority == the band (subquery MIN)
+			}
+			sr.rows = append(sr.rows, c)
+		}
+		err = rows.Err()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if sr != nil {
+			results[shard] = sr
+		}
+		return nil
+	})
 	if err != nil {
-		return errors.Trace(err)
+		return 0, nil, errors.Trace(err)
 	}
-
-	// Aggregate across shards. Strict priority is cluster-wide: take the global
-	// minimum band; shards whose band is worse contribute nothing this batch
-	// (their lower-priority work waits). Only rows at the global band form the
-	// fairness population.
 	globalBand := math.MaxInt
 	for _, sr := range results {
 		if sr != nil && len(sr.rows) > 0 && sr.band < globalBand {
@@ -168,27 +121,78 @@ func (svc *Service) runRefill(ctx context.Context) error {
 		}
 	}
 	if globalBand == math.MaxInt {
-		svc.cache.refill(nil, math.MaxInt) // nothing due on any shard (no-op)
-		return nil
+		return globalBand, nil, nil
 	}
-
-	// One global fairness-key population, built only from rows at the global
-	// minimum band (worse bands contribute nothing - see above). A key's weight
-	// is fixed by its globally-oldest step (largest ageMs), so a tenant cannot
-	// self-promote by submitting newer high-weight tasks; that same oldest step
-	// is also dispatched first (FIFO within the key, see the sort below).
-	type keyBucket struct {
-		weight    float64
-		oldestAge float64
-		steps     []candRow
-	}
-	byKey := map[string]*keyBucket{}
-	order := []string{}
+	var atBand []candidateRow
 	for _, sr := range results {
 		if sr == nil || sr.band != globalBand {
 			continue
 		}
-		for _, c := range sr.rows {
+		atBand = append(atBand, sr.rows...)
+	}
+	return globalBand, atBand, nil
+}
+
+// runRefill replaces the candidate cache with a fresh priority+fairness batch
+// honoring per-task adaptive dispatch-rate limits. See "Adaptive Per-Task
+// Concurrency" in coreservices/foreman/CLAUDE.md.
+func (svc *Service) runRefill(ctx context.Context) error {
+	now := time.Now()
+	capacity := svc.cache.capacity()
+	batch := make([]job, 0, capacity)
+
+	// admittedProbe records which tripped tasks have already received their one probe this refill.
+	// The throttle owns dispatch-rate accounting via valvePeek / valveCommit; this map exists
+	// solely so breakerAdmits caps a tripped task at one probe per cycle.
+	admittedProbe := map[string]bool{}
+	// valveDropped is set when any candidate row was refused by valvePeek (rate-limited task,
+	// throttle full this window). At the end of the refill, if true, we advance the next poll to
+	// the throttle window boundary so the foreman wakes when the throttle has rotated. Without
+	// this, valve-saturated work would wait the full backlogPollInterval (default 2s) instead of
+	// the throttle window (1s).
+	valveDropped := false
+	admittable := func(task string) bool {
+		if !svc.breakerAdmits(task, admittedProbe[task], now) {
+			return false
+		}
+		if !svc.valvePeek(task, now) {
+			valveDropped = true
+			return false
+		}
+		return true
+	}
+
+	// Walk priority bands ascending. Exits when scanPriorityBand returns MaxInt
+	// (no more pending work anywhere) or admittable work is found at the
+	// current band. Per refill, worst case is O(distinct priority values)
+	// scanPriorityBand calls, each one a parallel shard query on the saturation
+	// index.
+	prevBand := -1
+	chosenBand := math.MaxInt
+	for {
+		band, rows, err := svc.scanPriorityBand(ctx, prevBand)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if band == math.MaxInt {
+			break // nothing due on any shard
+		}
+		// Group by fairness_key; key weight is fixed by its oldest member;
+		// rows whose task has no headroom drop out, taking empty keys with them.
+		type keyBucket struct {
+			weight    float64
+			oldestAge float64
+			steps     []candidateRow
+		}
+		byKey := map[string]*keyBucket{}
+		order := []string{}
+		dropped := 0
+		for _, c := range rows {
+			if !admittable(c.task) {
+				dropped++
+				svc.IncrementStepsSkippedSaturated(ctx, 1, c.task)
+				continue
+			}
 			kb := byKey[c.key]
 			if kb == nil {
 				kb = &keyBucket{weight: c.weight, oldestAge: c.ageMs}
@@ -196,62 +200,89 @@ func (svc *Service) runRefill(ctx context.Context) error {
 				order = append(order, c.key)
 			} else if c.ageMs > kb.oldestAge {
 				kb.oldestAge = c.ageMs
-				kb.weight = c.weight // the globally-oldest step fixes the key's weight
+				kb.weight = c.weight
 			}
 			kb.steps = append(kb.steps, c)
 		}
-	}
-	for _, kb := range byKey {
-		// FIFO within a fairness key: oldest step first, across all shards.
-		// ageMs = DATE_DIFF_MILLIS(NOW_UTC(), created_at) is computed per shard
-		// with both terms on that shard's own clock, so the per-shard offset
-		// cancels and ageMs is directly comparable across shards. step_id is
-		// per-shard and cannot order this. Same-age ties break by
-		// (shard, step_id) for determinism.
-		sort.Slice(kb.steps, func(a, b int) bool {
-			x, y := kb.steps[a], kb.steps[b]
-			if x.ageMs != y.ageMs {
-				return x.ageMs > y.ageMs // oldest (largest age) first
-			}
-			if x.shard != y.shard {
-				return x.shard < y.shard
-			}
-			return x.stepID < y.stepID
-		})
-	}
-	distinctKeys := len(order)
-	svc.lastDistinctKeys.Store(int64(distinctKeys))
-	svc.LogDebug(ctx, "Refill selecting", "band", globalBand, "distinctKeys", distinctKeys)
-
-	// Weighted-random key pick (Efraimidis-Spirakis over the keys, re-rolled per
-	// step) over the single global population; take the chosen key's oldest
-	// remaining step (FIFO within the key). Fairness is over fairness_key, not
-	// shards.
-	capacity := svc.cache.capacity()
-	batch := make([]job, 0, capacity)
-	for len(batch) < capacity {
-		bestKey, bestScore := "", -1.0
-		for _, k := range order {
-			kb := byKey[k]
-			if len(kb.steps) == 0 {
-				continue
-			}
-			score := math.Pow(rand.Float64(), 1/kb.weight)
-			if score > bestScore {
-				bestScore = score
-				bestKey = k
-			}
+		if len(byKey) == 0 {
+			svc.LogDebug(ctx, "Refill band saturated, advancing", "band", band, "rows", len(rows))
+			prevBand = band
+			continue
 		}
-		if bestScore < 0 {
-			break // all keys exhausted
+		// FIFO within key: oldest first; ties broken by (shard, step_id).
+		for _, kb := range byKey {
+			sort.Slice(kb.steps, func(a, b int) bool {
+				x, y := kb.steps[a], kb.steps[b]
+				if x.ageMs != y.ageMs {
+					return x.ageMs > y.ageMs
+				}
+				if x.shard != y.shard {
+					return x.shard < y.shard
+				}
+				return x.stepID < y.stepID
+			})
 		}
-		kb := byKey[bestKey]
-		c := kb.steps[0]
-		kb.steps = kb.steps[1:]
-		batch = append(batch, job{stepID: c.stepID, shard: c.shard})
+		distinctKeys := len(order)
+		// Clear the previous band's series if the band changed, so an inactive band doesn't show stale counts on the dashboard.
+		if svc.lastRefillPriority != 0 && svc.lastRefillPriority != band {
+			_ = svc.RecordStepsFairnessKeys(ctx, 0, strconv.Itoa(svc.lastRefillPriority))
+		}
+		_ = svc.RecordStepsFairnessKeys(ctx, distinctKeys, strconv.Itoa(band))
+		svc.lastRefillPriority = band
+		svc.LogDebug(ctx, "Refill selecting", "band", band, "distinctKeys", distinctKeys, "saturatedDrops", dropped)
+
+		// Weighted-random key pick (Efraimidis-Spirakis), re-rolled per step.
+		for len(batch) < capacity {
+			bestKey, bestScore := "", -1.0
+			for _, k := range order {
+				kb := byKey[k]
+				// Skip past head steps whose task has hit its in-batch cap.
+				// A fairness key (per-tenant) may carry steps for multiple tasks;
+				// saturating one task must not block admissible work for another task in the same bucket.
+				for len(kb.steps) > 0 && !admittable(kb.steps[0].task) {
+					svc.IncrementStepsSkippedSaturated(ctx, 1, kb.steps[0].task)
+					kb.steps = kb.steps[1:]
+				}
+				if len(kb.steps) == 0 {
+					continue
+				}
+				score := math.Pow(rand.Float64(), 1/kb.weight)
+				if score > bestScore {
+					bestScore = score
+					bestKey = k
+				}
+			}
+			if bestScore < 0 {
+				break
+			}
+			kb := byKey[bestKey]
+			c := kb.steps[0]
+			kb.steps = kb.steps[1:]
+			batch = append(batch, job{stepID: c.stepID, shard: c.shard})
+			admittedProbe[c.task] = true
+			// Consume one throttle slot for this dispatch (no-op when the task has no valve recorded yet).
+			svc.valveCommit(c.task, now)
+			// Advance the breaker's probe schedule iff this commit was a probe (no-op when the task has no tripped breaker).
+			svc.breakerCommit(c.task, now)
+		}
+		chosenBand = band
+		break
 	}
 
-	svc.LogDebug(ctx, "Refill batch", "size", len(batch), "floor", globalBand)
-	svc.cache.refill(batch, globalBand)
+	// If no band was chosen (system idle or every band fully saturated), clear the previously
+	// recorded series so the dashboard returns to 0 instead of showing a stale count.
+	if chosenBand == math.MaxInt && svc.lastRefillPriority != 0 {
+		_ = svc.RecordStepsFairnessKeys(ctx, 0, strconv.Itoa(svc.lastRefillPriority))
+		svc.lastRefillPriority = 0
+	}
+	svc.LogDebug(ctx, "Refill batch", "size", len(batch), "floor", chosenBand)
+	svc.cache.refill(batch, chosenBand)
+	if valveDropped {
+		// At least one candidate was refused by a rate-limited valve; the throttle's window
+		// rotates within 1 second, so wake the poll at that boundary rather than waiting for the
+		// default backlogPollInterval. shortenNextPoll only advances; sibling tasks whose work is
+		// driven by the completion doorbell are unaffected.
+		svc.shortenNextPoll(now.Add(time.Second))
+	}
 	return nil
 }

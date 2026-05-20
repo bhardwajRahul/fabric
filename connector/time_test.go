@@ -18,101 +18,13 @@ package connector
 
 import (
 	"context"
-	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
 )
-
-func TestConnector_ClockOffset(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	// Create the microservices
-	alpha := New("alpha.clock.offset.connector")
-
-	var betaTime time.Time
-	var betaShift time.Duration
-	beta := New("beta.clock.offset.connector")
-	beta.Subscribe("Shift",
-		func(w http.ResponseWriter, r *http.Request) error {
-			ctx := r.Context()
-			betaTime = beta.Now(ctx)
-			betaShift = frame.Of(ctx).ClockShift()
-			beta.GET(r.Context(), "https://gamma.clock.offset.connector/shift")
-			return nil
-		},
-		sub.At("GET", "shift"),
-		sub.Web(),
-	)
-
-	var gammaTime time.Time
-	var gammaShift time.Duration
-	gamma := New("gamma.clock.offset.connector")
-	gamma.Subscribe("Shift",
-		func(w http.ResponseWriter, r *http.Request) error {
-			ctx := r.Context()
-			gammaTime = beta.Now(ctx)
-			gammaShift = frame.Of(ctx).ClockShift()
-			return nil
-		},
-		sub.At("GET", "shift"),
-		sub.Web(),
-	)
-
-	// Startup the microservices
-	ctx := t.Context()
-	err := alpha.Startup(ctx)
-	assert.NoError(err)
-	defer alpha.Shutdown(ctx)
-	err = beta.Startup(ctx)
-	assert.NoError(err)
-	defer beta.Shutdown(ctx)
-	err = gamma.Startup(ctx)
-	assert.NoError(err)
-	defer gamma.Shutdown(ctx)
-
-	// Shift the time in the context one minute in the past
-	ctx = frame.CloneContext(t.Context())
-	f := frame.Of(ctx)
-	f.SetClockShift(-time.Minute)
-	assert.Equal(-time.Minute, f.ClockShift())
-
-	// Send message and validate that beta receives the offset time
-	realTime := time.Now().UTC()
-	time.Sleep(10 * time.Millisecond)
-	alphaTime := alpha.Now(ctx) // Offset by -1m
-	assert.True(alphaTime.Before(realTime))
-	_, err = alpha.GET(ctx, "https://beta.clock.offset.connector/shift")
-	assert.NoError(err)
-	assert.True(betaTime.Before(realTime))
-	assert.True(gammaTime.Before(realTime))
-	assert.Equal(-time.Minute, betaShift)
-	assert.Equal(-time.Minute, gammaShift)
-
-	// Shift the time in the context one hour in the future
-	ctx = frame.CloneContext(t.Context())
-	f = frame.Of(ctx)
-	f.SetClockShift(15 * time.Minute)
-	f.IncrementClockShift(45 * time.Minute)
-	f.SetClockShift(time.Hour)
-
-	// Send message and validate that beta receives the offset time
-	realTime = time.Now().UTC()
-	alphaTime = alpha.Now(ctx) // Offset by +1h
-	assert.True(alphaTime.After(realTime.Add(time.Minute)))
-	_, err = alpha.GET(ctx, "https://beta.clock.offset.connector/shift")
-	assert.NoError(err)
-	assert.True(betaTime.After(realTime.Add(59 * time.Minute)))
-	assert.True(gammaTime.After(realTime.Add(59 * time.Minute)))
-	assert.Equal(time.Hour, betaShift)
-	assert.Equal(time.Hour, gammaShift)
-}
 
 func TestConnector_Ticker(t *testing.T) {
 	t.Parallel()

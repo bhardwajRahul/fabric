@@ -141,7 +141,6 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	// All errors must be assigned to err.
 	span := trc.NewSpan(nil)
 	startTime := time.Now()
-	ctx = context.Background()
 	defer func() {
 		// err is the named return value
 		if err != nil {
@@ -205,6 +204,11 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	c.ackTimeout = c.networkRoundtrip
 	c.LogInfo(ctx, "Transport latency", "latency", c.networkRoundtrip)
 
+	// Prepare the connector's lifetime context before any user-visible callback runs.
+	// OnStartup and downstream code can rely on svc.Lifetime() being a real cancellable
+	// context. It is cancelled in Shutdown after OnShutdown returns.
+	c.lifetimeCtx, c.ctxCancel = context.WithCancel(context.Background())
+
 	// Subscribe to the response subject
 	c.responseSub, err = c.transportConn.QueueSubscribe(subjectOfResponseSub(c.plane, c.hostname, c.id), c.id, c.onResponse)
 	if err != nil {
@@ -237,9 +241,6 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 		}
 	}
 
-	// Prepare the connector's root context
-	c.lifetimeCtx, c.ctxCancel = context.WithCancel(context.Background())
-
 	// Subscribe to :888 control messages
 	err = c.subscribeControl()
 	if err != nil {
@@ -262,13 +263,15 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 }
 
 // Shutdown the microservice by deactivating subscriptions and disconnecting from the transport.
+// The deadline on ctx, if any, bounds the time allotted to the operation: OnShutdown receives
+// the remaining budget, then the drains and teardown share what's left.
 func (c *Connector) Shutdown(ctx context.Context) (err error) {
 	if !c.phase.CompareAndSwap(startedUp, shuttingDown) && !c.phase.CompareAndSwap(startingUp, shuttingDown) {
 		return errors.New("not started")
 	}
 
-	// OpenTelemetry: create a span for the callback
-	ctx, span := c.StartSpan(context.Background(), "shutdown", trc.Internal())
+	// OpenTelemetry: create a span using the caller's ctx so its deadline propagates.
+	ctx, span := c.StartSpan(ctx, "shutdown", trc.Internal())
 
 	startTime := time.Now()
 	var lastErr error
@@ -288,39 +291,9 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		lastErr = errors.Trace(err)
 	}
 
-	// Drain pending operations (incoming requests, running tickers, goroutines)
-	totalDrainTime := time.Duration(0)
-	for c.pendingOps.Load() > 0 && totalDrainTime < 8*time.Second { // 8 seconds
-		time.Sleep(20 * time.Millisecond)
-		totalDrainTime += 20 * time.Millisecond
-	}
-	undrained := c.pendingOps.Load()
-	if undrained > 0 {
-		c.LogInfo(ctx, "Stubborn pending operations",
-			"ops", int(undrained),
-		)
-	}
-
-	// Cancel the root context
-	if c.ctxCancel != nil {
-		c.ctxCancel()
-		c.ctxCancel = nil
-	}
-
-	// Drain pending operations again after cancelling the context
-	totalDrainTime = time.Duration(0)
-	for c.pendingOps.Load() > 0 && totalDrainTime < 4*time.Second { // 4 seconds
-		time.Sleep(20 * time.Millisecond)
-		totalDrainTime += 20 * time.Millisecond
-	}
-	undrained = c.pendingOps.Load()
-	if undrained > 0 {
-		c.LogWarn(ctx, "Unable to drain pending operations",
-			"ops", int(undrained),
-		)
-	}
-
-	// Call the callback function
+	// Call OnShutdown while everything is still alive: lifetime context is valid, dlru is up,
+	// transport is up, outbound calls work, svc.Go can still launch goroutines. User code that
+	// needs to drain its own workers or flush state should do it here, bounded by ctx.
 	if c.onStartupCalled && c.onShutdown != nil {
 		err = errors.CatchPanic(func() error {
 			return c.onShutdown(ctx)
@@ -330,12 +303,45 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		}
 	}
 
+	// Two-phase drain: soft (cooperative) then hard (coerced by lifetime ctx cancel).
+	// Partition the remaining ctx budget; fall back to fixed defaults when no deadline was set.
+	softDrain, hardDrain := c.shutdownDrainBudgets(ctx)
+	undrained := c.drainPendingOps(time.Now().Add(softDrain))
+	if undrained > 0 {
+		c.LogInfo(ctx, "Stubborn pending operations",
+			"ops", int(undrained),
+		)
+	}
+
+	// Cancel the lifetime context. This is the escalation step: goroutines still running
+	// in svc.Go / svc.Parallel observe ctx.Done() and should exit promptly.
+	if c.ctxCancel != nil {
+		c.ctxCancel()
+		c.ctxCancel = nil
+	}
+
+	// Hard drain: short tail for cancellation-aware goroutines to exit after observing it.
+	undrained = c.drainPendingOps(time.Now().Add(hardDrain))
+	if undrained > 0 {
+		c.LogWarn(ctx, "Unable to drain pending operations",
+			"ops", int(undrained),
+		)
+	}
+
+	// From here on, mandatory framework teardown runs on a context that ignores the caller's
+	// cancellation: closing dlru, unsubscribing, disconnecting the transport, and flushing
+	// OTel must not be skipped because the caller's shutdown budget happened to expire.
+	// teardownBudget is enough for these to make their last attempts; OTel exporters have
+	// their own per-export timeouts (see connector/CLAUDE.md OTLP exporter resilience).
+	mctx, mcancel := context.WithTimeout(context.WithoutCancel(ctx), teardownBudget)
+	defer mcancel()
+
 	// Close the distributed cache; see dlru/CLAUDE.md for the offload window.
 	// Reset to nil so the next Startup creates a fresh cache - otherwise the
 	// "if c.distribCache == nil" guard skips dlru.NewCache and the cache's
 	// manual subs stay off the bus across the restart.
 	if c.distribCache != nil {
-		err = c.distribCache.Close(ctx)
+		err = c.distribCache.Close(mctx)
 		if err != nil {
 			lastErr = errors.Trace(err)
 		}
@@ -356,13 +362,13 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 
 	// Last chance to log an error
 	if lastErr != nil {
-		c.LogError(ctx, "Shutting down", "error", lastErr)
+		c.LogError(mctx, "Shutting down", "error", lastErr)
 		// OpenTelemetry: record the error
 		span.SetError(lastErr)
-		c.ForceTrace(ctx)
+		c.ForceTrace(mctx)
 	}
 	_ = c.RecordHistogram(
-		ctx,
+		mctx,
 		"microbus_callback_duration_seconds",
 		time.Since(startTime).Seconds(),
 		"name", "OnShutdown",
@@ -377,13 +383,64 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 
 	// OpenTelemetry: terminate
 	span.End()
-	_ = c.termTracer(ctx)
-	_ = c.termMeter(ctx)
+	_ = c.termTracer(mctx)
+	_ = c.termMeter(mctx)
 
-	c.LogInfo(ctx, "Shutdown")
+	c.LogInfo(mctx, "Shutdown")
 	c.phase.Store(shutDown)
 
 	return lastErr
+}
+
+// teardownBudget bounds the post-cancellation, mandatory cleanup steps in Shutdown
+// (dlru close, OTel flush) so they don't run unbounded if a downstream is unreachable.
+// The per-export OTLP timeout (see OTel docs) governs each network attempt within that.
+const teardownBudget = 2 * time.Second
+
+// drainPendingOps polls pendingOps until it reaches zero or deadline passes. Returns
+// the number of operations still pending when it returns.
+func (c *Connector) drainPendingOps(deadline time.Time) int32 {
+	const pollInterval = 20 * time.Millisecond
+	for c.pendingOps.Load() > 0 {
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(pollInterval)
+	}
+	return c.pendingOps.Load()
+}
+
+// shutdownDrainBudgets partitions the remaining ctx budget into soft and hard drains.
+// Soft drain is cooperative (lifetime ctx still valid); hard drain runs after the cancel.
+// When ctx has no deadline, fixed defaults are used. teardownBudget is reserved out of
+// the deadline for mandatory cleanup steps that run on context.WithoutCancel.
+func (c *Connector) shutdownDrainBudgets(ctx context.Context) (soft, hard time.Duration) {
+	const (
+		defaultSoftDrain = 8 * time.Second
+		defaultHardDrain = 2 * time.Second
+		maxHardDrain     = 2 * time.Second
+		minHardDrain     = 100 * time.Millisecond
+	)
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return defaultSoftDrain, defaultHardDrain
+	}
+	remaining := time.Until(deadline) - teardownBudget
+	if remaining <= 0 {
+		return 0, minHardDrain
+	}
+	hard = remaining / 4
+	if hard < minHardDrain {
+		hard = minHardDrain
+	}
+	if hard > maxHardDrain {
+		hard = maxHardDrain
+	}
+	soft = remaining - hard
+	if soft < 0 {
+		soft = 0
+	}
+	return soft, hard
 }
 
 // IsStarted indicates if the microservice has been successfully started up.
@@ -402,9 +459,13 @@ func (c *Connector) isPhase(phase ...int) bool {
 	return false
 }
 
-// Lifetime returns a context that gets cancelled when the microservice is shutdown.
-// The Done() channel can be used to detect when the microservice is shutting down.
-// In most cases the lifetime context should be used instead of the background context.
+// Lifetime returns a context that becomes valid before OnStartup runs and is cancelled
+// only after OnShutdown returns and the connector's soft drain elapses. It is the
+// canonical root context for long-lived goroutines launched from OnStartup (worker
+// pools, refillers, background reconcilers) and for outbound calls that should outlive
+// the request that initiated them. Its Done channel signals "the microservice is
+// shutting down, finish up." Use it instead of context.Background for any work whose
+// lifecycle should track the microservice's.
 func (c *Connector) Lifetime() context.Context {
 	return c.lifetimeCtx
 }

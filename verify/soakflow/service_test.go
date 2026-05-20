@@ -56,9 +56,33 @@ var (
 	_ soakflowapi.Client
 )
 
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func isTerminal(status string) bool {
 	switch status {
-	case foremanapi.StatusCompleted, foremanapi.StatusFailed, foremanapi.StatusCancelled:
+	case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled:
 		return true
 	}
 	return false
@@ -73,12 +97,16 @@ func TestSoakflow_Soak(t *testing.T) { // MARKER: Soak
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	fm := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
 		// NumShards>1 exercises the cross-shard combined query + round-robin
 		// batch assembly; a small worker pool makes the candidate cache the
@@ -87,15 +115,11 @@ func TestSoakflow_Soak(t *testing.T) { // MARKER: Soak
 		foreman.NewService().Init(func(f *foreman.Service) error {
 			// NumShards>1 requires a %d-templated DSN; in TESTING this still
 			// resolves to an isolated in-memory SQLite per (shard, test).
-			err := f.SetSQLDataSourceName("file:soak%d?mode=memory&cache=shared")
-			if err != nil {
-				return err
-			}
-			err = f.SetNumShards(2)
-			if err != nil {
-				return err
-			}
-			return f.SetWorkers(4)
+			f.SetSQLDataSourceName("file:soak%d")
+			f.SetNumShards(2)
+			f.SetWorkers(4)
+			f.SetSQLConnectionPool(4)
+			return nil
 		}),
 		tester,
 	)
@@ -122,7 +146,9 @@ func TestSoakflow_Soak(t *testing.T) { // MARKER: Soak
 		// the number still outstanding.
 		reap := func() int {
 			for k := range started {
-				status, _, err := fm.Snapshot(ctx, k)
+				outcome, err := fm.Snapshot(ctx, k)
+
+				status := outcomeStatus(outcome)
 				if err == nil && isTerminal(status) {
 					delete(started, k)
 				}
@@ -184,7 +210,9 @@ func TestSoakflow_Soak(t *testing.T) { // MARKER: Soak
 			// logged seed makes the run reproducible.
 			n := 0
 			for k := range started {
-				status, _, _ := fm.Snapshot(ctx, k)
+				outcome, _ := fm.Snapshot(ctx, k)
+
+				status := outcomeStatus(outcome)
 				t.Logf("STUCK flow=%s status=%s", k, status)
 				if n++; n >= 10 {
 					break

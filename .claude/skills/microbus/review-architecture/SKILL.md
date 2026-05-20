@@ -102,7 +102,6 @@ Check for adequate instrumentation by reviewing `manifest.yaml` metrics sections
 - **Logging** - is `svc.LogInfo/Warn/Error/Debug` used with structured `slog`-style name=value pairs? Is the `"error"` label used when logging errors? Grep for `fmt.Print`, `log.Print`, or `println` to flag non-framework logging.
 - **Context propagation** - is `ctx` passed through the entire call chain, from handler to downstream calls? Flag functions that create a new `context.Background()` or `context.TODO()` instead of propagating the received context, as this breaks distributed tracing.
 - **Error tracing** - are all returned errors wrapped with `errors.Trace`? Are new errors created with `errors.New` (not `fmt.Errorf`)? Grep for `return err` (without `errors.Trace`) and `fmt.Errorf` to find violations.
-- **Current time** - grep for `time.Now()` in `service.go` files. The framework requires `svc.Now(ctx)` instead, to support clock shifting in tests and to record timestamps in tracing spans.
 
 #### Step 8: Security
 

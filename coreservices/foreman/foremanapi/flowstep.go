@@ -32,9 +32,10 @@ type FlowStep struct {
 	SuccessorID   int `json:"successorID,omitzero"`
 	Subgraph   bool           `json:"subgraph,omitzero"`
 	SubHistory []FlowStep     `json:"subHistory,omitzero"`
-	State      map[string]any `json:"state,omitzero"`
-	Changes    map[string]any `json:"changes,omitzero"`
-	Status     string         `json:"status,omitzero"`
-	Error      string         `json:"error,omitzero"`
-	UpdatedAt  time.Time      `json:"updatedAt,omitzero"`
+	State            map[string]any `json:"state,omitzero"`
+	Changes          map[string]any `json:"changes,omitzero"`
+	InterruptPayload map[string]any `json:"interruptPayload,omitzero"`
+	Status           string         `json:"status,omitzero"`
+	Error            string         `json:"error,omitzero"`
+	UpdatedAt        time.Time      `json:"updatedAt,omitzero"`
 }

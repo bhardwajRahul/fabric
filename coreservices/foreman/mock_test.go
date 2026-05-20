@@ -22,6 +22,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
@@ -89,11 +90,11 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("snapshot", func(t *testing.T) { // MARKER: Snapshot
 		assert := testarossa.For(t)
 
-		mock.MockSnapshot(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
+		mock.MockSnapshot(func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) {
 			return
 		})
 		var flowKey string
-		_, _, err := mock.Snapshot(ctx, flowKey)
+		_, err := mock.Snapshot(ctx, flowKey)
 		assert.NoError(err)
 	})
 
@@ -112,23 +113,25 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("fork", func(t *testing.T) { // MARKER: Fork
 		assert := testarossa.For(t)
 
-		mock.MockFork(func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) {
+		mock.MockFork(func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) {
 			return
 		})
 		var stepKey string
 		var stateOverrides any
-		_, err := mock.Fork(ctx, stepKey, stateOverrides)
+		var opts *workflow.FlowOptions
+		_, err := mock.Fork(ctx, stepKey, stateOverrides, opts)
 		assert.NoError(err)
 	})
 
 	t.Run("cancel", func(t *testing.T) { // MARKER: Cancel
 		assert := testarossa.For(t)
 
-		mock.MockCancel(func(ctx context.Context, flowKey string) (err error) {
+		mock.MockCancel(func(ctx context.Context, flowKey string, reason string) (err error) {
 			return
 		})
 		var flowKey string
-		err := mock.Cancel(ctx, flowKey)
+		var reason string
+		err := mock.Cancel(ctx, flowKey, reason)
 		assert.NoError(err)
 	})
 
@@ -157,11 +160,43 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("list", func(t *testing.T) { // MARKER: List
 		assert := testarossa.For(t)
 
-		mock.MockList(func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, err error) {
+		mock.MockList(func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error) {
 			return
 		})
 		var query foremanapi.Query
-		_, err := mock.List(ctx, query)
+		_, _, err := mock.List(ctx, query)
+		assert.NoError(err)
+	})
+
+	t.Run("delete", func(t *testing.T) { // MARKER: Delete
+		assert := testarossa.For(t)
+
+		mock.MockDelete(func(ctx context.Context, flowKey string) (err error) {
+			return
+		})
+		var flowKey string
+		err := mock.Delete(ctx, flowKey)
+		assert.NoError(err)
+	})
+
+	t.Run("purge", func(t *testing.T) { // MARKER: Purge
+		assert := testarossa.For(t)
+
+		mock.MockPurge(func(ctx context.Context, query foremanapi.Query) (deleted int, err error) {
+			return
+		})
+		var query foremanapi.Query
+		_, err := mock.Purge(ctx, query)
+		assert.NoError(err)
+	})
+
+	t.Run("shard_info", func(t *testing.T) { // MARKER: ShardInfo
+		assert := testarossa.For(t)
+
+		mock.MockShardInfo(func(ctx context.Context) (shards []foremanapi.ShardSummary, err error) {
+			return
+		})
+		_, err := mock.ShardInfo(ctx)
 		assert.NoError(err)
 	})
 
@@ -192,11 +227,11 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("await", func(t *testing.T) { // MARKER: Await
 		assert := testarossa.For(t)
 
-		mock.MockAwait(func(ctx context.Context, flowKey string) (status string, state map[string]any, err error) {
+		mock.MockAwait(func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) {
 			return
 		})
 		var flowKey string
-		_, _, err := mock.Await(ctx, flowKey)
+		_, err := mock.Await(ctx, flowKey)
 		assert.NoError(err)
 	})
 
@@ -228,25 +263,26 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("run", func(t *testing.T) { // MARKER: Run
 		assert := testarossa.For(t)
 
-		mock.MockRun(func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (status string, state map[string]any, err error) {
+		mock.MockRun(func(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) {
 			return
 		})
 		var workflowName string
 		var initialState any
 		var opts *workflow.FlowOptions
-		_, _, err := mock.Run(ctx, workflowName, initialState, opts)
+		_, err := mock.Run(ctx, workflowName, initialState, opts)
 		assert.NoError(err)
 	})
 
 	t.Run("continue", func(t *testing.T) { // MARKER: Continue
 		assert := testarossa.For(t)
 
-		mock.MockContinue(func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) {
+		mock.MockContinue(func(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) {
 			return
 		})
 		var threadKey string
 		var additionalState any
-		_, err := mock.Continue(ctx, threadKey, additionalState)
+		var opts *workflow.FlowOptions
+		_, err := mock.Continue(ctx, threadKey, additionalState, opts)
 		assert.NoError(err)
 	})
 
@@ -262,53 +298,87 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("purge_expired_flows", func(t *testing.T) { // MARKER: PurgeExpiredFlows
+	t.Run("sync_valve", func(t *testing.T) { // MARKER: SyncValve
 		assert := testarossa.For(t)
 
-		mock.MockPurgeExpiredFlows(func(ctx context.Context) (err error) {
+		mock.MockSyncValve(func(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error) {
 			return
 		})
-		err := mock.PurgeExpiredFlows(ctx)
+		var taskName string
+		var wCong int
+		var tCong time.Time
+		err := mock.SyncValve(ctx, taskName, wCong, tCong)
 		assert.NoError(err)
 	})
 
-	t.Run("on_observe_queue_depth", func(t *testing.T) { // MARKER: QueueDepth
+	t.Run("trip_breaker", func(t *testing.T) { // MARKER: TripBreaker
 		assert := testarossa.For(t)
 
-		mock.MockOnObserveQueueDepth(func(ctx context.Context) (err error) {
+		mock.MockTripBreaker(func(ctx context.Context, taskName string) (err error) {
 			return
 		})
-		err := mock.OnObserveQueueDepth(ctx)
+		var taskName string
+		err := mock.TripBreaker(ctx, taskName)
 		assert.NoError(err)
 	})
 
-	t.Run("on_observe_pending_steps_by_priority", func(t *testing.T) { // MARKER: PendingStepsByPriority
+	t.Run("on_observe_steps_queue_depth", func(t *testing.T) { // MARKER: StepsQueueDepth
 		assert := testarossa.For(t)
 
-		mock.MockOnObservePendingStepsByPriority(func(ctx context.Context) (err error) {
+		mock.MockOnObserveStepsQueueDepth(func(ctx context.Context) (err error) {
 			return
 		})
-		err := mock.OnObservePendingStepsByPriority(ctx)
+		err := mock.OnObserveStepsQueueDepth(ctx)
 		assert.NoError(err)
 	})
 
-	t.Run("on_observe_oldest_pending_age_seconds", func(t *testing.T) { // MARKER: OldestPendingAgeSeconds
+	t.Run("on_observe_steps_pending", func(t *testing.T) { // MARKER: StepsPending
 		assert := testarossa.For(t)
 
-		mock.MockOnObserveOldestPendingAgeSeconds(func(ctx context.Context) (err error) {
+		mock.MockOnObserveStepsPending(func(ctx context.Context) (err error) {
 			return
 		})
-		err := mock.OnObserveOldestPendingAgeSeconds(ctx)
+		err := mock.OnObserveStepsPending(ctx)
 		assert.NoError(err)
 	})
 
-	t.Run("on_observe_distinct_fairness_keys", func(t *testing.T) { // MARKER: DistinctFairnessKeys
+	t.Run("on_observe_steps_oldest_pending_age_seconds", func(t *testing.T) { // MARKER: StepsOldestPendingAgeSeconds
 		assert := testarossa.For(t)
 
-		mock.MockOnObserveDistinctFairnessKeys(func(ctx context.Context) (err error) {
+		mock.MockOnObserveStepsOldestPendingAgeSeconds(func(ctx context.Context) (err error) {
 			return
 		})
-		err := mock.OnObserveDistinctFairnessKeys(ctx)
+		err := mock.OnObserveStepsOldestPendingAgeSeconds(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_observe_task_rate_limit", func(t *testing.T) { // MARKER: TaskRateLimit
+		assert := testarossa.For(t)
+
+		mock.MockOnObserveTaskRateLimit(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnObserveTaskRateLimit(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_observe_task_concurrency_running", func(t *testing.T) { // MARKER: TaskConcurrencyRunning
+		assert := testarossa.For(t)
+
+		mock.MockOnObserveTaskConcurrencyRunning(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnObserveTaskConcurrencyRunning(ctx)
+		assert.NoError(err)
+	})
+
+	t.Run("on_observe_task_breaker_state", func(t *testing.T) { // MARKER: TaskBreakerState
+		assert := testarossa.For(t)
+
+		mock.MockOnObserveTaskBreakerState(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnObserveTaskBreakerState(ctx)
 		assert.NoError(err)
 	})
 

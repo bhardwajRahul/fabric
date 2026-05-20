@@ -54,19 +54,48 @@ var (
 	_ forkflowapi.Client
 )
 
+
+// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
+func outcomeStatus(o *workflow.FlowOutcome) string {
+	if o == nil {
+		return ""
+	}
+	return o.Status
+}
+
+// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
+func outcomeState(o *workflow.FlowOutcome) map[string]any {
+	if o == nil {
+		return nil
+	}
+	return o.State
+}
+
+// outcomeStatusState extracts the Status and State from a FlowOutcome.
+func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
+	if o == nil {
+		return "", nil
+	}
+	return o.Status, o.State
+}
+
 func TestForkflow_Pipe(t *testing.T) { // MARKER: Pipe
 	t.Parallel()
 	ctx := t.Context()
 
+	// Initialize the microservice under test
 	svc := NewService()
 
+	// Initialize the testers
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 
+	// Run the testing app
 	app := application.New()
 	app.Add(
+		// HINT: Add microservices or mocks required for this test
 		svc,
-		foreman.NewService(),
+		foreman.NewService().Init(func(f *foreman.Service) error { return f.SetSQLConnectionPool(1) }),
 		tester,
 	)
 	app.RunInTest(t)
@@ -83,11 +112,13 @@ func TestForkflow_Pipe(t *testing.T) { // MARKER: Pipe
 		if !assert.NoError(err) {
 			return
 		}
-		status, state, err := foremanClient.Await(ctx, flowKey)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+
+		status, state := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		assert.Expect(state["value"], 11.0)
 
 		// Retrieve History; pick the stepKey of TaskB.
@@ -108,7 +139,7 @@ func TestForkflow_Pipe(t *testing.T) { // MARKER: Pipe
 		}
 
 		// Fork from B with value=100. The forked flow re-creates B with value=100, runs B (->200) and C (->201).
-		forkedKey, err := foremanClient.Fork(ctx, stepBKey, map[string]any{"value": 100})
+		forkedKey, err := foremanClient.Fork(ctx, stepBKey, map[string]any{"value": 100}, nil)
 		if !assert.NoError(err) {
 			return
 		}
@@ -116,15 +147,19 @@ func TestForkflow_Pipe(t *testing.T) { // MARKER: Pipe
 		if !assert.NoError(err) {
 			return
 		}
-		status, state, err = foremanClient.Await(ctx, forkedKey)
+		outcome, err = foremanClient.Await(ctx, forkedKey)
+
+		status, state = outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Expect(status, foremanapi.StatusCompleted)
+		assert.Expect(status, workflow.StatusCompleted)
 		assert.Expect(state["value"], 201.0)
 
 		// The original flow is unaffected.
-		_, origState, err := foremanClient.Snapshot(ctx, flowKey)
+		outcome, err = foremanClient.Snapshot(ctx, flowKey)
+
+		_, origState := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}

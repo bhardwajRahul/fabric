@@ -91,11 +91,11 @@ func (g *Graph) Nodes() []Node {
 	return result
 }
 
-// Transitions returns the list of transitions in the graph.
+// Transitions returns the list of transitions in the graph. The returned slice
+// shares the graph's underlying storage; callers must not mutate it. The graph
+// is treated as immutable after Validate, so read-only iteration is safe.
 func (g *Graph) Transitions() []Transition {
-	result := make([]Transition, len(g.transitions))
-	copy(result, g.transitions)
-	return result
+	return g.transitions
 }
 
 // DeclareInputs declares which state fields are passed into this graph when used as a subgraph.
