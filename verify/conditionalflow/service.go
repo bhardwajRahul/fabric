@@ -84,8 +84,6 @@ Conditional defines the graph A -> {TaskHigh (when score>=50), TaskLow (when sco
 */
 func (svc *Service) Conditional(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Conditional
 	graph = workflow.NewGraph(conditionalflowapi.Conditional.URL())
-	graph.DeclareInputs("score")
-	graph.DeclareOutputs("finalBranch")
 	graph.AddTask("taskA", conditionalflowapi.TaskA.URL())
 	graph.AddTask("taskHigh", conditionalflowapi.TaskHigh.URL())
 	graph.AddTask("taskLow", conditionalflowapi.TaskLow.URL())

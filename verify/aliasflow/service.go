@@ -98,8 +98,6 @@ but are independently identified in the graph and in the step history.
 */
 func (svc *Service) Alias(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Alias
 	graph = workflow.NewGraph(aliasflowapi.Alias.URL())
-	graph.DeclareInputs("branch")
-	graph.DeclareOutputs("path")
 	graph.AddTask("s", aliasflowapi.TaskS.URL())
 	graph.AddTask("a", aliasflowapi.TaskA.URL())
 	graph.AddTask("b", aliasflowapi.TaskB.URL())

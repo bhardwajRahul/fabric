@@ -152,6 +152,37 @@ func TestReducer_TypeMismatchErrors(t *testing.T) {
 	assert.Contains(err.Error(), "number")
 }
 
+func TestReducer_NullContributionIgnored(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// Add: null is identity 0 on either side.
+	got, err := ReducerAdd.Reduce(json.RawMessage(`5`), json.RawMessage(`null`))
+	assert.NoError(err)
+	assert.Equal("5", string(got.(json.RawMessage)))
+	got, err = ReducerAdd.Reduce(json.RawMessage(`null`), json.RawMessage(`7`))
+	assert.NoError(err)
+	assert.Equal("7", string(got.(json.RawMessage)))
+
+	// Append: null contributes nothing.
+	got, err = ReducerAppend.Reduce(json.RawMessage(`[1,2]`), json.RawMessage(`null`))
+	assert.NoError(err)
+	assert.Equal("[1,2]", string(got.(json.RawMessage)))
+	got, err = ReducerAppend.Reduce(json.RawMessage(`null`), json.RawMessage(`[3]`))
+	assert.NoError(err)
+	assert.Equal("[3]", string(got.(json.RawMessage)))
+
+	// Union: null contributes nothing.
+	got, err = ReducerUnion.Reduce(json.RawMessage(`["a","b"]`), json.RawMessage(`null`))
+	assert.NoError(err)
+	assert.Equal(`["a","b"]`, string(got.(json.RawMessage)))
+
+	// Merge: null contributes nothing.
+	got, err = ReducerMerge.Reduce(json.RawMessage(`{"k":1}`), json.RawMessage(`null`))
+	assert.NoError(err)
+	assert.Equal(`{"k":1}`, string(got.(json.RawMessage)))
+}
+
 func TestReducerForFieldName(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)

@@ -90,8 +90,6 @@ Error defines the graph A -> B -> C with B onError -> Handler -> C.
 */
 func (svc *Service) Error(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Error
 	graph = workflow.NewGraph(errorflowapi.Error.URL())
-	graph.DeclareInputs("trigger")
-	graph.DeclareOutputs("finalResult")
 	graph.AddTask("taskA", errorflowapi.TaskA.URL())
 	graph.AddTask("taskB", errorflowapi.TaskB.URL())
 	graph.AddTask("handler", errorflowapi.Handler.URL())

@@ -173,8 +173,6 @@ IdentityVerification defines the workflow graph for the identity verification pr
 */
 func (svc *Service) IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: IdentityVerification
 	graph = workflow.NewGraph(creditflowapi.IdentityVerification.URL())
-	graph.DeclareInputs("applicantName", "ssn", "address", "phone")
-	graph.DeclareOutputs("identityVerified")
 	graph.AddTask("initIdentityVerification", creditflowapi.InitIdentityVerification.URL())
 	graph.AddTask("verifySSN", creditflowapi.VerifySSN.URL())
 	graph.AddTask("verifyAddress", creditflowapi.VerifyAddress.URL())
@@ -415,8 +413,6 @@ CreditApproval defines the workflow graph for the credit approval process.
 */
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CreditApproval
 	graph = workflow.NewGraph(creditflowapi.CreditApproval.URL())
-	graph.DeclareInputs("applicant")
-	graph.DeclareOutputs("approved", "creditVerified", "sumEmploymentFailures", "identityVerified")
 	graph.AddTask("submitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
 	graph.AddTask("verifyCredit", creditflowapi.VerifyCredit.URL())
 	graph.AddTask("verifyEmployment", creditflowapi.VerifyEmployment.URL())

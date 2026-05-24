@@ -91,8 +91,6 @@ FanOut defines the workflow graph for A -> {B, C, D} -> E.
 */
 func (svc *Service) FanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: FanOut
 	graph = workflow.NewGraph(fanoutflowapi.FanOut.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("allMarked")
 	graph.AddTask("taskA", fanoutflowapi.TaskA.URL())
 	graph.AddTask("taskB", fanoutflowapi.TaskB.URL())
 	graph.AddTask("taskC", fanoutflowapi.TaskC.URL())

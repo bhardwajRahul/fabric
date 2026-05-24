@@ -91,8 +91,6 @@ func (svc *Service) TaskJ(ctx context.Context, flow *workflow.Flow, normalResult
 // Inner defines the subgraph X -> {Y, Z} -> W.
 func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Inner
 	graph = workflow.NewGraph(nestedfanoutflowapi.Inner.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("innerResult")
 	graph.AddTask("taskX", nestedfanoutflowapi.TaskX.URL())
 	graph.AddTask("taskY", nestedfanoutflowapi.TaskY.URL())
 	graph.AddTask("taskZ", nestedfanoutflowapi.TaskZ.URL())
@@ -109,8 +107,6 @@ func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error
 // Nested defines the outer graph A -> {NormalB, Inner subgraph} -> J.
 func (svc *Service) Nested(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Nested
 	graph = workflow.NewGraph(nestedfanoutflowapi.Nested.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("finalResult")
 	graph.AddTask("taskA", nestedfanoutflowapi.TaskA.URL())
 	graph.AddTask("normalB", nestedfanoutflowapi.NormalB.URL())
 	graph.AddSubgraph("inner", nestedfanoutflowapi.Inner.URL())

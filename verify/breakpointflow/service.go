@@ -77,8 +77,6 @@ Breakpoint defines the graph A -> B -> C.
 */
 func (svc *Service) Breakpoint(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Breakpoint
 	graph = workflow.NewGraph(breakpointflowapi.Breakpoint.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("stepC")
 	graph.AddTask("taskA", breakpointflowapi.TaskA.URL())
 	graph.AddTask("taskB", breakpointflowapi.TaskB.URL())
 	graph.AddTask("taskC", breakpointflowapi.TaskC.URL())

@@ -1,14 +1,18 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"retry-fan-out"}}:::term --> _start
-    t1@{ shape: st-rect, label: "increment" }
-    t2@{ shape: trap-t, label: "join" }
-    _start(( )):::term --> t0["enter"]:::task
-    t0 -->|"for each in elements"| t1
-    t1 -->|"fan-in"| t2
+    _start(( )):::term --> t0
+    t0["enter"]:::task
+    t2["join"]:::task
+    subgraph fo_t0 ["for each in elements"]
+        direction LR
+        t1["increment"]:::task
+    end
+    t0 -->|"fan out"| t1
+    t1 -->|"fan in"| t2
     t2 --> _end(( )):::term
-    class t1 task
-    class t2 task
+    style fo_t0 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

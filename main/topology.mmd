@@ -1,8 +1,9 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#2d2d2d', 'textColor': '#f4f2ef'}}}%%
 graph LR
     classDef core fill:#ed2e92,color:#f4f2ef,stroke-width:0px
     classDef svc fill:#32a7c1,color:#f4f2ef,stroke-width:0px
     classDef danger fill:#f15922,color:#f4f2ef,stroke-width:0px
-    classDef ext fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef ext fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     configurator.core[Configurator<br>configurator.core]
     http.egress.core[HTTPEgress<br>http.egress.core] --- http.egress.core.cloud@{shape: cloud, label: "various"}

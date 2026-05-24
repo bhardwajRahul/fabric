@@ -269,8 +269,6 @@ func writeGraphMock(sb *strings.Builder, g *generated, m method) {
 	fmt.Fprintf(sb, "\tsvc.mock%sGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {\n", m.name)
 	fmt.Fprintf(sb, "\t\tg := workflow.NewGraph(%s.%s.URL())\n", apiPkg, m.name)
 	sb.WriteString("\t\tg.AddTransition(mockTaskURL, workflow.END)\n")
-	sb.WriteString("\t\tg.DeclareInputs(\"*\")\n")
-	sb.WriteString("\t\tg.DeclareOutputs(\"*\")\n")
 	sb.WriteString("\t\treturn g, nil\n")
 	sb.WriteString("\t}\n")
 	sb.WriteString("\terr := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {\n")

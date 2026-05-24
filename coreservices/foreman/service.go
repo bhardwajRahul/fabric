@@ -560,8 +560,6 @@ func (svc *Service) CreateTask(ctx context.Context, taskName string, initialStat
 		return "", errors.New("task name is required", http.StatusBadRequest)
 	}
 	graph := workflow.NewGraph(taskName)
-	graph.DeclareInputs("*")
-	graph.DeclareOutputs("*")
 	graph.AddTransition(taskName, workflow.END)
 	shardNum := rand.IntN(svc.numDBShards()) + 1 // shards are 1-based
 	flowKey, err = svc.createWithGraph(ctx, shardNum, taskName, graph, initialState, 0, "", svc.resolveFlowOptions(ctx, nil))
@@ -661,10 +659,16 @@ func (svc *Service) createWithGraphTx(ctx context.Context, db *sequel.DB, flowTo
 		return 0, errors.Trace(err)
 	}
 
+	startDelayMs := int64(0)
+	if !opts.StartAt.IsZero() {
+		if d := time.Until(opts.StartAt).Milliseconds(); d > 0 {
+			startDelayMs = d
+		}
+	}
 	newStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lease_expires, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, 1, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-		newFlowID, stepToken, entryPoint, string(stateJSON), workflow.StatusCreated, timeBudget.Milliseconds(), leaseMargin.Milliseconds(), opts.Priority, opts.FairnessKey, opts.FairnessWeight,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, not_before, lease_expires, priority, fairness_key, fairness_weight)"+
+			" VALUES (?, 1, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		newFlowID, stepToken, entryPoint, string(stateJSON), workflow.StatusCreated, timeBudget.Milliseconds(), startDelayMs, leaseMargin.Milliseconds(), opts.Priority, opts.FairnessKey, opts.FairnessWeight,
 	)
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -1204,10 +1208,16 @@ func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any
 	}
 
 	forkTimeBudget := svc.taskTimeBudget()
+	forkStartDelayMs := int64(0)
+	if !opts.StartAt.IsZero() {
+		if d := time.Until(opts.StartAt).Milliseconds(); d > 0 {
+			forkStartDelayMs = d
+		}
+	}
 	newStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lease_expires, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-		newFlowID, stepDepth, utils.RandomIdentifier(16), taskName, string(mergedStateJSON), workflow.StatusCreated, forkTimeBudget.Milliseconds(), leaseMargin.Milliseconds(), opts.Priority, opts.FairnessKey, opts.FairnessWeight,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, not_before, lease_expires, priority, fairness_key, fairness_weight)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		newFlowID, stepDepth, utils.RandomIdentifier(16), taskName, string(mergedStateJSON), workflow.StatusCreated, forkTimeBudget.Milliseconds(), forkStartDelayMs, leaseMargin.Milliseconds(), opts.Priority, opts.FairnessKey, opts.FairnessWeight,
 	)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -2055,19 +2065,36 @@ func (svc *Service) Purge(ctx context.Context, query foremanapi.Query) (deleted 
 
 /*
 Enqueue rings the work doorbell, signalling that a step is pending. This endpoint is called by foreman replicas to
-distribute work across the cluster. It does not enqueue a specific step: the receiving replica decides, from the
-step's priority relative to its candidate cache, whether to refill or to flush and refill.
+distribute work across the cluster. It does not enqueue a specific step: the receiving replica looks up the announced
+step's priority and not_before, and either defers to the poll timer (if not yet due) or decides via its candidate
+cache whether to refill or head-insert for priority preemption.
 */
 func (svc *Service) Enqueue(ctx context.Context, shard int, stepID int) (err error) { // MARKER: Enqueue
 	if frame.Of(ctx).FromHost() != Hostname {
 		return errors.New("enqueue is restricted to foreman replicas", http.StatusForbidden)
 	}
-	// Resolve the announced step's priority via a PK lookup (off the selection
-	// hot path). A miss (step already consumed) yields MaxInt, so the doorbell
-	// only wakes an idle replica and never blanket-requeries a busy one.
+	// Resolve the announced step's priority and not_before delay via a PK lookup
+	// (off the selection hot path). A miss (step already consumed) yields MaxInt
+	// priority and 0 delay, so the doorbell only wakes an idle replica and never
+	// blanket-requeries a busy one. The delay is computed DB-side as (not_before
+	// - NOW) to avoid Go/database clock skew.
 	priority := math.MaxInt
+	var notBeforeDelayMs sql.NullFloat64
 	if db, derr := svc.shard(shard); derr == nil {
-		db.QueryRowContext(ctx, "SELECT priority FROM microbus_steps WHERE step_id=?", stepID).Scan(&priority)
+		db.QueryRowContext(ctx,
+			"SELECT priority, DATE_DIFF_MILLIS(not_before, NOW_UTC()) FROM microbus_steps WHERE step_id=?",
+			stepID,
+		).Scan(&priority, &notBeforeDelayMs)
+	}
+	// If the step is not yet due, defer to the poll timer instead of head-inserting
+	// into the cache: the work cannot run now, so there is nothing to preempt. The
+	// shortened poll wakes pollPendingSteps at the right moment, which will then
+	// ring the refiller's doorbell normally.
+	if notBeforeDelayMs.Valid && notBeforeDelayMs.Float64 > 0 {
+		wakeAt := time.Now().Add(time.Duration(notBeforeDelayMs.Float64 * float64(time.Millisecond)))
+		svc.shortenNextPoll(wakeAt)
+		svc.LogDebug(ctx, "Doorbell deferred", "stepID", stepID, "delayMs", notBeforeDelayMs.Float64)
+		return nil
 	}
 	ring := svc.cache.offer(job{stepID: stepID, shard: shard}, priority)
 	svc.LogDebug(ctx, "Doorbell", "stepID", stepID, "priority", priority, "ring", ring)

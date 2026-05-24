@@ -227,9 +227,12 @@ func fanInPredecessorTasks(graph *workflow.Graph, fanInTask string) []string {
 
 // nextStep describes a step to be created during transition evaluation.
 type nextStep struct {
-	taskName string
-	item     any    // non-nil for forEach fan-out
-	itemKey  string // state key for the item (the "as" alias or forEach field name)
+	taskName    string
+	item        any    // non-nil for forEach fan-out
+	itemKey     string // state key for the item (the "as" alias or forEach field name)
+	forEachKey  string // source array field name; stripped from branch state to avoid N^2 storage
+	cohortIndex int    // this element's position in the forEach array
+	cohortCount int    // total elements in the forEach array
 }
 
 // evaluateTransitions determines the next task(s) to execute based on the graph transitions
@@ -310,11 +313,14 @@ func (svc *Service) evaluateTransitions(graph *workflow.Graph, currentTask strin
 			if itemKey == "" {
 				itemKey = "item"
 			}
-			for _, item := range items {
+			for idx, item := range items {
 				candidates = append(candidates, nextStep{
-					taskName: tr.To,
-					item:     item,
-					itemKey:  itemKey,
+					taskName:    tr.To,
+					item:        item,
+					itemKey:     itemKey,
+					forEachKey:  tr.ForEach,
+					cohortIndex: idx,
+					cohortCount: len(items),
 				})
 			}
 		} else {

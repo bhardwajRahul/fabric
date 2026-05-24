@@ -132,26 +132,6 @@ func MergeState(state any, changes any, reducers map[string]Reducer) (map[string
 	return merged, nil
 }
 
-// FilterState returns a subset of state based on declared field names.
-// nil or empty = pass nothing.
-// ["*"] = pass everything.
-// Named fields = pass only those fields.
-func FilterState(state map[string]any, declared []string) map[string]any {
-	if len(declared) == 0 {
-		return make(map[string]any)
-	}
-	if len(declared) == 1 && declared[0] == "*" {
-		return state
-	}
-	filtered := make(map[string]any, len(declared))
-	for _, field := range declared {
-		if v, ok := state[field]; ok {
-			filtered[field] = v
-		}
-	}
-	return filtered
-}
-
 // toAnyMap converts any to map[string]any.
 // Accepts map[string]any (fast path), map[string]json.RawMessage, or nil.
 func toAnyMap(v any) (map[string]any, error) {
@@ -292,7 +272,14 @@ func reduceMerge(existing, incoming any) (any, error) {
 	return json.RawMessage(result), errors.Trace(err)
 }
 
+// A cleared slot (Go nil or JSON null) short-circuits to the reducer's identity
+// (nil array, nil object, zero number) so flow.Clear contributions are ignored
+// at fan-in rather than failing the type check.
+
 func unmarshalArray(v any, reducerName string) ([]json.RawMessage, error) {
+	if isCleared(v) {
+		return nil, nil
+	}
 	raw, err := marshalAny(v)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -305,6 +292,9 @@ func unmarshalArray(v any, reducerName string) ([]json.RawMessage, error) {
 }
 
 func unmarshalObject(v any, reducerName string) (map[string]json.RawMessage, error) {
+	if isCleared(v) {
+		return nil, nil
+	}
 	raw, err := marshalAny(v)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -317,6 +307,9 @@ func unmarshalObject(v any, reducerName string) (map[string]json.RawMessage, err
 }
 
 func unmarshalNumber(v any, reducerName string) (float64, error) {
+	if isCleared(v) {
+		return 0, nil
+	}
 	raw, err := marshalAny(v)
 	if err != nil {
 		return 0, errors.Trace(err)

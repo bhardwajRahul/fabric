@@ -25,11 +25,15 @@ import (
 // services.
 func renderMermaid(svcs []scanned) []byte {
 	var sb strings.Builder
+	// Pin a fixed palette so the diagram reads on both light and dark page
+	// backgrounds: teal lines (mid-luminance, visible on either), dark-grey
+	// label tiles with off-white text. Matches workflow.Graph.Mermaid.
+	sb.WriteString("%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#2d2d2d', 'textColor': '#f4f2ef'}}}%%\n")
 	sb.WriteString("graph LR\n")
 	sb.WriteString("    classDef core fill:#ed2e92,color:#f4f2ef,stroke-width:0px\n")
 	sb.WriteString("    classDef svc fill:#32a7c1,color:#f4f2ef,stroke-width:0px\n")
 	sb.WriteString("    classDef danger fill:#f15922,color:#f4f2ef,stroke-width:0px\n")
-	sb.WriteString("    classDef ext fill:#e5f4f3,color:#434343,stroke:#434343\n")
+	sb.WriteString("    classDef ext fill:#e5f4f3,color:#434343,stroke:#32a7c1\n")
 	sb.WriteByte('\n')
 
 	// Services that expose at least one :666 endpoint. Edges pointing

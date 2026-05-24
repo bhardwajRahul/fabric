@@ -690,7 +690,9 @@ postExecution:
 			return errors.Trace(err)
 		}
 
-		// Build the child's initial state: parent merged state + explicit input, filtered by DeclareInputs
+		// Build the child's initial state: parent merged state + explicit input. The full parent
+		// state passes through unfiltered; any adaptation happens in a Before<NodeName> adapter
+		// task ahead of this call via flow.Transform/Keep/Delete.
 		childInputState, err := workflow.MergeState(state, accumulatedChanges, nil)
 		if err != nil {
 			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
@@ -915,9 +917,21 @@ postExecution:
 	for i, next := range normalNexts {
 		stepStateJSON := childInputJSON
 		if next.item != nil {
-			perStepState := make(map[string]any, len(childInputState)+1)
+			perStepState := make(map[string]any, len(childInputState)+3)
 			maps.Copy(perStepState, childInputState)
+			// Drop the source array from the branch's state so it doesn't get copied into
+			// every branch (an N-element forEach would otherwise carry N copies forward).
+			// The array stays in the spawn step's immutable state and is restored by the
+			// fan-in merge. Guard against as == forEach so we don't strip what we're about
+			// to set.
+			if next.forEachKey != "" && next.forEachKey != next.itemKey {
+				delete(perStepState, next.forEachKey)
+			}
 			perStepState[next.itemKey] = next.item
+			if next.forEachKey != "" {
+				perStepState[next.itemKey+"Index"] = next.cohortIndex
+				perStepState[next.itemKey+"Count"] = next.cohortCount
+			}
 			stepStateJSON, _ = json.Marshal(perStepState)
 		}
 		nextTimeBudget := svc.taskTimeBudget()

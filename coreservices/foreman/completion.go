@@ -50,10 +50,10 @@ func (svc *Service) createSubgraphFlow(ctx context.Context, shardNum int, surgra
 		return "", errors.Trace(err)
 	}
 
-	// Create the subgraph flow via createWithGraph (reuses flow+step INSERT logic). Filter the
-	// parent state through the subgraph's declared inputs.
-	subgraphState := workflow.FilterState(surgraphState, subgraphGraph.Inputs())
-	subgraphFlowKey, err = svc.createWithGraph(ctx, shardNum, subgraphWorkflowName, subgraphGraph, subgraphState, 0, "", &inherited)
+	// Create the subgraph flow via createWithGraph (reuses flow+step INSERT logic). The parent
+	// state passes through unfiltered; any adaptation is the workflow author's responsibility via
+	// a Before<NodeName> adapter task (flow.Transform/Keep/Delete) ahead of the subgraph call.
+	subgraphFlowKey, err = svc.createWithGraph(ctx, shardNum, subgraphWorkflowName, subgraphGraph, surgraphState, 0, "", &inherited)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -232,27 +232,6 @@ func (svc *Service) completeFlow(ctx context.Context, shardNum int, flowID int, 
 		return false, errors.Trace(err)
 	}
 
-	// Filter the final state through the graph's declared outputs
-	var graphJSON string
-	err = db.QueryRowContext(ctx,
-		"SELECT graph FROM microbus_flows WHERE flow_id=?",
-		flowID,
-	).Scan(&graphJSON)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	var graph workflow.Graph
-	if err = json.Unmarshal([]byte(graphJSON), &graph); err != nil {
-		return false, errors.Trace(err)
-	}
-	var finalState map[string]any
-	if err = json.Unmarshal([]byte(finalStateJSON), &finalState); err != nil {
-		return false, errors.Trace(err)
-	}
-	finalState = workflow.FilterState(finalState, graph.Outputs())
-	filteredJSON, _ := json.Marshal(finalState)
-	finalStateJSON = string(filteredJSON)
-
 	res, err := db.ExecContext(ctx,
 		"UPDATE microbus_flows SET status=?, final_state=?, updated_at=NOW_UTC() WHERE flow_id=? AND status NOT IN (?, ?, ?)",
 		workflow.StatusCompleted, finalStateJSON, flowID,
@@ -378,9 +357,10 @@ func (svc *Service) completeSurgraphFlow(ctx context.Context, shardNum int, surg
 	if err := json.Unmarshal([]byte(subgraphFinalStateJSON), &subgraphFinalState); err != nil {
 		return errors.Trace(err)
 	}
-	subgraphFinalState = workflow.FilterState(subgraphFinalState, subgraphGraph.Outputs())
 
-	// Merge filtered subgraph state into the surgraph step's changes using reducers
+	// Merge the subgraph's full final state into the surgraph step's changes using reducers.
+	// Any hygiene (drop internal scratch state, rename keys) is the workflow author's
+	// responsibility via flow.Keep/Delete/Transform in the subgraph's terminal task.
 	var surgraphChanges map[string]any
 	if err := json.Unmarshal([]byte(surgraphStepChangesJSON), &surgraphChanges); err != nil {
 		surgraphChanges = make(map[string]any)

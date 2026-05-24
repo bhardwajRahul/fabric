@@ -75,6 +75,16 @@ func TestHttpingress_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("on_changed_allowed_internal_ports", func(t *testing.T) { // MARKER: AllowedInternalPorts
+		assert := testarossa.For(t)
+
+		mock.MockOnChangedAllowedInternalPorts(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.OnChangedAllowedInternalPorts(ctx)
+		assert.NoError(err)
+	})
+
 	t.Run("on_changed_read_timeout", func(t *testing.T) { // MARKER: ReadTimeout
 		assert := testarossa.For(t)
 

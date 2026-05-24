@@ -54,12 +54,17 @@ type TaskAOut struct { // MARKER: TaskA
 
 // TaskBIn are the input arguments of TaskB.
 type TaskBIn struct { // MARKER: TaskB
-	Item string `json:"item,omitzero"`
+	Item       string `json:"item,omitzero"`
+	ItemIndex  int    `json:"itemIndex,omitzero"`
+	ItemCount  int    `json:"itemCount,omitzero"`
+	ClearItems bool   `json:"clearItems,omitzero"`
 }
 
 // TaskBOut are the output arguments of TaskB.
 type TaskBOut struct { // MARKER: TaskB
-	SumProcessedOut int `json:"sumProcessed,omitzero"`
+	SumProcessedOut     int   `json:"sumProcessed,omitzero"`
+	ListSeenIndicesOut  []int `json:"listSeenIndices,omitzero"`
+	SetSeenCountsOut    []int `json:"setSeenCounts,omitzero"`
 }
 
 // TaskCIn are the input arguments of TaskC.
@@ -74,10 +79,14 @@ type TaskCOut struct { // MARKER: TaskC
 
 // DynamicFanOutIn are the input arguments of DynamicFanOut.
 type DynamicFanOutIn struct { // MARKER: DynamicFanOut
-	Items []string `json:"items,omitzero"`
+	Items      []string `json:"items,omitzero"`
+	ClearItems bool     `json:"clearItems,omitzero"`
 }
 
 // DynamicFanOutOut are the output arguments of DynamicFanOut.
 type DynamicFanOutOut struct { // MARKER: DynamicFanOut
-	ProcessedCount int `json:"processedCount,omitzero"`
+	ProcessedCount  int      `json:"processedCount,omitzero"`
+	ItemsOut        []string `json:"items,omitzero"`
+	ListSeenIndices []int    `json:"listSeenIndices,omitzero"`
+	SetSeenCounts   []int    `json:"setSeenCounts,omitzero"`
 }

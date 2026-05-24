@@ -124,8 +124,6 @@ func (svc *Mock) MockBasic(handler func(ctx context.Context, flow *workflow.Flow
 	svc.mockBasicGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(basicflowapi.Basic.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

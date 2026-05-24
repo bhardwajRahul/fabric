@@ -200,8 +200,6 @@ func (svc *Mock) MockSuper(handler func(ctx context.Context, flow *workflow.Flow
 	svc.mockSuperGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(superflowapi.Super.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
@@ -256,8 +254,6 @@ func (svc *Mock) MockSuperSub(handler func(ctx context.Context, flow *workflow.F
 	svc.mockSuperSubGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(superflowapi.SuperSub.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

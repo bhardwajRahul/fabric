@@ -107,6 +107,9 @@ func newHarness(t *testing.T, numShards int) *harness {
 		foreman.NewService().Init(func(f *foreman.Service) error {
 			f.SetNumShards(numShards)
 			f.SetSQLConnectionPool(1)
+			// Override any operator-local config so the test always runs against
+			// an isolated in-memory SQLite per (shard, test).
+			f.SetSQLDataSourceName("file:shard_%d.local.sqlite")
 			return nil
 		}),
 		tester,

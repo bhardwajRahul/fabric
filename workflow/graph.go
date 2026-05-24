@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/microbus-io/boolexp"
@@ -61,8 +62,6 @@ type Graph struct {
 	nodes         []Node
 	transitions   []Transition
 	reducers      map[string]Reducer
-	inputs        []string // nil/[] = pass nothing, ["*"] = pass everything, ["a","b"] = named
-	outputs       []string // nil/[] = pass nothing, ["*"] = pass everything, ["a","b"] = named
 	fanInNodes    map[string]bool
 	fanOutToFanIn map[string]string // populated by Validate
 }
@@ -96,26 +95,6 @@ func (g *Graph) Nodes() []Node {
 // is treated as immutable after Validate, so read-only iteration is safe.
 func (g *Graph) Transitions() []Transition {
 	return g.transitions
-}
-
-// DeclareInputs declares which state fields are passed into this graph when used as a subgraph.
-func (g *Graph) DeclareInputs(fields ...string) {
-	g.inputs = fields
-}
-
-// DeclareOutputs declares which state fields are returned from this graph on completion.
-func (g *Graph) DeclareOutputs(fields ...string) {
-	g.outputs = fields
-}
-
-// Inputs returns the declared input fields.
-func (g *Graph) Inputs() []string {
-	return g.inputs
-}
-
-// Outputs returns the declared output fields.
-func (g *Graph) Outputs() []string {
-	return g.outputs
 }
 
 // AddTask registers a task node in the graph under the given name, with the given URL as
@@ -347,16 +326,22 @@ func (g *Graph) Reducers() map[string]Reducer {
 // suitable for writing directly to a .mmd file. The output includes the classDef
 // styles, a title node derived from the graph's URL, and per-node class annotations.
 //
-// Node shapes encode role: regular tasks are rectangles, subgraphs use the double
-// rectangle, forEach targets use a stacked rectangle ("many of these"), and SetFanIn
-// nodes use an inverted trapezoid ("many converging here"). Edges into a SetFanIn
-// node carry a "fan-in" label.
+// Each forEach fan-out scope is rendered as a Mermaid subgraph block (dashed
+// outline, faint fill) titled "for each in <field>"; nodes that share the same
+// lineage frame sit inside that block, nested scopes nest accordingly. Edges
+// crossing the boundary carry "fan out" (into the scope) and "fan in" (out to the
+// fan-in node) labels. Static When fan-outs do not get a scope block; their
+// branches stay as plain labeled arrows.
 func (g *Graph) Mermaid() string {
 	var b strings.Builder
+	// Pin a fixed palette so the diagram reads on both light and dark page
+	// backgrounds: teal lines/borders (mid-luminance, visible on either),
+	// dark-grey label tiles with off-white text.
+	b.WriteString("%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%\n")
 	b.WriteString("graph LR\n")
-	b.WriteString("    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343\n")
-	b.WriteString("    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343\n")
-	b.WriteString("    classDef term fill:#e5f4f3,color:#434343,stroke:#434343\n")
+	b.WriteString("    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1\n")
+	b.WriteString("    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92\n")
+	b.WriteString("    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1\n")
 	b.WriteString("\n")
 
 	// Title is the workflow's last URL path segment (kebab-case route).
@@ -369,62 +354,75 @@ func (g *Graph) Mermaid() string {
 	ownHost := hostOf(g.name)
 	ids := make(map[string]string, len(g.nodes))
 	labels := make(map[string]string, len(g.nodes))
+	nodeIndex := make(map[string]int, len(g.nodes))
 	for i, t := range g.nodes {
 		ids[t.Name] = fmt.Sprintf("t%d", i)
 		labels[t.Name] = stripHostPort(t.Name, ownHost)
+		nodeIndex[t.Name] = i
 	}
 
-	// Identify nodes that need standalone shape declarations: forEach targets
-	// (st-rect) and SetFanIn nodes (trap-t). Both use Mermaid's `@{...}` form,
-	// which doesn't compose with `:::class`, so they get class lines at the end.
-	foreachTargets := make(map[string]bool)
-	standaloneOrder := []string{}
+	// forEach fan-out sources keyed by source name, value is the iterated field.
+	// Only forEach scopes become subgraph blocks; static When fan-outs do not.
+	// A fan-out source may also have non-forEach sibling edges (regular branches that share
+	// the lineage frame for fan-in counting but don't actually replicate); those branches
+	// stay in the source's parent scope, not in the forEach box.
+	forEachField := make(map[string]string)
 	for _, tr := range g.transitions {
-		if tr.ForEach == "" || foreachTargets[tr.To] {
-			continue
+		if tr.ForEach != "" && forEachField[tr.From] == "" {
+			forEachField[tr.From] = tr.ForEach
 		}
-		foreachTargets[tr.To] = true
-		standaloneOrder = append(standaloneOrder, tr.To)
-	}
-	standaloneFanIn := make(map[string]bool)
-	for _, t := range g.nodes {
-		if g.fanInNodes[t.Name] && !foreachTargets[t.Name] {
-			standaloneFanIn[t.Name] = true
-			standaloneOrder = append(standaloneOrder, t.Name)
-		}
-	}
-	for _, name := range standaloneOrder {
-		shape := "st-rect"
-		if standaloneFanIn[name] {
-			shape = "trap-t"
-		}
-		fmt.Fprintf(&b, "    %s@{ shape: %s, label: %q }\n", ids[name], shape, labels[name])
 	}
 
-	defined := make(map[string]bool, len(g.nodes))
-	for name := range foreachTargets {
-		defined[name] = true
+	// Per-node scope and per-scope parent, computed via an edge-aware BFS. A node enters a
+	// forEach scope only via its forEach edge - non-forEach siblings at the same fan-out
+	// source stay in the source's parent scope.
+	nodeScope, scopeParent := g.computeNodeScopes()
+
+	// Group nodes and child scopes by their parent for deterministic emission.
+	nodesByScope := make(map[string][]string)
+	for _, t := range g.nodes {
+		s := nodeScope[t.Name]
+		nodesByScope[s] = append(nodesByScope[s], t.Name)
 	}
-	for name := range standaloneFanIn {
-		defined[name] = true
+	childScopes := make(map[string][]string)
+	for src, parent := range scopeParent {
+		childScopes[parent] = append(childScopes[parent], src)
 	}
-	nodeShape := func(name string) string {
+	for s := range childScopes {
+		sort.Slice(childScopes[s], func(i, j int) bool {
+			return nodeIndex[childScopes[s][i]] < nodeIndex[childScopes[s][j]]
+		})
+	}
+
+	nodeDecl := func(name string) string {
 		id := ids[name]
-		if defined[name] {
-			return id
-		}
-		defined[name] = true
 		lbl := labels[name]
-		classSuffix := ":::task"
 		if g.IsSubgraph(name) {
-			return fmt.Sprintf("%s[[%q]]:::sub", id, lbl)
+			return fmt.Sprintf("%s[%q]:::sub", id, lbl)
 		}
-		return fmt.Sprintf("%s[%q]%s", id, lbl, classSuffix)
+		return fmt.Sprintf("%s[%q]:::task", id, lbl)
+	}
+
+	var emitScope func(scope string, indent string)
+	emitScope = func(scope string, indent string) {
+		for _, name := range nodesByScope[scope] {
+			fmt.Fprintf(&b, "%s%s\n", indent, nodeDecl(name))
+		}
+		for _, src := range childScopes[scope] {
+			blockID := "fo_" + ids[src]
+			fmt.Fprintf(&b, "%ssubgraph %s [\"for each in %s\"]\n", indent, blockID, forEachField[src])
+			fmt.Fprintf(&b, "%s    direction LR\n", indent)
+			emitScope(src, indent+"    ")
+			fmt.Fprintf(&b, "%send\n", indent)
+		}
 	}
 
 	if _, ok := ids[g.entryPoint]; ok {
-		fmt.Fprintf(&b, "    _start(( )):::term --> %s\n", nodeShape(g.entryPoint))
+		fmt.Fprintf(&b, "    _start(( )):::term --> %s\n", ids[g.entryPoint])
+	} else {
+		b.WriteString("    _start(( )):::term\n")
 	}
+	emitScope("", "    ")
 
 	type edge struct {
 		from string
@@ -436,18 +434,14 @@ func (g *Graph) Mermaid() string {
 		e := edge{tr.From, tr.To}
 		if _, ok := edgeLabels[e]; !ok {
 			edgeOrder = append(edgeOrder, e)
+			edgeLabels[e] = nil
 		}
-		label := ""
-		if tr.When != "" {
+		var label string
+		switch {
+		case tr.ForEach != "":
+			label = "fan out"
+		case tr.When != "":
 			label = "if " + tr.When
-		}
-		if tr.ForEach != "" {
-			forEachLabel := "for each in " + tr.ForEach
-			if label != "" {
-				label = forEachLabel + "; " + label
-			} else {
-				label = forEachLabel
-			}
 		}
 		if tr.WithGoto {
 			if label != "" {
@@ -475,12 +469,21 @@ func (g *Graph) Mermaid() string {
 	for _, e := range edgeOrder {
 		fromID := ids[e.from]
 		label := strings.Join(edgeLabels[e], " | ")
-		// "fan-in" annotation: every edge whose target is a SetFanIn node.
+		// "fan in" annotation: edges into a fan-in node that exit a forEach scope.
+		// Static When fan-ins (no enclosing forEach) get no label.
 		if e.to != END && g.fanInNodes[e.to] {
-			if label != "" {
-				label += "; fan-in"
-			} else {
-				label = "fan-in"
+			popped := nodeScope[e.from]
+			if popped == "" {
+				if _, ok := forEachField[e.from]; ok {
+					popped = e.from
+				}
+			}
+			if popped != "" {
+				if label != "" {
+					label += "; fan in"
+				} else {
+					label = "fan in"
+				}
 			}
 		}
 		if e.to == END {
@@ -489,25 +492,94 @@ func (g *Graph) Mermaid() string {
 			} else {
 				fmt.Fprintf(&b, "    %s --> _end(( )):::term\n", fromID)
 			}
+			continue
+		}
+		toID := ids[e.to]
+		if label != "" {
+			fmt.Fprintf(&b, "    %s -->|%q| %s\n", fromID, label, toID)
 		} else {
-			if label != "" {
-				fmt.Fprintf(&b, "    %s -->|%q| %s\n", fromID, label, nodeShape(e.to))
-			} else {
-				fmt.Fprintf(&b, "    %s --> %s\n", fromID, nodeShape(e.to))
-			}
+			fmt.Fprintf(&b, "    %s --> %s\n", fromID, toID)
 		}
 	}
 
-	// Class annotations for shape-declared nodes (couldn't combine inline).
-	for _, name := range standaloneOrder {
-		class := "task"
-		if g.IsSubgraph(name) {
-			class = "sub"
-		}
-		fmt.Fprintf(&b, "    class %s %s\n", ids[name], class)
+	// Subgraph block styling in registration order of the fan-out source.
+	scopeOrder := make([]string, 0, len(forEachField))
+	for src := range forEachField {
+		scopeOrder = append(scopeOrder, src)
+	}
+	sort.Slice(scopeOrder, func(i, j int) bool {
+		return nodeIndex[scopeOrder[i]] < nodeIndex[scopeOrder[j]]
+	})
+	for _, src := range scopeOrder {
+		fmt.Fprintf(&b, "    style fo_%s fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2\n", ids[src])
 	}
 
 	return b.String()
+}
+
+// computeNodeScopes walks the graph to assign each node a forEach scope (innermost
+// surrounding forEach fan-out source name, or "" for top-level). A node enters a
+// forEach scope only when it is the target of an actual forEach edge - non-forEach
+// sibling branches at the same fan-out source stay in the source's parent scope so
+// they don't render inside the dashed "for each" box. Returns the per-node scope map
+// and the parent-scope map for forEach scopes (used by fan-in to pop one level).
+// Tolerant of validation errors so the renderer also works on unvalidated graphs.
+func (g *Graph) computeNodeScopes() (nodeScope, scopeParent map[string]string) {
+	nodeScope = make(map[string]string, len(g.nodes))
+	scopeParent = make(map[string]string)
+	if g.entryPoint == "" {
+		return
+	}
+	isFanOutSource := make(map[string]bool, len(g.nodes))
+	for _, t := range g.nodes {
+		var normalCount int
+		var hasForEach bool
+		for _, tr := range g.transitions {
+			if tr.From != t.Name || tr.WithGoto || tr.OnError {
+				continue
+			}
+			normalCount++
+			if tr.ForEach != "" {
+				hasForEach = true
+			}
+		}
+		if normalCount >= 2 || hasForEach {
+			isFanOutSource[t.Name] = true
+		}
+	}
+	queue := []string{g.entryPoint}
+	nodeScope[g.entryPoint] = ""
+	seen := map[string]bool{g.entryPoint: true}
+	for len(queue) > 0 {
+		from := queue[0]
+		queue = queue[1:]
+		fromScope := nodeScope[from]
+		fromIsFanOut := isFanOutSource[from]
+		for _, tr := range g.transitions {
+			if tr.From != from || tr.To == END {
+				continue
+			}
+			var toScope string
+			switch {
+			case tr.WithGoto, tr.OnError:
+				toScope = fromScope
+			case g.fanInNodes[tr.To]:
+				toScope = scopeParent[fromScope] // pop one forEach scope; "" if at top
+			case fromIsFanOut && tr.ForEach != "":
+				toScope = from
+				scopeParent[from] = fromScope
+			default:
+				toScope = fromScope
+			}
+			if seen[tr.To] {
+				continue
+			}
+			seen[tr.To] = true
+			nodeScope[tr.To] = toScope
+			queue = append(queue, tr.To)
+		}
+	}
+	return
 }
 
 // hostOf returns the host[:port] of a URL-shaped string, or "" if it has no scheme.
@@ -780,8 +852,6 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 		Tasks         []jsonTask         `json:"tasks"`
 		Transitions   []Transition       `json:"transitions"`
 		Reducers      map[string]Reducer `json:"reducers,omitzero"`
-		Inputs        []string           `json:"inputs"`
-		Outputs       []string           `json:"outputs"`
 		FanOutToFanIn map[string]string  `json:"fanOutToFanIn,omitzero"`
 	}
 	jg := jsonGraph{
@@ -790,8 +860,6 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 		Tasks:         jsonTasks,
 		Transitions:   g.transitions,
 		Reducers:      g.reducers,
-		Inputs:        g.inputs,
-		Outputs:       g.outputs,
 		FanOutToFanIn: g.fanOutToFanIn,
 	}
 	if jg.Tasks == nil {
@@ -817,8 +885,6 @@ func (g *Graph) UnmarshalJSON(data []byte) error {
 		Tasks         []jsonTask         `json:"tasks"`
 		Transitions   []Transition       `json:"transitions"`
 		Reducers      map[string]Reducer `json:"reducers,omitzero"`
-		Inputs        []string           `json:"inputs"`
-		Outputs       []string           `json:"outputs"`
 		FanOutToFanIn map[string]string  `json:"fanOutToFanIn,omitzero"`
 	}
 	var jg jsonGraph
@@ -847,8 +913,6 @@ func (g *Graph) UnmarshalJSON(data []byte) error {
 	}
 	g.transitions = jg.Transitions
 	g.reducers = jg.Reducers
-	g.inputs = jg.Inputs
-	g.outputs = jg.Outputs
 	g.fanOutToFanIn = jg.FanOutToFanIn
 	return nil
 }

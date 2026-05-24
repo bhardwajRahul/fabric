@@ -86,8 +86,6 @@ func (svc *Service) Ping(ctx context.Context, flow *workflow.Flow, tag string) (
 // AckDropped defines the single-task graph (park -> END).
 func (svc *Service) AckDropped(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: AckDropped
 	graph = workflow.NewGraph(ackdroppedflowapi.AckDropped.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("parked")
 	graph.AddTask("park", ackdroppedflowapi.Park.URL())
 	graph.AddTransition("park", workflow.END)
 	return graph, nil
@@ -96,8 +94,6 @@ func (svc *Service) AckDropped(ctx context.Context) (graph *workflow.Graph, err 
 // Echo defines the single-task graph (ping -> END) used as the unrelated-task control.
 func (svc *Service) Echo(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Echo
 	graph = workflow.NewGraph(ackdroppedflowapi.Echo.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("pinged")
 	graph.AddTask("ping", ackdroppedflowapi.Ping.URL())
 	graph.AddTransition("ping", workflow.END)
 	return graph, nil

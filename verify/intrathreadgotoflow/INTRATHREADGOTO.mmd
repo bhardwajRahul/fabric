@@ -1,15 +1,18 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"intra-thread-goto"}}:::term --> _start
-    t3@{ shape: trap-t, label: "taskD" }
-    _start(( )):::term --> t0["taskA"]:::task
-    t0 --> t1["loopTask"]:::task
-    t0 --> t2["normalC"]:::task
+    _start(( )):::term --> t0
+    t0["taskA"]:::task
+    t1["loopTask"]:::task
+    t2["normalC"]:::task
+    t3["taskD"]:::task
+    t0 --> t1
+    t0 --> t2
     t1 -->|"goto"| t1
-    t1 -->|"fan-in"| t3
-    t2 -->|"fan-in"| t3
+    t1 --> t3
+    t2 --> t3
     t3 --> _end(( )):::term
-    class t3 task

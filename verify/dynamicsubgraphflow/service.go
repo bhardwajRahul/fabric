@@ -77,8 +77,6 @@ func (svc *Service) InnerB(ctx context.Context, flow *workflow.Flow, innerStage 
 // Inner defines the child subgraph InnerA -> InnerB.
 func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Inner
 	graph = workflow.NewGraph(dynamicsubgraphflowapi.Inner.URL())
-	graph.DeclareInputs("value")
-	graph.DeclareOutputs("innerResult", "innerDone")
 	graph.AddTask("innerA", dynamicsubgraphflowapi.InnerA.URL())
 	graph.AddTask("innerB", dynamicsubgraphflowapi.InnerB.URL())
 	graph.AddTransition("innerA", "innerB")
@@ -89,8 +87,6 @@ func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error
 // DynamicSubgraph defines a single-task parent graph that dynamically invokes Inner.
 func (svc *Service) DynamicSubgraph(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: DynamicSubgraph
 	graph = workflow.NewGraph(dynamicsubgraphflowapi.DynamicSubgraph.URL())
-	graph.DeclareInputs("value")
-	graph.DeclareOutputs("parentResult")
 	graph.AddTask("parent", dynamicsubgraphflowapi.Parent.URL())
 	graph.AddTransition("parent", workflow.END)
 	return graph, nil

@@ -80,8 +80,6 @@ via sub.TimeBudget, so the graph carries no timing.
 */
 func (svc *Service) TimeBudget(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: TimeBudget
 	graph = workflow.NewGraph(timebudgetflowapi.TimeBudget.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("done")
 	graph.AddTask("taskA", timebudgetflowapi.TaskA.URL())
 	graph.AddTask("slow", timebudgetflowapi.Slow.URL())
 	graph.AddTransition("taskA", "slow")

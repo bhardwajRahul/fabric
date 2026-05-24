@@ -78,8 +78,6 @@ func (svc *Mock) MockMaxConcurrency(handler func(ctx context.Context, flow *work
 	svc.mockMaxConcurrencyGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(maxconcurrencyflowapi.MaxConcurrency.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

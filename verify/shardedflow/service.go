@@ -89,8 +89,6 @@ The graph carries no timing or priority; priority is a per-flow option supplied 
 */
 func (svc *Service) Sharded(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Sharded
 	graph = workflow.NewGraph(shardedflowapi.Sharded.URL())
-	graph.DeclareInputs("tag", "delayMs")
-	graph.DeclareOutputs("recorded")
 	graph.AddTask("record", shardedflowapi.Record.URL())
 	graph.AddTransition("record", workflow.END)
 	return graph, nil

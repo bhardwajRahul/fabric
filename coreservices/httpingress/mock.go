@@ -28,13 +28,14 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockOnChangedPorts             func(ctx context.Context) (err error) // MARKER: Ports
-	mockOnChangedAllowedOrigins    func(ctx context.Context) (err error) // MARKER: AllowedOrigins
-	mockOnChangedPortMappings      func(ctx context.Context) (err error) // MARKER: PortMappings
-	mockOnChangedReadTimeout       func(ctx context.Context) (err error) // MARKER: ReadTimeout
-	mockOnChangedWriteTimeout      func(ctx context.Context) (err error) // MARKER: WriteTimeout
-	mockOnChangedReadHeaderTimeout func(ctx context.Context) (err error) // MARKER: ReadHeaderTimeout
-	mockOnChangedBlockedPaths      func(ctx context.Context) (err error) // MARKER: BlockedPaths
+	mockOnChangedPorts                func(ctx context.Context) (err error) // MARKER: Ports
+	mockOnChangedAllowedOrigins       func(ctx context.Context) (err error) // MARKER: AllowedOrigins
+	mockOnChangedPortMappings         func(ctx context.Context) (err error) // MARKER: PortMappings
+	mockOnChangedAllowedInternalPorts func(ctx context.Context) (err error) // MARKER: AllowedInternalPorts
+	mockOnChangedReadTimeout          func(ctx context.Context) (err error) // MARKER: ReadTimeout
+	mockOnChangedWriteTimeout         func(ctx context.Context) (err error) // MARKER: WriteTimeout
+	mockOnChangedReadHeaderTimeout    func(ctx context.Context) (err error) // MARKER: ReadHeaderTimeout
+	mockOnChangedBlockedPaths         func(ctx context.Context) (err error) // MARKER: BlockedPaths
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -96,6 +97,20 @@ func (svc *Mock) MockOnChangedPortMappings(handler func(ctx context.Context) (er
 func (svc *Mock) OnChangedPortMappings(ctx context.Context) (err error) { // MARKER: PortMappings
 	if svc.mockOnChangedPortMappings != nil {
 		err = svc.mockOnChangedPortMappings(ctx)
+	}
+	return errors.Trace(err)
+}
+
+// MockOnChangedAllowedInternalPorts sets up a mock handler for OnChangedAllowedInternalPorts.
+func (svc *Mock) MockOnChangedAllowedInternalPorts(handler func(ctx context.Context) (err error)) *Mock { // MARKER: AllowedInternalPorts
+	svc.mockOnChangedAllowedInternalPorts = handler
+	return svc
+}
+
+// OnChangedAllowedInternalPorts executes the mock handler.
+func (svc *Mock) OnChangedAllowedInternalPorts(ctx context.Context) (err error) { // MARKER: AllowedInternalPorts
+	if svc.mockOnChangedAllowedInternalPorts != nil {
+		err = svc.mockOnChangedAllowedInternalPorts(ctx)
 	}
 	return errors.Trace(err)
 }

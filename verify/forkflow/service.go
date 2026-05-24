@@ -69,8 +69,6 @@ func (svc *Service) TaskC(ctx context.Context, flow *workflow.Flow, value int) (
 // Pipe defines A -> B -> C.
 func (svc *Service) Pipe(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Pipe
 	graph = workflow.NewGraph(forkflowapi.Pipe.URL())
-	graph.DeclareInputs("value")
-	graph.DeclareOutputs("value")
 	graph.AddTask("taskA", forkflowapi.TaskA.URL())
 	graph.AddTask("taskB", forkflowapi.TaskB.URL())
 	graph.AddTask("taskC", forkflowapi.TaskC.URL())

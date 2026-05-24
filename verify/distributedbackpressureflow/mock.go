@@ -78,8 +78,6 @@ func (svc *Mock) MockDistributedBackpressure(handler func(ctx context.Context, f
 	svc.mockDistributedBackpressureGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(distributedbackpressureflowapi.DistributedBackpressure.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

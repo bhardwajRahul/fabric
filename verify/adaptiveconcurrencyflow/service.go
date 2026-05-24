@@ -114,8 +114,6 @@ AdaptiveConcurrency is a single-task graph routing through the rate-bounded Adap
 */
 func (svc *Service) AdaptiveConcurrency(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: AdaptiveConcurrency
 	graph = workflow.NewGraph(adaptiveconcurrencyflowapi.AdaptiveConcurrency.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("adaptive", adaptiveconcurrencyflowapi.Adaptive.URL())
 	graph.AddTransition("adaptive", workflow.END)
 	return graph, nil

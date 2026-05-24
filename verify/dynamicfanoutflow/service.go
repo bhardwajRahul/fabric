@@ -59,13 +59,23 @@ func (svc *Service) TaskA(ctx context.Context, flow *workflow.Flow, items []stri
 }
 
 /*
-TaskB runs once per element. Returns 1, contributing to sumProcessed via the sum* reducer.
+TaskB runs once per forEach element. It contributes to sumProcessed via the sum* reducer,
+echoes its own itemIndex into the listSeenIndices accumulator (via the list* reducer),
+and emits its itemCount into setSeenCounts (via the set* reducer) so the test can confirm
+every branch saw the same cohort size. When clearItems is true, the branch explicitly writes
+items=null into its changes to override the spawn-step's array at fan-in.
 */
-func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, item string) (sumProcessedOut int, err error) { // MARKER: TaskB
+func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) { // MARKER: TaskB
 	if item == "" {
-		return 0, nil
+		return 0, nil, nil, nil
 	}
-	return 1, nil
+	if clearItems {
+		err = flow.Set("items", nil)
+		if err != nil {
+			return 0, nil, nil, errors.Trace(err)
+		}
+	}
+	return 1, []int{itemIndex}, []int{itemCount}, nil
 }
 
 /*
@@ -80,8 +90,6 @@ DynamicFanOut defines the graph: A -> forEach(items) -> B -> C.
 */
 func (svc *Service) DynamicFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: DynamicFanOut
 	graph = workflow.NewGraph(dynamicfanoutflowapi.DynamicFanOut.URL())
-	graph.DeclareInputs("items")
-	graph.DeclareOutputs("processedCount")
 	graph.AddTask("taskA", dynamicfanoutflowapi.TaskA.URL())
 	graph.AddTask("taskB", dynamicfanoutflowapi.TaskB.URL())
 	graph.AddTask("taskC", dynamicfanoutflowapi.TaskC.URL())

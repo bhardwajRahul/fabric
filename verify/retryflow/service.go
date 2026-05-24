@@ -87,8 +87,6 @@ Retry defines the graph A -> Flaky -> B.
 */
 func (svc *Service) Retry(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Retry
 	graph = workflow.NewGraph(retryflowapi.Retry.URL())
-	graph.DeclareInputs("target")
-	graph.DeclareOutputs("finalAttempts")
 	graph.AddTask("taskA", retryflowapi.TaskA.URL())
 	graph.AddTask("flaky", retryflowapi.Flaky.URL())
 	graph.AddTask("taskB", retryflowapi.TaskB.URL())

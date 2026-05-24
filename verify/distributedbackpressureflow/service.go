@@ -123,8 +123,6 @@ DistributedBackpressure is a single-task graph routing through Bounded.
 */
 func (svc *Service) DistributedBackpressure(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: DistributedBackpressure
 	graph = workflow.NewGraph(distributedbackpressureflowapi.DistributedBackpressure.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("bounded", distributedbackpressureflowapi.Bounded.URL())
 	graph.AddTransition("bounded", workflow.END)
 	return graph, nil

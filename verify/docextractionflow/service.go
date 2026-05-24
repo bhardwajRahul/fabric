@@ -160,8 +160,6 @@ TranscribeChunk -[fan-in]-> JoinPageTranscriptions -[fan-in]-> JoinDocTranscript
 */
 func (svc *Service) DocExtraction(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: DocExtraction
 	graph = workflow.NewGraph(docextractionflowapi.DocExtraction.URL())
-	graph.DeclareInputs("pdf")
-	graph.DeclareOutputs("docTranscription", "pageCount")
 	graph.AddTask("scanPDF", docextractionflowapi.ScanPDF.URL())
 	graph.AddTask("identifyChunks", docextractionflowapi.IdentifyChunks.URL())
 	graph.AddTask("transcribeChunk", docextractionflowapi.TranscribeChunk.URL())

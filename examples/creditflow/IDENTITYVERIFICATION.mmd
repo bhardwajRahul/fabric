@@ -1,16 +1,20 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"identity-verification"}}:::term --> _start
-    t4@{ shape: trap-t, label: "identityDecision" }
-    _start(( )):::term --> t0["initIdentityVerification"]:::task
-    t0 --> t1["verifySSN"]:::task
-    t0 --> t2["verifyAddress"]:::task
-    t0 --> t3["verifyPhoneNumber"]:::task
-    t1 -->|"fan-in"| t4
-    t2 -->|"fan-in"| t4
-    t3 -->|"fan-in"| t4
+    _start(( )):::term --> t0
+    t0["initIdentityVerification"]:::task
+    t1["verifySSN"]:::task
+    t2["verifyAddress"]:::task
+    t3["verifyPhoneNumber"]:::task
+    t4["identityDecision"]:::task
+    t0 --> t1
+    t0 --> t2
+    t0 --> t3
+    t1 --> t4
+    t2 --> t4
+    t3 --> t4
     t4 --> _end(( )):::term
-    class t4 task

@@ -80,7 +80,7 @@ func (svc *Service) Arithmetic(ctx context.Context, x int, op string, y int) (xE
 		result = x / y // Intentional: division by zero panics; the platform recovers it as a 500 error
 		svc.sumDivide.Add(int64(result))
 	default:
-		return x, op, y, result, errors.New("invalid operator '%s'", op)
+		return x, op, y, result, errors.New("invalid operator '%s'", op, http.StatusBadRequest)
 	}
 	svc.IncrementUsedOperators(ctx, 1, op)
 	return x, op, y, result, nil

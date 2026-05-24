@@ -1,24 +1,31 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"super"}}:::term --> _start
-    t2@{ shape: st-rect, label: "taskC" }
-    t3@{ shape: trap-t, label: "taskD" }
-    t4@{ shape: trap-t, label: "taskE" }
-    _start(( )):::term --> t0["taskA"]:::task
-    t0 --> t1["taskB"]:::task
-    t1 -->|"for each in items"| t2
-    t2 -->|"fan-in"| t3
-    t2 -->|"onError"| t6["errorHandler"]:::task
-    t6 -->|"fan-in"| t3
-    t3 -->|"if useSubgraph == true"| t7[["superSubCall"]]:::sub
-    t3 -->|"if useSubgraph != true; fan-in"| t4
-    t7 -->|"fan-in"| t4
-    t4 -->|"goto"| t5["taskZ"]:::task
+    _start(( )):::term --> t0
+    t0["taskA"]:::task
+    t1["taskB"]:::task
+    t3["taskD"]:::task
+    t4["taskE"]:::task
+    t5["taskZ"]:::task
+    t7["superSubCall"]:::sub
+    subgraph fo_t1 ["for each in items"]
+        direction LR
+        t2["taskC"]:::task
+        t6["errorHandler"]:::task
+    end
+    t0 --> t1
+    t1 -->|"fan out"| t2
+    t2 -->|"fan in"| t3
+    t2 -->|"onError"| t6
+    t6 -->|"fan in"| t3
+    t3 -->|"if useSubgraph == true"| t7
+    t3 -->|"if useSubgraph != true"| t4
+    t7 --> t4
+    t4 -->|"goto"| t5
     t4 --> _end(( )):::term
     t5 --> _end(( )):::term
-    class t2 task
-    class t3 task
-    class t4 task
+    style fo_t1 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

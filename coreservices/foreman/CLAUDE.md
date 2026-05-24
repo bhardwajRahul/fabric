@@ -70,9 +70,15 @@ Create ──► created ──► Start ──► running ──► completed
 
 **BreakBefore** - Sets or clears a breakpoint that pauses execution before the named task runs. Breakpoints are stored in a `breakpoints` JSON column on the flow row as a `map[string]string` keyed by task name. During `processStep`, if the current task name matches a breakpoint and the step's `breakpoint_hit` flag is false, the foreman interrupts the flow (using the same interrupt propagation as `flow.Interrupt()`) and sets `breakpoint_hit=1` on the step. The flag prevents the breakpoint from re-triggering when the flow is resumed. Breakpoints are inherited by subgraph flows and forked flows.
 
-**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. Fields that need to persist across turns must be declared in both `DeclareInputs` and `DeclareOutputs`. The new flow's scheduling (priority, fairness) comes from caller-supplied `FlowOptions` like a fresh `Create`; a nil opts uses fresh defaults rather than inheriting from the prior flow.
+**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. The new flow's `final_state` from the prior turn passes through unfiltered as its initial state, so any field present at the end of one turn is visible at the start of the next; a workflow author who wants narrower turn-to-turn carryover puts an adapter task at the workflow's entry that uses `flow.Keep`/`Delete` to scrub. The new flow's scheduling (priority, fairness) comes from caller-supplied `FlowOptions` like a fresh `Create`; a nil opts uses fresh defaults rather than inheriting from the prior flow.
 
-**Enqueue** - Internal endpoint (port `:444`) that rings the work **doorbell**: it signals that a step is pending and lets the receiving replica decide, from the step's priority relative to its candidate cache, whether to refill or to flush and refill (see "Execution Model"). It does not enqueue a specific step. Load-balanced across foreman replicas. Fire-and-forget - errors are ignored because `pollPendingSteps` rings the local doorbell each cycle and recovers any missed work.
+**Enqueue** - Internal endpoint (port `:444`) that rings the work **doorbell**: it signals that a step is pending. The
+receiving replica does one PK lookup for the announced step's `priority` and `not_before`. If `not_before` is in the
+future the doorbell defers to the poll timer (`shortenNextPoll(not_before)`) - the work cannot run now, so there is
+nothing to preempt and the cache stays untouched. If `not_before` is due, the priority drives the cache offer
+(refill or head-insert; see "Execution Model"). It does not enqueue a specific step. Load-balanced across foreman
+replicas. Fire-and-forget - errors are ignored because `pollPendingSteps` rings the local doorbell each cycle and
+recovers any missed work.
 
 ### FlowOutcome and side-channel signals
 
@@ -154,8 +160,13 @@ of tenant isolation).
 Strict priority means no aging: a fed higher-priority band starves lower bands by design.
 
 **Queue-as-cache, doorbell, single-slot refiller.** `Enqueue` no longer carries a step to run in a queue;
-it is a **doorbell** (`candidateCache.offer`). It resolves the announced step's priority by a PK lookup
-(off the selection path), then takes one of three paths. (1) Empty cache: this replica is idle - request a
+it is a **doorbell** (`candidateCache.offer`). It resolves the announced step's priority *and* `not_before` in
+one PK lookup (off the selection path). If `not_before` is in the future, the doorbell short-circuits into
+`shortenNextPoll(not_before)` and returns - the work is not due, so there is nothing to preempt and the cache
+stays untouched; the local poll timer wakes at the right moment and the normal scan picks the step up. This
+is also how cross-replica delayed-start propagates: every replica that receives the multicast doorbell pulls
+its poll timer forward, with no need for a separate "wake at T" message. Otherwise the priority drives one of
+three cache paths. (1) Empty cache: this replica is idle - request a
 refill so the refiller selects the strictly-best pending step. It deliberately does **not** head-insert the
 first arrival, because an arbitrary-priority step jumping the queue on an idle replica can run before a
 more important one (this exact inversion was observed and is why the empty case defers to the refiller; the
@@ -253,6 +264,24 @@ Outside the hot path, `completeSurgraphFlow` and `surgraphChain` also paralleliz
 
 **Dynamic fan-out** uses `forEach` on a transition to iterate over a state array and spawn one task instance per element. Each instance receives the element under the `as` key. If the array is empty, no tasks are spawned for that transition. When a `forEach` transition is the only outgoing transition from a task, an empty array causes the flow to complete at that point - downstream tasks (including the fan-in target) are never reached.
 
+**Branch state strip on dynamic fan-out.** When the foreman spawns branches for a `forEach` transition, it removes
+the source array field from each branch's local `state` (and only the local state - the spawn step's immutable
+`state` snapshot still carries it). Without this, an N-element forEach feeding a sub-chain `forEach -> A -> B -> C
+-> J` would write N copies of the array into every step row in every branch, blowing storage up by N times the
+chain length. With the strip, each branch carries only its single element. The fan-in step rebuilds its own state
+from the spawn step's `state + changes`, so the source array reappears in the fan-in step and everything
+downstream of it - the absence is local to the cohort, not propagated past the join. The strip is skipped when
+`as == forEach` (the user named the alias the same as the source field), so the element write is not clobbered.
+Alongside the strip, the foreman injects two read-only fields on each branch's `state`: `<as>Index` (this
+element's position in the forEach array) and `<as>Count` (the cohort size), so the branch task can read its
+ordinal context without the source array being present.
+
+**Downstream suppression via explicit clear.** A branch that wants to suppress the source array past the fan-in
+calls `flow.Set(<forEach>, nil)` (or any value) in its task body. That writes the new value into the branch's
+`changes`, the replace reducer at fan-in folds it over the spawn-step base, and the field is absent (or whatever
+the branch wrote) past the fan-in. The use case is a forEach over a very large array where downstream tasks only
+care about the per-element transformation and not the original source.
+
 **Fan-in** is implicit. When the last sibling at a `step_depth` completes, the foreman merges all siblings' changes using reducers and creates the next step(s) within a transaction. The transaction prevents duplicate next steps when multiple workers finish siblings simultaneously.
 
 **Fan-in does not escalate on cancelled or failed siblings.** If a sibling at the current depth is in `failed` or `cancelled` status when fan-in evaluates, the flow is already being driven by another path: a sibling's `failStep` has cascaded the flow to failed, an external `Cancel` has cancelled it, or an `OnError` sibling-cancel has handed the depth off to an error handler. The fan-in worker bails out with `return nil` instead of calling `failStep` on its own step. Calling `failStep` here races with the OnError handler and incorrectly fails an otherwise-recoverable flow: the OnError handler's next step (e.g. an error-routed alternative path) is in flight at depth `N+1` while the fan-in worker is still finishing depth `N`, and a redundant `failStep` from the fan-in worker would mark the parent flow failed before the OnError path ever runs.
@@ -319,7 +348,7 @@ was wrong for any graph where an intra-thread `flow.Goto` self-loop sits inside 
 pushes `step_depth + 1`, so the looping branch can outrun the fan-in/terminal step in depth. When `normalC`
 (shallow branch) is the last cohort member to arrive, the fan-in `taskD` is created at `normalC.step_depth + 1`,
 which is *less* than the dangling final loop iteration's depth, so `MAX(step_depth)` selected the loop step
-(no `finalResult`) and `DeclareOutputs` filtering then yielded `{}`. The bug was order-dependent (only when the
+(no `finalResult`) and the empty step state was returned. The bug was order-dependent (only when the
 shallow branch lost the fan-in race), which is why `verify/intrathreadgotoflow` failed intermittently. The
 tail-step merge is depth-agnostic: the loop iterations carry `successor_id = taskD` (set by the fan-in cohort-exit
 UPDATE), so only the real terminal step qualifies. `mergeTerminalSteps` is the *only* final-state path - there is no
@@ -423,13 +452,13 @@ At `Create` time, `fetchGraph` does a direct `GET` to the workflow's endpoint UR
 
 ### State Across Subgraphs
 
-State crosses the subgraph boundary asymmetrically.
+State crosses the subgraph boundary unfiltered in both directions.
 
-**Into the child:** The parent's full state plus the surgraph step's accumulated changes is computed first. For dynamic subgraphs (`flow.Subgraph(url, input)`), the explicit input map is then merged on top using the *child* graph's reducers. The result is filtered through the *child's* `DeclareInputs` before becoming the child flow's initial state.
+**Into the child:** The parent's full state plus the surgraph step's accumulated changes is computed and becomes the child flow's initial state. For dynamic subgraphs (`flow.Subgraph(url, input)`), the explicit `input` map is merged on top using the *child* graph's reducers before the child starts.
 
-**Back to the parent:** The child's `final_state` is filtered through the *child's* `DeclareOutputs` and merged into the surgraph step's `changes` using the *parent* graph's reducers.
+**Back to the parent:** The child's `final_state` is merged into the surgraph step's `changes` using the *parent* graph's reducers.
 
-So both `DeclareInputs` and `DeclareOutputs` shape the subgraph contract, and the child graph's reducers govern only the input merge while the parent graph's reducers govern only the output merge.
+The framework does not filter at either boundary. State hygiene is the workflow author's responsibility: a parent that wants to adapt state across the contract boundary brackets the subgraph node with `Before<NodeName>` / `After<NodeName>` adapter tasks that call `flow.Transform`/`Keep`/`Delete`/`Clear`. The adapters are normal graph nodes - visible in the diagram, testable, mockable - and the cost is one extra HTTP dispatch per adapter when adaptation is needed, zero when it is not. The child graph's reducers govern the input merge only; the parent graph's reducers govern the output merge only.
 
 ### Surgraph Step Identification
 
@@ -462,7 +491,10 @@ The actor's JWT claims are captured at `Create` time and stored in the flow's `a
 
 ### SQLite Testing Support
 
-When `SQLDataSourceName` is empty (default in `TESTING` deployment), the foreman uses an in-memory SQLite database via `sequel.OpenTesting`. Key differences from server-based databases:
+When `SQLDataSourceName` is empty in `TESTING` or `LOCAL` deployment, the foreman falls back to a SQLite DSN
+(`file:shard_%d`). In `TESTING` the shard DSN is routed through `sequel.CreateTestingDatabase` to materialize a
+per-test database; in `LOCAL` the file is opened directly so the dev loop keeps its data across restarts. Both
+paths land on SQLite via `sequel.Open`. Key differences from server-based databases:
 
 - **Write-first transactions** - `advanceFlow` uses an `UPDATE` as the first operation in its transaction to immediately acquire a write lock. On MySQL/Postgres, this serializes concurrent workers (equivalent to `SELECT ... FOR UPDATE`). On SQLite with `cache=shared`, this prevents deadlocks: deferred transactions that start with reads both acquire SHARED locks, and neither can upgrade to write when the other holds a read lock. Starting with a write acquires the lock immediately, causing the second transaction to block until the first commits.
 - **Busy timeout** - `sequel` (since v1.5.7) automatically applies `_pragma=busy_timeout(1000)` to SQLite DSNs that don't already set one. Without this, concurrent workers hitting a write lock immediately fail with `SQLITE_BUSY`; with it, they wait up to 1 second for the lock. This is essential for the foreman because four worker goroutines routinely write to `microbus_steps` in parallel during fan-out.
@@ -915,7 +947,7 @@ rationale and the meaning of every column live here.
 | `thread_token` | Token component of the thread's flowKey |
 | `trace_parent` | W3C `traceparent` for distributed-trace continuity across the flow |
 | `notify_hostname` | Set by `StartNotify`; `OnFlowStopped` fires here when the flow stops. `''` = no notification |
-| `final_state` | JSON state computed at termination, filtered through the graph's `DeclareOutputs` |
+| `final_state` | JSON state computed at termination - the full merged state of the terminal step(s), unfiltered. Any narrowing happens in the workflow's terminal task via `flow.Keep`/`Delete` |
 | `breakpoints` | JSON `map[taskName]string` of `BreakBefore` breakpoints |
 | `created_at` | UTC creation time. Append-only and PK-correlated; `idx_*_created_at` relies on this for time-window queries. Surfaced to tasks via `Flow.CreatedAt()` for elapsed-time guards |
 | `updated_at` | UTC time of the last status transition; bumped on every state change. Surfaced to tasks via `Flow.UpdatedAt()` |

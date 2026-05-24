@@ -16,6 +16,8 @@ limitations under the License.
 
 package workflow
 
+import "time"
+
 // FlowOptions sets flow-level scheduling properties at Create or Run.
 // A nil *FlowOptions, or any zero field, uses the foreman's defaults.
 type FlowOptions struct {
@@ -29,4 +31,9 @@ type FlowOptions struct {
 	// FairnessWeight is the relative dispatch share of the fairness key.
 	// Zero uses a weight of 1.
 	FairnessWeight float64 `json:"fairnessWeight,omitzero"`
+	// StartAt delays execution of the flow's entry step until the given UTC time.
+	// Zero or a past time means run as soon as the flow is started. Sets the
+	// entry step's not_before column; the flow can still be created and started
+	// immediately, but no worker will pick the step up before StartAt.
+	StartAt time.Time `json:"startAt,omitzero"`
 }

@@ -1,29 +1,38 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"soak"}}:::term --> _start
-    t2@{ shape: st-rect, label: "work" }
-    t3@{ shape: trap-t, label: "collect" }
-    t8@{ shape: trap-t, label: "join" }
-    _start(( )):::term --> t0["seed"]:::task
-    t0 -->|"if branch == 0"| t1["fanA"]:::task
-    t0 -->|"if branch == 1"| t4["loop"]:::task
-    t0 -->|"if branch == 2"| t9[["sub"]]:::sub
-    t0 -->|"if branch == 3"| t5["boomR"]:::task
-    t0 -->|"if branch == 4"| t7["boomF"]:::task
-    t1 -->|"for each in items"| t2
-    t2 -->|"fan-in"| t3
-    t3 -->|"fan-in"| t8
+    _start(( )):::term --> t0
+    t0["seed"]:::task
+    t1["fanA"]:::task
+    t3["collect"]:::task
+    t4["loop"]:::task
+    t5["boomR"]:::task
+    t6["recover"]:::task
+    t7["boomF"]:::task
+    t8["join"]:::task
+    t9["sub"]:::sub
+    subgraph fo_t1 ["for each in items"]
+        direction LR
+        t2["work"]:::task
+    end
+    t0 -->|"if branch == 0"| t1
+    t0 -->|"if branch == 1"| t4
+    t0 -->|"if branch == 2"| t9
+    t0 -->|"if branch == 3"| t5
+    t0 -->|"if branch == 4"| t7
+    t1 -->|"fan out"| t2
+    t2 -->|"fan in"| t3
+    t3 --> t8
     t4 -->|"goto"| t4
-    t4 -->|"fan-in"| t8
-    t9 -->|"fan-in"| t8
-    t5 -->|"onError"| t6["recover"]:::task
-    t5 -->|"fan-in"| t8
-    t6 -->|"fan-in"| t8
-    t7 -->|"fan-in"| t8
+    t4 --> t8
+    t9 --> t8
+    t5 -->|"onError"| t6
+    t5 --> t8
+    t6 --> t8
+    t7 --> t8
     t8 --> _end(( )):::term
-    class t2 task
-    class t3 task
-    class t8 task
+    style fo_t1 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

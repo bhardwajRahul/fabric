@@ -78,8 +78,6 @@ func (svc *Mock) MockAdaptiveConcurrency(handler func(ctx context.Context, flow 
 	svc.mockAdaptiveConcurrencyGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(adaptiveconcurrencyflowapi.AdaptiveConcurrency.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

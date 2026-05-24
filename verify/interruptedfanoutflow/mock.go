@@ -154,8 +154,6 @@ func (svc *Mock) MockInterruptedFanOut(handler func(ctx context.Context, flow *w
 	svc.mockInterruptedFanOutGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(interruptedfanoutflowapi.InterruptedFanOut.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

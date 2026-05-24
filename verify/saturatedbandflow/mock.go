@@ -95,8 +95,6 @@ func (svc *Mock) MockSaturatedBand(handler func(ctx context.Context, flow *workf
 	svc.mockSaturatedBandGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(saturatedbandflowapi.SaturatedBand.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
@@ -151,8 +149,6 @@ func (svc *Mock) MockOpenBand(handler func(ctx context.Context, flow *workflow.F
 	svc.mockOpenBandGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(saturatedbandflowapi.OpenBand.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

@@ -82,8 +82,6 @@ Interruptor defines the graph A -> AwaitInput -> Compose.
 */
 func (svc *Service) Interruptor(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Interruptor
 	graph = workflow.NewGraph(interruptflowapi.Interruptor.URL())
-	graph.DeclareInputs("prompt")
-	graph.DeclareOutputs("result")
 	graph.AddTask("taskA", interruptflowapi.TaskA.URL())
 	graph.AddTask("awaitInput", interruptflowapi.AwaitInput.URL())
 	graph.AddTask("compose", interruptflowapi.Compose.URL())

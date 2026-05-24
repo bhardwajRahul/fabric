@@ -81,8 +81,6 @@ IntraThreadGoto defines A -> {LoopTask (self-Goto), NormalC} -> D.
 */
 func (svc *Service) IntraThreadGoto(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: IntraThreadGoto
 	graph = workflow.NewGraph(intrathreadgotoflowapi.IntraThreadGoto.URL())
-	graph.DeclareInputs("target")
-	graph.DeclareOutputs("finalResult")
 	graph.AddTask("taskA", intrathreadgotoflowapi.TaskA.URL())
 	graph.AddTask("loopTask", intrathreadgotoflowapi.LoopTask.URL())
 	graph.AddTask("normalC", intrathreadgotoflowapi.NormalC.URL())

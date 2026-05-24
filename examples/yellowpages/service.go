@@ -271,6 +271,9 @@ func (svc *Service) openDatabase(ctx context.Context) (err error) {
 	_ = ctx
 	const driverName = "" // The driver name is inferred from the data source name
 	dataSourceName := svc.SQLDataSourceName()
+	if dataSourceName == "" && svc.Deployment() == connector.LOCAL {
+		dataSourceName = "file:local.sqlite"
+	}
 	if svc.Deployment() == connector.TESTING {
 		dataSourceName, err = sequel.CreateTestingDatabase(driverName, dataSourceName, svc.Plane())
 		if err != nil {

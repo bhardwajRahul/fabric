@@ -95,8 +95,6 @@ func (svc *Mock) MockAckDropped(handler func(ctx context.Context, flow *workflow
 	svc.mockAckDroppedGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(ackdroppedflowapi.AckDropped.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
@@ -151,8 +149,6 @@ func (svc *Mock) MockEcho(handler func(ctx context.Context, flow *workflow.Flow,
 	svc.mockEchoGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(ackdroppedflowapi.Echo.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

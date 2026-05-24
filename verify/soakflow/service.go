@@ -165,8 +165,6 @@ onError-recovered failure, and an unhandled failure - all converging at Join
 */
 func (svc *Service) Soak(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Soak
 	graph = workflow.NewGraph(soakflowapi.Soak.URL())
-	graph.DeclareInputs("branch", "fanWidth", "loops")
-	graph.DeclareOutputs("done")
 	graph.AddTask("seed", soakflowapi.Seed.URL())
 	graph.AddTask("fanA", soakflowapi.FanA.URL())
 	graph.AddTask("work", soakflowapi.Work.URL())
@@ -216,8 +214,6 @@ Inner defines the subgraph invoked by Soak: a single task then END.
 */
 func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Inner
 	graph = workflow.NewGraph(soakflowapi.Inner.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("done")
 	graph.AddTask("innerEntry", soakflowapi.InnerEntry.URL())
 	graph.AddTransition("innerEntry", workflow.END)
 	return graph, nil

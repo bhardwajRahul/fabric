@@ -124,8 +124,6 @@ func (svc *Mock) MockBreakpoint(handler func(ctx context.Context, flow *workflow
 	svc.mockBreakpointGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(breakpointflowapi.Breakpoint.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

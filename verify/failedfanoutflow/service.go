@@ -96,8 +96,6 @@ transition, so B's error fails the whole flow.
 */
 func (svc *Service) FailedFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: FailedFanOut
 	graph = workflow.NewGraph(failedfanoutflowapi.FailedFanOut.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("sumExecuted", "totalExecuted")
 	graph.AddTask("src", failedfanoutflowapi.Src.URL())
 	graph.AddTask("a", failedfanoutflowapi.A.URL())
 	graph.AddTask("b", failedfanoutflowapi.B.URL())

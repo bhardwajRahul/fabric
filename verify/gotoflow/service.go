@@ -80,8 +80,6 @@ Goto defines the graph A -> B -> C with B -> withGoto -> A.
 */
 func (svc *Service) Goto(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Goto
 	graph = workflow.NewGraph(gotoflowapi.Goto.URL())
-	graph.DeclareInputs("target")
-	graph.DeclareOutputs("finalLoops")
 	graph.AddTask("taskA", gotoflowapi.TaskA.URL())
 	graph.AddTask("taskB", gotoflowapi.TaskB.URL())
 	graph.AddTask("taskC", gotoflowapi.TaskC.URL())
@@ -107,8 +105,6 @@ The flow must end with status=failed.
 */
 func (svc *Service) BadGoto(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: BadGoto
 	graph = workflow.NewGraph(gotoflowapi.BadGoto.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs()
 	graph.AddTask("badGotoer", gotoflowapi.BadGotoer.URL())
 	graph.AddTransition("badGotoer", workflow.END)
 	return graph, nil

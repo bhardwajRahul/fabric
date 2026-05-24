@@ -175,6 +175,162 @@ func TestFlow_Has(t *testing.T) {
 	assert.True(f.Has("name"))
 }
 
+func TestFlow_Delete(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.SetString("name", "Alice")
+	f.SetInt("score", 42)
+	f.SetBool("active", true)
+	f.changes = make(map[string]any) // reset changes from typed setters
+
+	f.Delete("name", "score")
+	// State reads see the deleted fields as absent.
+	assert.False(f.Has("name"))
+	assert.False(f.Has("score"))
+	assert.Equal("", f.GetString("name"))
+	assert.Equal(0, f.GetInt("score"))
+	// Changes records JSON null for each deleted key.
+	for _, k := range []string{"name", "score"} {
+		raw, ok := f.changes[k].(json.RawMessage)
+		assert.True(ok)
+		assert.Equal("null", string(raw))
+	}
+	// Unlisted field is unaffected.
+	assert.True(f.Has("active"))
+	assert.Equal(true, f.GetBool("active"))
+}
+
+func TestFlow_Clear(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.SetString("name", "Alice")
+	f.SetInt("score", 42)
+	f.changes = make(map[string]any)
+
+	f.Clear()
+	// Every field reads as absent.
+	assert.False(f.Has("name"))
+	assert.False(f.Has("score"))
+	// Every prior field has a null contribution in changes.
+	assert.Equal(2, len(f.changes))
+	for _, k := range []string{"name", "score"} {
+		raw, ok := f.changes[k].(json.RawMessage)
+		assert.True(ok)
+		assert.Equal("null", string(raw))
+	}
+}
+
+func TestFlow_Keep(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.SetString("a", "1")
+	f.SetString("b", "2")
+	f.SetString("c", "3")
+	f.changes = make(map[string]any)
+
+	f.Keep("a", "c", "missing")
+	assert.True(f.Has("a"))
+	assert.False(f.Has("b"))
+	assert.True(f.Has("c"))
+	// b is the only field dropped.
+	raw, ok := f.changes["b"].(json.RawMessage)
+	assert.True(ok)
+	assert.Equal("null", string(raw))
+	// Keepers don't produce spurious change entries.
+	_, hasA := f.changes["a"]
+	_, hasC := f.changes["c"]
+	assert.False(hasA)
+	assert.False(hasC)
+}
+
+func TestFlow_Transform(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.SetString("parentVarA", "alpha")
+	f.SetInt("parentVarB", 7)
+	f.SetString("scratch", "drop me")
+	f.changes = make(map[string]any)
+
+	f.Transform("subInput1", "parentVarA", "subInput2", "parentVarB")
+
+	// New names hold the captured values.
+	assert.Equal("alpha", f.GetString("subInput1"))
+	assert.Equal(7, f.GetInt("subInput2"))
+	// Old names and uninvolved fields are gone.
+	assert.False(f.Has("parentVarA"))
+	assert.False(f.Has("parentVarB"))
+	assert.False(f.Has("scratch"))
+	// Changes: new keys carry their values, dropped old keys carry null.
+	assert.Equal(`"alpha"`, string(f.changes["subInput1"].(json.RawMessage)))
+	assert.Equal("7", string(f.changes["subInput2"].(json.RawMessage)))
+	for _, k := range []string{"parentVarA", "parentVarB", "scratch"} {
+		raw, ok := f.changes[k].(json.RawMessage)
+		assert.True(ok)
+		assert.Equal("null", string(raw))
+	}
+}
+
+func TestFlow_TransformSkipsMissingAndNull(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.SetString("present", "value")
+	f.state["alreadyNull"] = json.RawMessage("null")
+	f.changes = make(map[string]any)
+
+	f.Transform("kept", "present", "skipped1", "absent", "skipped2", "alreadyNull")
+
+	assert.True(f.Has("kept"))
+	assert.False(f.Has("skipped1"))
+	assert.False(f.Has("skipped2"))
+}
+
+func TestFlow_TransformPanicsOnOddArgs(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	defer func() {
+		r := recover()
+		assert.True(r != nil)
+	}()
+	f.Transform("only-one")
+}
+
+func TestFlow_GetTreatsJSONNullAsAbsent(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	f := NewFlow()
+	f.state["x"] = json.RawMessage("null")
+	f.state["y"] = nil
+	assert.False(f.Has("x"))
+	assert.False(f.Has("y"))
+	assert.Equal("", f.GetString("x"))
+	assert.Equal(0, f.GetInt("y"))
+
+	// ParseState skips null-valued fields rather than overwriting the target's zero.
+	var view struct {
+		X string `json:"x"`
+		Y int    `json:"y"`
+	}
+	view.X = "preset"
+	view.Y = 99
+	err := f.ParseState(&view)
+	assert.NoError(err)
+	assert.Equal("preset", view.X)
+	assert.Equal(99, view.Y)
+}
+
 func TestFlow_Goto(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)

@@ -86,8 +86,6 @@ the parent step's state crosses the boundary filtered through these.
 */
 func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Inner
 	graph = workflow.NewGraph(subgraphflowapi.Inner.URL())
-	graph.DeclareInputs("seed")
-	graph.DeclareOutputs("innerResult")
 	graph.AddTask("taskX", subgraphflowapi.TaskX.URL())
 	graph.AddTask("taskY", subgraphflowapi.TaskY.URL())
 	graph.AddTransition("taskX", "taskY")
@@ -100,8 +98,6 @@ Parent defines the graph A -> [Inner subgraph] -> Z.
 */
 func (svc *Service) Parent(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Parent
 	graph = workflow.NewGraph(subgraphflowapi.Parent.URL())
-	graph.DeclareInputs("seed")
-	graph.DeclareOutputs("finalResult")
 	graph.AddTask("taskA", subgraphflowapi.TaskA.URL())
 	graph.AddSubgraph("inner", subgraphflowapi.Inner.URL())
 	graph.AddTask("taskZ", subgraphflowapi.TaskZ.URL())

@@ -18,6 +18,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/microbus-io/testarossa"
@@ -374,14 +375,15 @@ func TestGraph_MermaidForEachShape(t *testing.T) {
 	g.AddTransition("svc/worker", END)
 
 	mmd := g.Mermaid()
-	// Foreach target's shape is declared on its own line so edges can
-	// reference it by bare id and compose with `:::class` downstream.
-	assert.Contains(mmd, `t1@{ shape: st-rect, label: "svc/worker" }`)
-	// Edges reference the foreach target by bare id, not by its shape.
-	assert.Contains(mmd, `|"for each in items"| t1`)
-	assert.NotContains(mmd, `|"for each in items"| t1@`)
-	// Non-foreach target keeps the default rectangle.
-	assert.NotContains(mmd, `t0@{ shape: st-rect`)
+	// forEach scopes are rendered as Mermaid subgraph blocks titled by the iterated field.
+	assert.Contains(mmd, `subgraph fo_t0 ["for each in items"]`)
+	// The forEach edge into the scope carries a "fan out" label.
+	assert.Contains(mmd, `|"fan out"| t1`)
+	// The forEach target uses a standard rectangle; the dashed box signals replication.
+	assert.Contains(mmd, `t1["svc/worker"]:::task`)
+	assert.NotContains(mmd, `shape: st-rect`)
+	// The scope block carries a dashed-outline / faint-fill style line.
+	assert.Contains(mmd, `style fo_t0 fill:#32a7c1,fill-opacity:0.15`)
 }
 
 func TestGraph_MermaidFanInShape(t *testing.T) {
@@ -398,12 +400,54 @@ func TestGraph_MermaidFanInShape(t *testing.T) {
 	assert.NoError(g.Validate())
 
 	mmd := g.Mermaid()
-	// FanIn nodes use the inverted-trapezoid shape, declared standalone like forEach.
-	assert.Contains(mmd, `@{ shape: trap-t, label: "join" }`)
-	// Every edge into the fan-in carries the "fan-in" label.
-	assert.Contains(mmd, `|"fan-in"|`)
-	// And gets a class line (since @{shape:...} can't compose with :::).
-	assert.Contains(mmd, "class t3 task")
+	// Fan-in nodes are standard rectangles; no special shape.
+	assert.Contains(mmd, `t3["join"]:::task`)
+	assert.NotContains(mmd, `shape: trap-t`)
+	// Static When-style fan-out has no enclosing scope block, so edges into the
+	// fan-in node do not get a "fan in" label.
+	assert.NotContains(mmd, `"fan in"`)
+}
+
+func TestGraph_MermaidForEachFanInLabel(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("test")
+	g.AddTransitionForEach("svc/start", "svc/worker", "items", "item")
+	g.AddTransition("svc/worker", "svc/join")
+	g.AddTransition("svc/join", END)
+	g.SetFanIn("svc/join")
+	assert.NoError(g.Validate())
+
+	mmd := g.Mermaid()
+	// Edges exiting a forEach scope into the fan-in node carry the "fan in" label.
+	assert.Contains(mmd, `|"fan in"| t2`)
+	// The fan-in node itself stays a standard rectangle and lives outside the scope.
+	assert.Contains(mmd, `t2["svc/join"]:::task`)
+}
+
+func TestGraph_MermaidNestedForEachScopes(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("test")
+	g.AddTransitionForEach("svc/outer", "svc/inner", "tenants", "tenant")
+	g.AddTransitionForEach("svc/inner", "svc/leaf", "docs", "doc")
+	g.AddTransition("svc/leaf", "svc/innerJoin")
+	g.AddTransition("svc/innerJoin", "svc/outerJoin")
+	g.AddTransition("svc/outerJoin", END)
+	g.SetFanIn("svc/innerJoin")
+	g.SetFanIn("svc/outerJoin")
+	assert.NoError(g.Validate())
+
+	mmd := g.Mermaid()
+	// Each forEach source produces its own subgraph block, in registration order.
+	outerIdx := strings.Index(mmd, `subgraph fo_t0 ["for each in tenants"]`)
+	innerIdx := strings.Index(mmd, `subgraph fo_t1 ["for each in docs"]`)
+	assert.True(outerIdx >= 0)
+	assert.True(innerIdx >= 0)
+	// Inner block is nested textually after the outer block opens.
+	assert.True(innerIdx > outerIdx)
 }
 
 func TestGraph_MermaidLabelsOnErrorAndOnTimeout(t *testing.T) {

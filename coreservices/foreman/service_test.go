@@ -203,9 +203,6 @@ func TestForeman_LowLevel(t *testing.T) {
 		var finalState map[string]any
 		assert.NoError(json.Unmarshal([]byte(finalStateJSON), &finalState))
 		assert.Equal("hello world", finalState["result"])
-		// DeclareOutputs("result") should have filtered out "input"
-		_, hasInput := finalState["input"]
-		assert.False(hasInput)
 
 		// Verify all steps are completed
 		var stepCount int
@@ -458,8 +455,6 @@ func newTestWorkflowSvc() *connector.Connector {
 	graphSvc.Subscribe("MyWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph("https://test.workflow.host:428/my-workflow")
-			g.DeclareInputs("*")
-			g.DeclareOutputs("result")
 			g.AddTask("taskA", "https://test.workflow.host:428/task-a")
 			g.AddTask("taskB", "https://test.workflow.host:428/task-b")
 			g.AddTransition("taskA", "taskB")
@@ -863,8 +858,6 @@ func TestForeman_Retry(t *testing.T) {
 	graphSvc.Subscribe("FailWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph("https://test.fail.host:428/fail-workflow")
-			g.DeclareInputs("*")
-			g.DeclareOutputs("result")
 			g.AddTask("failTask", "https://test.fail.host:428/fail-task")
 			g.AddTransition("failTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
@@ -1036,8 +1029,6 @@ func newTestErrorWorkflowSvc() *connector.Connector {
 	svc.Subscribe("ErrorWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph("https://test.error.host:428/error-workflow")
-			g.DeclareInputs("*")
-			g.DeclareOutputs("*")
 			g.AddTask("taskA", "https://test.error.host:428/task-a")
 			g.AddTask("taskB", "https://test.error.host:428/task-b")
 			g.AddTask("errorHandler", "https://test.error.host:428/error-handler")
@@ -1178,7 +1169,6 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 	graphSvc.Subscribe("SubWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph(subWorkflow)
-			g.DeclareInputs("*")
 			g.AddTask("subTask", subTask)
 			g.AddTransition("subTask", workflow.END)
 			w.Header().Set("Content-Type", "application/json")
@@ -1205,8 +1195,6 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 	graphSvc.Subscribe("MainWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph(mainWorkflow)
-			g.DeclareInputs("*")
-			g.DeclareOutputs("result")
 			g.AddTask("startTask", startTask)
 			g.AddTask("slowTask", slowTask)
 			g.AddSubgraph("subWorkflow", subWorkflow)
@@ -1321,8 +1309,6 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 		graphSvc.Subscribe(name+"Workflow",
 			func(w http.ResponseWriter, r *http.Request) error {
 				g := workflow.NewGraph(workflowURL)
-				g.DeclareInputs("*")
-				g.DeclareOutputs(outputField)
 				g.AddTask(name, taskURL)
 				g.AddTransition(name, workflow.END)
 				w.Header().Set("Content-Type", "application/json")
@@ -1357,8 +1343,6 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 	graphSvc.Subscribe("MainWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph(mainWorkflow)
-			g.DeclareInputs("*")
-			g.DeclareOutputs("result", "outA", "outB")
 			g.AddTask("startTask", startTask)
 			g.AddSubgraph("subA", subA)
 			g.AddSubgraph("subB", subB)
@@ -1440,8 +1424,6 @@ func newTestTimeoutWorkflowSvc() *connector.Connector {
 	svc.Subscribe("TimeoutWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph("https://test.timeout.host:428/timeout-workflow")
-			g.DeclareInputs("*")
-			g.DeclareOutputs("*")
 			g.AddTask("taskA", "https://test.timeout.host:428/task-a")
 			g.AddTask("taskB", "https://test.timeout.host:428/task-b")
 			g.AddTask("timeoutHandler", "https://test.timeout.host:428/timeout-handler")

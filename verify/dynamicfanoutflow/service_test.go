@@ -79,22 +79,32 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 	t.Run("three_elements", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		count, status, err := exec.DynamicFanOut(ctx, []string{"x", "y", "z"})
+		// The branches strip 'items' from their local state to avoid N^2 carry, but the
+		// fan-in step reconstructs from the spawn step's immutable state so 'items'
+		// resurfaces post-fan-in. itemIndex / itemCount prove the branch saw its position
+		// and the cohort size.
+		out, status, err := exec.DynamicFanOut(ctx, []string{"x", "y", "z"}, false)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
-			count, 3,
+			out.ProcessedCount, 3,
+			out.ItemsOut, []string{"x", "y", "z"},
+			out.ListSeenIndices, []int{0, 1, 2},
+			out.SetSeenCounts, []int{3},
 		)
 	})
 
 	t.Run("single_element", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		count, status, err := exec.DynamicFanOut(ctx, []string{"only"})
+		out, status, err := exec.DynamicFanOut(ctx, []string{"only"}, false)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
-			count, 1,
+			out.ProcessedCount, 1,
+			out.ItemsOut, []string{"only"},
+			out.ListSeenIndices, []int{0},
+			out.SetSeenCounts, []int{1},
 		)
 	})
 
@@ -103,11 +113,30 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 
 		// With an empty list, TaskB never runs, so TaskC is never reached.
 		// The flow completes at TaskA without producing a processedCount.
-		count, status, err := exec.DynamicFanOut(ctx, []string{})
+		out, status, err := exec.DynamicFanOut(ctx, []string{}, false)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
-			count, 0,
+			out.ProcessedCount, 0,
+		)
+	})
+
+	t.Run("clear_items_in_branch_suppresses_downstream", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Each branch calls flow.Set("items", nil) which writes null into its changes.
+		// At fan-in, the replace reducer folds that null over the spawn-step's array,
+		// so 'items' is absent downstream of the fan-in even though it lived in the
+		// original input. Useful when the source array is large and only the
+		// transformation matters past the fan-in.
+		out, status, err := exec.DynamicFanOut(ctx, []string{"x", "y", "z"}, true)
+		assert.Expect(
+			err, nil,
+			status, workflow.StatusCompleted,
+			out.ProcessedCount, 3,
+			out.ItemsOut, []string(nil),
+			out.ListSeenIndices, []int{0, 1, 2},
+			out.SetSeenCounts, []int{3},
 		)
 	})
 }

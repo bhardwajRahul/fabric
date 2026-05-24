@@ -125,8 +125,6 @@ func (svc *Mock) MockDelay(handler func(ctx context.Context, flow *workflow.Flow
 	svc.mockDelayGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(sleepflowapi.Delay.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

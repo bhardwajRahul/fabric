@@ -1,17 +1,23 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"chat-loop"}}:::term --> _start
-    t4@{ shape: st-rect, label: "executeTool" }
-    t2@{ shape: trap-t, label: "nextLLM" }
-    _start(( )):::term --> t0["initChat"]:::task
-    t0 --> t1["firstLLM"]:::task
-    t1 --> t3["processResponse"]:::task
+    _start(( )):::term --> t0
+    t0["initChat"]:::task
+    t1["firstLLM"]:::task
+    t2["nextLLM"]:::task
+    t3["processResponse"]:::task
+    subgraph fo_t3 ["for each in pendingToolCalls"]
+        direction LR
+        t4["executeTool"]:::task
+    end
+    t0 --> t1
+    t1 --> t3
     t3 -->|"goto"| _end(( )):::term
-    t3 -->|"for each in pendingToolCalls"| t4
-    t4 -->|"fan-in"| t2
+    t3 -->|"fan out"| t4
+    t4 -->|"fan in"| t2
     t2 --> t3
-    class t4 task
-    class t2 task
+    style fo_t3 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

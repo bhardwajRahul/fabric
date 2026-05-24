@@ -89,8 +89,6 @@ The graph carries no timing or priority; priority is a per-flow option supplied 
 */
 func (svc *Service) Priority(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Priority
 	graph = workflow.NewGraph(priorityflowapi.Priority.URL())
-	graph.DeclareInputs("tag", "delayMs")
-	graph.DeclareOutputs("recorded")
 	graph.AddTask("record", priorityflowapi.Record.URL())
 	graph.AddTransition("record", workflow.END)
 	return graph, nil

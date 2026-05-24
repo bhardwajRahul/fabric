@@ -92,8 +92,6 @@ Reducer defines the graph A -> {B, C, D} -> E with reducer-managed fan-in fields
 */
 func (svc *Service) Reducer(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Reducer
 	graph = workflow.NewGraph(reducerflowapi.Reducer.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("finalSum", "finalList", "finalSet")
 	graph.AddTask("taskA", reducerflowapi.TaskA.URL())
 	graph.AddTask("taskB", reducerflowapi.TaskB.URL())
 	graph.AddTask("taskC", reducerflowapi.TaskC.URL())

@@ -122,8 +122,6 @@ fan-in over the sum* reducer field sumExecuted.
 */
 func (svc *Service) CancelledFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CancelledFanOut
 	graph = workflow.NewGraph(cancelledfanoutflowapi.CancelledFanOut.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("sumExecuted", "totalExecuted")
 	graph.AddTask("source", cancelledfanoutflowapi.Source.URL())
 	graph.AddTask("a", cancelledfanoutflowapi.A.URL())
 	graph.AddTask("b", cancelledfanoutflowapi.B.URL())

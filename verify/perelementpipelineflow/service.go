@@ -99,8 +99,6 @@ PerElementPipeline defines the graph S -> forEach(items) -> H -> {A, B} -> M -> 
 */
 func (svc *Service) PerElementPipeline(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: PerElementPipeline
 	graph = workflow.NewGraph(perelementpipelineflowapi.PerElementPipeline.URL())
-	graph.DeclareInputs("items")
-	graph.DeclareOutputs("finalCount")
 	graph.AddTask("taskS", perelementpipelineflowapi.TaskS.URL())
 	graph.AddTask("taskH", perelementpipelineflowapi.TaskH.URL())
 	graph.AddTask("taskA", perelementpipelineflowapi.TaskA.URL())

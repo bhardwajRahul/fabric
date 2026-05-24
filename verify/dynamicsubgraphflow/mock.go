@@ -126,8 +126,6 @@ func (svc *Mock) MockInner(handler func(ctx context.Context, flow *workflow.Flow
 	svc.mockInnerGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(dynamicsubgraphflowapi.Inner.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {
@@ -182,8 +180,6 @@ func (svc *Mock) MockDynamicSubgraph(handler func(ctx context.Context, flow *wor
 	svc.mockDynamicSubgraphGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
 		g := workflow.NewGraph(dynamicsubgraphflowapi.DynamicSubgraph.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
-		g.DeclareInputs("*")
-		g.DeclareOutputs("*")
 		return g, nil
 	}
 	err := svc.Subscribe(mockName, func(w http.ResponseWriter, r *http.Request) error {

@@ -77,6 +77,10 @@ Naming for fan-in: when an argument represents a state field that will be merged
 
 The character right after the prefix must be uppercase. These prefixes are reserved: do not name an argument `sum*`, `list*`, or `set*` unless it is genuinely a fan-in accumulator, because the reducer for a field is inferred from its name prefix (unless overridden by `graph.SetReducer`), so such a field is silently summed/appended/unioned instead of replaced if it is ever written on parallel branches. For ordinary inputs and outputs, pick a name that does not start with these prefixes (e.g. `files`, `total`, `config`, not `listFiles`, `sumTotal`, `setConfig`). Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer should return `sumEmploymentFailuresOut: 0 or 1` (its own count), not the running total.
 
+**Prefer typed input/output arguments over `flow.Get` / `flow.Set`.** Inputs and outputs are auto-bound to state by name; the signature is the task's state contract, mocks get typed handlers, and a reader sees what the task reads and produces without scanning the body. Reserve `flow.Get` / `flow.Set` for keys whose names are dynamic or for internal types not in the API package. See the Best Practices section of `.claude/rules/workflows.txt` for the rationale.
+
+**`forEach` branches see auto-injected per-element fields.** When the task runs as the target of `AddTransitionForEach(..., "items", "item")`, the branch's state contains `item` (the element), `itemIndex` (0-based position), and `itemCount` (cohort size). Take any of them as a typed argument by name - no lookup code needed.
+
 #### Step 3: Extend the `ToDo` Interface
 
 Extend the `ToDo` interface in `intermediate.go`.
@@ -198,6 +202,17 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 stri
 }
 ```
 
+**Idempotency.** Tasks may be replayed: `flow.Retry`, worker-death recovery, and Subgraph re-entry all re-run the task body from the top. A task that fires an external side effect (charge a card, send an email, write to a non-transactional store) must carry its own dedupe key or check first whether the effect has already happened. The framework does not deduplicate side effects for you. Pure computation over state needs no special treatment.
+
+**State hygiene.** If this task consumes large intermediates (LLM response, parsed payload, raw API body, image bytes) that downstream tasks do not need, drop them before returning. The four primitives mirror Go's map builtins:
+
+- `flow.Delete(names...)` - drop the listed fields.
+- `flow.Clear()` - drop every field (typical in a `Before<NodeName>` adapter task that builds a fresh subgraph input from scratch).
+- `flow.Keep(names...)` - drop everything except the listed fields.
+- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names.
+
+Each records JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail; downstream merged state is absent the field (Replace reducer) or sees no contribution (`sum*`/`list*`/`set*`).
+
 #### Step 11: Define the Marshaler Function
 
 Append a web handler at the end of `intermediate.go` to perform the marshaling.
@@ -251,6 +266,8 @@ sub.Description(`MyTask does X.`),
 The first argument to `svc.Subscribe` is the task name (must be a Go identifier starting with an uppercase letter). The `sub.Description` carries the godoc text from Step 5. `sub.Task(In{}, Out{})` declares the feature type and the input/output struct types - the input struct's fields are read from the workflow state on entry, and the output struct's fields are written back on exit.
 
 Add `sub.RequiredClaims(requiredClaims)` to `svc.Subscribe` to define the authorization requirements of the task endpoint. Omit to allow all requests.
+
+Add `sub.TimeBudget(duration)` if the task has a known intrinsic runtime ceiling shorter than the foreman default (2m, hard ceiling 15m). The connector shortens the context deadline to the smaller of the caller's budget and the declared one, so an over-running handler is cancelled at its declared bound. For work that does not fit within 15m, use the Interrupt-and-Resume or Polling-with-Retry patterns from `.claude/rules/workflows.txt` instead.
 
 Tasks are NOT exposed via OpenAPI - the connector's built-in `:888/openapi.json` handler filters them out automatically.
 

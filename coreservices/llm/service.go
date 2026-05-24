@@ -429,8 +429,6 @@ ChatLoop defines the workflow graph for the LLM chat loop.
 */
 func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: ChatLoop
 	graph = workflow.NewGraph(llmapi.ChatLoop.URL())
-	graph.DeclareInputs("provider", "model", "listMessages", "tools", "options")
-	graph.DeclareOutputs("listMessages", "usage")
 	graph.AddTask("initChat", llmapi.InitChat.URL())
 	// firstLLM and nextLLM are two graph positions sharing one task URL. firstLLM is the
 	// initial sequential call after initChat; nextLLM is the fan-in nexus for the per-round

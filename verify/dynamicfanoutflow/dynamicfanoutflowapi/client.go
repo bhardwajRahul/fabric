@@ -362,10 +362,10 @@ func (_c Executor) TaskA(ctx context.Context, items []string) (itemsOut []string
 /*
 TaskB creates and runs the TaskB task.
 */
-func (_c Executor) TaskB(ctx context.Context, item string) (sumProcessedOut int, err error) { // MARKER: TaskB
+func (_c Executor) TaskB(ctx context.Context, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) { // MARKER: TaskB
 	var out TaskBOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskB.Method, TaskB.Route, TaskBIn{Item: item}, &out, _c.inFlow, _c.outFlow)
-	return out.SumProcessedOut, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskB.Method, TaskB.Route, TaskBIn{Item: item, ItemIndex: itemIndex, ItemCount: itemCount, ClearItems: clearItems}, &out, _c.inFlow, _c.outFlow)
+	return out.SumProcessedOut, out.ListSeenIndicesOut, out.SetSeenCountsOut, err // No trace
 }
 
 /*
@@ -380,11 +380,10 @@ func (_c Executor) TaskC(ctx context.Context, sumProcessed int) (processedCount 
 /*
 DynamicFanOut creates and runs the DynamicFanOut workflow, blocking until termination.
 */
-func (_c Executor) DynamicFanOut(ctx context.Context, items []string) (processedCount int, status string, err error) { // MARKER: DynamicFanOut
+func (_c Executor) DynamicFanOut(ctx context.Context, items []string, clearItems bool) (out DynamicFanOutOut, status string, err error) { // MARKER: DynamicFanOut
 	if _c.runner == nil {
-		return processedCount, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return out, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
-	var out DynamicFanOutOut
-	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, DynamicFanOut.URL(), DynamicFanOutIn{Items: items}, &out)
-	return out.ProcessedCount, status, err
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, DynamicFanOut.URL(), DynamicFanOutIn{Items: items, ClearItems: clearItems}, &out)
+	return out, status, err
 }

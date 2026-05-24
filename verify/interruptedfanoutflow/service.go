@@ -101,8 +101,6 @@ first run; the flow only completes once B is resumed.
 */
 func (svc *Service) InterruptedFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: InterruptedFanOut
 	graph = workflow.NewGraph(interruptedfanoutflowapi.InterruptedFanOut.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("sumExecuted", "totalExecuted")
 	graph.AddTask("src", interruptedfanoutflowapi.Src.URL())
 	graph.AddTask("a", interruptedfanoutflowapi.A.URL())
 	graph.AddTask("b", interruptedfanoutflowapi.B.URL())

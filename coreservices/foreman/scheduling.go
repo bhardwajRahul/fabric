@@ -43,6 +43,7 @@ func (svc *Service) resolveFlowOptions(ctx context.Context, opts *workflow.FlowO
 			resolved.FairnessWeight = opts.FairnessWeight
 		}
 		resolved.FairnessKey = opts.FairnessKey
+		resolved.StartAt = opts.StartAt
 	}
 	if resolved.FairnessKey == "" {
 		if tid, _ := frame.Of(ctx).Tenant(); tid != 0 {

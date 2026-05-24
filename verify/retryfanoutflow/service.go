@@ -89,8 +89,6 @@ Join is the explicit fan-in; listResult collects each branch's incremented value
 */
 func (svc *Service) RetryFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: RetryFanOut
 	graph = workflow.NewGraph(retryfanoutflowapi.RetryFanOut.URL())
-	graph.DeclareInputs("elements")
-	graph.DeclareOutputs("listResult")
 	graph.AddTask("enter", retryfanoutflowapi.Enter.URL())
 	graph.AddTask("increment", retryfanoutflowapi.Increment.URL())
 	graph.AddTask("join", retryfanoutflowapi.Join.URL())

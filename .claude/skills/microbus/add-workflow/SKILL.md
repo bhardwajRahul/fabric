@@ -146,8 +146,6 @@ MyWorkflow does X.
 */
 func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MyWorkflow
 	graph = workflow.NewGraph(myserviceapi.MyWorkflow.URL())
-	graph.DeclareInputs("inputField1", "inputField2")
-	graph.DeclareOutputs("outputField1", "outputField2")
 	graph.AddTask("taskA", myserviceapi.TaskA.URL())
 	graph.AddTask("taskB", myserviceapi.TaskB.URL())
 	graph.AddTask("taskC", myserviceapi.TaskC.URL())
@@ -158,6 +156,8 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 	return graph, nil
 }
 ```
+
+State flows through the entire workflow unfiltered - the `MyWorkflowIn`/`MyWorkflowOut` structs from Step 5 are documentation (OpenAPI, the runner UI, the Executor signature), not runtime contracts. If a subgraph call needs its input or output adapted across a contract boundary, bracket the subgraph node with `Before<NodeName>` / `After<NodeName>` adapter tasks that use `flow.Transform`/`Keep`/`Delete`/`Clear` - see the "State Transformation Around a Subgraph" section in `.claude/rules/workflows.txt`. If the workflow's terminal state needs scrubbing before it lands in `final_state`, the last task calls `flow.Keep`/`Delete`.
 
 Naming the same task URL twice with different names is the supported way to reuse a task at multiple positions in the graph (each position keeps its own node identity for fan-in tracking).
 
@@ -172,6 +172,8 @@ Naming the same task URL twice with different names is the supported way to reus
 The character right after the prefix must be uppercase (e.g. `sumScore`, `listMessages`, `setUsers`). For new graphs, prefer naming fan-in state fields with these prefixes - no explicit reducer configuration is needed. Conversely, these prefixes are reserved: do not name a state field `sum*`, `list*`, or `set*` unless it is a genuine fan-in accumulator, or it will be silently summed/appended/unioned instead of replaced once written on parallel branches.
 
 `graph.SetReducer(field, reducer)` is the escape hatch for fields whose names are dictated by an external schema or pre-existing API surface and cannot follow the convention.
+
+**Prefer `AddTransitionWhen` for routing the graph knows about; reserve `AddTransitionGoto` for runtime loops the task body decides.** A `When` transition is part of the static graph - the validator sees it, the Mermaid diagram renders it as a labeled branch, and lineage scoping handles it like any other fan-out. A `Goto` is an out-of-band edge that's only taken when the task calls `flow.Goto`. The canonical use for `Goto` is a fan-in node looping back ("ask for more info, retry the review"); for any branch a `When` expression can evaluate, prefer `When`.
 
 #### Step 9: Define the Marshaler Function
 

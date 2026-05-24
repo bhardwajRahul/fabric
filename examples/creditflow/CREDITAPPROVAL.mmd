@@ -1,25 +1,35 @@
+%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
-    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#434343
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#434343
-    classDef term fill:#e5f4f3,color:#434343,stroke:#434343
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
 
     _title{{"credit-approval"}}:::term --> _start
-    t2@{ shape: st-rect, label: "verifyEmployment" }
-    t5@{ shape: trap-t, label: "reviewJoin" }
-    _start(( )):::term --> t0["submitCreditApplication"]:::task
-    t0 --> t1["verifyCredit"]:::task
-    t1 -->|"onError"| t4["handleCreditError"]:::task
-    t4 -->|"fan-in"| t5
-    t0 -->|"for each in employers"| t2
-    t0 --> t3[["identityVerification"]]:::sub
-    t1 -->|"fan-in"| t5
-    t2 -->|"fan-in"| t5
-    t3 -->|"fan-in"| t5
-    t5 -->|"goto"| t7["requestMoreInfo"]:::task
-    t5 --> t6["reviewCredit"]:::task
+    _start(( )):::term --> t0
+    t0["submitCreditApplication"]:::task
+    t1["verifyCredit"]:::task
+    t3["identityVerification"]:::sub
+    t4["handleCreditError"]:::task
+    t5["reviewJoin"]:::task
+    t6["reviewCredit"]:::task
+    t7["requestMoreInfo"]:::task
+    t8["decision"]:::task
+    subgraph fo_t0 ["for each in employers"]
+        direction LR
+        t2["verifyEmployment"]:::task
+    end
+    t0 --> t1
+    t1 -->|"onError"| t4
+    t4 --> t5
+    t0 -->|"fan out"| t2
+    t0 --> t3
+    t1 --> t5
+    t2 -->|"fan in"| t5
+    t3 --> t5
+    t5 -->|"goto"| t7
+    t5 --> t6
     t6 -->|"goto"| t7
     t7 --> t6
-    t6 --> t8["decision"]:::task
+    t6 --> t8
     t8 --> _end(( )):::term
-    class t2 task
-    class t5 task
+    style fo_t0 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

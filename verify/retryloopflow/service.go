@@ -79,8 +79,6 @@ RetryLoop defines A -> B -> C with B onError -> Handler -> B (back-edge cycle).
 */
 func (svc *Service) RetryLoop(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: RetryLoop
 	graph = workflow.NewGraph(retryloopflowapi.RetryLoop.URL())
-	graph.DeclareInputs("target")
-	graph.DeclareOutputs("finalAttempts")
 	graph.AddTask("taskA", retryloopflowapi.TaskA.URL())
 	graph.AddTask("taskB", retryloopflowapi.TaskB.URL())
 	graph.AddTask("handler", retryloopflowapi.Handler.URL())

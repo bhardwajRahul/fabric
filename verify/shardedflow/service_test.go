@@ -58,7 +58,6 @@ var (
 	_ shardedflowapi.Client
 )
 
-
 // outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
 func outcomeStatus(o *workflow.FlowOutcome) string {
 	if o == nil {
@@ -107,6 +106,9 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 			f.SetNumShards(8)
 			f.SetWorkers(1)
 			f.SetSQLConnectionPool(1)
+			// Override any operator-local config so the test always runs against
+			// an isolated in-memory SQLite per (shard, test).
+			f.SetSQLDataSourceName("file:shard_%d.local.sqlite")
 			return nil
 		}),
 		tester,
@@ -154,7 +156,6 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 
 		outcome, err := fm.Await(ctx, holder)
 
-
 		status := outcomeStatus(outcome)
 		assert.NoError(err)
 		assert.Expect(status, workflow.StatusCompleted)
@@ -182,7 +183,6 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		time.Sleep(300 * time.Millisecond)
 
 		outcome, err := fm.Await(ctx, holder)
-
 
 		status := outcomeStatus(outcome)
 		assert.NoError(err)
@@ -224,7 +224,6 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		time.Sleep(400 * time.Millisecond)
 
 		outcome, err := fm.Await(ctx, holder)
-
 
 		status := outcomeStatus(outcome)
 		assert.NoError(err)
@@ -338,7 +337,6 @@ func TestShardedflow_Sharded(t *testing.T) { // MARKER: Sharded
 		}
 
 		outcome, err := fm.Await(ctx, holder)
-
 
 		status := outcomeStatus(outcome)
 		assert.NoError(err)

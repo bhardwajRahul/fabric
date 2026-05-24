@@ -149,8 +149,6 @@ SaturatedBand is a single-task graph routing through the throttled Bounded task.
 */
 func (svc *Service) SaturatedBand(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: SaturatedBand
 	graph = workflow.NewGraph(saturatedbandflowapi.SaturatedBand.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("bounded", saturatedbandflowapi.Bounded.URL())
 	graph.AddTransition("bounded", workflow.END)
 	return graph, nil
@@ -161,8 +159,6 @@ OpenBand is a single-task graph routing through the unrestricted Open task.
 */
 func (svc *Service) OpenBand(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: OpenBand
 	graph = workflow.NewGraph(saturatedbandflowapi.OpenBand.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("open", saturatedbandflowapi.Open.URL())
 	graph.AddTransition("open", workflow.END)
 	return graph, nil

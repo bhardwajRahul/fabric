@@ -101,8 +101,6 @@ FanOutError defines the graph A -> {B, C, D} -> E with B onError -> Handler -> E
 */
 func (svc *Service) FanOutError(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: FanOutError
 	graph = workflow.NewGraph(fanouterrorflowapi.FanOutError.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("recovered")
 	graph.AddTask("taskA", fanouterrorflowapi.TaskA.URL())
 	graph.AddTask("taskB", fanouterrorflowapi.TaskB.URL())
 	graph.AddTask("taskC", fanouterrorflowapi.TaskC.URL())

@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = foremanapi.Hostname
-	Version  = 42
+	Version  = 44
 )
 
 // ToDo is implemented by the service or mock.

@@ -175,7 +175,7 @@ applicable, a `signature`. The YAML is self-describing; the non-obvious decode r
   default and the foreman `TimeBudget` ceiling apply. Same meaning for tasks.
 - **`signature`**: a valid Go signature. Configs - the getter, return type `string`/`int`/`float64`/
   `time.Duration`/`bool`. Tasks - excludes `ctx`, `flow *workflow.Flow`, `err`; an `Out`-suffixed output is the
-  read-modify-write pair of its same-named input (see the Naming-Driven Behavior table). Workflows - declared input
+  read-modify-write pair of its same-named input (i.e. `foo`/`fooOut` map to the same state field). Workflows - declared input
   fields before the parens, output fields inside, an `Out` suffix marking a read-modify-write field; types are
   informational since state is untyped JSON.
 - **`configs`**: `secret` (never logged), `callback` (`OnChanged` fires on change), `default`, and `validation`:
@@ -458,15 +458,7 @@ Microbus uses a number of naming conventions to drive framework behavior without
 | Pattern | What it does | Where |
 |---|---|---|
 | `httpRequestBody`, `httpResponseBody`, `httpStatusCode` | Magic HTTP arguments on functional endpoints — the named arg is bound directly to the HTTP request/response body or status code. | Magic HTTP Arguments |
-| `xxxOut` (Go arg suffix) | Read-modify-write for tasks: input arg `foo` and output arg `fooOut` map to the same workflow state field `foo`. The framework strips the `Out` suffix when writing back. | Workflow tasks |
-| `sum*` (state field prefix) | Numeric add reducer at fan-in. The state field's value is summed across parallel branches. Requires uppercase letter right after `sum`. | Workflow reducers |
-| `list*` (state field prefix) | Append reducer at fan-in. Branch arrays are concatenated, duplicates kept, ordered. | Workflow reducers |
-| `set*` (state field prefix) | Polymorphic set-style reducer: union for arrays (dedupe by value), merge for objects (new key wins on collision). | Workflow reducers |
 | Path argument names matching function arg names | A function argument whose name matches a `{argName}` segment in the route is auto-populated from the path. | Reading Path Argument Values |
-
-The boundary rule for prefixes is consistent: the character right after the prefix must be uppercase. `summary`, `listening`, `setup` do not match. `sumScore`, `listMessages`, `setUsers` do.
-
-Explicit configuration (e.g. `graph.SetReducer`) overrides the convention and is reserved for cases where the field name is dictated by an external schema or a pre-existing API surface.
 
 ### OpenAPI Parameter Descriptions
 

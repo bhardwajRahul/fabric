@@ -67,10 +67,10 @@ The bool exists so the foreman can tell the task when retries have been spent. O
 
 The wire-up is done by the foreman, not by the workflow package itself, but the rules are worth knowing because they shape what a task can rely on:
 
-- **Into the child:** Build parent's full `state` + accumulated `changes` of the surgraph step. For dynamic subgraphs (`flow.Subgraph(url, input)`), merge the explicit `input` map on top using the *child* graph's reducers. Filter the result through the child's `DeclareInputs`. That becomes the child flow's initial state.
-- **Back to the parent:** The child's `final_state` is filtered through the child's `DeclareOutputs` and merged into the surgraph step's `changes` using the *parent* graph's reducers.
+- **Into the child:** Build parent's full `state` + accumulated `changes` of the surgraph step. For dynamic subgraphs (`flow.Subgraph(url, input)`), merge the explicit `input` map on top using the *child* graph's reducers. That becomes the child flow's initial state. The framework does not filter - whatever is in parent state crosses the boundary.
+- **Back to the parent:** The child's `final_state` is merged into the surgraph step's `changes` using the *parent* graph's reducers. Again no filtering at the framework layer.
 
-Both `DeclareInputs` and `DeclareOutputs` are enforced - they are the subgraph's contract surface. The child graph's reducers govern the input merge only; the parent graph's reducers govern the output merge only.
+State hygiene at subgraph boundaries is the workflow author's responsibility. The convention is to bracket a subgraph node with a pair of adapter tasks - a `Before<NodeName>` upstream adapter that reshapes parent state into the subgraph's expected input, and an `After<NodeName>` downstream adapter that translates the subgraph's output back into the parent's vocabulary (or drops internal scratch the parent doesn't want). Either is optional. Both use `flow.Transform`/`Keep`/`Delete`/`Clear`. Adapters are normal task endpoints - visible in the graph, testable, mockable. The typed `MyWorkflowIn`/`MyWorkflowOut` structs declared via `sub.Workflow` are documentation and OpenAPI surface, not runtime contracts.
 
 ### Transitions are rules evaluated per fan-out, not graph edges
 
@@ -126,16 +126,6 @@ When a step transitions to a `SetFanIn` target the foreman atomically increments
 ### Auto-registration on `AddTransition`
 
 `AddTransition`, `AddTransitionWhen`, `AddTransitionGoto`, `AddTransitionForEach`, `AddTransitionOnError`, `AddTransitionOnTimeout` all auto-register both endpoints as tasks. The first node added - by any path - becomes the default `entryPoint` unless `SetEntryPoint` overrides. So a graph can be built from transitions alone, without explicit `AddTask` calls.
-
-### `DeclareInputs` / `DeclareOutputs` use a three-state encoding
-
-The same convention is used in both directions and in `FilterState`:
-
-- `nil` or empty slice = pass nothing.
-- `["*"]` = pass everything.
-- Named fields = pass exactly those fields.
-
-`Outputs` filtering applies whether the graph runs as a subgraph or as a root flow. This is what lets a workflow declare "my contract is just these output fields" and have the foreman strip the rest before returning to the caller.
 
 ### `RawFlow` is the orchestrator's API; tasks see only `Flow`
 

@@ -200,8 +200,6 @@ Super defines the unified verification graph. Coverage:
 */
 func (svc *Service) Super(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Super
 	graph = workflow.NewGraph(superflowapi.Super.URL())
-	graph.DeclareInputs("items", "useSubgraph", "behaviors")
-	graph.DeclareOutputs()
 	graph.AddTask("taskA", superflowapi.TaskA.URL())
 	graph.AddTask("taskB", superflowapi.TaskB.URL())
 	graph.AddTask("taskC", superflowapi.TaskC.URL())
@@ -241,8 +239,6 @@ func (svc *Service) Super(ctx context.Context) (graph *workflow.Graph, err error
 // SuperSub is the nested subgraph: a minimal two-task sequence.
 func (svc *Service) SuperSub(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: SuperSub
 	graph = workflow.NewGraph(superflowapi.SuperSub.URL())
-	graph.DeclareInputs("behaviors")
-	graph.DeclareOutputs()
 	graph.AddTask("subTaskA", superflowapi.SubTaskA.URL())
 	graph.AddTask("subTaskB", superflowapi.SubTaskB.URL())
 	graph.AddTransition("subTaskA", "subTaskB")

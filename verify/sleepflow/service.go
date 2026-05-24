@@ -81,8 +81,6 @@ The workflow is named Delay (not Sleep) to avoid colliding with the connector's 
 */
 func (svc *Service) Delay(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Delay
 	graph = workflow.NewGraph(sleepflowapi.Delay.URL())
-	graph.DeclareInputs("sleepFor")
-	graph.DeclareOutputs("completed")
 	graph.AddTask("taskA", sleepflowapi.TaskA.URL())
 	graph.AddTask("taskB", sleepflowapi.TaskB.URL())
 	graph.AddTask("taskC", sleepflowapi.TaskC.URL())

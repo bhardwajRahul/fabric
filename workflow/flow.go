@@ -115,10 +115,11 @@ func (f *Flow) Get(key string, target any) error {
 	return getFromMap(f.state, key, target)
 }
 
-// Has reports whether a state field exists.
+// Has reports whether a state field exists. A cleared slot (JSON null) reads
+// as absent.
 func (f *Flow) Has(key string) bool {
-	_, ok := f.state[key]
-	return ok
+	v, ok := f.state[key]
+	return ok && !isCleared(v)
 }
 
 // ParseState unmarshals state fields into the target struct.
@@ -207,6 +208,88 @@ func (f *Flow) set(key string, value any) {
 	raw := json.RawMessage(data)
 	f.state[key] = raw
 	f.changes[key] = raw
+}
+
+// Delete removes the listed state fields. Each becomes JSON null in changes
+// (so the next merge drops the field for Replace, contributes the reducer's
+// identity for sum*/list*/set*) and is removed from the local state map so
+// subsequent reads in this task see it as absent.
+func (f *Flow) Delete(keys ...string) {
+	for _, k := range keys {
+		f.deleteOne(k)
+	}
+}
+
+// Clear removes every state field. Equivalent to Delete on every current key.
+// Useful at workflow boundaries (e.g. a Before<NodeName> adapter task that
+// builds a fresh subgraph input from a curated subset of parent state) or
+// anywhere a task wants a blank slate before populating it.
+func (f *Flow) Clear() {
+	for k := range f.state {
+		f.deleteOne(k)
+	}
+}
+
+// Keep deletes every state field except those listed. The listed names that
+// are absent from state are ignored. Symmetric to Delete: where Delete names
+// what to drop, Keep names what to preserve.
+func (f *Flow) Keep(keepers ...string) {
+	keep := make(map[string]bool, len(keepers))
+	for _, k := range keepers {
+		keep[k] = true
+	}
+	for k := range f.state {
+		if !keep[k] {
+			f.deleteOne(k)
+		}
+	}
+}
+
+// Transform clears all state, then re-introduces the listed fields under new
+// names. Arguments are (newKey, oldKey) pairs; the value previously stored
+// under oldKey is captured before the clear and re-set under newKey. Old keys
+// that were absent or already null are skipped (the new key is not introduced
+// as null). Panics on an odd number of arguments.
+//
+// Typical use: a Before<NodeName> adapter task that reshapes parent state
+// into the subgraph's expected input.
+//
+//	flow.Transform("subInput1", "parentVarA", "subInput2", "parentVarB")
+func (f *Flow) Transform(pairs ...string) {
+	if len(pairs)%2 != 0 {
+		panic("workflow: Transform requires an even number of arguments (newKey, oldKey, ...)")
+	}
+	n := len(pairs) / 2
+	captured := make([]any, n)
+	for i := range n {
+		captured[i] = f.state[pairs[i*2+1]]
+	}
+	f.Clear()
+	for i := range n {
+		v := captured[i]
+		if isCleared(v) {
+			continue
+		}
+		if f.state == nil {
+			f.state = make(map[string]any)
+		}
+		newKey := pairs[i*2]
+		if raw, ok := v.(json.RawMessage); ok {
+			f.state[newKey] = raw
+			f.changes[newKey] = raw
+		} else {
+			_ = f.Set(newKey, v)
+		}
+	}
+}
+
+// deleteOne is the shared worker: writes JSON null to changes, drops from state.
+func (f *Flow) deleteOne(key string) {
+	if f.changes == nil {
+		f.changes = make(map[string]any)
+	}
+	f.changes[key] = json.RawMessage("null")
+	delete(f.state, key)
 }
 
 // Snapshot captures a read-only copy of the flow's current state

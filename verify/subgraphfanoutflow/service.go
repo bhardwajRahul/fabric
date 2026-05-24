@@ -87,8 +87,6 @@ func (svc *Service) TaskE(ctx context.Context, flow *workflow.Flow, resultB, sub
 // Sub defines the subgraph X -> Y.
 func (svc *Service) Sub(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Sub
 	graph = workflow.NewGraph(subgraphfanoutflowapi.Sub.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("subResult")
 	graph.AddTask("taskX", subgraphfanoutflowapi.TaskX.URL())
 	graph.AddTask("taskY", subgraphfanoutflowapi.TaskY.URL())
 	graph.AddTransition("taskX", "taskY")
@@ -99,8 +97,6 @@ func (svc *Service) Sub(ctx context.Context) (graph *workflow.Graph, err error) 
 // SubFanOut defines A -> {NormalB, Sub, NormalD} -> E.
 func (svc *Service) SubFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: SubFanOut
 	graph = workflow.NewGraph(subgraphfanoutflowapi.SubFanOut.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("finalResult")
 	graph.AddTask("taskA", subgraphfanoutflowapi.TaskA.URL())
 	graph.AddTask("normalB", subgraphfanoutflowapi.NormalB.URL())
 	graph.AddSubgraph("sub", subgraphfanoutflowapi.Sub.URL())

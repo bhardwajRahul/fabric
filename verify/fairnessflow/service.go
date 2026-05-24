@@ -89,8 +89,6 @@ fairness keys. The graph carries no timing; the fairness key and weight are per-
 */
 func (svc *Service) Fairness(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Fairness
 	graph = workflow.NewGraph(fairnessflowapi.Fairness.URL())
-	graph.DeclareInputs("tag", "delayMs")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("tally", fairnessflowapi.Tally.URL())
 	graph.AddTransition("tally", workflow.END)
 	return graph, nil

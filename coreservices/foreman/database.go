@@ -30,7 +30,6 @@ import (
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/sequel"
-
 )
 
 // shard returns the database connection for the given 1-based shard index. Indices outside
@@ -90,8 +89,8 @@ func (svc *Service) eachShard(ctx context.Context, op func(ctx context.Context, 
 func (svc *Service) openDatabase(ctx context.Context) (err error) {
 	numShards := svc.NumShards()
 	dataSourceName := svc.SQLDataSourceName()
-	if svc.Deployment() == connector.TESTING && dataSourceName == "" {
-		dataSourceName = "file:shard_%d" // SQLite
+	if dataSourceName == "" && svc.Deployment() == connector.LOCAL {
+		dataSourceName = "file:shard_%d.local.sqlite" // SQLite
 	}
 	if numShards > 1 && !strings.Contains(dataSourceName, "%d") {
 		return errors.New("SQLDataSourceName must contain %%d when NumShards > 1")

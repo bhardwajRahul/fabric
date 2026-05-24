@@ -64,8 +64,6 @@ Counting defines a single-task workflow that increments counter and persists it 
 func (svc *Service) Counting(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Counting
 	graph = workflow.NewGraph(continueflowapi.Counting.URL())
 	// Counter is declared as both input and output so it persists across Continue turns.
-	graph.DeclareInputs("counter")
-	graph.DeclareOutputs("counter")
 	graph.AddTask("increment", continueflowapi.Increment.URL())
 	graph.AddTransition("increment", workflow.END)
 	return graph, nil

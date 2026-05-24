@@ -77,8 +77,6 @@ Basic defines the workflow graph for the sequential A -> B -> C chain.
 */
 func (svc *Service) Basic(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Basic
 	graph = workflow.NewGraph(basicflowapi.Basic.URL())
-	graph.DeclareInputs()
-	graph.DeclareOutputs("path")
 	graph.AddTask("taskA", basicflowapi.TaskA.URL())
 	graph.AddTask("taskB", basicflowapi.TaskB.URL())
 	graph.AddTask("taskC", basicflowapi.TaskC.URL())

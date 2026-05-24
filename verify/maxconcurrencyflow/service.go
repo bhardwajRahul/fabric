@@ -126,8 +126,6 @@ the backpressure path.
 */
 func (svc *Service) MaxConcurrency(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MaxConcurrency
 	graph = workflow.NewGraph(maxconcurrencyflowapi.MaxConcurrency.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("bounded", maxconcurrencyflowapi.Bounded.URL())
 	graph.AddTransition("bounded", workflow.END)
 	return graph, nil

@@ -93,8 +93,6 @@ CancelBackpressure is a single-task graph that runs BounceAndCancel.
 */
 func (svc *Service) CancelBackpressure(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CancelBackpressure
 	graph = workflow.NewGraph(cancelbackpressureflowapi.CancelBackpressure.URL())
-	graph.DeclareInputs("tag")
-	graph.DeclareOutputs("tallied")
 	graph.AddTask("bounce-and-cancel", cancelbackpressureflowapi.BounceAndCancel.URL())
 	graph.AddTransition("bounce-and-cancel", workflow.END)
 	return graph, nil

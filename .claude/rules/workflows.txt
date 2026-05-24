@@ -96,8 +96,6 @@ Control signals on `Flow`:
 - `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
 - `AddTransitionOnTimeout(from, to)` - error transition taken only when the source task's error carries HTTP status 408 (both foreman-side and task-side timeouts). Wins over a plain OnError when the status matches
 - `SetReducer(field, reducer)` - escape hatch to override the prefix-driven reducer for a state field (rarely needed; see Reducers below)
-- `DeclareInputs(fields...)` - declare which state fields are passed into this graph; no args = nothing, `"*"` = everything, named = those only
-- `DeclareOutputs(fields...)` - declare which state fields are returned on completion; no args = nothing, `"*"` = everything, named = those only
 - `workflow.END` - pseudo-node indicating workflow termination
 
 **Reducers** control how state fields are merged at fan-in points. The reducer is normally chosen by the field name's prefix, with no explicit configuration:
@@ -161,6 +159,30 @@ State fields produced by the parallel branches are merged at the fan-in node by 
 them with the `sum*`, `list*`, or `set*` prefix, or attach a reducer with `SetReducer`. Each branch writes only its own
 delta, never the accumulated value.
 
+### `forEach` Branch State
+
+A `forEach` branch does **not** receive a copy of the source array. The foreman strips the array (`forEach` field
+name) from each branch's local state at spawn, so an N-element forEach over a sub-chain `A -> B -> C` does not write
+N copies of the array across every step in every branch. The array still lives in the spawn step's immutable
+snapshot, and the fan-in step rebuilds its own state from that snapshot - so the array is absent only **inside the
+cohort** and reappears in the fan-in step and everything downstream of it. A branch task that needs to read
+something from the source array must take it as an explicit per-element value (the `as` argument) or look it up
+some other way.
+
+Alongside the strip, the foreman injects two read-only fields on each branch's state, named after the `as` alias:
+
+- `<as>Index` (`int`) - this element's 0-based position in the `forEach` array.
+- `<as>Count` (`int`) - the cohort size (total elements in the `forEach` array).
+
+For `AddTransitionForEach("split", "worker", "items", "item")` the branch sees `item`, `itemIndex`, `itemCount`.
+A task argument by that name (e.g. `func Worker(... item string, itemIndex int, itemCount int)`) is auto-populated
+from state like any other. These fields are present only for `forEach` fan-out, not static fan-out.
+
+To suppress the source array past the fan-in (useful when it is very large and only the per-element transformation
+matters downstream), have the branch call `flow.Set("<forEach>", nil)` in its task body. That writes the new value
+into the branch's `changes`, the replace reducer folds it over the spawn-step base at fan-in, and the field is
+absent (or whatever the branch wrote) past the join.
+
 To reuse one task at two graph positions across a fan-in boundary (for example, fan in and then loop back), register
 the same task URL under two distinct names with `AddTask`; each name is a separate node with its own lineage scope. See
 `examples/creditflow/service.go` for a worked graph that combines fan-out/fan-in, `forEach`, subgraphs, goto loops, and
@@ -184,9 +206,50 @@ If the error handler itself returns an error, the flow fails normally.
 
 ## Subgraphs
 
-A subgraph is a child workflow that executes as a single step in the parent workflow. Register it with `graph.AddSubgraph(workflowName)` and use it as a transition target like any task. On entry, the parent's state is filtered through the child graph's `DeclareInputs`. On completion, the child's final state is filtered through its `DeclareOutputs` before merging into the parent step's changes. This prevents field-name collisions and keeps internal scratch fields from leaking across boundaries.
+A subgraph is a child workflow that executes as a single step in the parent workflow. Register it with `graph.AddSubgraph(workflowName)` and use it as a transition target like any task. On entry, the parent's full state crosses the boundary unchanged. On completion, the child's full final state is merged into the parent step's changes using the parent graph's reducers. The framework does not filter at either boundary - state hygiene is the workflow author's responsibility.
 
 Interrupts propagate up through the subgraph chain to the root flow. Cancellation cascades down from parent to all child subgraph flows. The parent step is parked until the child completes.
+
+### State Transformation Around a Subgraph
+
+A subgraph and its parent are two contracts. When they don't line up - the parent stores fields under different names than the subgraph expects, the subgraph emits internal scratch the parent doesn't want, or either side curates a subset of what crosses - bracket the subgraph node in the parent's graph with a pair of **adapter tasks**: a `Before<NodeName>` task immediately upstream of the subgraph adapts parent state into the subgraph's expected input, and an `After<NodeName>` task immediately downstream adapts the subgraph's output back into the parent's vocabulary. The suffix is the subgraph node's name in PascalCase. Either adapter is optional - write only the side that needs to adapt.
+
+Both adapters are ordinary task endpoints, scaffolded with the `add-task` skill. They use the four state-mutation primitives on `*workflow.Flow`:
+
+- `flow.Delete(names...)` - drop the listed fields (variadic; mirrors Go's `delete(m, k)`).
+- `flow.Clear()` - drop every field (mirrors Go's `clear(m)`); typical inside a `Before<NodeName>` adapter that builds a fresh subgraph input from scratch.
+- `flow.Keep(names...)` - drop everything except the listed fields.
+- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names (pairs of `newKey, oldKey`).
+
+Example: a parent calls `IdentityVerification` as a subgraph. The subgraph only needs `ssn` and `address` from the parent, and produces a `identityVerified` boolean plus internal scratch fields the parent doesn't want polluting its state.
+
+```go
+// In the parent's graph builder
+graph.AddTask("beforeIdentityVerification", myserviceapi.BeforeIdentityVerification.URL())
+graph.AddSubgraph("identityVerification", idverifyapi.IdentityVerification.URL())
+graph.AddTask("afterIdentityVerification", myserviceapi.AfterIdentityVerification.URL())
+graph.AddTransition("beforeIdentityVerification", "identityVerification")
+graph.AddTransition("identityVerification", "afterIdentityVerification")
+```
+
+```go
+// BeforeIdentityVerification adapts parent state into the subgraph's expected input.
+func (svc *Service) BeforeIdentityVerification(ctx context.Context, flow *workflow.Flow) (err error) {
+    flow.Keep("ssn", "address")
+    return nil
+}
+
+// AfterIdentityVerification adapts the subgraph's output back into the parent's vocabulary,
+// dropping internal scratch the parent doesn't need.
+func (svc *Service) AfterIdentityVerification(ctx context.Context, flow *workflow.Flow, identityVerified bool) (identityVerifiedOut bool, err error) {
+    flow.Keep("identityVerified")
+    return identityVerified, nil
+}
+```
+
+Use the `Before` / `After` naming even when the adaptation is trivial. The convention pays off in two places: the mermaid diagram shows the contract boundary as explicit graph nodes rather than hiding the adaptation inside an unrelated task, and a reader can find the boundary by searching for the subgraph's name. Both adapters are visible in the diagram, testable in isolation, and mockable like any other task.
+
+For **dynamic** subgraphs - those triggered by `flow.Subgraph(workflowURL, input)` from inside a task body - the adaptation happens inside the task itself: the task builds the `input` map (the "before" adaptation) and reads the child's output on re-entry (the "after" adaptation). No separate graph nodes are needed because the dynamic subgraph isn't a transition target.
 
 ## Dynamic Subgraphs
 
@@ -220,6 +283,25 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bo
     return true, nil
 }
 ```
+
+## Best Practices
+
+A short list of high-leverage choices that emerge from operating these workflows in practice. None are enforced by the validator; they fall to the author.
+
+**Prefer typed input/output arguments over `flow.Get` / `flow.Set`.** The task signature *is* the state contract - the marshaler binds inputs from state on entry and writes outputs back on exit, mocks get typed handlers, and a reader sees what the task reads and produces without scanning the body. Reach for `flow.Get` / `flow.Set` only when a key's name is dynamic, or when the value's type is internal to the microservice (not part of the API package and not worth promoting). The output `Out` suffix convention covers the read-modify-write case (`counter` in, `counterOut` out, both mapped to state key `counter`).
+
+**Use `flow.Delete` / `flow.Clear` / `flow.Keep` to drop state the rest of the flow does not need.** LLM responses, parsed documents, raw API bodies, image bytes - anything a task consumes once and would otherwise ride through every downstream step's persisted snapshot and bloat both the wire and the audit trail. The four primitives mirror Go's map builtins and compose for any cleanup pattern:
+
+- `flow.Delete(names...)` - drop the listed fields (variadic; mirrors `delete(m, k)`).
+- `flow.Clear()` - drop every field (mirrors `clear(m)`); useful in an adapter task that is about to populate a fresh subgraph input from scratch.
+- `flow.Keep(names...)` - drop everything except the listed fields.
+- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names (pairs of `newKey, oldKey`). Convenient for adapter tasks that reshape state across a contract boundary.
+
+All four record JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail. For Replace-reduced fields, null drops the field from merged state at the next fan-in. For reducer-managed fields (`sum*`, `list*`, `set*`), a cleared contribution is treated as the reducer's identity and contributes nothing to the merge. None of these methods are restricted to boundaries - call them mid-flow whenever a field has served its purpose.
+
+**Prefer `AddTransitionWhen` for routing the graph knows about; reserve `AddTransitionGoto` for runtime loops the task body decides.** A `When` transition is part of the static graph - the validator sees it, the Mermaid diagram renders it as a labeled branch, and lineage scoping handles it like any other fan-out. A `Goto` is an out-of-band edge that's only taken when the task calls `flow.Goto`, so it shows in the diagram but doesn't shape lineage. The canonical use for `Goto` is a fan-in node looping back ("ask for more info, retry the review"); for any branch a `When` expression can evaluate, prefer `When`.
+
+**Tasks that fire external side effects must be idempotent.** `flow.Retry`, foreman lease-recovery after a worker dies mid-step, and Subgraph re-entry all replay the task body from the top. A task that charges a card, sends an email, or writes to a non-transactional store must either carry its own dedupe key (per-flow idempotency id, per-step natural key) or check first whether the effect has already happened. The framework does not deduplicate side effects for you. Tasks that are pure computation over state need no special treatment - replay just recomputes the same output.
 
 ## Time Budgets and Long-Running Work
 
@@ -320,7 +402,7 @@ output1, status, err := exec.MyWorkflow(ctx, input1, input2)
 
 The `WorkflowRunner` interface is defined in the API package to avoid a `foremanapi` dependency. `foremanapi.Client` satisfies it implicitly.
 
-### Flow Options (priority and fairness)
+### Flow Options (priority, fairness, delayed start)
 
 A flow can carry scheduling hints via `*workflow.FlowOptions` (a flow-level concept, so it lives in the `workflow` package, not `foremanapi`):
 
@@ -329,12 +411,15 @@ opts := &workflow.FlowOptions{
     Priority:       1,        // explicit priority is >= 1, lower runs first; 0 = unset -> the foreman DefaultPriority config
     FairnessKey:    "tenant-42", // "" -> derived from the tid/tenant actor claim, else the "" bucket
     FairnessWeight: 2.0,      // relative dispatch share of the fairness key; 0 -> 1
+    StartAt:        time.Now().Add(10 * time.Minute), // entry step's not_before; zero/past = run as soon as started
 }
 status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 ```
 
-These three values are immutable for the life of the flow and are inherited unchanged by `Continue`, `Fork`, and subgraphs. The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
+`Priority`, `FairnessKey`, and `FairnessWeight` are immutable for the life of the flow and are inherited unchanged by `Continue`, `Fork`, and subgraphs. The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
+
+`StartAt` sets the entry step's `not_before` and is honored by `Create`, `Run`, `Continue`, and `Fork`; subgraphs do not inherit it. The flow can still be created and started immediately, but no worker will pick up its entry step before `StartAt`. A `Run` call blocks across the delay, so callers wanting fire-and-forget delayed execution should use `Create` + `Start` and walk away.
 
 The generated per-workflow `Executor` methods keep their minimal signatures. To run a *typed* workflow with options in a test, attach them once with the `WithFlowOptions` builder:
 
