@@ -109,9 +109,13 @@ func (c *Connector) handleOpenAPI(w http.ResponseWriter, r *http.Request) error 
 			continue
 		}
 		// sub.Type values intentionally match the openapi.Feature* string values 1:1
-		// (function/web/workflow), so the type field passes through unchanged.
+		// (function/web/workflow/task), so the type field passes through unchanged.
+		// Tasks are included so internal inspector tools (e.g. agentstudio) can
+		// discover task signatures; consumers that should not surface tasks
+		// (openapiportal, mcpportal, llm.core) whitelist the feature types they
+		// expose - the producer no longer pre-filters.
 		switch s.Type {
-		case sub.TypeFunction, sub.TypeWeb, sub.TypeWorkflow:
+		case sub.TypeFunction, sub.TypeWeb, sub.TypeWorkflow, sub.TypeTask:
 		default:
 			continue
 		}

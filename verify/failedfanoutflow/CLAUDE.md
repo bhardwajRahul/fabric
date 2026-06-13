@@ -7,8 +7,8 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 ## Purpose
 
 Verification fixture for a hard failure inside a static fan-out. The graph is
-`Src -> {A, B, C} -> J`. Src fans out; A and C succeed (contributing 1 each to the sum*
-reducer field sumExecuted); B always returns an error. There is **no** OnError transition,
+`Src -> {A, B, C} -> J`. Src fans out; A and C succeed (each contributing 1 to the Add-reduced
+`executed` field); B always returns an error. There is **no** OnError transition,
 so B's failure fails B's step and `failStep` cascades the whole flow to failed. The fan-in J
 is never reached.
 

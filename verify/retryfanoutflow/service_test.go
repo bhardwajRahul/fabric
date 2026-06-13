@@ -80,8 +80,8 @@ func TestRetryfanoutflow_RetryFanOut(t *testing.T) { // MARKER: RetryFanOut
 		assert := testarossa.For(t)
 
 		// Input [0..99]; each branch increments its element by one. Despite a random
-		// 10% per-attempt failure scrambling completion order, the list* reducer
-		// appends in fan_out_ordinal order, so listResult must be exactly [1..100].
+		// 10% per-attempt failure scrambling completion order, the Append reducer on
+		// `results` merges in fan_out_ordinal order, so `results` must be exactly [1..100].
 		input := make([]int, 100)
 		for i := range input {
 			input[i] = i
@@ -91,11 +91,11 @@ func TestRetryfanoutflow_RetryFanOut(t *testing.T) { // MARKER: RetryFanOut
 			want[i] = i + 1
 		}
 
-		listResult, status, err := exec.RetryFanOut(ctx, input)
+		results, status, err := exec.RetryFanOut(ctx, input)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
-			listResult, want,
+			results, want,
 		)
 	})
 }

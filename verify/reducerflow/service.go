@@ -59,32 +59,32 @@ func (svc *Service) TaskA(ctx context.Context, flow *workflow.Flow) (started boo
 }
 
 /*
-TaskB contributes deltas: +10 to sumTotal, ["b"] to listTags, ["x"] to setSeen.
+TaskB contributes deltas: +10 to total, ["b"] to tags, ["x"] to seen.
 */
-func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskB
+func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskB
 	return 10, []string{"b"}, []string{"x"}, nil
 }
 
 /*
-TaskC contributes deltas: +20 to sumTotal, ["c"] to listTags, ["y","x"] to setSeen.
-The "x" overlaps with TaskB's contribution; setSeen's union reducer dedupes it.
+TaskC contributes deltas: +20 to total, ["c"] to tags, ["y","x"] to seen.
+The "x" overlaps with TaskB's contribution; seen's union reducer dedupes it.
 */
-func (svc *Service) TaskC(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskC
+func (svc *Service) TaskC(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskC
 	return 20, []string{"c"}, []string{"y", "x"}, nil
 }
 
 /*
-TaskD contributes deltas: +30 to sumTotal, ["d"] to listTags, ["z"] to setSeen.
+TaskD contributes deltas: +30 to total, ["d"] to tags, ["z"] to seen.
 */
-func (svc *Service) TaskD(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskD
+func (svc *Service) TaskD(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskD
 	return 30, []string{"d"}, []string{"z"}, nil
 }
 
 /*
 TaskE reads the reducer-merged values and surfaces them.
 */
-func (svc *Service) TaskE(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags, setSeen []string) (finalSum int, finalList, finalSet []string, err error) { // MARKER: TaskE
-	return sumTotal, listTags, setSeen, nil
+func (svc *Service) TaskE(ctx context.Context, flow *workflow.Flow, total int, tags, seen []string) (finalSum int, finalList, finalSet []string, err error) { // MARKER: TaskE
+	return total, tags, seen, nil
 }
 
 /*
@@ -98,6 +98,9 @@ func (svc *Service) Reducer(ctx context.Context) (graph *workflow.Graph, err err
 	graph.AddTask("taskD", reducerflowapi.TaskD.URL())
 	graph.AddTask("taskE", reducerflowapi.TaskE.URL())
 	graph.SetFanIn("taskE")
+	graph.SetReducer("total", workflow.ReducerAdd)
+	graph.SetReducer("tags", workflow.ReducerAppend)
+	graph.SetReducer("seen", workflow.ReducerUnion)
 	graph.AddTransition("taskA", "taskB")
 	graph.AddTransition("taskA", "taskC")
 	graph.AddTransition("taskA", "taskD")

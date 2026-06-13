@@ -38,10 +38,11 @@ type Mock struct {
 	*Intermediate
 	mockTaskA       func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                             // MARKER: TaskA
 	mockNormalB     func(ctx context.Context, flow *workflow.Flow) (normalResult string, err error)                                      // MARKER: NormalB
+	mockRunInner    func(ctx context.Context, flow *workflow.Flow) (innerResult int, err error)                                          // MARKER: RunInner
 	mockTaskX       func(ctx context.Context, flow *workflow.Flow) (innerStarted bool, err error)                                        // MARKER: TaskX
-	mockTaskY       func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)                                          // MARKER: TaskY
-	mockTaskZ       func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)                                          // MARKER: TaskZ
-	mockTaskW       func(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error)                            // MARKER: TaskW
+	mockTaskY       func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)                                             // MARKER: TaskY
+	mockTaskZ       func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)                                             // MARKER: TaskZ
+	mockTaskW       func(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error)                               // MARKER: TaskW
 	mockTaskJ       func(ctx context.Context, flow *workflow.Flow, normalResult string, innerResult int) (finalResult string, err error) // MARKER: TaskJ
 	mockInnerGraph  func(ctx context.Context) (graph *workflow.Graph, err error)                                                         // MARKER: Inner
 	unsubMockInner  func() error                                                                                                         // MARKER: Inner
@@ -98,6 +99,20 @@ func (svc *Mock) NormalB(ctx context.Context, flow *workflow.Flow) (normalResult
 	return normalResult, errors.Trace(err)
 }
 
+// MockRunInner sets up a mock handler for RunInner.
+func (svc *Mock) MockRunInner(handler func(ctx context.Context, flow *workflow.Flow) (innerResult int, err error)) *Mock { // MARKER: RunInner
+	svc.mockRunInner = handler
+	return svc
+}
+
+// RunInner executes the mock handler.
+func (svc *Mock) RunInner(ctx context.Context, flow *workflow.Flow) (innerResult int, err error) { // MARKER: RunInner
+	if svc.mockRunInner != nil {
+		innerResult, err = svc.mockRunInner(ctx, flow)
+	}
+	return innerResult, errors.Trace(err)
+}
+
 // MockTaskX sets up a mock handler for TaskX.
 func (svc *Mock) MockTaskX(handler func(ctx context.Context, flow *workflow.Flow) (innerStarted bool, err error)) *Mock { // MARKER: TaskX
 	svc.mockTaskX = handler
@@ -113,43 +128,43 @@ func (svc *Mock) TaskX(ctx context.Context, flow *workflow.Flow) (innerStarted b
 }
 
 // MockTaskY sets up a mock handler for TaskY.
-func (svc *Mock) MockTaskY(handler func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)) *Mock { // MARKER: TaskY
+func (svc *Mock) MockTaskY(handler func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)) *Mock { // MARKER: TaskY
 	svc.mockTaskY = handler
 	return svc
 }
 
 // TaskY executes the mock handler.
-func (svc *Mock) TaskY(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) { // MARKER: TaskY
+func (svc *Mock) TaskY(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) { // MARKER: TaskY
 	if svc.mockTaskY != nil {
-		sumInnerOut, err = svc.mockTaskY(ctx, flow)
+		innerOut, err = svc.mockTaskY(ctx, flow)
 	}
-	return sumInnerOut, errors.Trace(err)
+	return innerOut, errors.Trace(err)
 }
 
 // MockTaskZ sets up a mock handler for TaskZ.
-func (svc *Mock) MockTaskZ(handler func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)) *Mock { // MARKER: TaskZ
+func (svc *Mock) MockTaskZ(handler func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)) *Mock { // MARKER: TaskZ
 	svc.mockTaskZ = handler
 	return svc
 }
 
 // TaskZ executes the mock handler.
-func (svc *Mock) TaskZ(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) { // MARKER: TaskZ
+func (svc *Mock) TaskZ(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) { // MARKER: TaskZ
 	if svc.mockTaskZ != nil {
-		sumInnerOut, err = svc.mockTaskZ(ctx, flow)
+		innerOut, err = svc.mockTaskZ(ctx, flow)
 	}
-	return sumInnerOut, errors.Trace(err)
+	return innerOut, errors.Trace(err)
 }
 
 // MockTaskW sets up a mock handler for TaskW.
-func (svc *Mock) MockTaskW(handler func(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error)) *Mock { // MARKER: TaskW
+func (svc *Mock) MockTaskW(handler func(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error)) *Mock { // MARKER: TaskW
 	svc.mockTaskW = handler
 	return svc
 }
 
 // TaskW executes the mock handler.
-func (svc *Mock) TaskW(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error) { // MARKER: TaskW
+func (svc *Mock) TaskW(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error) { // MARKER: TaskW
 	if svc.mockTaskW != nil {
-		innerResult, err = svc.mockTaskW(ctx, flow, sumInner)
+		innerResult, err = svc.mockTaskW(ctx, flow, inner)
 	}
 	return innerResult, errors.Trace(err)
 }

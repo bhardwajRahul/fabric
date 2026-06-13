@@ -20,7 +20,7 @@ general:
   description: "dynamicfanoutflow.verify exercises forEach dynamic fan-out: A -> forEach(items) -> B -> C."
   package: github.com/microbus-io/fabric/verify/dynamicfanoutflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-24T14:25:54Z"
+  modifiedAt: "2026-05-26T14:11:18Z"
 
 tasks:
   TaskA:
@@ -28,16 +28,16 @@ tasks:
     description: TaskA is the forEach source.
     route: :428/task-a
   TaskB:
-    signature: TaskB(item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int)
+    signature: TaskB(item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int)
     description: TaskB runs once per forEach element.
     route: :428/task-b
   TaskC:
-    signature: TaskC(sumProcessed int) (processedCount int)
+    signature: TaskC(processed int) (processedCount int)
     description: TaskC is the fan-in target.
     route: :428/task-c
 
 workflows:
   DynamicFanOut:
-    signature: DynamicFanOut(items []string, clearItems bool) (processedCount int, itemsOut []string, listSeenIndices []int, setSeenCounts []int)
+    signature: DynamicFanOut(items []string, clearItems bool) (processedCount int, itemsOut []string, seenIndices []int, seenCounts []int)
     description: "DynamicFanOut defines the graph: A -> forEach(items) -> B -> C."
     route: :428/dynamic-fan-out

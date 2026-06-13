@@ -1,6 +1,6 @@
 ---
 name: add-task
-description: TRIGGER when user asks to add a workflow step, task endpoint, or workflow phase. Tasks are handlers that read/write shared state via workflow.Flow. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
+description: TRIGGER when user asks to add a workflow step, agent step, agentic task, task endpoint, or workflow phase. "Agent step" and "workflow step" are interchangeable - a task is a single step of a workflow / agent / agentic workflow, regardless of whether the surrounding workflow calls an LLM. Tasks are handlers that read/write shared state via workflow.Flow. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -69,13 +69,7 @@ Constraints:
 - Argument names must start with a lowercase letter
 - The function name must start with an uppercase letter
 
-Naming for fan-in: when an argument represents a state field that will be merged across parallel branches, name it with one of these prefixes so the foreman picks the reducer automatically (no `graph.SetReducer` call needed):
-
-- `sum*` - numeric add (e.g. `sumFailures`, `sumScore`)
-- `list*` - array append, duplicates kept (e.g. `listMessages`, `listEvents`)
-- `set*` - set-style: array union or object merge depending on the value (e.g. `setUsers`, `setTags`)
-
-The character right after the prefix must be uppercase. These prefixes are reserved: do not name an argument `sum*`, `list*`, or `set*` unless it is genuinely a fan-in accumulator, because the reducer for a field is inferred from its name prefix (unless overridden by `graph.SetReducer`), so such a field is silently summed/appended/unioned instead of replaced if it is ever written on parallel branches. For ordinary inputs and outputs, pick a name that does not start with these prefixes (e.g. `files`, `total`, `config`, not `listFiles`, `sumTotal`, `setConfig`). Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer should return `sumEmploymentFailuresOut: 0 or 1` (its own count), not the running total.
+Naming for fan-in: argument names carry no execution semantics. A fan-in field's reducer is set explicitly at graph-build time with `graph.SetReducer(field, reducer)`; without one, the default is `Replace` (last write wins). Pick names that describe what the field *is* (e.g. `failures`, `messages`, `score`), not the merge strategy. Tasks writing to a reducer-managed field must produce only the **delta** for this branch, not the full accumulated value - otherwise fan-in produces duplicates. For example, a `VerifyEmployment` task running once per employer with `graph.SetReducer("failures", workflow.ReducerAdd)` should return `failuresOut: 0 or 1` (its own count), not the running total.
 
 **Prefer typed input/output arguments over `flow.Get` / `flow.Set`.** Inputs and outputs are auto-bound to state by name; the signature is the task's state contract, mocks get typed handlers, and a reader sees what the task reads and produces without scanning the body. Reserve `flow.Get` / `flow.Set` for keys whose names are dynamic or for internal types not in the API package. See the Best Practices section of `.claude/rules/workflows.txt` for the rationale.
 
@@ -99,6 +93,8 @@ The route of the task endpoint is resolved relative to the hostname of the micro
 #### Step 5: Determine a Description
 
 Describe the task starting with its name, in Go doc style: `MyTask does X`. Embed this description in followup steps wherever you see `MyTask does X`.
+
+Describe **what the task does and the effect it produces**, not who or what is expected to invoke it. The same task may be dispatched by the foreman from any workflow that references it, by a test, or by an LLM tool call - the description should read the same in every case. `"Computes the credit score from the applicant's history"` is good; `"called by the credit-review workflow"` or `"used by the LLM as a tool"` is not. Naming the caller leaks orchestration context into the task contract and goes stale as soon as another workflow reuses the task.
 
 #### Step 6: Determine the Required Claims
 
@@ -190,7 +186,7 @@ func (_c Executor) MyTask(ctx context.Context, input1 string, input2 float64) (o
 
 Implement the task in `service.go`. Complex types should always refer to their definition in `myserviceapi`, even if owned by a third-party.
 
-The task receives state fields as input arguments and returns state fields as output. It also has access to `flow` for control operations (`flow.Goto()`, `flow.Interrupt()`, `flow.Retry()`, `flow.Sleep()`) and for field-based state access (`flow.GetString()`, `flow.Set()`) when needed.
+The task receives state fields as input arguments and returns state fields as output. It also has access to `flow` for control operations (`flow.Goto()`, `flow.Interrupt()`, `flow.Subgraph()`, `flow.Retry()`, `flow.Sleep()`) and for field-based state access (`flow.GetString()`, `flow.Set()`) when needed. `Interrupt` and `Subgraph` both park the step and return `(data, yield, err)`; the task must `return nil` when `yield` is true and may read `data` / branch on `err` once it resolves (see "Subgraphs and Interrupts" in `.claude/rules/workflows.txt`).
 
 ```go
 /*
@@ -204,14 +200,13 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 stri
 
 **Idempotency.** Tasks may be replayed: `flow.Retry`, worker-death recovery, and Subgraph re-entry all re-run the task body from the top. A task that fires an external side effect (charge a card, send an email, write to a non-transactional store) must carry its own dedupe key or check first whether the effect has already happened. The framework does not deduplicate side effects for you. Pure computation over state needs no special treatment.
 
-**State hygiene.** If this task consumes large intermediates (LLM response, parsed payload, raw API body, image bytes) that downstream tasks do not need, drop them before returning. The four primitives mirror Go's map builtins:
+**State hygiene.** If this task consumes large intermediates (LLM response, parsed payload, raw API body, image bytes) that downstream tasks do not need, drop them before returning. Three primitives compose for any cleanup pattern:
 
 - `flow.Delete(names...)` - drop the listed fields.
-- `flow.Clear()` - drop every field (typical in a `Before<NodeName>` adapter task that builds a fresh subgraph input from scratch).
-- `flow.Keep(names...)` - drop everything except the listed fields.
-- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names.
+- `flow.Clear()` - drop every field; typical in a task that is about to build a fresh subgraph input from scratch.
+- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names. Doubles as a "keep these" primitive when called with `("name", "name")` pairs.
 
-Each records JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail; downstream merged state is absent the field (Replace reducer) or sees no contribution (`sum*`/`list*`/`set*`).
+Each records JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail; downstream merged state is absent the field (Replace reducer) or sees no contribution (Add/Append/Union/Merge/And/Or/Concat short-circuit to their identity when a branch's value is JSON null).
 
 #### Step 11: Define the Marshaler Function
 

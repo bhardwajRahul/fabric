@@ -36,13 +36,13 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockSource               func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                       // MARKER: Source
-	mockA                    func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                 // MARKER: A
-	mockB                    func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                 // MARKER: B
-	mockC                    func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                 // MARKER: C
-	mockJ                    func(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) // MARKER: J
-	mockCancelledFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                   // MARKER: CancelledFanOut
-	unsubMockCancelledFanOut func() error                                                                                   // MARKER: CancelledFanOut
+	mockSource               func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                    // MARKER: Source
+	mockA                    func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                 // MARKER: A
+	mockB                    func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                 // MARKER: B
+	mockC                    func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                 // MARKER: C
+	mockJ                    func(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) // MARKER: J
+	mockCancelledFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                // MARKER: CancelledFanOut
+	unsubMockCancelledFanOut func() error                                                                                // MARKER: CancelledFanOut
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -81,57 +81,57 @@ func (svc *Mock) Source(ctx context.Context, flow *workflow.Flow) (started bool,
 }
 
 // MockA sets up a mock handler for A.
-func (svc *Mock) MockA(handler func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)) *Mock { // MARKER: A
+func (svc *Mock) MockA(handler func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)) *Mock { // MARKER: A
 	svc.mockA = handler
 	return svc
 }
 
 // A executes the mock handler.
-func (svc *Mock) A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: A
+func (svc *Mock) A(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: A
 	if svc.mockA != nil {
-		sumExecutedOut, err = svc.mockA(ctx, flow)
+		executedOut, err = svc.mockA(ctx, flow)
 	}
-	return sumExecutedOut, errors.Trace(err)
+	return executedOut, errors.Trace(err)
 }
 
 // MockB sets up a mock handler for B.
-func (svc *Mock) MockB(handler func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)) *Mock { // MARKER: B
+func (svc *Mock) MockB(handler func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)) *Mock { // MARKER: B
 	svc.mockB = handler
 	return svc
 }
 
 // B executes the mock handler.
-func (svc *Mock) B(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: B
+func (svc *Mock) B(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: B
 	if svc.mockB != nil {
-		sumExecutedOut, err = svc.mockB(ctx, flow)
+		executedOut, err = svc.mockB(ctx, flow)
 	}
-	return sumExecutedOut, errors.Trace(err)
+	return executedOut, errors.Trace(err)
 }
 
 // MockC sets up a mock handler for C.
-func (svc *Mock) MockC(handler func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)) *Mock { // MARKER: C
+func (svc *Mock) MockC(handler func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)) *Mock { // MARKER: C
 	svc.mockC = handler
 	return svc
 }
 
 // C executes the mock handler.
-func (svc *Mock) C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: C
+func (svc *Mock) C(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: C
 	if svc.mockC != nil {
-		sumExecutedOut, err = svc.mockC(ctx, flow)
+		executedOut, err = svc.mockC(ctx, flow)
 	}
-	return sumExecutedOut, errors.Trace(err)
+	return executedOut, errors.Trace(err)
 }
 
 // MockJ sets up a mock handler for J.
-func (svc *Mock) MockJ(handler func(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error)) *Mock { // MARKER: J
+func (svc *Mock) MockJ(handler func(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error)) *Mock { // MARKER: J
 	svc.mockJ = handler
 	return svc
 }
 
 // J executes the mock handler.
-func (svc *Mock) J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) { // MARKER: J
+func (svc *Mock) J(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) { // MARKER: J
 	if svc.mockJ != nil {
-		totalExecuted, err = svc.mockJ(ctx, flow, sumExecuted)
+		totalExecuted, err = svc.mockJ(ctx, flow, executed)
 	}
 	return totalExecuted, errors.Trace(err)
 }
@@ -139,7 +139,7 @@ func (svc *Mock) J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (t
 // MockCancelledFanOut sets up a mock handler for the CancelledFanOut workflow.
 // The handler receives typed inputs from the workflow's state and returns typed outputs.
 // A nil handler clears the mock.
-func (svc *Mock) MockCancelledFanOut(handler func(ctx context.Context, flow *workflow.Flow) (sumExecuted int, totalExecuted int, err error)) *Mock { // MARKER: CancelledFanOut
+func (svc *Mock) MockCancelledFanOut(handler func(ctx context.Context, flow *workflow.Flow) (executed int, totalExecuted int, err error)) *Mock { // MARKER: CancelledFanOut
 	if svc.unsubMockCancelledFanOut != nil {
 		svc.unsubMockCancelledFanOut()
 		svc.unsubMockCancelledFanOut = nil
@@ -164,11 +164,11 @@ func (svc *Mock) MockCancelledFanOut(handler func(ctx context.Context, flow *wor
 		snap := f.Snapshot()
 		var in cancelledfanoutflowapi.CancelledFanOutIn
 		f.ParseState(&in)
-		sumExecuted, totalExecuted, err := handler(r.Context(), &f)
+		executed, totalExecuted, err := handler(r.Context(), &f)
 		if err != nil {
 			return err // No trace
 		}
-		out := cancelledfanoutflowapi.CancelledFanOutOut{SumExecuted: sumExecuted, TotalExecuted: totalExecuted}
+		out := cancelledfanoutflowapi.CancelledFanOutOut{Executed: executed, TotalExecuted: totalExecuted}
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)

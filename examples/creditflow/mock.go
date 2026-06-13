@@ -38,18 +38,19 @@ type Mock struct {
 	*Intermediate
 	mockSubmitCreditApplication   func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
 	mockVerifyCredit              func(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error)                                                                                                   // MARKER: VerifyCredit
-	mockVerifyEmployment          func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)                                                                // MARKER: VerifyEmployment
+	mockVerifyEmployment          func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error)                                                                   // MARKER: VerifyEmployment
 	mockInitIdentityVerification  func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                         // MARKER: InitIdentityVerification
 	mockVerifySSN                 func(ctx context.Context, flow *workflow.Flow, ssn string) (ssnVerified bool, err error)                                                                                                           // MARKER: VerifySSN
 	mockVerifyAddress             func(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                   // MARKER: VerifyAddress
 	mockVerifyPhoneNumber         func(ctx context.Context, flow *workflow.Flow, phone string) (phoneVerified bool, err error)                                                                                                       // MARKER: VerifyPhoneNumber
 	mockIdentityDecision          func(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error)                                                      // MARKER: IdentityDecision
+	mockRunIdentityVerification   func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error)                                                  // MARKER: RunIdentityVerification
 	mockIdentityVerificationGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                       // MARKER: IdentityVerification
 	unsubMockIdentityVerification func() error                                                                                                                                                                                       // MARKER: IdentityVerification
 	mockRequestMoreInfo           func(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                              // MARKER: RequestMoreInfo
 	mockReviewCredit              func(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error)                                                       // MARKER: ReviewCredit
 	mockHandleCreditError         func(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                         // MARKER: HandleCreditError
-	mockDecision                  func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)                                                   // MARKER: Decision
+	mockDecision                  func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                      // MARKER: Decision
 	mockCreditApprovalGraph       func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                       // MARKER: CreditApproval
 	unsubMockCreditApproval       func() error                                                                                                                                                                                       // MARKER: CreditApproval
 	mockDemo                      func(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                           // MARKER: Demo
@@ -105,17 +106,17 @@ func (svc *Mock) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditSc
 }
 
 // MockVerifyEmployment sets up a mock handler for VerifyEmployment.
-func (svc *Mock) MockVerifyEmployment(handler func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)) *Mock { // MARKER: VerifyEmployment
+func (svc *Mock) MockVerifyEmployment(handler func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error)) *Mock { // MARKER: VerifyEmployment
 	svc.mockVerifyEmployment = handler
 	return svc
 }
 
 // VerifyEmployment executes the mock handler.
-func (svc *Mock) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) { // MARKER: VerifyEmployment
+func (svc *Mock) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error) { // MARKER: VerifyEmployment
 	if svc.mockVerifyEmployment != nil {
-		sumEmploymentFailuresOut, err = svc.mockVerifyEmployment(ctx, flow, applicantName, employerName)
+		employmentFailuresOut, err = svc.mockVerifyEmployment(ctx, flow, applicantName, employerName)
 	}
-	return sumEmploymentFailuresOut, errors.Trace(err)
+	return employmentFailuresOut, errors.Trace(err)
 }
 
 // MockInitIdentityVerification sets up a mock handler for InitIdentityVerification.
@@ -184,6 +185,20 @@ func (svc *Mock) MockIdentityDecision(handler func(ctx context.Context, flow *wo
 func (svc *Mock) IdentityDecision(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error) { // MARKER: IdentityDecision
 	if svc.mockIdentityDecision != nil {
 		identityVerified, err = svc.mockIdentityDecision(ctx, flow, ssnVerified, addressVerified, phoneVerified)
+	}
+	return identityVerified, errors.Trace(err)
+}
+
+// MockRunIdentityVerification sets up a mock handler for RunIdentityVerification.
+func (svc *Mock) MockRunIdentityVerification(handler func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error)) *Mock { // MARKER: RunIdentityVerification
+	svc.mockRunIdentityVerification = handler
+	return svc
+}
+
+// RunIdentityVerification executes the mock handler.
+func (svc *Mock) RunIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) { // MARKER: RunIdentityVerification
+	if svc.mockRunIdentityVerification != nil {
+		identityVerified, err = svc.mockRunIdentityVerification(ctx, flow, applicantName, ssn, address, phone)
 	}
 	return identityVerified, errors.Trace(err)
 }
@@ -285,15 +300,15 @@ func (svc *Mock) HandleCreditError(ctx context.Context, flow *workflow.Flow, onE
 }
 
 // MockDecision sets up a mock handler for Decision.
-func (svc *Mock) MockDecision(handler func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)) *Mock { // MARKER: Decision
+func (svc *Mock) MockDecision(handler func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)) *Mock { // MARKER: Decision
 	svc.mockDecision = handler
 	return svc
 }
 
 // Decision executes the mock handler.
-func (svc *Mock) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
+func (svc *Mock) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
 	if svc.mockDecision != nil {
-		approved, err = svc.mockDecision(ctx, flow, creditVerified, sumEmploymentFailures, identityVerified)
+		approved, err = svc.mockDecision(ctx, flow, creditVerified, employmentFailures, identityVerified)
 	}
 	return approved, errors.Trace(err)
 }
@@ -301,7 +316,7 @@ func (svc *Mock) Decision(ctx context.Context, flow *workflow.Flow, creditVerifi
 // MockCreditApproval sets up a mock handler for the CreditApproval workflow.
 // The handler receives typed inputs from the workflow's state and returns typed outputs.
 // A nil handler clears the mock.
-func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, err error)) *Mock { // MARKER: CreditApproval
+func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, err error)) *Mock { // MARKER: CreditApproval
 	if svc.unsubMockCreditApproval != nil {
 		svc.unsubMockCreditApproval()
 		svc.unsubMockCreditApproval = nil
@@ -326,11 +341,11 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 		snap := f.Snapshot()
 		var in creditflowapi.CreditApprovalIn
 		f.ParseState(&in)
-		approved, creditVerified, sumEmploymentFailures, identityVerified, err := handler(r.Context(), &f, in.Applicant)
+		approved, creditVerified, employmentFailures, identityVerified, err := handler(r.Context(), &f, in.Applicant)
 		if err != nil {
 			return err // No trace
 		}
-		out := creditflowapi.CreditApprovalOut{Approved: approved, CreditVerified: creditVerified, SumEmploymentFailures: sumEmploymentFailures, IdentityVerified: identityVerified}
+		out := creditflowapi.CreditApprovalOut{Approved: approved, CreditVerified: creditVerified, EmploymentFailures: employmentFailures, IdentityVerified: identityVerified}
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)

@@ -46,6 +46,7 @@ var (
 	BoomF      = Def{Method: "POST", Route: ":428/boom-f"}      // MARKER: BoomF
 	Join       = Def{Method: "POST", Route: ":428/join"}        // MARKER: Join
 	InnerEntry = Def{Method: "POST", Route: ":428/inner-entry"} // MARKER: InnerEntry
+	RunSub     = Def{Method: "POST", Route: ":428/run-sub"}     // MARKER: RunSub
 	Soak       = Def{Method: "GET", Route: ":428/soak"}         // MARKER: Soak
 	Inner      = Def{Method: "GET", Route: ":428/inner"}        // MARKER: Inner
 )
@@ -137,6 +138,15 @@ type InnerEntryIn struct { // MARKER: InnerEntry
 
 // InnerEntryOut are the output arguments of InnerEntry.
 type InnerEntryOut struct { // MARKER: InnerEntry
+	Done bool `json:"done,omitzero"`
+}
+
+// RunSubIn are the input arguments of RunSub.
+type RunSubIn struct { // MARKER: RunSub
+}
+
+// RunSubOut are the output arguments of RunSub.
+type RunSubOut struct { // MARKER: RunSub
 	Done bool `json:"done,omitzero"`
 }
 

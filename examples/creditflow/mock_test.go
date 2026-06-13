@@ -76,7 +76,7 @@ func TestCreditflow_Mock(t *testing.T) {
 	t.Run("verify_employment", func(t *testing.T) { // MARKER: VerifyEmployment
 		assert := testarossa.For(t)
 
-		mock.MockVerifyEmployment(func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) {
+		mock.MockVerifyEmployment(func(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error) {
 			return
 		})
 		var applicantName string
@@ -145,6 +145,20 @@ func TestCreditflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_identity_verification", func(t *testing.T) { // MARKER: RunIdentityVerification
+		assert := testarossa.For(t)
+
+		mock.MockRunIdentityVerification(func(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) {
+			return
+		})
+		var applicantName string
+		var ssn string
+		var address string
+		var phone string
+		_, err := mock.RunIdentityVerification(ctx, nil, applicantName, ssn, address, phone)
+		assert.NoError(err)
+	})
+
 	t.Run("identity_verification", func(t *testing.T) { // MARKER: IdentityVerification
 		assert := testarossa.For(t)
 
@@ -195,20 +209,20 @@ func TestCreditflow_Mock(t *testing.T) {
 	t.Run("decision", func(t *testing.T) { // MARKER: Decision
 		assert := testarossa.For(t)
 
-		mock.MockDecision(func(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) {
+		mock.MockDecision(func(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) {
 			return
 		})
 		var creditVerified bool
-		var sumEmploymentFailures int
+		var employmentFailures int
 		var identityVerified bool
-		_, err := mock.Decision(ctx, nil, creditVerified, sumEmploymentFailures, identityVerified)
+		_, err := mock.Decision(ctx, nil, creditVerified, employmentFailures, identityVerified)
 		assert.NoError(err)
 	})
 
 	t.Run("credit_approval", func(t *testing.T) { // MARKER: CreditApproval
 		assert := testarossa.For(t)
 
-		mock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (approved bool, creditVerified bool, sumEmploymentFailures int, identityVerified bool, err error) {
+		mock.MockCreditApproval(func(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, err error) {
 			return
 		})
 		graph, err := mock.CreditApproval(ctx)

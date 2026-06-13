@@ -63,8 +63,8 @@ type ToDo interface {
 	TaskH(ctx context.Context, flow *workflow.Flow, item string) (itemUpper string, err error)                              // MARKER: TaskH
 	TaskA(ctx context.Context, flow *workflow.Flow, itemUpper string) (aProcessed string, err error)                        // MARKER: TaskA
 	TaskB(ctx context.Context, flow *workflow.Flow, itemUpper string) (bProcessed string, err error)                        // MARKER: TaskB
-	TaskM(ctx context.Context, flow *workflow.Flow, aProcessed, bProcessed string) (setMerged []string, err error)          // MARKER: TaskM
-	TaskL(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error)                         // MARKER: TaskL
+	TaskM(ctx context.Context, flow *workflow.Flow, aProcessed, bProcessed string) (mergedItems []string, err error) // MARKER: TaskM
+	TaskL(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error)                // MARKER: TaskL
 	PerElementPipeline(ctx context.Context) (graph *workflow.Graph, err error)                                              // MARKER: PerElementPipeline
 }
 
@@ -266,7 +266,7 @@ func (svc *Intermediate) doTaskM(w http.ResponseWriter, r *http.Request) (err er
 	var in perelementpipelineflowapi.TaskMIn
 	flow.ParseState(&in)
 	var out perelementpipelineflowapi.TaskMOut
-	out.SetMerged, err = svc.TaskM(r.Context(), &flow, in.AProcessed, in.BProcessed)
+	out.MergedItems, err = svc.TaskM(r.Context(), &flow, in.AProcessed, in.BProcessed)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,7 @@ func (svc *Intermediate) doTaskL(w http.ResponseWriter, r *http.Request) (err er
 	var in perelementpipelineflowapi.TaskLIn
 	flow.ParseState(&in)
 	var out perelementpipelineflowapi.TaskLOut
-	out.FinalCount, err = svc.TaskL(r.Context(), &flow, in.SetMerged)
+	out.FinalCount, err = svc.TaskL(r.Context(), &flow, in.MergedItems)
 	if err != nil {
 		return err
 	}

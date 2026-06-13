@@ -53,7 +53,11 @@ Query parameters generated from typed function inputs are not flagged `required`
 
 Each rendered `Operation` carries two non-standard extensions:
 
-- **`x-feature-type`** - `function`, `workflow`, or `web`. Tasks and outbound events are filtered out *before* reaching the renderer (in `connector/control.go`), so they never appear in the doc.
+- **`x-feature-type`** - `function`, `workflow`, `web`, or `task`. The producer (`connector/control.go`) emits all
+  four; tasks are included so internal inspector tools (e.g. the agent studio on `:428`) can discover task endpoints.
+  Outbound events are still filtered out *before* the renderer and never appear. Consumers that expose the doc to
+  external callers or LLMs (`openapiportal`, `mcpportal`, `llm.core`) whitelist the feature types they surface and drop
+  tasks at their own boundary.
 - **`x-name`** - the endpoint's original Go-side name (PascalCase, pre-kebab-conversion).
 
 Three internal consumers read these fields today:
@@ -76,7 +80,7 @@ Functions and workflows default to `POST` when method is empty or `ANY`. Web end
 
 ### `OutboundEvent` has a constant but never renders
 
-`FeatureOutboundEvent = "outboundevent"` exists in `feature.go` so the value can be set on a `sub.Type` and round-tripped through the framework, but the renderer's switch only handles `function`, `workflow`, and `web`. Outbound events are filtered upstream by `connector/control.go`'s `handleOpenAPI` before reaching `Render`, so this branch is effectively dead in normal use - the constant is there for completeness and external introspection.
+`FeatureOutboundEvent = "outboundevent"` exists in `feature.go` so the value can be set on a `sub.Type` and round-tripped through the framework, but the renderer's switch only handles `function`, `workflow`, `web`, and `task`. Outbound events are filtered upstream by `connector/control.go`'s `handleOpenAPI` before reaching `Render`, so this branch is effectively dead in normal use - the constant is there for completeness and external introspection.
 
 ### `Doc` is a transitional alias for `Document`
 

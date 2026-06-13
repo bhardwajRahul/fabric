@@ -17,10 +17,10 @@
 general:
   name: breakpointflow
   hostname: breakpointflow.verify
-  description: breakpointflow.verify exercises BreakBefore + Resume.
+  description: breakpointflow.verify exercises BreakBefore + ResumeBreak.
   package: github.com/microbus-io/fabric/verify/breakpointflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-31T03:21:34Z"
 
 tasks:
   TaskA:

@@ -51,14 +51,14 @@ func TestChatbox_Mock(t *testing.T) {
 	t.Run("turn", func(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
-		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
 			return
 		})
 		var model string
 		var messages []llmapi.Message
 		var tools []llmapi.Tool
 		var options *llmapi.TurnOptions
-		_, _, _, err := mock.Turn(ctx, model, messages, tools, options)
+		_, _, _, _, err := mock.Turn(ctx, model, messages, tools, options)
 		assert.NoError(err)
 	})
 

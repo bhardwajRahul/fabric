@@ -18,11 +18,17 @@ package workflow
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/microbus-io/testarossa"
 )
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 
 func TestGraph_BuilderAndMarshal(t *testing.T) {
 	t.Parallel()
@@ -205,12 +211,13 @@ func TestGraph_Mermaid(t *testing.T) {
 	g.AddTransition("payment.service/charge", END)
 	g.AddTransition("order.service/reject", END)
 
-	mmd := g.Mermaid()
+	mmd := must(NewGraphRenderer(g).Render())
 
 	assert.Contains(mmd, "graph LR")
 	assert.Contains(mmd, "_start(( ))")
 	assert.Contains(mmd, "_end(( ))")
-	assert.Contains(mmd, `"if valid == true"`)
+	assert.Contains(mmd, `"valid == true"`)
+	assert.Contains(mmd, `_when{"when"}`)
 	assert.Contains(mmd, "order.service/validate")
 	assert.Contains(mmd, "payment.service/charge")
 }
@@ -233,7 +240,7 @@ func TestGraph_GotoTransition(t *testing.T) {
 	assert.False(transitions[3].WithGoto) // svc/c -> END
 
 	// Goto transitions should have a "goto" label in Mermaid
-	mmd := g.Mermaid()
+	mmd := must(NewGraphRenderer(g).Render())
 	assert.Contains(mmd, `"goto"`)
 
 	// Should validate successfully
@@ -374,16 +381,14 @@ func TestGraph_MermaidForEachShape(t *testing.T) {
 	g.AddTransitionForEach("svc/start", "svc/worker", "items", "item")
 	g.AddTransition("svc/worker", END)
 
-	mmd := g.Mermaid()
-	// forEach scopes are rendered as Mermaid subgraph blocks titled by the iterated field.
-	assert.Contains(mmd, `subgraph fo_t0 ["for each in items"]`)
-	// The forEach edge into the scope carries a "fan out" label.
-	assert.Contains(mmd, `|"fan out"| t1`)
-	// The forEach target uses a standard rectangle; the dashed box signals replication.
+	mmd := must(NewGraphRenderer(g).Render())
+	// forEach is marked with a "for each" edge label, the same convention as onError/goto.
+	assert.Contains(mmd, `t0 -->|"for each"| t1`)
+	// No enclosing box and no box style line; the branch is not wrapped.
+	assert.NotContains(mmd, `subgraph fo_`)
+	assert.NotContains(mmd, `style fo_`)
+	// The forEach target is a standard rectangle.
 	assert.Contains(mmd, `t1["svc/worker"]:::task`)
-	assert.NotContains(mmd, `shape: st-rect`)
-	// The scope block carries a dashed-outline / faint-fill style line.
-	assert.Contains(mmd, `style fo_t0 fill:#32a7c1,fill-opacity:0.15`)
 }
 
 func TestGraph_MermaidFanInShape(t *testing.T) {
@@ -399,7 +404,7 @@ func TestGraph_MermaidFanInShape(t *testing.T) {
 	g.SetFanIn("join")
 	assert.NoError(g.Validate())
 
-	mmd := g.Mermaid()
+	mmd := must(NewGraphRenderer(g).Render())
 	// Fan-in nodes are standard rectangles; no special shape.
 	assert.Contains(mmd, `t3["join"]:::task`)
 	assert.NotContains(mmd, `shape: trap-t`)
@@ -419,14 +424,16 @@ func TestGraph_MermaidForEachFanInLabel(t *testing.T) {
 	g.SetFanIn("svc/join")
 	assert.NoError(g.Validate())
 
-	mmd := g.Mermaid()
-	// Edges exiting a forEach scope into the fan-in node carry the "fan in" label.
-	assert.Contains(mmd, `|"fan in"| t2`)
-	// The fan-in node itself stays a standard rectangle and lives outside the scope.
+	mmd := must(NewGraphRenderer(g).Render())
+	// Only the forEach transition is labeled; the edge from the branch into the fan-in
+	// reduce circle is a plain edge.
+	assert.Contains(mmd, `t0 -->|"for each"| t1`)
+	assert.Contains(mmd, `t1 --> t2_reduce`)
+	// The fan-in node itself stays a standard rectangle.
 	assert.Contains(mmd, `t2["svc/join"]:::task`)
 }
 
-func TestGraph_MermaidNestedForEachScopes(t *testing.T) {
+func TestGraph_MermaidNestedForEachLabels(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
@@ -440,14 +447,11 @@ func TestGraph_MermaidNestedForEachScopes(t *testing.T) {
 	g.SetFanIn("svc/outerJoin")
 	assert.NoError(g.Validate())
 
-	mmd := g.Mermaid()
-	// Each forEach source produces its own subgraph block, in registration order.
-	outerIdx := strings.Index(mmd, `subgraph fo_t0 ["for each in tenants"]`)
-	innerIdx := strings.Index(mmd, `subgraph fo_t1 ["for each in docs"]`)
-	assert.True(outerIdx >= 0)
-	assert.True(innerIdx >= 0)
-	// Inner block is nested textually after the outer block opens.
-	assert.True(innerIdx > outerIdx)
+	mmd := must(NewGraphRenderer(g).Render())
+	// Each forEach transition gets its own "for each" edge label; no nested boxes.
+	assert.Contains(mmd, `t0 -->|"for each"| t1`)
+	assert.Contains(mmd, `t1 -->|"for each"| t2`)
+	assert.NotContains(mmd, `subgraph fo_`)
 }
 
 func TestGraph_MermaidLabelsOnErrorAndOnTimeout(t *testing.T) {
@@ -461,7 +465,7 @@ func TestGraph_MermaidLabelsOnErrorAndOnTimeout(t *testing.T) {
 	g.AddTransitionOnTimeout("svc/a", "svc/timeoutHandler")
 	g.AddTransition("svc/timeoutHandler", END)
 
-	mmd := g.Mermaid()
+	mmd := must(NewGraphRenderer(g).Render())
 	assert.Contains(mmd, `"onError"`)
 	assert.Contains(mmd, `"onTimeout"`)
 }
@@ -477,7 +481,7 @@ func TestGraph_SelfLoopOnErrorRejected(t *testing.T) {
 	err := g.Validate()
 	if assert.Error(err) {
 		assert.Contains(err.Error(), "to itself")
-		assert.Contains(err.Error(), "RetryOnTimeout")
+		assert.Contains(err.Error(), "flow.Retry")
 	}
 }
 
@@ -644,25 +648,6 @@ func TestLineage_OnErrorHandlerConvergesToFanIn(t *testing.T) {
 	assert.NoError(g.Validate())
 }
 
-func TestLineage_SubgraphIsOpaque(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	// A subgraph node is treated like any other node by the parent's validator.
-	g := NewGraph("subgraph-as-node")
-	g.AddTask("s", "host/s")
-	g.AddTask("a", "host/a")
-	g.AddSubgraph("child", "host/child-workflow")
-	g.AddTask("join", "host/join")
-	g.AddTransition("s", "a")
-	g.AddTransition("s", "child")
-	g.AddTransition("a", "join")
-	g.AddTransition("child", "join")
-	g.AddTransition("join", END)
-	g.SetFanIn("join")
-	assert.NoError(g.Validate())
-}
-
 func TestLineage_EndWithUnpoppedFrame(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
@@ -803,4 +788,219 @@ func TestLineage_FanInFlagSurvivesJSONRoundTrip(t *testing.T) {
 	assert.Expect(restored.IsFanIn("join"), true)
 	assert.Expect(restored.IsFanIn("a"), false)
 	assert.Equal("join", restored.FanInFor("s"))
+}
+
+func TestGraph_SwitchValid(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-routing")
+	g.AddTransition("entry", "router")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionSwitch("router", "b", "i==2")
+	g.AddTransitionSwitch("router", "c", "true")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	g.AddTransition("c", END)
+	assert.NoError(g.Validate())
+	// Switch source must not be treated as a fan-out source.
+	assert.Expect(g.IsFanOutSource("router"), false)
+}
+
+func TestGraph_SwitchRejectsEmptyWhen(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-no-when")
+	g.AddTransitionSwitch("router", "a", "")
+	g.AddTransition("a", END)
+	err := g.Validate()
+	assert.Error(err)
+	assert.Contains(err.Error(), "requires a 'when' expression")
+}
+
+func TestGraph_SwitchRejectsMixWithPlain(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-mixed")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransition("router", "b")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	err := g.Validate()
+	assert.Error(err)
+	assert.Contains(err.Error(), "switch transition")
+}
+
+func TestGraph_SwitchRejectsMixWithWhen(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-vs-when")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionWhen("router", "b", "i==2")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	err := g.Validate()
+	assert.Error(err)
+	assert.Contains(err.Error(), "switch transition")
+}
+
+func TestGraph_SwitchAllowedWithGoto(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// WithGoto is an explicit task-requested override; it preempts Switch
+	// evaluation at runtime, so the two kinds can coexist from one source.
+	g := NewGraph("switch-with-goto")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionSwitch("router", "b", "true")
+	g.AddTransitionGoto("router", "c")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	g.AddTransition("c", END)
+	assert.NoError(g.Validate())
+}
+
+func TestGraph_SwitchAllowedWithOnError(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-with-onerror")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionSwitch("router", "b", "true")
+	g.AddTransitionOnError("router", "handler")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	g.AddTransition("handler", END)
+	assert.NoError(g.Validate())
+}
+
+func TestGraph_SwitchNoFanInRequired(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// Three Switch branches from one node, no SetFanIn anywhere: validator must accept.
+	g := NewGraph("switch-no-fanin")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionSwitch("router", "b", "i==2")
+	g.AddTransitionSwitch("router", "c", "true")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	g.AddTransition("c", END)
+	assert.NoError(g.Validate())
+}
+
+func TestGraph_SwitchRejectsForEach(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// A switch transition with ForEach set is constructed directly to bypass the
+	// constructor; the validator must reject it.
+	g := NewGraph("switch-foreach")
+	g.AddTransition("router", "a")
+	g.AddTransition("a", END)
+	g.transitions = append(g.transitions, Transition{From: "router", To: "a", When: "true", Switch: true, ForEach: "items", As: "item"})
+	err := g.Validate()
+	assert.Error(err)
+	assert.Contains(err.Error(), "switch")
+}
+
+func TestGraph_SwitchMermaidDiamond(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("switch-render")
+	g.AddTransitionSwitch("router", "a", "i==1")
+	g.AddTransitionSwitch("router", "b", "true")
+	g.AddTransition("a", END)
+	g.AddTransition("b", END)
+	assert.NoError(g.Validate())
+	m := must(NewGraphRenderer(g).Render())
+	// Diamond is emitted as a rhombus labeled "switch" with a per-source suffix.
+	assert.Contains(m, `t0_switch{"switch"}`)
+	// Source routes through the diamond, not directly to the arms.
+	assert.Contains(m, "t0 --> t0_switch")
+	// Arms carry the condition as their label; when="true" becomes "default".
+	assert.Contains(m, `t0_switch -->|"i==1"| t1`)
+	assert.Contains(m, `t0_switch -->|"default"| t2`)
+	// No direct labeled edge from source to arms.
+	assert.NotContains(m, `t0 -->|"i==1"|`)
+}
+
+func TestGraph_MermaidReduceCircle(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	// Classic two-branch fan-out converging on a SetFanIn node.
+	g := NewGraph("reduce-render")
+	g.AddTransition("split", "a")
+	g.AddTransition("split", "b")
+	g.AddTransition("a", "join")
+	g.AddTransition("b", "join")
+	g.AddTransition("join", END)
+	g.SetFanIn("join")
+	assert.NoError(g.Validate())
+	m := must(NewGraphRenderer(g).Render())
+
+	// The reduce circle sits ahead of the fan-in node, same color as the
+	// switch/when diamonds (term class).
+	assert.Contains(m, `t3_reduce(("reduce")):::term`)
+	// Single edge from reduce circle to the fan-in node.
+	assert.Contains(m, "t3_reduce --> t3")
+	// Both cohort siblings now point at the reduce circle, not the node.
+	assert.Contains(m, "t1 --> t3_reduce")
+	assert.Contains(m, "t2 --> t3_reduce")
+	// No direct cohort -> fan-in node edges.
+	assert.NotContains(m, "t1 --> t3\n")
+	assert.NotContains(m, "t2 --> t3\n")
+}
+
+func TestGraph_MermaidAnnotation(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("annotated")
+	g.AddTransition("a", "b")
+	g.AddTransition("b", END)
+	g.Annotate("a", "kicks off the loop")
+
+	mmd := must(NewGraphRenderer(g).Render())
+	// Annotated node is wrapped in an invisible TB subgraph.
+	assert.Contains(mmd, `subgraph t0_anno [" "]`)
+	assert.Contains(mmd, "direction TB")
+	assert.Contains(mmd, "style t0_anno fill:none,stroke:none")
+	// The note is a teal, chromeless text node beneath the source.
+	assert.Contains(mmd, `t0_note["kicks off the loop"]:::note`)
+	assert.Contains(mmd, "classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em")
+	// Edges still target the actual task node, not the wrapper.
+	assert.Contains(mmd, "t0 --> t1")
+	assert.NotContains(mmd, "t0_anno --> ")
+
+	// Re-annotating replaces; passing "" clears.
+	g.Annotate("a", "")
+	mmd = must(NewGraphRenderer(g).Render())
+	assert.NotContains(mmd, "kicks off the loop")
+	assert.NotContains(mmd, "t0_anno")
+}
+
+func TestGraph_WhenMermaidDiamond(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	g := NewGraph("when-render")
+	g.AddTransitionWhen("router", "a", "i==1")
+	g.AddTransitionWhen("router", "b", "i==2")
+	g.AddTransition("a", "join")
+	g.AddTransition("b", "join")
+	g.AddTransition("join", END)
+	g.SetFanIn("join")
+	assert.NoError(g.Validate())
+	m := must(NewGraphRenderer(g).Render())
+	// Diamond labeled "when" appears for the When-source.
+	assert.Contains(m, `t0_when{"when"}`)
+	assert.Contains(m, "t0 --> t0_when")
+	assert.Contains(m, `t0_when -->|"i==1"| t1`)
+	assert.Contains(m, `t0_when -->|"i==2"| t2`)
 }

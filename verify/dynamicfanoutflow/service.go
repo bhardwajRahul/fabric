@@ -59,13 +59,13 @@ func (svc *Service) TaskA(ctx context.Context, flow *workflow.Flow, items []stri
 }
 
 /*
-TaskB runs once per forEach element. It contributes to sumProcessed via the sum* reducer,
-echoes its own itemIndex into the listSeenIndices accumulator (via the list* reducer),
-and emits its itemCount into setSeenCounts (via the set* reducer) so the test can confirm
-every branch saw the same cohort size. When clearItems is true, the branch explicitly writes
-items=null into its changes to override the spawn-step's array at fan-in.
+TaskB runs once per forEach element. It contributes to `processed` (Add-reduced),
+echoes its own itemIndex into the `seenIndices` accumulator (Append-reduced), and emits
+its itemCount into `seenCounts` (Union-reduced) so the test can confirm every branch saw
+the same cohort size. When clearItems is true, the branch explicitly writes items=null
+into its changes to override the spawn-step's array at fan-in.
 */
-func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) { // MARKER: TaskB
+func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) { // MARKER: TaskB
 	if item == "" {
 		return 0, nil, nil, nil
 	}
@@ -79,10 +79,10 @@ func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, item string,
 }
 
 /*
-TaskC is the fan-in target. It surfaces the final sumProcessed as processedCount.
+TaskC is the fan-in target. It surfaces the final processed as processedCount.
 */
-func (svc *Service) TaskC(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error) { // MARKER: TaskC
-	return sumProcessed, nil
+func (svc *Service) TaskC(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error) { // MARKER: TaskC
+	return processed, nil
 }
 
 /*
@@ -94,6 +94,9 @@ func (svc *Service) DynamicFanOut(ctx context.Context) (graph *workflow.Graph, e
 	graph.AddTask("taskB", dynamicfanoutflowapi.TaskB.URL())
 	graph.AddTask("taskC", dynamicfanoutflowapi.TaskC.URL())
 	graph.SetFanIn("taskC")
+	graph.SetReducer("processed", workflow.ReducerAdd)
+	graph.SetReducer("seenIndices", workflow.ReducerAppend)
+	graph.SetReducer("seenCounts", workflow.ReducerUnion)
 	graph.AddTransitionForEach("taskA", "taskB", "items", "item")
 	graph.AddTransition("taskB", "taskC")
 	graph.AddTransition("taskC", workflow.END)

@@ -73,7 +73,7 @@ func TestDocextractionflow_Mock(t *testing.T) {
 	t.Run("transcribe_chunk", func(t *testing.T) { // MARKER: TranscribeChunk
 		assert := testarossa.For(t)
 
-		mock.MockTranscribeChunk(func(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) {
+		mock.MockTranscribeChunk(func(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (transcriptions []string, err error) {
 			return
 		})
 		var page []byte
@@ -85,22 +85,22 @@ func TestDocextractionflow_Mock(t *testing.T) {
 	t.Run("join_page_transcriptions", func(t *testing.T) { // MARKER: JoinPageTranscriptions
 		assert := testarossa.For(t)
 
-		mock.MockJoinPageTranscriptions(func(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error) {
+		mock.MockJoinPageTranscriptions(func(ctx context.Context, flow *workflow.Flow, transcriptions []string) (pageTexts []string, err error) {
 			return
 		})
-		var listTranscriptions []string
-		_, err := mock.JoinPageTranscriptions(ctx, nil, listTranscriptions)
+		var transcriptions []string
+		_, err := mock.JoinPageTranscriptions(ctx, nil, transcriptions)
 		assert.NoError(err)
 	})
 
 	t.Run("join_doc_transcriptions", func(t *testing.T) { // MARKER: JoinDocTranscriptions
 		assert := testarossa.For(t)
 
-		mock.MockJoinDocTranscriptions(func(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error) {
+		mock.MockJoinDocTranscriptions(func(ctx context.Context, flow *workflow.Flow, pageTexts []string) (docTranscription string, err error) {
 			return
 		})
-		var listPageTexts []string
-		_, err := mock.JoinDocTranscriptions(ctx, nil, listPageTexts)
+		var pageTexts []string
+		_, err := mock.JoinDocTranscriptions(ctx, nil, pageTexts)
 		assert.NoError(err)
 	})
 

@@ -91,11 +91,11 @@ func (svc *Service) FanA(ctx context.Context, flow *workflow.Flow) (done bool, e
 }
 
 /*
-Work processes one fan-out element and contributes a delta to the sum reducer.
-The `sumWork` field name auto-selects the numeric-add reducer at fan-in.
+Work processes one fan-out element and contributes a delta to the work accumulator;
+the Soak graph attaches ReducerAdd to the `work` field so the deltas sum at fan-in.
 */
 func (svc *Service) Work(ctx context.Context, flow *workflow.Flow) (done bool, err error) { // MARKER: Work
-	flow.Set("sumWork", 1)
+	flow.Set("work", 1)
 	return true, nil
 }
 
@@ -174,9 +174,10 @@ func (svc *Service) Soak(ctx context.Context) (graph *workflow.Graph, err error)
 	graph.AddTask("recover", soakflowapi.Recover.URL())
 	graph.AddTask("boomF", soakflowapi.BoomF.URL())
 	graph.AddTask("join", soakflowapi.Join.URL())
-	graph.AddSubgraph("sub", soakflowapi.Inner.URL())
+	graph.AddTask("sub", soakflowapi.RunSub.URL())
 	graph.SetFanIn("collect") // pops the fanA forEach frame
 	graph.SetFanIn("join")    // pops the seed conditional-split frame
+	graph.SetReducer("work", workflow.ReducerAdd)
 
 	// Mutually exclusive 5-way conditional split (branch is clamped to 0..4).
 	graph.AddTransitionWhen("seed", "fanA", "branch == 0")
@@ -207,6 +208,24 @@ func (svc *Service) Soak(ctx context.Context) (graph *workflow.Graph, err error)
 
 	graph.AddTransition("join", workflow.END)
 	return graph, nil
+}
+
+/*
+RunSub invokes the Inner subgraph via flow.Subgraph and adopts its `done` output. It is the branch==2
+route into the Join fan-in.
+*/
+func (svc *Service) RunSub(ctx context.Context, flow *workflow.Flow) (done bool, err error) { // MARKER: RunSub
+	out, yield, err := flow.Subgraph(soakflowapi.Inner.URL(), nil)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if yield {
+		return false, nil
+	}
+	if v, ok := out["done"].(bool); ok {
+		return v, nil
+	}
+	return false, nil
 }
 
 /*

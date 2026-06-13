@@ -143,7 +143,7 @@ func Render(s *Service) *Document {
 		paramDescs, resultDescs := parseParamDescriptions(ep.Description)
 
 		// Functions
-		if ep.Type == FeatureFunction || ep.Type == FeatureWorkflow {
+		if ep.Type == FeatureFunction || ep.Type == FeatureWorkflow || ep.Type == FeatureTask {
 			method := ep.Method
 			if method == "" || method == "ANY" {
 				method = "POST"
@@ -358,7 +358,7 @@ func Render(s *Service) *Document {
 
 		// Determine the HTTP method for the path key
 		pathMethod := ep.Method
-		if ep.Type == FeatureFunction || ep.Type == FeatureWorkflow {
+		if ep.Type == FeatureFunction || ep.Type == FeatureWorkflow || ep.Type == FeatureTask {
 			if pathMethod == "" || pathMethod == "ANY" {
 				pathMethod = "POST"
 			}

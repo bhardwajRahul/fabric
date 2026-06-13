@@ -389,18 +389,18 @@ func (_c Executor) TaskB(ctx context.Context, itemUpper string) (bProcessed stri
 /*
 TaskM creates and runs the TaskM task.
 */
-func (_c Executor) TaskM(ctx context.Context, aProcessed, bProcessed string) (setMerged []string, err error) { // MARKER: TaskM
+func (_c Executor) TaskM(ctx context.Context, aProcessed, bProcessed string) (mergedItems []string, err error) { // MARKER: TaskM
 	var out TaskMOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskM.Method, TaskM.Route, TaskMIn{AProcessed: aProcessed, BProcessed: bProcessed}, &out, _c.inFlow, _c.outFlow)
-	return out.SetMerged, err
+	return out.MergedItems, err
 }
 
 /*
 TaskL creates and runs the TaskL task.
 */
-func (_c Executor) TaskL(ctx context.Context, setMerged []string) (finalCount int, err error) { // MARKER: TaskL
+func (_c Executor) TaskL(ctx context.Context, mergedItems []string) (finalCount int, err error) { // MARKER: TaskL
 	var out TaskLOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskL.Method, TaskL.Route, TaskLIn{SetMerged: setMerged}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskL.Method, TaskL.Route, TaskLIn{MergedItems: mergedItems}, &out, _c.inFlow, _c.outFlow)
 	return out.FinalCount, err
 }
 

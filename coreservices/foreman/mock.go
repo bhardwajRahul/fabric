@@ -37,11 +37,14 @@ type Mock struct {
 	mockStart                                 func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Start
 	mockStartNotify                           func(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                            // MARKER: StartNotify
 	mockSnapshot                              func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                    // MARKER: Snapshot
+	mockFingerprint                           func(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                                // MARKER: Fingerprint
 	mockResume                                func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                   // MARKER: Resume
-	mockFork                                  func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error)                // MARKER: Fork
+	mockResumeBreak                           func(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                               // MARKER: ResumeBreak
 	mockCancel                                func(ctx context.Context, flowKey string, reason string) (err error)                                                                    // MARKER: Cancel
+	mockRestart                               func(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                               // MARKER: Restart
+	mockRestartFrom                           func(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                               // MARKER: RestartFrom
 	mockHistory                               func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                      // MARKER: History
-	mockRetry                                 func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Retry
+	mockStep                                  func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                        // MARKER: Step
 	mockList                                  func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                        // MARKER: List
 	mockDelete                                func(ctx context.Context, flowKey string) (err error)                                                                                   // MARKER: Delete
 	mockPurge                                 func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                              // MARKER: Purge
@@ -142,6 +145,20 @@ func (svc *Mock) Snapshot(ctx context.Context, flowKey string) (outcome *workflo
 	return outcome, errors.Trace(err)
 }
 
+// MockFingerprint sets up a mock handler for Fingerprint.
+func (svc *Mock) MockFingerprint(handler func(ctx context.Context, flowKey string) (fingerprint string, status string, err error)) *Mock { // MARKER: Fingerprint
+	svc.mockFingerprint = handler
+	return svc
+}
+
+// Fingerprint executes the mock handler.
+func (svc *Mock) Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error) { // MARKER: Fingerprint
+	if svc.mockFingerprint != nil {
+		fingerprint, status, err = svc.mockFingerprint(ctx, flowKey)
+	}
+	return fingerprint, status, errors.Trace(err)
+}
+
 // MockResume sets up a mock handler for Resume.
 func (svc *Mock) MockResume(handler func(ctx context.Context, flowKey string, resumeData any) (err error)) *Mock { // MARKER: Resume
 	svc.mockResume = handler
@@ -156,18 +173,18 @@ func (svc *Mock) Resume(ctx context.Context, flowKey string, resumeData any) (er
 	return errors.Trace(err)
 }
 
-// MockFork sets up a mock handler for Fork.
-func (svc *Mock) MockFork(handler func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error)) *Mock { // MARKER: Fork
-	svc.mockFork = handler
+// MockResumeBreak sets up a mock handler for ResumeBreak.
+func (svc *Mock) MockResumeBreak(handler func(ctx context.Context, flowKey string, stateOverrides any) (err error)) *Mock { // MARKER: ResumeBreak
+	svc.mockResumeBreak = handler
 	return svc
 }
 
-// Fork executes the mock handler.
-func (svc *Mock) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Fork
-	if svc.mockFork != nil {
-		newFlowKey, err = svc.mockFork(ctx, stepKey, stateOverrides, opts)
+// ResumeBreak executes the mock handler.
+func (svc *Mock) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: ResumeBreak
+	if svc.mockResumeBreak != nil {
+		err = svc.mockResumeBreak(ctx, flowKey, stateOverrides)
 	}
-	return newFlowKey, errors.Trace(err)
+	return errors.Trace(err)
 }
 
 // MockCancel sets up a mock handler for Cancel.
@@ -180,6 +197,34 @@ func (svc *Mock) MockCancel(handler func(ctx context.Context, flowKey string, re
 func (svc *Mock) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
 	if svc.mockCancel != nil {
 		err = svc.mockCancel(ctx, flowKey, reason)
+	}
+	return errors.Trace(err)
+}
+
+// MockRestart sets up a mock handler for Restart.
+func (svc *Mock) MockRestart(handler func(ctx context.Context, flowKey string, stateOverrides any) (err error)) *Mock { // MARKER: Restart
+	svc.mockRestart = handler
+	return svc
+}
+
+// Restart executes the mock handler.
+func (svc *Mock) Restart(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Restart
+	if svc.mockRestart != nil {
+		err = svc.mockRestart(ctx, flowKey, stateOverrides)
+	}
+	return errors.Trace(err)
+}
+
+// MockRestartFrom sets up a mock handler for RestartFrom.
+func (svc *Mock) MockRestartFrom(handler func(ctx context.Context, stepKey string, stateOverrides any) (err error)) *Mock { // MARKER: RestartFrom
+	svc.mockRestartFrom = handler
+	return svc
+}
+
+// RestartFrom executes the mock handler.
+func (svc *Mock) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
+	if svc.mockRestartFrom != nil {
+		err = svc.mockRestartFrom(ctx, stepKey, stateOverrides)
 	}
 	return errors.Trace(err)
 }
@@ -198,18 +243,18 @@ func (svc *Mock) History(ctx context.Context, flowKey string) (steps []foremanap
 	return steps, errors.Trace(err)
 }
 
-// MockRetry sets up a mock handler for Retry.
-func (svc *Mock) MockRetry(handler func(ctx context.Context, flowKey string) (err error)) *Mock { // MARKER: Retry
-	svc.mockRetry = handler
+// MockStep sets up a mock handler for Step.
+func (svc *Mock) MockStep(handler func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)) *Mock { // MARKER: Step
+	svc.mockStep = handler
 	return svc
 }
 
-// Retry executes the mock handler.
-func (svc *Mock) Retry(ctx context.Context, flowKey string) (err error) { // MARKER: Retry
-	if svc.mockRetry != nil {
-		err = svc.mockRetry(ctx, flowKey)
+// Step executes the mock handler.
+func (svc *Mock) Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error) { // MARKER: Step
+	if svc.mockStep != nil {
+		step, err = svc.mockStep(ctx, stepKey)
 	}
-	return errors.Trace(err)
+	return step, errors.Trace(err)
 }
 
 // MockList sets up a mock handler for List.

@@ -262,17 +262,31 @@ func operationInputSchema(op *openapi.Operation, doc *openapi.Document) (json.Ra
 }
 
 // resolveSchemaRef resolves a "#/components/schemas/Foo" $ref against the document's components,
-// returning the referenced schema if found or the original schema otherwise.
+// returning the deepest non-ref schema reachable through chained refs, or the original schema if
+// the chain cannot be followed. Microbus's render.go produces a two-hop chain for endpoint
+// inputs (ENDPOINT_IN -> ENDPOINT_StructName), so we must walk refs until a concrete schema is
+// reached -- a single hop returns a wrapper with only $ref and no `type`, which downstream LLM
+// providers reject as missing input_schema.type.
 func resolveSchemaRef(schema *jsonschema.Schema, doc *openapi.Document) *jsonschema.Schema {
-	if schema == nil || schema.Ref == "" || doc == nil || doc.Components == nil {
-		return schema
-	}
 	const prefix = "#/components/schemas/"
-	if !strings.HasPrefix(schema.Ref, prefix) {
+	if doc == nil || doc.Components == nil {
 		return schema
 	}
-	if resolved, ok := doc.Components.Schemas[schema.Ref[len(prefix):]]; ok && resolved != nil {
-		return resolved
+	seen := map[string]bool{}
+	for schema != nil && schema.Ref != "" {
+		if !strings.HasPrefix(schema.Ref, prefix) {
+			return schema
+		}
+		key := schema.Ref[len(prefix):]
+		if seen[key] {
+			return schema // cycle guard
+		}
+		seen[key] = true
+		next, ok := doc.Components.Schemas[key]
+		if !ok || next == nil {
+			return schema
+		}
+		schema = next
 	}
 	return schema
 }

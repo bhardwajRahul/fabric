@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = subgraphfanoutflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -64,6 +64,7 @@ type ToDo interface {
 	TaskX(ctx context.Context, flow *workflow.Flow) (xPassed bool, err error)                                                          // MARKER: TaskX
 	TaskY(ctx context.Context, flow *workflow.Flow, xPassed bool) (subResult string, err error)                                        // MARKER: TaskY
 	NormalD(ctx context.Context, flow *workflow.Flow) (resultD string, err error)                                                      // MARKER: NormalD
+	RunSub(ctx context.Context, flow *workflow.Flow) (subResult string, err error)                                                     // MARKER: RunSub
 	TaskE(ctx context.Context, flow *workflow.Flow, resultB, subResult, resultD string) (finalResult string, err error)                // MARKER: TaskE
 	Sub(ctx context.Context) (graph *workflow.Graph, err error)                                                                         // MARKER: Sub
 	SubFanOut(ctx context.Context) (graph *workflow.Graph, err error)                                                                   // MARKER: SubFanOut
@@ -133,6 +134,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(subgraphfanoutflowapi.NormalD.Method, subgraphfanoutflowapi.NormalD.Route),
 		sub.Description(`NormalD produces resultD.`),
 		sub.Task(subgraphfanoutflowapi.NormalDIn{}, subgraphfanoutflowapi.NormalDOut{}),
+	)
+	svc.Subscribe( // MARKER: RunSub
+		"RunSub", svc.doRunSub,
+		sub.At(subgraphfanoutflowapi.RunSub.Method, subgraphfanoutflowapi.RunSub.Route),
+		sub.Description(`RunSub invokes the Sub subgraph via flow.Subgraph and adopts its subResult.`),
+		sub.Task(subgraphfanoutflowapi.RunSubIn{}, subgraphfanoutflowapi.RunSubOut{}),
 	)
 	svc.Subscribe( // MARKER: TaskE
 		"TaskE", svc.doTaskE,
@@ -250,6 +257,26 @@ func (svc *Intermediate) doTaskY(w http.ResponseWriter, r *http.Request) (err er
 	flow.ParseState(&in)
 	var out subgraphfanoutflowapi.TaskYOut
 	out.SubResult, err = svc.TaskY(r.Context(), &flow, in.XPassed)
+	if err != nil {
+		return err
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(&flow))
+}
+
+// doRunSub handles marshaling for RunSub.
+func (svc *Intermediate) doRunSub(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunSub
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in subgraphfanoutflowapi.RunSubIn
+	flow.ParseState(&in)
+	var out subgraphfanoutflowapi.RunSubOut
+	out.SubResult, err = svc.RunSub(r.Context(), &flow)
 	if err != nil {
 		return err
 	}

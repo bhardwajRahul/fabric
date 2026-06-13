@@ -59,17 +59,17 @@ type IncrementIn struct { // MARKER: Increment
 
 // IncrementOut are the output arguments of Increment.
 type IncrementOut struct { // MARKER: Increment
-	ListResultOut []int `json:"listResult,omitzero"`
+	ResultsOut []int `json:"results,omitzero"`
 }
 
 // JoinIn are the input arguments of Join.
 type JoinIn struct { // MARKER: Join
-	ListResult []int `json:"listResult,omitzero"`
+	Results []int `json:"results,omitzero"`
 }
 
 // JoinOut are the output arguments of Join.
 type JoinOut struct { // MARKER: Join
-	ListResultOut []int `json:"listResult,omitzero"`
+	ResultsOut []int `json:"results,omitzero"`
 }
 
 // RetryFanOutIn are the input arguments of RetryFanOut.
@@ -79,5 +79,5 @@ type RetryFanOutIn struct { // MARKER: RetryFanOut
 
 // RetryFanOutOut are the output arguments of RetryFanOut.
 type RetryFanOutOut struct { // MARKER: RetryFanOut
-	ListResult []int `json:"listResult,omitzero"`
+	Results []int `json:"results,omitzero"`
 }

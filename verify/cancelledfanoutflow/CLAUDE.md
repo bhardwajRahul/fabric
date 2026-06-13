@@ -29,7 +29,7 @@ the other two branches are cancelled while still `pending` and never run; J neve
 
 - final status is `cancelled`
 - the atomic execution counter is exactly 1 (only the branch the single worker picked up ran)
-- `sumExecuted` is 0/absent in the final state (the running branch's result was discarded and
-  the fan-in never aggregated)
+- `executed` is 0/absent in the final state (the running branch's result was discarded and
+  the fan-in never aggregated; the field is wired with `SetReducer("executed", ReducerAdd)`)
 
 The 1s cancel vs 2s branch sleep gives a comfortable margin for the in-memory test harness.

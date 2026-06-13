@@ -19,7 +19,7 @@ SubmitCreditApplication → (fan-out)
   ├─ VerifyCredit ─────────→ ReviewCredit
   │    └─ (on err) HandleCreditError → ReviewCredit
   ├─ VerifyEmployment (forEach employer) → ReviewCredit
-  └─ IdentityVerification (subgraph) ──→ ReviewCredit
+  └─ RunIdentityVerification (flow.Subgraph) → ReviewCredit
                                             │
                                     ReviewCredit → Decision → END
                                        ↕ (goto)
@@ -30,7 +30,7 @@ SubmitCreditApplication → (fan-out)
 - `VerifyCredit` checks credit score ≥ 550. On error, routes to `HandleCreditError`
 - `HandleCreditError` receives the `TracedError` via `onErr`, sets `creditVerified = false`
 - `VerifyEmployment` runs once per employer via forEach; failures summed with `ReducerAdd`
-- `IdentityVerification` is a subgraph (see below)
+- `RunIdentityVerification` calls `flow.Subgraph` to run the `IdentityVerification` child workflow (see below) and adopts its `identityVerified` output
 - `ReviewCredit` is the fan-in point. Passes through for good scores (650+), approves borderline (580-649), uses goto to `RequestMoreInfo` for very borderline (550-579), rejects below 550
 - `Decision` ANDs all verification results
 

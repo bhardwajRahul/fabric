@@ -16,14 +16,37 @@ limitations under the License.
 
 package foremanapi
 
+import "time"
+
 // FlowSummary is a summary of a flow for listing purposes. The heavy side-channel fields
 // (State, InterruptPayload) are omitted; callers needing them follow up with Snapshot.
 type FlowSummary struct {
-	FlowKey      string `json:"flowKey,omitzero"`
-	ThreadKey    string `json:"threadKey,omitzero"`
-	WorkflowName string `json:"workflowName,omitzero"`
-	Status       string `json:"status,omitzero"`
-	TaskName     string `json:"taskName,omitzero"`
-	Error        string `json:"error,omitzero"`
-	CancelReason string `json:"cancelReason,omitzero"`
+	FlowKey      string    `json:"flowKey,omitzero"`
+	ThreadKey    string    `json:"threadKey,omitzero"`
+	WorkflowName string    `json:"workflowName,omitzero"`
+	Status       string    `json:"status,omitzero"`
+	TaskName     string    `json:"taskName,omitzero"`
+	Error        string    `json:"error,omitzero"`
+	CancelReason string    `json:"cancelReason,omitzero"`
+	CreatedAt    time.Time `json:"createdAt,omitzero"`
+	// StartedAt is when this attempt began dispatching (Start, or a Restart/RestartFrom
+	// rewind). Distinct from CreatedAt, which is the row's INSERT moment and is only
+	// reset on full Restart. Use StartedAt for duration metrics; CreatedAt for "when did
+	// this flow first appear."
+	StartedAt    time.Time `json:"startedAt,omitzero"`
+	UpdatedAt    time.Time `json:"updatedAt,omitzero"`
+}
+
+// Duration is the wall-clock time from StartedAt to UpdatedAt - the time the current attempt
+// has spent dispatching, excluding any pre-Start queue wait or breaker-park hold. Returns zero
+// when either timestamp is missing or the delta is negative.
+func (f FlowSummary) Duration() time.Duration {
+	if f.StartedAt.IsZero() || f.UpdatedAt.IsZero() {
+		return 0
+	}
+	d := f.UpdatedAt.Sub(f.StartedAt)
+	if d < 0 {
+		return 0
+	}
+	return d
 }

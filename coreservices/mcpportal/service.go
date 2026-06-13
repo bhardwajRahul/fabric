@@ -175,6 +175,9 @@ func (svc *Service) handleToolsList(r *http.Request) (any, *jsonrpcError) {
 			if op == nil || op.XName == "" {
 				continue
 			}
+			if !exposedFeatureType(op.XFeatureType) {
+				continue
+			}
 			name := op.XName
 			// Disambiguate name collisions: first occurrence keeps the bare name, later
 			// ones get `_2`, `_3`, ... suffixes so the LLM can address them distinctly.
@@ -239,7 +242,10 @@ func (svc *Service) handleToolsCall(r *http.Request, params json.RawMessage) (an
 		sort.Strings(methodKeys)
 		for _, method := range methodKeys {
 			op := methods[method]
-			if op != nil && op.XName == p.Name {
+			if op == nil || !exposedFeatureType(op.XFeatureType) {
+				continue
+			}
+			if op.XName == p.Name {
 				toolMethod = strings.ToUpper(method)
 				toolPath = path
 				toolOp = op
@@ -296,6 +302,18 @@ func (svc *Service) fetchAggregate(r *http.Request) (*openapi.Document, error) {
 		return nil, errors.Trace(err)
 	}
 	return &doc, nil
+}
+
+// exposedFeatureType is the whitelist of x-feature-type values mcpportal turns
+// into MCP tools. The connector's :888/openapi.json includes every type
+// (including task) so internal inspectors can discover them; this portal
+// expresses its own policy of what is safe to surface as a callable LLM tool.
+func exposedFeatureType(t string) bool {
+	switch t {
+	case openapi.FeatureFunction, openapi.FeatureWeb, openapi.FeatureWorkflow:
+		return true
+	}
+	return false
 }
 
 // buildToolInputSchema returns a self-contained JSON Schema describing the tool's input.

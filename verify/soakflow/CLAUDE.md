@@ -18,9 +18,9 @@ independent pending flows).
 `Soak` clamps the random inputs in `seed`, then a mutually exclusive 5-way `when` split on `branch` selects
 one route, all converging at `join -> END` except the unhandled failure:
 
-- `branch==0`: dynamic `forEach` fan-out over an input-sized array, with a `sum*` reducer fan-in (`collect`).
+- `branch==0`: dynamic `forEach` fan-out over an input-sized array, with an Add-reduced `work` field at the fan-in (`collect`).
 - `branch==1`: a bounded `flow.Goto` self-loop (`loop`), iteration count from the input.
-- `branch==2`: a subgraph (`Inner`).
+- `branch==2`: a `flow.Subgraph` caller task (`RunSub`) invoking the `Inner` subgraph.
 - `branch==3`: a task that always errors, recovered via an `onError` transition (flow completes).
 - `branch==4`: a task that always errors with no error transition (flow **fails** - still terminal).
 
@@ -30,8 +30,8 @@ construction (the loop and the fan-out width are bounded by `seed`'s clamps).
 
 ## Patterns exercised
 
-- Conditional `AddTransitionWhen`, dynamic `AddTransitionForEach` + `SetFanIn` + `sum*` reducer, bounded
-  `AddTransitionGoto`, `AddSubgraph`, `AddTransitionOnError`, and unhandled-error termination - all under
+- Conditional `AddTransitionWhen`, dynamic `AddTransitionForEach` + `SetFanIn` + explicit `SetReducer(work, Add)`, bounded
+  `AddTransitionGoto`, a `flow.Subgraph` caller task, `AddTransitionOnError`, and unhandled-error termination - all under
   high concurrent volume.
 - The priority/fairness dispatch path: candidate cache, single-slot refiller, doorbell/head-insert, the
   combined band+candidate query, and the deep priority/fairness subquery insert paths (via the subgraph and

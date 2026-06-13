@@ -22,9 +22,9 @@ ScanPDF -forEach(pageImages as page)->
   >=1 so the inner forEach never empties).
 - `TranscribeChunk`: 50-150ms simulated OCR latency; 5% failure rate retried via
   `flow.Retry(100, 500ms, 1.0, 500ms)` (constant delay, no backoff); on success contributes
-  one sentence (8-20 words) as the single-element `listTranscriptions` delta.
+  one sentence (8-20 words) as the single-element `transcriptions` delta.
 - `JoinPageTranscriptions` (`SetFanIn`, inner): joins a page's chunk transcriptions and
-  contributes the page text as the single-element `listPageTexts` delta.
+  contributes the page text as the single-element `pageTexts` delta.
 - `JoinDocTranscriptions` (`SetFanIn`, outer): joins all page texts into `docTranscription`,
   one page per line.
 
@@ -32,8 +32,8 @@ ScanPDF -forEach(pageImages as page)->
 
 - Doubly-nested dynamic fan-out (`forEach` within `forEach`)
 - Two stacked explicit fan-ins (`SetFanIn` on the inner and outer join)
-- `list*` append reducer at both fan-in levels, with distinct field names per level
-  (`listTranscriptions` inner, `listPageTexts` outer) so reducers do not cross levels
+- Explicit `SetReducer("transcriptions", ReducerAppend)` and `SetReducer("pageTexts", ReducerAppend)`
+  at the two fan-in levels, with distinct field names per level so reducers do not cross levels
 - Deterministic fan-in ordering via `fan_out_ordinal` (page order, chunk order) despite the
   random per-chunk latency that scrambles completion order
 - Task-initiated bounded retry (constant delay, no backoff) under a real failure rate
@@ -45,10 +45,16 @@ Random page/chunk counts and transcription text make exact-value assertions impo
 test asserts structural invariants:
 
 - final status is `completed`
-- `pageCount` in `[5, 22]`
 - `docTranscription` is non-empty
-- it has exactly `pageCount` lines (no page dropped or duplicated by the nested fan-in)
+- it has between 5 and 22 lines, i.e. one line per page over the source range (no page dropped or duplicated by the
+  nested fan-in)
 - every line is non-empty (every page produced >=1 chunk transcription)
+
+The `pageCount` output is deliberately **not** asserted. The outer `forEach` uses alias `page`, so the foreman injects
+and later strips a `<as>Count` bookkeeping field named `pageCount` (the cohort size) - the same name as `ScanPDF`'s
+`pageCount` output. The fan-in strip removes it by name, so `pageCount` is cleared by the time the flow completes. The
+line count carries the page-count invariant instead. (This is the forEach `<as>Index`/`<as>Count` naming collision; an
+author who needs a surviving page count must name the output something other than `<alias>Count`.)
 
 ## Runtime note
 

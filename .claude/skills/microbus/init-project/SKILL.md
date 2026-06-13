@@ -126,12 +126,17 @@ Create `.claude/settings.json` relative to the root of the project with the foll
 {
   "permissions": {
     "allow": [
-      "Bash(go run github.com/microbus-io/fabric/cmd/genmanifest:*)",
-      "Bash(go run github.com/microbus-io/fabric/cmd/gentopology:*)",
+      "Bash(go run github.com/microbus-io/fabric/cmd/:*)",
       "Bash(go vet:*)",
       "Bash(go test:*)",
       "Bash(go build:*)",
-      "Bash(go mod tidy:*)"
+      "Bash(go mod:*)",
+      "Bash(mkdir:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
     ]
   }
 }
@@ -160,4 +165,10 @@ openssl genpkey -algorithm Ed25519 -out private.pem
 ```yaml
 bearer.token.core:
   PrivateKey: MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
+```
+
+After copying the base64 body of the key into `config.local.yaml`, delete `private.pem`. The canonical key lives in `config.local.yaml` (git-ignored); the `.pem` file is a throwaway intermediate. Do not leave it in the project root: it is the token-mint signing root, and anyone who reads it can mint access tokens with arbitrary claims.
+
+```shell
+rm private.pem
 ```

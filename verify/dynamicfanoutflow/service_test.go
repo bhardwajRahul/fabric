@@ -89,8 +89,8 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 			status, workflow.StatusCompleted,
 			out.ProcessedCount, 3,
 			out.ItemsOut, []string{"x", "y", "z"},
-			out.ListSeenIndices, []int{0, 1, 2},
-			out.SetSeenCounts, []int{3},
+			out.SeenIndices, []int{0, 1, 2},
+			out.SeenCounts, []int{3},
 		)
 	})
 
@@ -103,8 +103,8 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 			status, workflow.StatusCompleted,
 			out.ProcessedCount, 1,
 			out.ItemsOut, []string{"only"},
-			out.ListSeenIndices, []int{0},
-			out.SetSeenCounts, []int{1},
+			out.SeenIndices, []int{0},
+			out.SeenCounts, []int{1},
 		)
 	})
 
@@ -135,8 +135,8 @@ func TestDynamicfanoutflow_DynamicFanOut(t *testing.T) { // MARKER: DynamicFanOu
 			status, workflow.StatusCompleted,
 			out.ProcessedCount, 3,
 			out.ItemsOut, []string(nil),
-			out.ListSeenIndices, []int{0, 1, 2},
-			out.SetSeenCounts, []int{3},
+			out.SeenIndices, []int{0, 1, 2},
+			out.SeenCounts, []int{3},
 		)
 	})
 }

@@ -18,9 +18,7 @@ package workflow
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/microbus-io/boolexp"
@@ -36,9 +34,8 @@ const END = "END"
 // step rows (microbus_steps.task_name). URL is the dispatch target the
 // foreman calls when the node is reached.
 type Node struct {
-	Name     string
-	URL      string
-	Subgraph bool
+	Name string
+	URL  string
 }
 
 // Transition defines a possible transition between two nodes in a workflow graph.
@@ -51,6 +48,7 @@ type Transition struct {
 	ForEach    string `json:"forEach,omitzero"` // dynamic fan-out over a state field
 	As         string `json:"as,omitzero"`      // alias for the current element during forEach fan-out
 	OnError    bool   `json:"onError,omitzero"` // taken when the source task returns an error
+	Switch     bool   `json:"switch,omitzero"`  // first-match-wins among siblings; never fans out
 	StatusCode int    `json:"statusCode,omitzero"`
 }
 
@@ -64,6 +62,7 @@ type Graph struct {
 	reducers      map[string]Reducer
 	fanInNodes    map[string]bool
 	fanOutToFanIn map[string]string // populated by Validate
+	annotations   map[string]string // node name -> annotation text rendered as a note under the node
 }
 
 // NewGraph creates a new workflow graph with the given name.
@@ -120,31 +119,6 @@ func (g *Graph) AddTask(name, url string) {
 	}
 }
 
-// AddSubgraph registers a child workflow as a subgraph node in the graph under the given
-// name, with the given URL as the dispatch target. Same registration semantics as AddTask.
-func (g *Graph) AddSubgraph(name, workflowURL string) {
-	if name == END {
-		return
-	}
-	for i := range g.nodes {
-		if g.nodes[i].Name == name {
-			g.nodes[i].Subgraph = true
-			return
-		}
-	}
-	g.nodes = append(g.nodes, Node{Name: name, URL: workflowURL, Subgraph: true})
-}
-
-// IsSubgraph returns true if the given node name is registered as a subgraph.
-func (g *Graph) IsSubgraph(name string) bool {
-	for _, n := range g.nodes {
-		if n.Name == name {
-			return n.Subgraph
-		}
-	}
-	return false
-}
-
 // URLOf returns the dispatch URL for a node identified by name. Returns the empty string
 // if the name is not registered. END maps to itself.
 func (g *Graph) URLOf(name string) string {
@@ -191,6 +165,22 @@ func (g *Graph) AddTransitionWhen(from, to string, when string) {
 	from = g.autoRegister(from)
 	to = g.autoRegister(to)
 	g.transitions = append(g.transitions, Transition{From: from, To: to, When: when})
+}
+
+// AddTransitionSwitch adds a first-match-wins transition between two nodes. Multiple
+// Switch transitions from the same source are evaluated in registration order and only
+// the first whose 'when' expression evaluates true fires; the rest are skipped. If no
+// Switch matches the flow ends at the source node, so the last Switch from a node is
+// typically a catch-all with when="true". Only one branch ever runs, so a downstream
+// SetFanIn is not required.
+//
+// A node that uses Switch transitions must declare every successful-path outgoing
+// transition as Switch (the validator rejects mixing Switch with When/plain/ForEach/Goto
+// from the same source). OnError transitions are orthogonal and remain allowed.
+func (g *Graph) AddTransitionSwitch(from, to string, when string) {
+	from = g.autoRegister(from)
+	to = g.autoRegister(to)
+	g.transitions = append(g.transitions, Transition{From: from, To: to, When: when, Switch: true})
 }
 
 // AddTransitionGoto adds a transition that is only taken when the source task calls
@@ -291,11 +281,12 @@ func (g *Graph) FanInFor(fanOutSource string) string {
 }
 
 // IsFanOutSource reports whether the named node has 2+ non-goto/non-error outgoing
-// transitions, or any forEach outgoing transition.
+// transitions, or any forEach outgoing transition. Switch transitions are exclusive
+// (only one branch ever fires) and therefore do not count toward fan-out.
 func (g *Graph) IsFanOutSource(name string) bool {
 	var normalCount int
 	for _, tr := range g.transitions {
-		if tr.From != name || tr.WithGoto || tr.OnError {
+		if tr.From != name || tr.WithGoto || tr.OnError || tr.Switch {
 			continue
 		}
 		if tr.ForEach != "" {
@@ -322,295 +313,26 @@ func (g *Graph) Reducers() map[string]Reducer {
 	return g.reducers
 }
 
-// Mermaid returns a fully-styled Mermaid flowchart representation of the graph,
-// suitable for writing directly to a .mmd file. The output includes the classDef
-// styles, a title node derived from the graph's URL, and per-node class annotations.
-//
-// Each forEach fan-out scope is rendered as a Mermaid subgraph block (dashed
-// outline, faint fill) titled "for each in <field>"; nodes that share the same
-// lineage frame sit inside that block, nested scopes nest accordingly. Edges
-// crossing the boundary carry "fan out" (into the scope) and "fan in" (out to the
-// fan-in node) labels. Static When fan-outs do not get a scope block; their
-// branches stay as plain labeled arrows.
-func (g *Graph) Mermaid() string {
-	var b strings.Builder
-	// Pin a fixed palette so the diagram reads on both light and dark page
-	// backgrounds: teal lines/borders (mid-luminance, visible on either),
-	// dark-grey label tiles with off-white text.
-	b.WriteString("%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%\n")
-	b.WriteString("graph LR\n")
-	b.WriteString("    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1\n")
-	b.WriteString("    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92\n")
-	b.WriteString("    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1\n")
-	b.WriteString("\n")
-
-	// Title is the workflow's last URL path segment (kebab-case route).
-	graphLabel := stripHostPort(g.name, "")
-	fmt.Fprintf(&b, "    _title{{%q}}:::term --> _start\n", graphLabel)
-
-	// Node IDs are stable t0..tN by registration order. Labels strip the graph's
-	// own hostname:port prefix and protocol so URL-as-name nodes render as just
-	// the route segment; cross-host references keep their hostname for clarity.
-	ownHost := hostOf(g.name)
-	ids := make(map[string]string, len(g.nodes))
-	labels := make(map[string]string, len(g.nodes))
-	nodeIndex := make(map[string]int, len(g.nodes))
-	for i, t := range g.nodes {
-		ids[t.Name] = fmt.Sprintf("t%d", i)
-		labels[t.Name] = stripHostPort(t.Name, ownHost)
-		nodeIndex[t.Name] = i
+// Annotate attaches a short note to a node. The note renders as a teal,
+// borderless text label directly beneath the node in the Mermaid diagram.
+// Useful for free-form context the node name alone cannot carry (e.g.
+// "subgraph for each opportunity" on a fan-out source). Re-annotating the
+// same node replaces the previous note; passing an empty string clears it.
+// No effect on execution.
+func (g *Graph) Annotate(name string, note string) {
+	if g.annotations == nil {
+		g.annotations = make(map[string]string)
 	}
-
-	// forEach fan-out sources keyed by source name, value is the iterated field.
-	// Only forEach scopes become subgraph blocks; static When fan-outs do not.
-	// A fan-out source may also have non-forEach sibling edges (regular branches that share
-	// the lineage frame for fan-in counting but don't actually replicate); those branches
-	// stay in the source's parent scope, not in the forEach box.
-	forEachField := make(map[string]string)
-	for _, tr := range g.transitions {
-		if tr.ForEach != "" && forEachField[tr.From] == "" {
-			forEachField[tr.From] = tr.ForEach
-		}
-	}
-
-	// Per-node scope and per-scope parent, computed via an edge-aware BFS. A node enters a
-	// forEach scope only via its forEach edge - non-forEach siblings at the same fan-out
-	// source stay in the source's parent scope.
-	nodeScope, scopeParent := g.computeNodeScopes()
-
-	// Group nodes and child scopes by their parent for deterministic emission.
-	nodesByScope := make(map[string][]string)
-	for _, t := range g.nodes {
-		s := nodeScope[t.Name]
-		nodesByScope[s] = append(nodesByScope[s], t.Name)
-	}
-	childScopes := make(map[string][]string)
-	for src, parent := range scopeParent {
-		childScopes[parent] = append(childScopes[parent], src)
-	}
-	for s := range childScopes {
-		sort.Slice(childScopes[s], func(i, j int) bool {
-			return nodeIndex[childScopes[s][i]] < nodeIndex[childScopes[s][j]]
-		})
-	}
-
-	nodeDecl := func(name string) string {
-		id := ids[name]
-		lbl := labels[name]
-		if g.IsSubgraph(name) {
-			return fmt.Sprintf("%s[%q]:::sub", id, lbl)
-		}
-		return fmt.Sprintf("%s[%q]:::task", id, lbl)
-	}
-
-	var emitScope func(scope string, indent string)
-	emitScope = func(scope string, indent string) {
-		for _, name := range nodesByScope[scope] {
-			fmt.Fprintf(&b, "%s%s\n", indent, nodeDecl(name))
-		}
-		for _, src := range childScopes[scope] {
-			blockID := "fo_" + ids[src]
-			fmt.Fprintf(&b, "%ssubgraph %s [\"for each in %s\"]\n", indent, blockID, forEachField[src])
-			fmt.Fprintf(&b, "%s    direction LR\n", indent)
-			emitScope(src, indent+"    ")
-			fmt.Fprintf(&b, "%send\n", indent)
-		}
-	}
-
-	if _, ok := ids[g.entryPoint]; ok {
-		fmt.Fprintf(&b, "    _start(( )):::term --> %s\n", ids[g.entryPoint])
-	} else {
-		b.WriteString("    _start(( )):::term\n")
-	}
-	emitScope("", "    ")
-
-	type edge struct {
-		from string
-		to   string
-	}
-	edgeOrder := []edge{}
-	edgeLabels := map[edge][]string{}
-	for _, tr := range g.transitions {
-		e := edge{tr.From, tr.To}
-		if _, ok := edgeLabels[e]; !ok {
-			edgeOrder = append(edgeOrder, e)
-			edgeLabels[e] = nil
-		}
-		var label string
-		switch {
-		case tr.ForEach != "":
-			label = "fan out"
-		case tr.When != "":
-			label = "if " + tr.When
-		}
-		if tr.WithGoto {
-			if label != "" {
-				label = "goto; " + label
-			} else {
-				label = "goto"
-			}
-		}
-		if tr.OnError {
-			errLabel := "onError"
-			if tr.StatusCode == http.StatusRequestTimeout {
-				errLabel = "onTimeout"
-			}
-			if label != "" {
-				label = errLabel + "; " + label
-			} else {
-				label = errLabel
-			}
-		}
-		if label != "" {
-			edgeLabels[e] = append(edgeLabels[e], label)
-		}
-	}
-
-	for _, e := range edgeOrder {
-		fromID := ids[e.from]
-		label := strings.Join(edgeLabels[e], " | ")
-		// "fan in" annotation: edges into a fan-in node that exit a forEach scope.
-		// Static When fan-ins (no enclosing forEach) get no label.
-		if e.to != END && g.fanInNodes[e.to] {
-			popped := nodeScope[e.from]
-			if popped == "" {
-				if _, ok := forEachField[e.from]; ok {
-					popped = e.from
-				}
-			}
-			if popped != "" {
-				if label != "" {
-					label += "; fan in"
-				} else {
-					label = "fan in"
-				}
-			}
-		}
-		if e.to == END {
-			if label != "" {
-				fmt.Fprintf(&b, "    %s -->|%q| _end(( )):::term\n", fromID, label)
-			} else {
-				fmt.Fprintf(&b, "    %s --> _end(( )):::term\n", fromID)
-			}
-			continue
-		}
-		toID := ids[e.to]
-		if label != "" {
-			fmt.Fprintf(&b, "    %s -->|%q| %s\n", fromID, label, toID)
-		} else {
-			fmt.Fprintf(&b, "    %s --> %s\n", fromID, toID)
-		}
-	}
-
-	// Subgraph block styling in registration order of the fan-out source.
-	scopeOrder := make([]string, 0, len(forEachField))
-	for src := range forEachField {
-		scopeOrder = append(scopeOrder, src)
-	}
-	sort.Slice(scopeOrder, func(i, j int) bool {
-		return nodeIndex[scopeOrder[i]] < nodeIndex[scopeOrder[j]]
-	})
-	for _, src := range scopeOrder {
-		fmt.Fprintf(&b, "    style fo_%s fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2\n", ids[src])
-	}
-
-	return b.String()
-}
-
-// computeNodeScopes walks the graph to assign each node a forEach scope (innermost
-// surrounding forEach fan-out source name, or "" for top-level). A node enters a
-// forEach scope only when it is the target of an actual forEach edge - non-forEach
-// sibling branches at the same fan-out source stay in the source's parent scope so
-// they don't render inside the dashed "for each" box. Returns the per-node scope map
-// and the parent-scope map for forEach scopes (used by fan-in to pop one level).
-// Tolerant of validation errors so the renderer also works on unvalidated graphs.
-func (g *Graph) computeNodeScopes() (nodeScope, scopeParent map[string]string) {
-	nodeScope = make(map[string]string, len(g.nodes))
-	scopeParent = make(map[string]string)
-	if g.entryPoint == "" {
+	if note == "" {
+		delete(g.annotations, name)
 		return
 	}
-	isFanOutSource := make(map[string]bool, len(g.nodes))
-	for _, t := range g.nodes {
-		var normalCount int
-		var hasForEach bool
-		for _, tr := range g.transitions {
-			if tr.From != t.Name || tr.WithGoto || tr.OnError {
-				continue
-			}
-			normalCount++
-			if tr.ForEach != "" {
-				hasForEach = true
-			}
-		}
-		if normalCount >= 2 || hasForEach {
-			isFanOutSource[t.Name] = true
-		}
-	}
-	queue := []string{g.entryPoint}
-	nodeScope[g.entryPoint] = ""
-	seen := map[string]bool{g.entryPoint: true}
-	for len(queue) > 0 {
-		from := queue[0]
-		queue = queue[1:]
-		fromScope := nodeScope[from]
-		fromIsFanOut := isFanOutSource[from]
-		for _, tr := range g.transitions {
-			if tr.From != from || tr.To == END {
-				continue
-			}
-			var toScope string
-			switch {
-			case tr.WithGoto, tr.OnError:
-				toScope = fromScope
-			case g.fanInNodes[tr.To]:
-				toScope = scopeParent[fromScope] // pop one forEach scope; "" if at top
-			case fromIsFanOut && tr.ForEach != "":
-				toScope = from
-				scopeParent[from] = fromScope
-			default:
-				toScope = fromScope
-			}
-			if seen[tr.To] {
-				continue
-			}
-			seen[tr.To] = true
-			nodeScope[tr.To] = toScope
-			queue = append(queue, tr.To)
-		}
-	}
-	return
+	g.annotations[name] = note
 }
 
-// hostOf returns the host[:port] of a URL-shaped string, or "" if it has no scheme.
-func hostOf(s string) string {
-	_, after, ok := strings.Cut(s, "://")
-	if !ok {
-		return ""
-	}
-	if i := strings.IndexByte(after, '/'); i >= 0 {
-		return after[:i]
-	}
-	return after
-}
-
-// stripHostPort returns the path portion of a URL-shaped string when its host
-// matches ownHost (or any host when ownHost is ""). Falls back to stripProto
-// for URL-shaped values whose host doesn't match. Non-URL inputs pass through.
-func stripHostPort(s, ownHost string) string {
-	_, after, ok := strings.Cut(s, "://")
-	if !ok {
-		return s
-	}
-	host, path := after, ""
-	if i := strings.IndexByte(after, '/'); i >= 0 {
-		host = after[:i]
-		path = after[i+1:]
-	}
-	if ownHost == "" || host == ownHost {
-		return path
-	}
-	return after
+// Annotation returns the note attached to a node via Annotate, or "" if none.
+func (g *Graph) Annotation(name string) string {
+	return g.annotations[name]
 }
 
 // Validate checks the graph for structural errors.
@@ -632,8 +354,8 @@ func (g *Graph) Validate() error {
 			return errors.New("node '%s' in graph '%s' has no URL", t.Name, g.name)
 		}
 	}
-	if !nodeSet[g.entryPoint] || g.IsSubgraph(g.entryPoint) {
-		return errors.New("entry point '%s' is not a registered task in graph '%s'", g.entryPoint, g.name)
+	if !nodeSet[g.entryPoint] {
+		return errors.New("entry point '%s' is not a registered node in graph '%s'", g.entryPoint, g.name)
 	}
 	for fanInName := range g.fanInNodes {
 		if !nodeSet[fanInName] {
@@ -659,11 +381,17 @@ func (g *Graph) Validate() error {
 		if tr.OnError && (tr.ForEach != "" || tr.WithGoto) {
 			return errors.New("transition from '%s' to '%s' in graph '%s' cannot combine onError with forEach or withGoto", tr.From, tr.To, g.name)
 		}
+		if tr.Switch && (tr.ForEach != "" || tr.WithGoto || tr.OnError) {
+			return errors.New("transition from '%s' to '%s' in graph '%s' cannot combine switch with forEach, withGoto, or onError", stripProto(tr.From), stripProto(tr.To), g.name)
+		}
+		if tr.Switch && tr.When == "" {
+			return errors.New("switch transition from '%s' to '%s' in graph '%s' requires a 'when' expression (use \"true\" for the default branch)", stripProto(tr.From), stripProto(tr.To), g.name)
+		}
 		if tr.StatusCode != 0 && !tr.OnError {
 			return errors.New("transition from '%s' to '%s' in graph '%s' sets statusCode without onError", tr.From, tr.To, g.name)
 		}
 		if tr.OnError && tr.From == tr.To {
-			return errors.New("transition from '%s' to itself in graph '%s' would loop unboundedly; use flow.Retry or flow.RetryOnTimeout in the task body for bounded retries with backoff", stripProto(tr.From), g.name)
+			return errors.New("transition from '%s' to itself in graph '%s' would loop unboundedly; use flow.Retry in the task body for bounded retries with backoff", stripProto(tr.From), g.name)
 		}
 		if tr.When != "" {
 			err := boolexp.Validate(tr.When)
@@ -671,6 +399,26 @@ func (g *Graph) Validate() error {
 				return errors.New("transition from '%s' to '%s' in graph '%s' has invalid 'when' expression: %v", stripProto(tr.From), stripProto(tr.To), g.name, err)
 			}
 		}
+	}
+
+	// A node that uses Switch must have every success-path transition be either
+	// Switch or WithGoto. OnError/OnTimeout (error axis) and WithGoto (explicit
+	// task-requested override) are each independent preemptors of Switch: the
+	// foreman picks Goto -> Switch -> nothing on success, and OnError/OnTimeout
+	// on error, so all four kinds can coexist from one source. What stays
+	// rejected is mixing Switch with plain/When/ForEach success-path branches,
+	// which would race ambiguously against the Switch ladder.
+	hasSwitchFrom := make(map[string]bool, len(g.nodes))
+	for _, tr := range g.transitions {
+		if tr.Switch {
+			hasSwitchFrom[tr.From] = true
+		}
+	}
+	for _, tr := range g.transitions {
+		if !hasSwitchFrom[tr.From] || tr.Switch || tr.OnError || tr.WithGoto {
+			continue
+		}
+		return errors.New("node '%s' in graph '%s' mixes a switch transition with a non-switch success-path transition to '%s'; convert all outgoing success-path transitions to switch (use when=\"true\" for the default), or use withGoto for explicit overrides", stripProto(tr.From), g.name, stripProto(tr.To))
 	}
 
 	reachable := make(map[string]bool)
@@ -716,7 +464,7 @@ func (g *Graph) validateLineage() error {
 		var normalCount int
 		var hasForEach bool
 		for _, tr := range g.transitions {
-			if tr.From != t.Name || tr.WithGoto || tr.OnError {
+			if tr.From != t.Name || tr.WithGoto || tr.OnError || tr.Switch {
 				continue
 			}
 			normalCount++
@@ -765,8 +513,9 @@ func (g *Graph) validateLineage() error {
 			}
 			var nextStack []string
 			switch {
-			case tr.WithGoto, tr.OnError:
-				// Stay in the same scope.
+			case tr.WithGoto, tr.OnError, tr.Switch:
+				// Stay in the same scope. Switch never pushes or pops a fan-out
+				// frame because exactly one of its branches ever fires at runtime.
 				nextStack = fromStack
 			case g.fanInNodes[tr.To]:
 				if fromIsFanOut {
@@ -837,14 +586,13 @@ func stripProto(s string) string {
 // MarshalJSON serializes the graph to JSON.
 func (g *Graph) MarshalJSON() ([]byte, error) {
 	type jsonTask struct {
-		Name     string `json:"name"`
-		URL      string `json:"url,omitzero"`
-		Subgraph bool   `json:"subgraph,omitzero"`
-		FanIn    bool   `json:"fanIn,omitzero"`
+		Name  string `json:"name"`
+		URL   string `json:"url,omitzero"`
+		FanIn bool   `json:"fanIn,omitzero"`
 	}
 	jsonTasks := make([]jsonTask, len(g.nodes))
 	for i, t := range g.nodes {
-		jsonTasks[i] = jsonTask{Name: t.Name, URL: t.URL, Subgraph: t.Subgraph, FanIn: g.fanInNodes[t.Name]}
+		jsonTasks[i] = jsonTask{Name: t.Name, URL: t.URL, FanIn: g.fanInNodes[t.Name]}
 	}
 	type jsonGraph struct {
 		Name          string             `json:"name"`
@@ -874,10 +622,9 @@ func (g *Graph) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON deserializes the graph from JSON.
 func (g *Graph) UnmarshalJSON(data []byte) error {
 	type jsonTask struct {
-		Name     string `json:"name"`
-		URL      string `json:"url,omitzero"`
-		Subgraph bool   `json:"subgraph,omitzero"`
-		FanIn    bool   `json:"fanIn,omitzero"`
+		Name  string `json:"name"`
+		URL   string `json:"url,omitzero"`
+		FanIn bool   `json:"fanIn,omitzero"`
 	}
 	type jsonGraph struct {
 		Name          string             `json:"name"`
@@ -903,7 +650,6 @@ func (g *Graph) UnmarshalJSON(data []byte) error {
 			// Legacy JSON (no url field): name doubled as the URL.
 			g.nodes[i].URL = jt.Name
 		}
-		g.nodes[i].Subgraph = jt.Subgraph
 		if jt.FanIn {
 			if g.fanInNodes == nil {
 				g.fanInNodes = make(map[string]bool)

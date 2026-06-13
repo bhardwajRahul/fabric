@@ -130,6 +130,16 @@ func TestSoakflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_sub", func(t *testing.T) { // MARKER: RunSub
+		assert := testarossa.For(t)
+
+		mock.MockRunSub(func(ctx context.Context, flow *workflow.Flow) (done bool, err error) {
+			return
+		})
+		_, err := mock.RunSub(ctx, nil)
+		assert.NoError(err)
+	})
+
 	t.Run("soak", func(t *testing.T) { // MARKER: Soak
 		assert := testarossa.For(t)
 

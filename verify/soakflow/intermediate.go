@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = soakflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -69,6 +69,7 @@ type ToDo interface {
 	BoomF(ctx context.Context, flow *workflow.Flow) (done bool, err error)      // MARKER: BoomF
 	Join(ctx context.Context, flow *workflow.Flow) (done bool, err error)       // MARKER: Join
 	InnerEntry(ctx context.Context, flow *workflow.Flow) (done bool, err error) // MARKER: InnerEntry
+	RunSub(ctx context.Context, flow *workflow.Flow) (done bool, err error)     // MARKER: RunSub
 	Soak(ctx context.Context) (graph *workflow.Graph, err error)                // MARKER: Soak
 	Inner(ctx context.Context) (graph *workflow.Graph, err error)               // MARKER: Inner
 }
@@ -167,6 +168,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(soakflowapi.InnerEntry.Method, soakflowapi.InnerEntry.Route),
 		sub.Description(`InnerEntry is the single task of the Inner subgraph.`),
 		sub.Task(soakflowapi.InnerEntryIn{}, soakflowapi.InnerEntryOut{}),
+	)
+	svc.Subscribe( // MARKER: RunSub
+		"RunSub", svc.doRunSub,
+		sub.At(soakflowapi.RunSub.Method, soakflowapi.RunSub.Route),
+		sub.Description(`RunSub invokes the Inner subgraph via flow.Subgraph.`),
+		sub.Task(soakflowapi.RunSubIn{}, soakflowapi.RunSubOut{}),
 	)
 	svc.Subscribe( // MARKER: Soak
 		"Soak", svc.doSoak,
@@ -381,6 +388,26 @@ func (svc *Intermediate) doJoin(w http.ResponseWriter, r *http.Request) (err err
 	flow.ParseState(&in)
 	var out soakflowapi.JoinOut
 	out.Done, err = svc.Join(r.Context(), &flow)
+	if err != nil {
+		return err
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(&flow))
+}
+
+// doRunSub handles marshaling for RunSub.
+func (svc *Intermediate) doRunSub(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunSub
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in soakflowapi.RunSubIn
+	flow.ParseState(&in)
+	var out soakflowapi.RunSubOut
+	out.Done, err = svc.RunSub(r.Context(), &flow)
 	if err != nil {
 		return err
 	}

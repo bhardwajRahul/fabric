@@ -69,7 +69,7 @@ When `add-task` finishes, return here for Step 4.
 
 #### Step 4: Replace the Task Body with the Call+Await Durability Pattern
 
-In `service.go`, replace the task body that `add-task` left as a stub with the durable Call+Await pattern. The callID is persisted in flow state under the key `pyCallID`; if the task is re-entered (via `flow.RetryNowOnTimeout` after the step's time budget expires), the existing callID is re-Awaited rather than a fresh call being issued. This lets a Python computation that exceeds the framework's 15-minute hop ceiling survive across task retries.
+In `service.go`, replace the task body that `add-task` left as a stub with the durable Call+Await pattern. The callID is persisted in flow state under the key `pyCallID`; if the task is re-entered (via an unlimited `flow.Retry` gated on a 408 timeout after the step's time budget expires), the existing callID is re-Awaited rather than a fresh call being issued. This lets a Python computation that exceeds the framework's 15-minute hop ceiling survive across task retries.
 
 ```go
 func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 string, input2 int) (output1 float64, err error) { // MARKER: MyTask
@@ -93,7 +93,7 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 stri
     var out myserviceapi.MyTaskOut
     err = svc.venv.Await(ctx, callID, &out)
     if err != nil {
-        if flow.RetryNowOnTimeout(err) {
+        if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(math.MaxInt32, 0, 0, 0) {
             return 0, nil
         }
         flow.SetString("pyCallID", "") // clear on terminal error so downstream steps don't see it

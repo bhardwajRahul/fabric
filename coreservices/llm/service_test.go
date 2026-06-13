@@ -197,8 +197,8 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
-			return "Hello from mocked provider!", nil, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
+			return "Hello from mocked provider!", nil, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
@@ -216,16 +216,16 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 	t.Run("tool_calling", func(t *testing.T) {
 		assert := testarossa.For(t)
 		callCount := 0
-		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
 			callCount++
 			if callCount == 1 {
 				return "", []llmapi.ToolCall{{
 					ID:        "call_1",
 					Name:      "Arithmetic",
 					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
-				}}, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+				}}, llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 			}
-			return "3 + 5 = 8", nil, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
+			return "3 + 5 = 8", nil, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
@@ -261,8 +261,8 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
-			return "Hello from the workflow!", nil, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
+			return "Hello from the workflow!", nil, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
@@ -274,7 +274,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 			usage.Turns, 1,
 			usage.OutputTokens, 5,
 		)
-		// Output listMessages = input history + assistant reply (the list* reducer accumulates).
+		// Output messages = input history + assistant reply (the messages field is Append-reduced).
 		if assert.Expect(len(out) >= 1, true) {
 			last := out[len(out)-1]
 			assert.Expect(last.Role, "assistant")
@@ -286,7 +286,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		assert := testarossa.For(t)
 
 		callCount := 0
-		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
 			callCount++
 			if callCount == 1 {
 				// First turn: ask for a tool call.
@@ -294,25 +294,18 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 					ID:        "call_1",
 					Name:      "Arithmetic",
 					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
-				}}, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+				}}, llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 			}
 			// Second turn (after fan-in at nextLLM): finalize.
-			return "3 + 5 = 8", nil, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
+			return "3 + 5 = 8", nil, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
-		// ChatLoop's InitChat takes pre-resolved []llmapi.Tool, not URLs. The executeTool
-		// task dispatches to the tool's URL via the bus, so we provide the calculator's
-		// schema directly.
-		toolSchema := []llmapi.Tool{{
-			Name:        "Arithmetic",
-			Description: "Computes x op y",
-			URL:         calculatorapi.Arithmetic.URL(),
-			Method:      calculatorapi.Arithmetic.Method,
-			Type:        "function",
-		}}
+		// ChatLoop's InitChat resolves URLs to tool schemas via the host's OpenAPI document,
+		// so we pass the calculator's canonical URL and let InitChat fetch the schema.
+		toolURLs := []string{calculatorapi.Arithmetic.URL()}
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, toolSchema, nil)
+		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, toolURLs, nil)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,

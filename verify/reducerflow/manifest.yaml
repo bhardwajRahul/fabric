@@ -20,7 +20,7 @@ general:
   description: reducerflow.verify exercises sum/list/set reducers at fan-in.
   package: github.com/microbus-io/fabric/verify/reducerflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-27T00:32:11Z"
 
 tasks:
   TaskA:
@@ -28,19 +28,19 @@ tasks:
     description: TaskA is the fan-out source.
     route: :428/task-a
   TaskB:
-    signature: TaskB() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
-    description: TaskB contributes deltas to sumTotal/listTags/setSeen.
+    signature: TaskB() (totalOut int, tagsOut []string, seenOut []string)
+    description: TaskB contributes deltas to total/tags/seen.
     route: :428/task-b
   TaskC:
-    signature: TaskC() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
-    description: TaskC contributes deltas with one overlapping setSeen element.
+    signature: TaskC() (totalOut int, tagsOut []string, seenOut []string)
+    description: TaskC contributes deltas with one overlapping seen element.
     route: :428/task-c
   TaskD:
-    signature: TaskD() (sumTotalOut int, listTagsOut []string, setSeenOut []string)
+    signature: TaskD() (totalOut int, tagsOut []string, seenOut []string)
     description: TaskD contributes deltas.
     route: :428/task-d
   TaskE:
-    signature: TaskE(sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string)
+    signature: TaskE(total int, tags []string, seen []string) (finalSum int, finalList []string, finalSet []string)
     description: TaskE reads the reducer-merged values.
     route: :428/task-e
 

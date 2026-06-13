@@ -35,7 +35,7 @@ var (
 )
 
 /*
-Service implements breakpointflow.verify, exercising BreakBefore + Resume.
+Service implements breakpointflow.verify, exercising BreakBefore + ResumeBreak.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove

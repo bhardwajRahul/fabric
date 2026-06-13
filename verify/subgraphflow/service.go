@@ -73,7 +73,25 @@ func (svc *Service) TaskY(ctx context.Context, flow *workflow.Flow, innerStage s
 }
 
 /*
-TaskZ runs in the parent after the subgraph. Reads `innerResult` (merged in from the subgraph)
+RunInner invokes the Inner subgraph via flow.Subgraph and adopts its `innerResult` output into parent
+state. Parks on the first call, then re-runs with the child's result and returns it.
+*/
+func (svc *Service) RunInner(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error) { // MARKER: RunInner
+	out, yield, err := flow.Subgraph(subgraphflowapi.Inner.URL(), map[string]any{"seed": seed})
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if yield {
+		return "", nil
+	}
+	if v, ok := out["innerResult"].(string); ok {
+		return v, nil
+	}
+	return "", nil
+}
+
+/*
+TaskZ runs in the parent after the subgraph. Reads `innerResult` (adopted from the subgraph by RunInner)
 and produces a final result.
 */
 func (svc *Service) TaskZ(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error) { // MARKER: TaskZ
@@ -99,10 +117,10 @@ Parent defines the graph A -> [Inner subgraph] -> Z.
 func (svc *Service) Parent(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Parent
 	graph = workflow.NewGraph(subgraphflowapi.Parent.URL())
 	graph.AddTask("taskA", subgraphflowapi.TaskA.URL())
-	graph.AddSubgraph("inner", subgraphflowapi.Inner.URL())
+	graph.AddTask("runInner", subgraphflowapi.RunInner.URL())
 	graph.AddTask("taskZ", subgraphflowapi.TaskZ.URL())
-	graph.AddTransition("taskA", "inner")
-	graph.AddTransition("inner", "taskZ")
+	graph.AddTransition("taskA", "runInner")
+	graph.AddTransition("runInner", "taskZ")
 	graph.AddTransition("taskZ", workflow.END)
 	return graph, nil
 }

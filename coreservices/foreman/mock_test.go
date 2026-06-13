@@ -98,6 +98,17 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("fingerprint", func(t *testing.T) { // MARKER: Fingerprint
+		assert := testarossa.For(t)
+
+		mock.MockFingerprint(func(ctx context.Context, flowKey string) (fingerprint string, status string, err error) {
+			return
+		})
+		var flowKey string
+		_, _, err := mock.Fingerprint(ctx, flowKey)
+		assert.NoError(err)
+	})
+
 	t.Run("resume", func(t *testing.T) { // MARKER: Resume
 		assert := testarossa.For(t)
 
@@ -110,16 +121,15 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("fork", func(t *testing.T) { // MARKER: Fork
+	t.Run("resume_break", func(t *testing.T) { // MARKER: ResumeBreak
 		assert := testarossa.For(t)
 
-		mock.MockFork(func(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) {
+		mock.MockResumeBreak(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
 			return
 		})
-		var stepKey string
+		var flowKey string
 		var stateOverrides any
-		var opts *workflow.FlowOptions
-		_, err := mock.Fork(ctx, stepKey, stateOverrides, opts)
+		err := mock.ResumeBreak(ctx, flowKey, stateOverrides)
 		assert.NoError(err)
 	})
 
@@ -135,6 +145,30 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("restart", func(t *testing.T) { // MARKER: Restart
+		assert := testarossa.For(t)
+
+		mock.MockRestart(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
+			return
+		})
+		var flowKey string
+		var stateOverrides any
+		err := mock.Restart(ctx, flowKey, stateOverrides)
+		assert.NoError(err)
+	})
+
+	t.Run("restart_from", func(t *testing.T) { // MARKER: RestartFrom
+		assert := testarossa.For(t)
+
+		mock.MockRestartFrom(func(ctx context.Context, stepKey string, stateOverrides any) (err error) {
+			return
+		})
+		var stepKey string
+		var stateOverrides any
+		err := mock.RestartFrom(ctx, stepKey, stateOverrides)
+		assert.NoError(err)
+	})
+
 	t.Run("history", func(t *testing.T) { // MARKER: History
 		assert := testarossa.For(t)
 
@@ -146,14 +180,14 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("retry", func(t *testing.T) { // MARKER: Retry
+	t.Run("step", func(t *testing.T) { // MARKER: Step
 		assert := testarossa.For(t)
 
-		mock.MockRetry(func(ctx context.Context, flowKey string) (err error) {
+		mock.MockStep(func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error) {
 			return
 		})
-		var flowKey string
-		err := mock.Retry(ctx, flowKey)
+		var stepKey string
+		_, err := mock.Step(ctx, stepKey)
 		assert.NoError(err)
 	})
 

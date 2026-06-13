@@ -1,12 +1,12 @@
-%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
     classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
+    classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em
+    linkStyle default stroke:#32a7c1
 
-    _title{{"time-budget"}}:::term --> _start
-    _start(( )):::term --> t0
+    _title{{"time-budget"}}:::term -.-> _start
     t0["taskA"]:::task
     t1["slow"]:::task
     t0 --> t1
+    _start(( )):::term --> t0
     t1 --> _end(( )):::term

@@ -97,6 +97,16 @@ func TestSubgraphfanoutflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_sub", func(t *testing.T) { // MARKER: RunSub
+		assert := testarossa.For(t)
+
+		mock.MockRunSub(func(ctx context.Context, flow *workflow.Flow) (subResult string, err error) {
+			return
+		})
+		_, err := mock.RunSub(ctx, nil)
+		assert.NoError(err)
+	})
+
 	t.Run("task_e", func(t *testing.T) { // MARKER: TaskE
 		assert := testarossa.For(t)
 

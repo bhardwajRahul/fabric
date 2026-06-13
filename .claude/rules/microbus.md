@@ -117,6 +117,8 @@ SQL CRUD microservices are Microbus microservices that expose a CRUD API to pers
 
 Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`. Tasks are registered on port `:428` by default.
 
+In this codebase, **"workflow", "agent", and "agentic workflow" are interchangeable terms** for the same `workflow.Graph` construct. An LLM call is not a prerequisite - rule-based, deterministic, small-model, and LLM-driven workflows are all agents. When a user says "create an agent" or "create an agentic workflow", they mean "create a workflow"; use the `add-workflow` skill. When they say "agent step" or "agentic task", they mean a task endpoint; use the `add-task` skill. Microservices whose sole purpose is to host one workflow are conventionally named `<role>.agent` (e.g. `planner.agent`, `coordinator.agent`), but the naming is convention only - the microservice is scaffolded with `add-microservice` like any other.
+
 **IMPORTANT**: If the microservice defines tasks or workflows (has `tasks` or `workflows` in its `manifest.yaml`), read `.claude/rules/workflows.txt` before proceeding.
 
 ### Calling Python
@@ -508,8 +510,8 @@ The available feature skills are:
 | `add-function` | Functional endpoint (RPC) |
 | `add-web` | Web handler endpoint |
 | `add-inbound-event` | Inbound event sink |
-| `add-task` | Task endpoint (agentic workflow step) |
-| `add-workflow` | Workflow graph (agentic workflow definition) |
+| `add-task` | Task endpoint (workflow / agent step) |
+| `add-workflow` | Workflow graph (agent / agentic workflow definition) |
 | `add-ticker` | Ticker |
 
 The recommended order is configs, metrics, outbound events, functions, webs, inbound events, tasks, workflows, then tickers. This order is not mandatory but it follows the natural dependency chain - for example, a function may reference a configuration property or record a metric, so those should exist first. Workflows reference task endpoints, so tasks should be defined first.

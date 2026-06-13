@@ -362,36 +362,36 @@ func (_c Executor) TaskA(ctx context.Context) (started bool, err error) { // MAR
 /*
 TaskB creates and runs the TaskB task.
 */
-func (_c Executor) TaskB(ctx context.Context) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskB
+func (_c Executor) TaskB(ctx context.Context) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskB
 	var out TaskBOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskB.Method, TaskB.Route, TaskBIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err
+	return out.TotalOut, out.TagsOut, out.SeenOut, err
 }
 
 /*
 TaskC creates and runs the TaskC task.
 */
-func (_c Executor) TaskC(ctx context.Context) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskC
+func (_c Executor) TaskC(ctx context.Context) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskC
 	var out TaskCOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskC.Method, TaskC.Route, TaskCIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err
+	return out.TotalOut, out.TagsOut, out.SeenOut, err
 }
 
 /*
 TaskD creates and runs the TaskD task.
 */
-func (_c Executor) TaskD(ctx context.Context) (sumTotalOut int, listTagsOut, setSeenOut []string, err error) { // MARKER: TaskD
+func (_c Executor) TaskD(ctx context.Context) (totalOut int, tagsOut, seenOut []string, err error) { // MARKER: TaskD
 	var out TaskDOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskD.Method, TaskD.Route, TaskDIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err
+	return out.TotalOut, out.TagsOut, out.SeenOut, err
 }
 
 /*
 TaskE creates and runs the TaskE task.
 */
-func (_c Executor) TaskE(ctx context.Context, sumTotal int, listTags, setSeen []string) (finalSum int, finalList, finalSet []string, err error) { // MARKER: TaskE
+func (_c Executor) TaskE(ctx context.Context, total int, tags, seen []string) (finalSum int, finalList, finalSet []string, err error) { // MARKER: TaskE
 	var out TaskEOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskE.Method, TaskE.Route, TaskEIn{SumTotal: sumTotal, ListTags: listTags, SetSeen: setSeen}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskE.Method, TaskE.Route, TaskEIn{Total: total, Tags: tags, Seen: seen}, &out, _c.inFlow, _c.outFlow)
 	return out.FinalSum, out.FinalList, out.FinalSet, err
 }
 

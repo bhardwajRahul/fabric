@@ -79,9 +79,9 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 	sleepMs := sleepDur.Milliseconds()
 	nextTimeBudget := svc.taskTimeBudget()
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), lineageID, stepID, sleepMs, priority, fairnessKey, fairnessWeight,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, parked, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTarget, string(mergedJSON), workflow.StatusPending, svc.initialParkedFor(fanInTarget), nextTimeBudget.Milliseconds(), lineageID, stepID, sleepMs, priority, fairnessKey, fairnessWeight,
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -120,7 +120,7 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 // Only cohort members (steps with lineage_id = cohortSpawnID) in status 'completed' contribute
 // their changes, merged in fan_out_ordinal order (the forEach array / spawn order) so list/append/
 // sum reducers are deterministic; step_id breaks ties. Non-completed members ('failed',
-// 'cancelled', 'retried', 'pending', 'running') contribute no state and the fan-in does NOT
+// 'cancelled', 'pending', 'running') contribute no state and the fan-in does NOT
 // escalate on them: a 'cancelled' member is the normal OnError sibling-cancel case and the flow
 // must still recover via the handler path; genuine failures/cancels are already terminal via
 // failStep / the Cancel API / the terminal-flow check. The new step's lineage_id is the spawn's
@@ -128,12 +128,12 @@ func (svc *Service) fireFanInDirect(ctx context.Context, shardNum int, db *seque
 // to finish); each cohort exit step's successor_id is set to the fan-in step so the many-to-one
 // fan-in edges are recorded.
 func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flowID, nextStepDepth, cohortSpawnID, predecessorStepID int, fanInTaskName string, graph *workflow.Graph, sleepMs int64, priority int, fairnessKey string, fairnessWeight float64) (stepID int, err error) {
-	var spawnStateJSON, spawnChangesJSON string
+	var spawnStateJSON, spawnChangesJSON, spawnTaskName string
 	var spawnLineageID int
 	err = tx.QueryRowContext(ctx,
-		"SELECT state, changes, lineage_id FROM microbus_steps WHERE step_id=?",
+		"SELECT state, changes, lineage_id, task_name FROM microbus_steps WHERE step_id=?",
 		cohortSpawnID,
-	).Scan(&spawnStateJSON, &spawnChangesJSON, &spawnLineageID)
+	).Scan(&spawnStateJSON, &spawnChangesJSON, &spawnLineageID, &spawnTaskName)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -160,8 +160,8 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 			return 0, errors.Trace(err)
 		}
 		status = strings.TrimSpace(status)
-		// Only completed members contribute state. failed/cancelled/retried/pending/
-		// running are skipped - the fan-in does not escalate on them.
+		// Only completed members contribute state. failed/cancelled/pending/running
+		// are skipped - the fan-in does not escalate on them.
 		if status != workflow.StatusCompleted {
 			continue
 		}
@@ -177,12 +177,28 @@ func (svc *Service) insertFanInStep(ctx context.Context, tx sequel.Executor, flo
 		return 0, errors.Trace(err)
 	}
 
+	// Drop per-branch forEach bookkeeping injected at fan-out: the `<as>`
+	// element, `<as>Index`, and `<as>Count`. After fan-in the cohort has
+	// converged and these per-element values carry no meaning - leaving them
+	// in would let an arbitrary branch's index/element win via the Replace
+	// reducer and pollute every downstream step. Only fields that come from
+	// forEach transitions on the spawn task are dropped (static fan-out has
+	// no `as`).
+	for _, tr := range graph.Transitions() {
+		if tr.From != spawnTaskName || tr.ForEach == "" || tr.As == "" {
+			continue
+		}
+		delete(merged, tr.As)
+		delete(merged, tr.As+"Index")
+		delete(merged, tr.As+"Count")
+	}
+
 	mergedJSON, _ := json.Marshal(merged)
 	nextTimeBudget := svc.taskTimeBudget()
 	fanInStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), spawnLineageID, predecessorStepID, sleepMs, priority, fairnessKey, fairnessWeight,
+		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, parked, time_budget_ms, lineage_id, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+		flowID, nextStepDepth, utils.RandomIdentifier(16), fanInTaskName, string(mergedJSON), workflow.StatusPending, svc.initialParkedFor(fanInTaskName), nextTimeBudget.Milliseconds(), spawnLineageID, predecessorStepID, sleepMs, priority, fairnessKey, fairnessWeight,
 	)
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -267,6 +283,30 @@ func (svc *Service) evaluateTransitions(graph *workflow.Graph, currentTask strin
 		} else {
 			stateMap[k] = v
 		}
+	}
+
+	// Switch transitions short-circuit normal evaluation. If the current task has any
+	// Switch transition, evaluate them in registration order and take the first whose
+	// 'when' expression evaluates true. The graph validator guarantees no non-switch
+	// success-path transitions coexist on this node, so we return immediately. No
+	// match -> empty candidate list -> the caller terminates the flow at this node.
+	for _, tr := range graph.Transitions() {
+		if tr.From != currentTask || !tr.Switch {
+			continue
+		}
+		for _, sw := range graph.Transitions() {
+			if sw.From != currentTask || !sw.Switch {
+				continue
+			}
+			match, err := boolexp.Eval(sw.When, stateMap)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if match {
+				return []nextStep{{taskName: sw.To}}, nil
+			}
+		}
+		return nil, nil
 	}
 
 	// Evaluate transitions from the current task

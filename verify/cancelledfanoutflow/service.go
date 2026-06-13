@@ -78,7 +78,7 @@ func (svc *Service) Source(ctx context.Context, flow *workflow.Flow) (started bo
 
 // branch is the shared body of A, B and C: count the entry, then block for
 // branchSleep so a mid-flight cancel can take effect while it runs.
-func (svc *Service) branch(ctx context.Context) (sumExecutedOut int, err error) {
+func (svc *Service) branch(ctx context.Context) (executedOut int, err error) {
 	svc.executed.Add(1)
 	select {
 	case <-time.After(branchSleep):
@@ -90,35 +90,35 @@ func (svc *Service) branch(ctx context.Context) (sumExecutedOut int, err error) 
 /*
 A is a fan-out branch. It records its execution and sleeps before contributing 1.
 */
-func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: A
+func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: A
 	return svc.branch(ctx)
 }
 
 /*
 B is a fan-out branch. It records its execution and sleeps before contributing 1.
 */
-func (svc *Service) B(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: B
+func (svc *Service) B(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: B
 	return svc.branch(ctx)
 }
 
 /*
 C is a fan-out branch. It records its execution and sleeps before contributing 1.
 */
-func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: C
+func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: C
 	return svc.branch(ctx)
 }
 
 /*
-J is the fan-in target. It surfaces the summed sumExecuted. In the cancel
+J is the fan-in target. It surfaces the summed executed. In the cancel
 scenario the flow is cancelled before fan-in, so J never runs.
 */
-func (svc *Service) J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) { // MARKER: J
-	return sumExecuted, nil
+func (svc *Service) J(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) { // MARKER: J
+	return executed, nil
 }
 
 /*
 CancelledFanOut defines the graph: Source -> {A, B, C} -> J. J is the explicit
-fan-in over the sum* reducer field sumExecuted.
+fan-in over the Add-reduced `executed` field.
 */
 func (svc *Service) CancelledFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CancelledFanOut
 	graph = workflow.NewGraph(cancelledfanoutflowapi.CancelledFanOut.URL())
@@ -128,6 +128,7 @@ func (svc *Service) CancelledFanOut(ctx context.Context) (graph *workflow.Graph,
 	graph.AddTask("c", cancelledfanoutflowapi.C.URL())
 	graph.AddTask("j", cancelledfanoutflowapi.J.URL())
 	graph.SetFanIn("j")
+	graph.SetReducer("executed", workflow.ReducerAdd)
 	graph.AddTransition("source", "a")
 	graph.AddTransition("source", "b")
 	graph.AddTransition("source", "c")

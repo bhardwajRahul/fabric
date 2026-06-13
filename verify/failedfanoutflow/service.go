@@ -61,9 +61,9 @@ func (svc *Service) Src(ctx context.Context, flow *workflow.Flow) (started bool,
 }
 
 /*
-A is a normal fan-out branch contributing 1 to sumExecuted.
+A is a normal fan-out branch contributing 1 to executed.
 */
-func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: A
+func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: A
 	return 1, nil
 }
 
@@ -71,14 +71,14 @@ func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut 
 B is the failing fan-out branch. It always returns an error. With no OnError
 transition, this fails B's step and cascades the whole flow to failed.
 */
-func (svc *Service) B(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: B
+func (svc *Service) B(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: B
 	return 0, errors.New("triggered failure in B")
 }
 
 /*
-C is a normal fan-out branch contributing 1 to sumExecuted.
+C is a normal fan-out branch contributing 1 to executed.
 */
-func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: C
+func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: C
 	return 1, nil
 }
 
@@ -86,8 +86,8 @@ func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut 
 J is the fan-in target. Because B fails with no OnError route, the flow fails
 before fan-in, so J never runs.
 */
-func (svc *Service) J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) { // MARKER: J
-	return sumExecuted, nil
+func (svc *Service) J(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) { // MARKER: J
+	return executed, nil
 }
 
 /*
@@ -102,6 +102,7 @@ func (svc *Service) FailedFanOut(ctx context.Context) (graph *workflow.Graph, er
 	graph.AddTask("c", failedfanoutflowapi.C.URL())
 	graph.AddTask("j", failedfanoutflowapi.J.URL())
 	graph.SetFanIn("j")
+	graph.SetReducer("executed", workflow.ReducerAdd)
 	graph.AddTransition("src", "a")
 	graph.AddTransition("src", "b")
 	graph.AddTransition("src", "c")

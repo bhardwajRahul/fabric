@@ -11,9 +11,13 @@ Verification fixture for multi-turn flows via `Continue`. A single-task workflow
 ## Patterns exercised
 
 - `foremanapi.Client.Continue(threadKey, additionalState)` creating a new flow in an existing thread
-- State persistence across turns via `DeclareInputs(counter)` + `DeclareOutputs(counter)` on the same field
+- State persistence across turns via `Continue`'s unfiltered carryover of the prior turn's `final_state`
+- The read-modify-write `Out`-suffix pattern (`Increment` reads `counter`, returns `counterOut`)
 - Thread identity carried via the original flowKey acting as a threadKey
 
 ## Important convention
 
-Fields that must persist across turns are declared as **both** inputs and outputs of the workflow. Other state fields are dropped when a turn completes.
+`Continue` carries the prior turn's `final_state` through to the next turn unfiltered, so any field present at the end
+of one turn (here, `counter`) is visible at the start of the next. There is no per-field input/output declaration; a
+workflow author who wants narrower turn-to-turn carryover puts an adapter task at the workflow's entry that scrubs
+state with `flow.Delete`/`Transform`.

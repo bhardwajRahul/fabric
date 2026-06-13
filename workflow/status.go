@@ -23,6 +23,5 @@ const (
 	StatusInterrupted = "interrupted" // Flow is paused, waiting for external input
 	StatusCompleted   = "completed"   // Flow has finished successfully
 	StatusFailed      = "failed"      // Flow has failed with an error
-	StatusRetried     = "retried"     // Step was failed but has been retried (replaced by a new step)
 	StatusCancelled   = "cancelled"   // Flow was cancelled by the user
 )

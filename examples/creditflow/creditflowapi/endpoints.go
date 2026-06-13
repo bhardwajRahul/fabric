@@ -68,7 +68,7 @@ type VerifyEmploymentIn struct { // MARKER: VerifyEmployment
 
 // VerifyEmploymentOut are the output arguments of VerifyEmployment.
 type VerifyEmploymentOut struct { // MARKER: VerifyEmployment
-	SumEmploymentFailuresOut int `json:"sumEmploymentFailures,omitzero"`
+	EmploymentFailuresOut int `json:"employmentFailures,omitzero"`
 }
 
 // InitIdentityVerificationIn are the input arguments of InitIdentityVerification.
@@ -160,13 +160,26 @@ type HandleCreditErrorOut struct { // MARKER: HandleCreditError
 // DecisionIn are the input arguments of Decision.
 type DecisionIn struct { // MARKER: Decision
 	CreditVerified         bool `json:"creditVerified,omitzero"`
-	SumEmploymentFailures  int  `json:"sumEmploymentFailures,omitzero"`
+	EmploymentFailures     int  `json:"employmentFailures,omitzero"`
 	IdentityVerified       bool `json:"identityVerified,omitzero"`
 }
 
 // DecisionOut are the output arguments of Decision.
 type DecisionOut struct { // MARKER: Decision
 	Approved bool `json:"approved,omitzero"`
+}
+
+// RunIdentityVerificationIn are the input arguments of RunIdentityVerification.
+type RunIdentityVerificationIn struct { // MARKER: RunIdentityVerification
+	ApplicantName string `json:"applicantName,omitzero"`
+	SSN           string `json:"ssn,omitzero"`
+	Address       string `json:"address,omitzero"`
+	Phone         string `json:"phone,omitzero"`
+}
+
+// RunIdentityVerificationOut are the output arguments of RunIdentityVerification.
+type RunIdentityVerificationOut struct { // MARKER: RunIdentityVerification
+	IdentityVerified bool `json:"identityVerified,omitzero"`
 }
 
 // IdentityVerificationIn are the input arguments of IdentityVerification.
@@ -191,7 +204,7 @@ type CreditApprovalIn struct { // MARKER: CreditApproval
 type CreditApprovalOut struct { // MARKER: CreditApproval
 	Approved              bool `json:"approved,omitzero"`
 	CreditVerified        bool `json:"creditVerified,omitzero"`
-	SumEmploymentFailures int  `json:"sumEmploymentFailures,omitzero"`
+	EmploymentFailures int  `json:"employmentFailures,omitzero"`
 	IdentityVerified      bool `json:"identityVerified,omitzero"`
 }
 
@@ -209,6 +222,7 @@ var (
 	ReviewCredit             = Def{Method: "POST", Route: ":428/review-credit"}              // MARKER: ReviewCredit
 	HandleCreditError        = Def{Method: "POST", Route: ":428/handle-credit-error"}        // MARKER: HandleCreditError
 	Decision                 = Def{Method: "POST", Route: ":428/decision"}                   // MARKER: Decision
+	RunIdentityVerification  = Def{Method: "POST", Route: ":428/run-identity-verification"}  // MARKER: RunIdentityVerification
 	IdentityVerification     = Def{Method: "GET", Route: ":428/identity-verification"}       // MARKER: IdentityVerification
 	CreditApproval           = Def{Method: "GET", Route: ":428/credit-approval"}             // MARKER: CreditApproval
 	Demo                     = Def{Method: "ANY", Route: "/demo"}                            // MARKER: Demo

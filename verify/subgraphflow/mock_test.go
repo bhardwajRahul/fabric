@@ -90,6 +90,17 @@ func TestSubgraphflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_inner", func(t *testing.T) { // MARKER: RunInner
+		assert := testarossa.For(t)
+
+		mock.MockRunInner(func(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error) {
+			return
+		})
+		var seed string
+		_, err := mock.RunInner(ctx, nil, seed)
+		assert.NoError(err)
+	})
+
 	t.Run("inner", func(t *testing.T) { // MARKER: Inner
 		assert := testarossa.For(t)
 

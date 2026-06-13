@@ -69,7 +69,7 @@ A `ToDo` method of the form `Method(ctx context.Context) (graph *workflow.Graph,
 `MockMyWorkflow(handler)` therefore:
 
 1. Subscribes a synthetic task endpoint on `:428/mock-<kebab>-<rand>` whose body decodes the incoming `workflow.Flow`, parses the workflow's `In` struct out of state, calls the user's typed handler, and writes the `Out` struct back via `f.SetChanges`.
-2. Replaces the workflow's graph with a single-transition graph that targets the synthetic task and ends. `DeclareInputs("*")` / `DeclareOutputs("*")` are emitted so the subgraph passes all state through to the mock task and back; without them the framework's `FilterState` returns an empty map and the handler sees zero-valued inputs.
+2. Replaces the workflow's graph with a single-transition graph (`AddTransition(mockTaskURL, END)`) that targets the synthetic task and ends. No input/output declaration is needed: the framework passes the parent's full state across the subgraph boundary unfiltered, so the mock task sees every field and its writes flow back.
 3. Stores an `unsubMock<X>` callback so subsequent `MockX(...)` calls (and `MockX(nil)` to clear) can tear down the previous subscription cleanly.
 
 The handler signature is reconstructed from the api package's `<Name>In` and `<Name>Out` structs. Bare type identifiers in those struct fields are qualified with the api package alias when rendered into the parent package (`Applicant` -> `creditflowapi.Applicant`), since the structs themselves live in the api package but the mock does not.

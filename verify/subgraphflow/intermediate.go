@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = subgraphflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -63,6 +63,7 @@ type ToDo interface {
 	TaskX(ctx context.Context, flow *workflow.Flow, seed string) (innerStage string, err error)          // MARKER: TaskX
 	TaskY(ctx context.Context, flow *workflow.Flow, innerStage string) (innerResult string, err error)   // MARKER: TaskY
 	TaskZ(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error)  // MARKER: TaskZ
+	RunInner(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error)      // MARKER: RunInner
 	Inner(ctx context.Context) (graph *workflow.Graph, err error)                                         // MARKER: Inner
 	Parent(ctx context.Context) (graph *workflow.Graph, err error)                                        // MARKER: Parent
 }
@@ -125,6 +126,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(subgraphflowapi.TaskZ.Method, subgraphflowapi.TaskZ.Route),
 		sub.Description(`TaskZ runs in the parent after the subgraph.`),
 		sub.Task(subgraphflowapi.TaskZIn{}, subgraphflowapi.TaskZOut{}),
+	)
+
+	svc.Subscribe( // MARKER: RunInner
+		"RunInner", svc.doRunInner,
+		sub.At(subgraphflowapi.RunInner.Method, subgraphflowapi.RunInner.Route),
+		sub.Description(`RunInner invokes the Inner subgraph via flow.Subgraph and adopts its innerResult output.`),
+		sub.Task(subgraphflowapi.RunInnerIn{}, subgraphflowapi.RunInnerOut{}),
 	)
 
 	svc.Subscribe( // MARKER: Inner
@@ -240,6 +248,26 @@ func (svc *Intermediate) doTaskZ(w http.ResponseWriter, r *http.Request) (err er
 	flow.ParseState(&in)
 	var out subgraphflowapi.TaskZOut
 	out.FinalResult, err = svc.TaskZ(r.Context(), &flow, in.InnerResult)
+	if err != nil {
+		return err
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(&flow))
+}
+
+// doRunInner handles marshaling for RunInner.
+func (svc *Intermediate) doRunInner(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunInner
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in subgraphflowapi.RunInnerIn
+	flow.ParseState(&in)
+	var out subgraphflowapi.RunInnerOut
+	out.InnerResult, err = svc.RunInner(r.Context(), &flow, in.Seed)
 	if err != nil {
 		return err
 	}

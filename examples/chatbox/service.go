@@ -75,11 +75,11 @@ var opMap = map[string]string{
 Turn executes a single LLM turn using the chatbox demo provider.
 It pattern-matches math questions and generates tool calls to the calculator.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	usage = llmapi.Usage{Model: model, Turns: 1}
 
 	if len(messages) == 0 {
-		return "I'm the Chatbox demo. Ask me a math question!", nil, usage, nil
+		return "I'm the Chatbox demo. Ask me a math question!", nil, llmapi.StopReasonEndTurn, usage, nil
 	}
 
 	lastMsg := messages[len(messages)-1]
@@ -89,9 +89,9 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		var result map[string]any
 		json.Unmarshal([]byte(lastMsg.Content), &result)
 		if r, ok := result["result"]; ok {
-			return fmt.Sprintf("The answer is %v.", r), nil, usage, nil
+			return fmt.Sprintf("The answer is %v.", r), nil, llmapi.StopReasonEndTurn, usage, nil
 		}
-		return fmt.Sprintf("The result is: %s", lastMsg.Content), nil, usage, nil
+		return fmt.Sprintf("The result is: %s", lastMsg.Content), nil, llmapi.StopReasonEndTurn, usage, nil
 	}
 
 	// Try to match a math question
@@ -123,7 +123,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 						ID:        "chatbox_1",
 						Name:      calcTool.Name,
 						Arguments: args,
-					}}, usage, nil
+					}}, llmapi.StopReasonToolUse, usage, nil
 			}
 
 			// No calculator tool - do the math ourselves
@@ -139,17 +139,17 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 				if y != 0 {
 					answer = x / y
 				} else {
-					return "Cannot divide by zero.", nil, usage, nil
+					return "Cannot divide by zero.", nil, llmapi.StopReasonEndTurn, usage, nil
 				}
 			}
-			return fmt.Sprintf("%d %s %d = %d", x, op, y, answer), nil, usage, nil
+			return fmt.Sprintf("%d %s %d = %d", x, op, y, answer), nil, llmapi.StopReasonEndTurn, usage, nil
 		}
 
 		// No pattern matched
-		return "I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"", nil, usage, nil
+		return "I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"", nil, llmapi.StopReasonEndTurn, usage, nil
 	}
 
-	return "I don't understand that message.", nil, usage, nil
+	return "I don't understand that message.", nil, llmapi.StopReasonEndTurn, usage, nil
 }
 
 /*

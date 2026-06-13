@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = creditflowapi.Hostname
-	Version  = 6
+	Version  = 7
 )
 
 // ToDo is implemented by the service or mock.
@@ -62,17 +62,18 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
 	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error)                                                                                                              // MARKER: VerifyCredit
-	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error)                                                                       // MARKER: VerifyEmployment
+	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error)                                                                       // MARKER: VerifyEmployment
 	InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                        // MARKER: InitIdentityVerification
 	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string) (ssnVerified bool, err error)                                                                                                                         // MARKER: VerifySSN
 	VerifyAddress(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                             // MARKER: VerifyAddress
 	VerifyPhoneNumber(ctx context.Context, flow *workflow.Flow, phone string) (phoneVerified bool, err error)                                                                                                             // MARKER: VerifyPhoneNumber
 	IdentityDecision(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error)                                                             // MARKER: IdentityDecision
+	RunIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error)                                                  // MARKER: RunIdentityVerification
 	IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                          // MARKER: IdentityVerification
 	RequestMoreInfo(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                                      // MARKER: RequestMoreInfo
 	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error)                                                                  // MARKER: ReviewCredit
 	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                               // MARKER: HandleCreditError
-	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error)                                                                  // MARKER: Decision
+	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                                  // MARKER: Decision
 	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                // MARKER: CreditApproval
 	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                                              // MARKER: Demo
 }
@@ -179,6 +180,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(creditflowapi.IdentityDecision.Method, creditflowapi.IdentityDecision.Route),
 		sub.Description(`IdentityDecision determines whether the applicant's identity is verified based on SSN, address, and phone checks.`),
 		sub.Task(creditflowapi.IdentityDecisionIn{}, creditflowapi.IdentityDecisionOut{}),
+	)
+	svc.Subscribe( // MARKER: RunIdentityVerification
+		"RunIdentityVerification", svc.doRunIdentityVerification,
+		sub.At(creditflowapi.RunIdentityVerification.Method, creditflowapi.RunIdentityVerification.Route),
+		sub.Description(`RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgraph and adopts identityVerified.`),
+		sub.Task(creditflowapi.RunIdentityVerificationIn{}, creditflowapi.RunIdentityVerificationOut{}),
 	)
 	svc.Subscribe( // MARKER: RequestMoreInfo
 		"RequestMoreInfo", svc.doRequestMoreInfo,
@@ -295,7 +302,7 @@ func (svc *Intermediate) doVerifyEmployment(w http.ResponseWriter, r *http.Reque
 	var in creditflowapi.VerifyEmploymentIn
 	flow.ParseState(&in)
 	var out creditflowapi.VerifyEmploymentOut
-	out.SumEmploymentFailuresOut, err = svc.VerifyEmployment(r.Context(), &flow, in.ApplicantName, in.EmployerName)
+	out.EmploymentFailuresOut, err = svc.VerifyEmployment(r.Context(), &flow, in.ApplicantName, in.EmployerName)
 	if err != nil {
 		return err // No trace
 	}
@@ -428,6 +435,30 @@ func (svc *Intermediate) doIdentityDecision(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
+// doRunIdentityVerification handles marshaling for RunIdentityVerification.
+func (svc *Intermediate) doRunIdentityVerification(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunIdentityVerification
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in creditflowapi.RunIdentityVerificationIn
+	flow.ParseState(&in)
+	var out creditflowapi.RunIdentityVerificationOut
+	out.IdentityVerified, err = svc.RunIdentityVerification(r.Context(), &flow, in.ApplicantName, in.SSN, in.Address, in.Phone)
+	if err != nil {
+		return err // No trace
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // doIdentityVerification handles marshaling for IdentityVerification.
 func (svc *Intermediate) doIdentityVerification(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: IdentityVerification
 	graph, err := svc.IdentityVerification(r.Context())
@@ -531,7 +562,7 @@ func (svc *Intermediate) doDecision(w http.ResponseWriter, r *http.Request) (err
 	var in creditflowapi.DecisionIn
 	flow.ParseState(&in)
 	var out creditflowapi.DecisionOut
-	out.Approved, err = svc.Decision(r.Context(), &flow, in.CreditVerified, in.SumEmploymentFailures, in.IdentityVerified)
+	out.Approved, err = svc.Decision(r.Context(), &flow, in.CreditVerified, in.EmploymentFailures, in.IdentityVerified)
 	if err != nil {
 		return err // No trace
 	}

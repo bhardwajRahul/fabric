@@ -18,6 +18,7 @@ package retryfanoutflow
 
 import (
 	"context"
+	"math"
 	"math/rand/v2"
 	"net/http"
 
@@ -64,12 +65,12 @@ func (svc *Service) Enter(ctx context.Context, flow *workflow.Flow, elements []i
 /*
 Increment runs once per element. It fails with a 10% probability and retries
 immediately with no limit, so every element eventually succeeds. On success it
-increments the element by one and contributes it as the listResult delta for
+increments the element by one and contributes it as the results delta for
 this branch; the list* reducer appends deltas in fan_out_ordinal order at fan-in.
 */
-func (svc *Service) Increment(ctx context.Context, flow *workflow.Flow, element int) (listResultOut []int, err error) { // MARKER: Increment
+func (svc *Service) Increment(ctx context.Context, flow *workflow.Flow, element int) (resultsOut []int, err error) { // MARKER: Increment
 	if rand.Float64() < 0.10 {
-		flow.RetryNow()
+		flow.Retry(math.MaxInt32, 0, 0, 0)
 		return nil, nil
 	}
 	return []int{element + 1}, nil
@@ -77,15 +78,15 @@ func (svc *Service) Increment(ctx context.Context, flow *workflow.Flow, element 
 
 /*
 Join is the fan-in target. The list* reducer has already appended every branch's
-delta into listResult in fan_out_ordinal order; Join surfaces it as the workflow result.
+delta into results in fan_out_ordinal order; Join surfaces it as the workflow result.
 */
-func (svc *Service) Join(ctx context.Context, flow *workflow.Flow, listResult []int) (listResultOut []int, err error) { // MARKER: Join
-	return listResult, nil
+func (svc *Service) Join(ctx context.Context, flow *workflow.Flow, results []int) (resultsOut []int, err error) { // MARKER: Join
+	return results, nil
 }
 
 /*
 RetryFanOut defines the graph: Enter -> forEach(elements) -> Increment -> Join.
-Join is the explicit fan-in; listResult collects each branch's incremented value.
+Join is the explicit fan-in; results collects each branch's incremented value.
 */
 func (svc *Service) RetryFanOut(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: RetryFanOut
 	graph = workflow.NewGraph(retryfanoutflowapi.RetryFanOut.URL())
@@ -93,6 +94,7 @@ func (svc *Service) RetryFanOut(ctx context.Context) (graph *workflow.Graph, err
 	graph.AddTask("increment", retryfanoutflowapi.Increment.URL())
 	graph.AddTask("join", retryfanoutflowapi.Join.URL())
 	graph.SetFanIn("join")
+	graph.SetReducer("results", workflow.ReducerAppend)
 	graph.AddTransitionForEach("enter", "increment", "elements", "element")
 	graph.AddTransition("increment", "join")
 	graph.AddTransition("join", workflow.END)

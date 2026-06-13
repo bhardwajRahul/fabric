@@ -36,11 +36,11 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTaskA              func(ctx context.Context, flow *workflow.Flow, items []string) (itemsOut []string, err error)                                                                                                 // MARKER: TaskA
-	mockTaskB              func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) // MARKER: TaskB
-	mockTaskC              func(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error)                                                                                              // MARKER: TaskC
-	mockDynamicFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                  // MARKER: DynamicFanOut
-	unsubMockDynamicFanOut func() error                                                                                                                                                                                  // MARKER: DynamicFanOut
+	mockTaskA              func(ctx context.Context, flow *workflow.Flow, items []string) (itemsOut []string, err error)                                                                                       // MARKER: TaskA
+	mockTaskB              func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) // MARKER: TaskB
+	mockTaskC              func(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error)                                                                                       // MARKER: TaskC
+	mockDynamicFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                        // MARKER: DynamicFanOut
+	unsubMockDynamicFanOut func() error                                                                                                                                                                        // MARKER: DynamicFanOut
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -79,29 +79,29 @@ func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow, items []string)
 }
 
 // MockTaskB sets up a mock handler for TaskB.
-func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error)) *Mock { // MARKER: TaskB
+func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error)) *Mock { // MARKER: TaskB
 	svc.mockTaskB = handler
 	return svc
 }
 
 // TaskB executes the mock handler.
-func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) { // MARKER: TaskB
+func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) { // MARKER: TaskB
 	if svc.mockTaskB != nil {
-		sumProcessedOut, listSeenIndicesOut, setSeenCountsOut, err = svc.mockTaskB(ctx, flow, item, itemIndex, itemCount, clearItems)
+		processedOut, seenIndicesOut, seenCountsOut, err = svc.mockTaskB(ctx, flow, item, itemIndex, itemCount, clearItems)
 	}
-	return sumProcessedOut, listSeenIndicesOut, setSeenCountsOut, errors.Trace(err)
+	return processedOut, seenIndicesOut, seenCountsOut, errors.Trace(err)
 }
 
 // MockTaskC sets up a mock handler for TaskC.
-func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error)) *Mock { // MARKER: TaskC
+func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error)) *Mock { // MARKER: TaskC
 	svc.mockTaskC = handler
 	return svc
 }
 
 // TaskC executes the mock handler.
-func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error) { // MARKER: TaskC
+func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error) { // MARKER: TaskC
 	if svc.mockTaskC != nil {
-		processedCount, err = svc.mockTaskC(ctx, flow, sumProcessed)
+		processedCount, err = svc.mockTaskC(ctx, flow, processed)
 	}
 	return processedCount, errors.Trace(err)
 }
@@ -109,7 +109,7 @@ func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow, sumProcessed in
 // MockDynamicFanOut sets up a mock handler for the DynamicFanOut workflow.
 // The handler receives typed inputs from the workflow's state and returns typed outputs.
 // A nil handler clears the mock.
-func (svc *Mock) MockDynamicFanOut(handler func(ctx context.Context, flow *workflow.Flow, items []string, clearItems bool) (processedCount int, itemsOut []string, listSeenIndices []int, setSeenCounts []int, err error)) *Mock { // MARKER: DynamicFanOut
+func (svc *Mock) MockDynamicFanOut(handler func(ctx context.Context, flow *workflow.Flow, items []string, clearItems bool) (processedCount int, itemsOut []string, seenIndices []int, seenCounts []int, err error)) *Mock { // MARKER: DynamicFanOut
 	if svc.unsubMockDynamicFanOut != nil {
 		svc.unsubMockDynamicFanOut()
 		svc.unsubMockDynamicFanOut = nil
@@ -134,11 +134,11 @@ func (svc *Mock) MockDynamicFanOut(handler func(ctx context.Context, flow *workf
 		snap := f.Snapshot()
 		var in dynamicfanoutflowapi.DynamicFanOutIn
 		f.ParseState(&in)
-		processedCount, itemsOut, listSeenIndices, setSeenCounts, err := handler(r.Context(), &f, in.Items, in.ClearItems)
+		processedCount, itemsOut, seenIndices, seenCounts, err := handler(r.Context(), &f, in.Items, in.ClearItems)
 		if err != nil {
 			return err // No trace
 		}
-		out := dynamicfanoutflowapi.DynamicFanOutOut{ProcessedCount: processedCount, ItemsOut: itemsOut, ListSeenIndices: listSeenIndices, SetSeenCounts: setSeenCounts}
+		out := dynamicfanoutflowapi.DynamicFanOutOut{ProcessedCount: processedCount, ItemsOut: itemsOut, SeenIndices: seenIndices, SeenCounts: seenCounts}
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)

@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = nestedfanoutflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -61,10 +61,11 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	TaskA(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                                       // MARKER: TaskA
 	NormalB(ctx context.Context, flow *workflow.Flow) (normalResult string, err error)                                              // MARKER: NormalB
+	RunInner(ctx context.Context, flow *workflow.Flow) (innerResult int, err error)                                                 // MARKER: RunInner
 	TaskX(ctx context.Context, flow *workflow.Flow) (innerStarted bool, err error)                                                  // MARKER: TaskX
-	TaskY(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)                                                    // MARKER: TaskY
-	TaskZ(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error)                                                    // MARKER: TaskZ
-	TaskW(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error)                                      // MARKER: TaskW
+	TaskY(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)                                                       // MARKER: TaskY
+	TaskZ(ctx context.Context, flow *workflow.Flow) (innerOut int, err error)                                                       // MARKER: TaskZ
+	TaskW(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error)                                         // MARKER: TaskW
 	TaskJ(ctx context.Context, flow *workflow.Flow, normalResult string, innerResult int) (finalResult string, err error)           // MARKER: TaskJ
 	Inner(ctx context.Context) (graph *workflow.Graph, err error)                                                                    // MARKER: Inner
 	Nested(ctx context.Context) (graph *workflow.Graph, err error)                                                                   // MARKER: Nested
@@ -116,6 +117,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(nestedfanoutflowapi.NormalB.Method, nestedfanoutflowapi.NormalB.Route),
 		sub.Description(`NormalB is the non-subgraph sibling.`),
 		sub.Task(nestedfanoutflowapi.NormalBIn{}, nestedfanoutflowapi.NormalBOut{}),
+	)
+	svc.Subscribe( // MARKER: RunInner
+		"RunInner", svc.doRunInner,
+		sub.At(nestedfanoutflowapi.RunInner.Method, nestedfanoutflowapi.RunInner.Route),
+		sub.Description(`RunInner invokes the Inner subgraph via flow.Subgraph and adopts its innerResult.`),
+		sub.Task(nestedfanoutflowapi.RunInnerIn{}, nestedfanoutflowapi.RunInnerOut{}),
 	)
 	svc.Subscribe( // MARKER: TaskX
 		"TaskX", svc.doTaskX,
@@ -208,6 +215,26 @@ func (svc *Intermediate) doTaskA(w http.ResponseWriter, r *http.Request) (err er
 	return errors.Trace(json.NewEncoder(w).Encode(&flow))
 }
 
+// doRunInner handles marshaling for RunInner.
+func (svc *Intermediate) doRunInner(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunInner
+	var flow workflow.Flow
+	err = json.NewDecoder(r.Body).Decode(&flow)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap := flow.Snapshot()
+	var in nestedfanoutflowapi.RunInnerIn
+	flow.ParseState(&in)
+	var out nestedfanoutflowapi.RunInnerOut
+	out.InnerResult, err = svc.RunInner(r.Context(), &flow)
+	if err != nil {
+		return err
+	}
+	flow.SetChanges(out, snap)
+	w.Header().Set("Content-Type", "application/json")
+	return errors.Trace(json.NewEncoder(w).Encode(&flow))
+}
+
 // doNormalB handles marshaling for NormalB.
 func (svc *Intermediate) doNormalB(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: NormalB
 	var flow workflow.Flow
@@ -256,7 +283,7 @@ func (svc *Intermediate) doTaskY(w http.ResponseWriter, r *http.Request) (err er
 	var in nestedfanoutflowapi.TaskYIn
 	flow.ParseState(&in)
 	var out nestedfanoutflowapi.TaskYOut
-	out.SumInnerOut, err = svc.TaskY(r.Context(), &flow)
+	out.InnerOut, err = svc.TaskY(r.Context(), &flow)
 	if err != nil {
 		return err
 	}
@@ -275,7 +302,7 @@ func (svc *Intermediate) doTaskZ(w http.ResponseWriter, r *http.Request) (err er
 	var in nestedfanoutflowapi.TaskZIn
 	flow.ParseState(&in)
 	var out nestedfanoutflowapi.TaskZOut
-	out.SumInnerOut, err = svc.TaskZ(r.Context(), &flow)
+	out.InnerOut, err = svc.TaskZ(r.Context(), &flow)
 	if err != nil {
 		return err
 	}
@@ -294,7 +321,7 @@ func (svc *Intermediate) doTaskW(w http.ResponseWriter, r *http.Request) (err er
 	var in nestedfanoutflowapi.TaskWIn
 	flow.ParseState(&in)
 	var out nestedfanoutflowapi.TaskWOut
-	out.InnerResult, err = svc.TaskW(r.Context(), &flow, in.SumInner)
+	out.InnerResult, err = svc.TaskW(r.Context(), &flow, in.Inner)
 	if err != nil {
 		return err
 	}

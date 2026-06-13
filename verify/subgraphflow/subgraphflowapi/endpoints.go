@@ -36,12 +36,13 @@ func (d Def) URL() string {
 
 var (
 	// HINT: Insert endpoint definitions here
-	TaskA  = Def{Method: "POST", Route: ":428/task-a"} // MARKER: TaskA
-	TaskX  = Def{Method: "POST", Route: ":428/task-x"} // MARKER: TaskX
-	TaskY  = Def{Method: "POST", Route: ":428/task-y"} // MARKER: TaskY
-	TaskZ  = Def{Method: "POST", Route: ":428/task-z"} // MARKER: TaskZ
-	Inner  = Def{Method: "GET", Route: ":428/inner"}   // MARKER: Inner
-	Parent = Def{Method: "GET", Route: ":428/parent"}  // MARKER: Parent
+	TaskA    = Def{Method: "POST", Route: ":428/task-a"}     // MARKER: TaskA
+	TaskX    = Def{Method: "POST", Route: ":428/task-x"}     // MARKER: TaskX
+	TaskY    = Def{Method: "POST", Route: ":428/task-y"}     // MARKER: TaskY
+	TaskZ    = Def{Method: "POST", Route: ":428/task-z"}     // MARKER: TaskZ
+	RunInner = Def{Method: "POST", Route: ":428/run-inner"}  // MARKER: RunInner
+	Inner    = Def{Method: "GET", Route: ":428/inner"}       // MARKER: Inner
+	Parent   = Def{Method: "GET", Route: ":428/parent"}      // MARKER: Parent
 )
 
 // TaskAIn are the input arguments of TaskA.
@@ -82,6 +83,16 @@ type TaskZIn struct { // MARKER: TaskZ
 // TaskZOut are the output arguments of TaskZ.
 type TaskZOut struct { // MARKER: TaskZ
 	FinalResult string `json:"finalResult,omitzero"`
+}
+
+// RunInnerIn are the input arguments of RunInner.
+type RunInnerIn struct { // MARKER: RunInner
+	Seed string `json:"seed,omitzero"`
+}
+
+// RunInnerOut are the output arguments of RunInner.
+type RunInnerOut struct { // MARKER: RunInner
+	InnerResult string `json:"innerResult,omitzero"`
 }
 
 // InnerIn are the input arguments of Inner. Declared inputs: `seed`.

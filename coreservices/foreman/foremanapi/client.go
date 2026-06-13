@@ -463,8 +463,50 @@ func (_c Client) Snapshot(ctx context.Context, flowKey string) (outcome *workflo
 	return _out.Outcome, err // No trace
 }
 
+// FingerprintResponse packs the response of Fingerprint.
+type FingerprintResponse multicastResponse // MARKER: Fingerprint
+
+// Get unpacks the return arguments of Fingerprint.
+func (_res *FingerprintResponse) Get() (fingerprint string, status string, err error) { // MARKER: Fingerprint
+	_d := _res.data.(*FingerprintOut)
+	return _d.Fingerprint, _d.Status, _res.err
+}
+
 /*
-Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.
+Fingerprint returns an opaque hash that changes when a flow's status, step count, or any step's
+updated_at changes — across the flow and any nested subgraph descendants. Cheap to call; intended
+as the change-detection probe for long-polling watchers.
+*/
+func (_c MulticastClient) Fingerprint(ctx context.Context, flowKey string) iter.Seq[*FingerprintResponse] { // MARKER: Fingerprint
+	_in := FingerprintIn{FlowKey: flowKey}
+	_out := FingerprintOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Fingerprint.Method, Fingerprint.Route, &_in, &_out)
+	return func(yield func(*FingerprintResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*FingerprintResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+Fingerprint returns an opaque hash that changes when a flow's status, step count, or any step's
+updated_at changes — across the flow and any nested subgraph descendants. Cheap to call; intended
+as the change-detection probe for long-polling watchers.
+*/
+func (_c Client) Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error) { // MARKER: Fingerprint
+	_in := FingerprintIn{FlowKey: flowKey}
+	_out := FingerprintOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Fingerprint.Method, Fingerprint.Route, &_in, &_out)
+	return _out.Fingerprint, _out.Status, err // No trace
+}
+
+/*
+Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails if the flow
+is paused at a breakpoint rather than an interrupt.
 */
 func (_c MulticastClient) Resume(ctx context.Context, flowKey string, resumeData any) iter.Seq[*multicastResponse] { // MARKER: Resume
 	_in := ResumeIn{FlowKey: flowKey, ResumeData: resumeData}
@@ -473,7 +515,8 @@ func (_c MulticastClient) Resume(ctx context.Context, flowKey string, resumeData
 }
 
 /*
-Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.
+Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails if the flow
+is paused at a breakpoint rather than an interrupt.
 */
 func (_c Client) Resume(ctx context.Context, flowKey string, resumeData any) (err error) { // MARKER: Resume
 	_in := ResumeIn{FlowKey: flowKey, ResumeData: resumeData}
@@ -482,45 +525,25 @@ func (_c Client) Resume(ctx context.Context, flowKey string, resumeData any) (er
 	return err // No trace
 }
 
-// ForkResponse packs the response of Fork.
-type ForkResponse multicastResponse // MARKER: Fork
-
-// Get unpacks the return arguments of Fork.
-func (_res *ForkResponse) Get() (newFlowKey string, err error) { // MARKER: Fork
-	_d := _res.data.(*ForkOut)
-	return _d.NewFlowKey, _res.err
+/*
+ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state.
+Fails if the flow is paused at an interrupt rather than a breakpoint.
+*/
+func (_c MulticastClient) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*multicastResponse] { // MARKER: ResumeBreak
+	_in := ResumeBreakIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := ResumeBreakOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, ResumeBreak.Method, ResumeBreak.Route, &_in, &_out)
 }
 
 /*
-Fork creates a new flow from an existing step's checkpoint. opts supplies the new flow's
-scheduling and lifetime (priority, fairness, deadline); a nil opts uses fresh defaults rather
-than inheriting from the parent. Fork is primarily a debug/repro tool.
+ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state.
+Fails if the flow is paused at an interrupt rather than a breakpoint.
 */
-func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) iter.Seq[*ForkResponse] { // MARKER: Fork
-	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides, Opts: opts}
-	_out := ForkOut{}
-	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
-	return func(yield func(*ForkResponse) bool) {
-		for _r := range _inner {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*ForkResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-/*
-Fork creates a new flow from an existing step's checkpoint. opts supplies the new flow's
-scheduling and lifetime (priority, fairness, deadline); a nil opts uses fresh defaults rather
-than inheriting from the parent. Fork is primarily a debug/repro tool.
-*/
-func (_c Client) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Fork
-	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides, Opts: opts}
-	_out := ForkOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
-	return _out.NewFlowKey, err // No trace
+func (_c Client) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: ResumeBreak
+	_in := ResumeBreakIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := ResumeBreakOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, ResumeBreak.Method, ResumeBreak.Route, &_in, &_out)
+	return err // No trace
 }
 
 /*
@@ -581,22 +604,92 @@ func (_c Client) History(ctx context.Context, flowKey string) (steps []FlowStep,
 	return _out.Steps, err // No trace
 }
 
-/*
-Retry re-executes the last failed step of a flow.
-*/
-func (_c MulticastClient) Retry(ctx context.Context, flowKey string) iter.Seq[*multicastResponse] { // MARKER: Retry
-	_in := RetryIn{FlowKey: flowKey}
-	_out := RetryOut{}
-	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, Retry.Method, Retry.Route, &_in, &_out)
+// StepResponse packs the response of Step.
+type StepResponse multicastResponse // MARKER: Step
+
+// Get unpacks the return arguments of Step.
+func (_res *StepResponse) Get() (step *FlowStep, err error) { // MARKER: Step
+	_d := _res.data.(*StepOut)
+	return _d.Step, _res.err
 }
 
 /*
-Retry re-executes the last failed step of a flow.
+Step returns the full detail of one execution step, including the state,
+changes and interrupt payload that History intentionally omits to keep
+flow-wide responses bounded.
 */
-func (_c Client) Retry(ctx context.Context, flowKey string) (err error) { // MARKER: Retry
-	_in := RetryIn{FlowKey: flowKey}
-	_out := RetryOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Retry.Method, Retry.Route, &_in, &_out)
+func (_c MulticastClient) Step(ctx context.Context, stepKey string) iter.Seq[*StepResponse] { // MARKER: Step
+	_in := StepIn{StepKey: stepKey}
+	_out := StepOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Step.Method, Step.Route, &_in, &_out)
+	return func(yield func(*StepResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*StepResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+Step returns the full detail of one execution step, including the state,
+changes and interrupt payload that History intentionally omits to keep
+flow-wide responses bounded.
+*/
+func (_c Client) Step(ctx context.Context, stepKey string) (step *FlowStep, err error) { // MARKER: Step
+	_in := StepIn{StepKey: stepKey}
+	_out := StepOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Step.Method, Step.Route, &_in, &_out)
+	return _out.Step, err // No trace
+}
+
+/*
+Restart wipes everything past a flow's entry step, resets the entry step to pending with state =
+merge(originalEntryState, stateOverrides), cascade-deletes subgraph children, and flips the flow
+to running. The flow must be in a terminal status. stateOverrides is shallow-merged at the top
+level (replace semantics); pass JSON null to remove a key.
+*/
+func (_c MulticastClient) Restart(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*multicastResponse] { // MARKER: Restart
+	_in := RestartIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := RestartOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, Restart.Method, Restart.Route, &_in, &_out)
+}
+
+/*
+Restart wipes everything past a flow's entry step, resets the entry step to pending with state =
+merge(originalEntryState, stateOverrides), cascade-deletes subgraph children, and flips the flow
+to running.
+*/
+func (_c Client) Restart(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Restart
+	_in := RestartIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := RestartOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Restart.Method, Restart.Route, &_in, &_out)
+	return err // No trace
+}
+
+/*
+RestartFrom sweeps the DAG subtree downstream of the named step (via successor_id), decrements the
+spawn's cohort counters for swept members, UPDATEs the target step to pending with state =
+merge(originalStepState, stateOverrides), and flips the flow to running. The target step must be
+in a non-pending, non-running status. stateOverrides is shallow-merged at the top level.
+*/
+func (_c MulticastClient) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) iter.Seq[*multicastResponse] { // MARKER: RestartFrom
+	_in := RestartFromIn{StepKey: stepKey, StateOverrides: stateOverrides}
+	_out := RestartFromOut{}
+	return marshalPublish(ctx, _c.svc, _c.opts, _c.host, RestartFrom.Method, RestartFrom.Route, &_in, &_out)
+}
+
+/*
+RestartFrom sweeps the DAG subtree downstream of the named step (via successor_id), decrements the
+spawn's cohort counters for swept members, UPDATEs the target step to pending with state =
+merge(originalStepState, stateOverrides), and flips the flow to running.
+*/
+func (_c Client) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
+	_in := RestartFromIn{StepKey: stepKey, StateOverrides: stateOverrides}
+	_out := RestartFromOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, RestartFrom.Method, RestartFrom.Route, &_in, &_out)
 	return err // No trace
 }
 

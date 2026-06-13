@@ -2,16 +2,18 @@ module github.com/microbus-io/fabric
 
 go 1.26.3
 
+tool github.com/microbus-io/copyrighter
+
 require (
 	github.com/andybalholm/brotli v1.2.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invopop/jsonschema v0.14.0
-	github.com/microbus-io/boolexp v1.1.0
-	github.com/microbus-io/copyrighter v1.3.0
-	github.com/microbus-io/errors v1.0.0
-	github.com/microbus-io/pyvenv v1.0.0
-	github.com/microbus-io/sequel v1.6.1
+	github.com/microbus-io/bespa v0.1.2
+	github.com/microbus-io/boolexp v1.1.1
+	github.com/microbus-io/errors v1.0.1
+	github.com/microbus-io/pyvenv v1.0.3
+	github.com/microbus-io/sequel v1.7.1
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/microbus-io/throttle v0.3.0
 	github.com/mnako/letters v0.2.8
@@ -55,6 +57,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
+	github.com/gomarkdown/markdown v0.0.0-20260417124207-7d523f7318df // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
@@ -64,6 +67,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/microbus-io/copyrighter v1.4.0 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
@@ -91,3 +95,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.50.1 // indirect
 )
+
+replace github.com/microbus-io/bespa => ../bespa

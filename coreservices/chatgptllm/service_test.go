@@ -84,7 +84,7 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Hello from OpenAI!"}}],"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":5}}`))
+				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Hello from OpenAI!"},"finish_reason":"stop"}],"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":5}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -93,10 +93,11 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		content, toolCalls, usage, err := client.Turn(ctx, chatgptllmapi.ModelGPT4o, messages, nil, nil)
+		content, toolCalls, stopReason, usage, err := client.Turn(ctx, chatgptllmapi.ModelGPT4o, messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(content, "Hello from OpenAI!")
 			assert.Expect(len(toolCalls), 0)
+			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.Expect(usage.OutputTokens, 5)
 			assert.Expect(usage.Turns, 1)
 		}
@@ -109,7 +110,7 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
 			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}}]}}],"model":"gpt-4o","usage":{"prompt_tokens":15,"completion_tokens":8}}`))
+				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}}]},"finish_reason":"tool_calls"}],"model":"gpt-4o","usage":{"prompt_tokens":15,"completion_tokens":8}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -118,10 +119,11 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 10 - 3?"}}
-		_, toolCalls, _, err := client.Turn(ctx, chatgptllmapi.ModelGPT4o, messages, nil, nil)
+		_, toolCalls, stopReason, _, err := client.Turn(ctx, chatgptllmapi.ModelGPT4o, messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(toolCalls), 1)
 			assert.Expect(toolCalls[0].Name, "Arithmetic")
+			assert.Expect(stopReason, llmapi.StopReasonToolUse)
 		}
 	})
 }

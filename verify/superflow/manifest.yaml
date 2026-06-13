@@ -5,7 +5,7 @@ general:
   description: superflow.verify is a unified workflow fixture covering every transition primitive in a single graph, with per-task behavior driven by state.
   package: github.com/microbus-io/fabric/verify/superflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-22T23:15:20Z"
+  modifiedAt: "2026-05-31T01:00:29Z"
 
 tasks:
   TaskA:
@@ -44,6 +44,10 @@ tasks:
     signature: SubTaskB()
     description: SubTaskB is the second step of the SuperSub subgraph.
     route: :428/sub-task-b
+  RunSuperSub:
+    signature: RunSuperSub()
+    description: RunSuperSub invokes the SuperSub subgraph via flow.Subgraph.
+    route: :428/run-super-sub
 
 workflows:
   Super:

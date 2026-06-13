@@ -45,9 +45,10 @@ type TurnIn struct { // MARKER: Turn
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content   string            `json:"content,omitzero" jsonschema:"description=Content is the LLM text response"`
-	ToolCalls []llmapi.ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls"`
-	Usage     llmapi.Usage      `json:"usage,omitzero" jsonschema:"description=Usage is the token consumption"`
+	Content    string            `json:"content,omitzero" jsonschema:"description=Content is the LLM text response"`
+	ToolCalls  []llmapi.ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls"`
+	StopReason string            `json:"stopReason,omitzero" jsonschema:"description=StopReason is the normalized reason the turn ended"`
+	Usage      llmapi.Usage      `json:"usage,omitzero" jsonschema:"description=Usage is the token consumption"`
 }
 
 var (

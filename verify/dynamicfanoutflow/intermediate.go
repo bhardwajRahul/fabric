@@ -60,8 +60,8 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	TaskA(ctx context.Context, flow *workflow.Flow, items []string) (itemsOut []string, err error) // MARKER: TaskA
-	TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error)  // MARKER: TaskB
-	TaskC(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error) // MARKER: TaskC
+	TaskB(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) // MARKER: TaskB
+	TaskC(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error)                                                                                     // MARKER: TaskC
 	DynamicFanOut(ctx context.Context) (graph *workflow.Graph, err error)                          // MARKER: DynamicFanOut
 }
 
@@ -194,7 +194,7 @@ func (svc *Intermediate) doTaskB(w http.ResponseWriter, r *http.Request) (err er
 	var in dynamicfanoutflowapi.TaskBIn
 	flow.ParseState(&in)
 	var out dynamicfanoutflowapi.TaskBOut
-	out.SumProcessedOut, out.ListSeenIndicesOut, out.SetSeenCountsOut, err = svc.TaskB(r.Context(), &flow, in.Item, in.ItemIndex, in.ItemCount, in.ClearItems)
+	out.ProcessedOut, out.SeenIndicesOut, out.SeenCountsOut, err = svc.TaskB(r.Context(), &flow, in.Item, in.ItemIndex, in.ItemCount, in.ClearItems)
 	if err != nil {
 		return err // No trace
 	}
@@ -218,7 +218,7 @@ func (svc *Intermediate) doTaskC(w http.ResponseWriter, r *http.Request) (err er
 	var in dynamicfanoutflowapi.TaskCIn
 	flow.ParseState(&in)
 	var out dynamicfanoutflowapi.TaskCOut
-	out.ProcessedCount, err = svc.TaskC(r.Context(), &flow, in.SumProcessed)
+	out.ProcessedCount, err = svc.TaskC(r.Context(), &flow, in.Processed)
 	if err != nil {
 		return err // No trace
 	}

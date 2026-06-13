@@ -57,11 +57,22 @@ Parent calls flow.Subgraph on its first invocation, then re-runs after the child
 with the child's outputs (innerDone, innerResult) merged into state.
 */
 func (svc *Service) Parent(ctx context.Context, flow *workflow.Flow, value int, innerDone bool, innerResult int) (parentResult string, err error) { // MARKER: Parent
-	if !innerDone {
-		flow.Subgraph(dynamicsubgraphflowapi.Inner.URL(), map[string]any{"value": value})
+	// innerDone/innerResult are no longer populated from state: the child's output now arrives via
+	// flow.Subgraph's return value instead of being merged into the parent's state.
+	_ = innerDone
+	_ = innerResult
+	out, yield, err := flow.Subgraph(dynamicsubgraphflowapi.Inner.URL(), map[string]any{"value": value})
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if yield {
 		return "", nil
 	}
-	return fmt.Sprintf("parent:%d", innerResult), nil
+	result := 0
+	if v, ok := out["innerResult"].(float64); ok {
+		result = int(v)
+	}
+	return fmt.Sprintf("parent:%d", result), nil
 }
 
 // InnerA doubles value.

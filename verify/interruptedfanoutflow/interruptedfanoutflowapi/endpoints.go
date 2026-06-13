@@ -59,7 +59,7 @@ type AIn struct { // MARKER: A
 
 // AOut are the output arguments of A.
 type AOut struct { // MARKER: A
-	SumExecutedOut int `json:"sumExecuted,omitzero"`
+	ExecutedOut int `json:"executed,omitzero"`
 }
 
 // BIn are the input arguments of B.
@@ -69,7 +69,7 @@ type BIn struct { // MARKER: B
 
 // BOut are the output arguments of B.
 type BOut struct { // MARKER: B
-	SumExecutedOut int `json:"sumExecuted,omitzero"`
+	ExecutedOut int `json:"executed,omitzero"`
 }
 
 // CIn are the input arguments of C.
@@ -78,12 +78,12 @@ type CIn struct { // MARKER: C
 
 // COut are the output arguments of C.
 type COut struct { // MARKER: C
-	SumExecutedOut int `json:"sumExecuted,omitzero"`
+	ExecutedOut int `json:"executed,omitzero"`
 }
 
 // JIn are the input arguments of J.
 type JIn struct { // MARKER: J
-	SumExecuted int `json:"sumExecuted,omitzero"`
+	Executed int `json:"executed,omitzero"`
 }
 
 // JOut are the output arguments of J.
@@ -97,6 +97,6 @@ type InterruptedFanOutIn struct { // MARKER: InterruptedFanOut
 
 // InterruptedFanOutOut are the output arguments of InterruptedFanOut.
 type InterruptedFanOutOut struct { // MARKER: InterruptedFanOut
-	SumExecuted   int `json:"sumExecuted,omitzero"`
+	Executed      int `json:"executed,omitzero"`
 	TotalExecuted int `json:"totalExecuted,omitzero"`
 }

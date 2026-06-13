@@ -13,6 +13,8 @@ nats-server
 nats.creds
 *_nats.creds
 
+*.pem
+
 *.db
 *.sqlite
 *.sqlite3

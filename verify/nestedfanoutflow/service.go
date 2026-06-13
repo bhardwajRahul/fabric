@@ -69,23 +69,39 @@ func (svc *Service) TaskX(ctx context.Context, flow *workflow.Flow) (innerStarte
 }
 
 // TaskY contributes +10 to the inner sum reducer.
-func (svc *Service) TaskY(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) { // MARKER: TaskY
+func (svc *Service) TaskY(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) { // MARKER: TaskY
 	return 10, nil
 }
 
 // TaskZ contributes +20 to the inner sum reducer.
-func (svc *Service) TaskZ(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) { // MARKER: TaskZ
+func (svc *Service) TaskZ(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) { // MARKER: TaskZ
 	return 20, nil
 }
 
-// TaskW is the inner subgraph fan-in; reads the merged sumInner.
-func (svc *Service) TaskW(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error) { // MARKER: TaskW
-	return sumInner, nil
+// TaskW is the inner subgraph fan-in; reads the merged inner.
+func (svc *Service) TaskW(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error) { // MARKER: TaskW
+	return inner, nil
 }
 
 // TaskJ is the outer fan-in; combines NormalB's result with the inner subgraph's result.
 func (svc *Service) TaskJ(ctx context.Context, flow *workflow.Flow, normalResult string, innerResult int) (finalResult string, err error) { // MARKER: TaskJ
 	return fmt.Sprintf("%s/%d", normalResult, innerResult), nil
+}
+
+// RunInner invokes the Inner subgraph via flow.Subgraph and adopts its innerResult. It is one of the
+// two outer fan-out siblings (alongside NormalB).
+func (svc *Service) RunInner(ctx context.Context, flow *workflow.Flow) (innerResult int, err error) { // MARKER: RunInner
+	out, yield, err := flow.Subgraph(nestedfanoutflowapi.Inner.URL(), nil)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if yield {
+		return 0, nil
+	}
+	if v, ok := out["innerResult"].(float64); ok {
+		return int(v), nil
+	}
+	return 0, nil
 }
 
 // Inner defines the subgraph X -> {Y, Z} -> W.
@@ -96,6 +112,7 @@ func (svc *Service) Inner(ctx context.Context) (graph *workflow.Graph, err error
 	graph.AddTask("taskZ", nestedfanoutflowapi.TaskZ.URL())
 	graph.AddTask("taskW", nestedfanoutflowapi.TaskW.URL())
 	graph.SetFanIn("taskW")
+	graph.SetReducer("inner", workflow.ReducerAdd)
 	graph.AddTransition("taskX", "taskY")
 	graph.AddTransition("taskX", "taskZ")
 	graph.AddTransition("taskY", "taskW")
@@ -109,13 +126,13 @@ func (svc *Service) Nested(ctx context.Context) (graph *workflow.Graph, err erro
 	graph = workflow.NewGraph(nestedfanoutflowapi.Nested.URL())
 	graph.AddTask("taskA", nestedfanoutflowapi.TaskA.URL())
 	graph.AddTask("normalB", nestedfanoutflowapi.NormalB.URL())
-	graph.AddSubgraph("inner", nestedfanoutflowapi.Inner.URL())
+	graph.AddTask("runInner", nestedfanoutflowapi.RunInner.URL())
 	graph.AddTask("taskJ", nestedfanoutflowapi.TaskJ.URL())
 	graph.SetFanIn("taskJ")
 	graph.AddTransition("taskA", "normalB")
-	graph.AddTransition("taskA", "inner")
+	graph.AddTransition("taskA", "runInner")
 	graph.AddTransition("normalB", "taskJ")
-	graph.AddTransition("inner", "taskJ")
+	graph.AddTransition("runInner", "taskJ")
 	graph.AddTransition("taskJ", workflow.END)
 	return graph, nil
 }

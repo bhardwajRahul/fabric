@@ -20,7 +20,7 @@ general:
   description: perelementpipelineflow.verify is the SKIP-marked per-element pipeline pattern (lineage redesign required).
   package: github.com/microbus-io/fabric/verify/perelementpipelineflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-26T14:11:18Z"
 
 tasks:
   TaskS:
@@ -40,11 +40,11 @@ tasks:
     description: TaskB is the other parallel branch.
     route: :428/task-b
   TaskM:
-    signature: TaskM(aProcessed string, bProcessed string) (setMerged []string)
+    signature: TaskM(aProcessed string, bProcessed string) (mergedItems []string)
     description: TaskM is the per-element fan-in.
     route: :428/task-m
   TaskL:
-    signature: TaskL(setMerged []string) (finalCount int)
+    signature: TaskL(mergedItems []string) (finalCount int)
     description: TaskL is the outer fan-in.
     route: :428/task-l
 

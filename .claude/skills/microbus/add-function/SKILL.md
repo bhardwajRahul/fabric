@@ -82,6 +82,8 @@ Prefix the route with `//` to set a hostname other than that of this microservic
 
 Describe the endpoint starting with its name, in Go doc style: `MyFunction does X`. Embed this description in followup steps wherever you see `MyFunction does X`.
 
+Describe **what the endpoint does and the effect it produces**, not who is expected to call it. The same endpoint may be invoked by a human, another microservice, a test, or an LLM tool call - the description should read the same in every case. `"Charges the card and returns a receipt id"` is good; `"called by the LLM as a tool"` or `"used by the checkout page"` is not. Naming the caller in the description leaks deployment context into the API contract and goes stale as soon as another caller shows up.
+
 When the function has non-trivial parameters or results, include `Input:` and/or `Output:` sections in the description. These sections are extracted by the OpenAPI generator to populate per-field descriptions. Use the godoc indented list format:
 
 ```

@@ -60,8 +60,8 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Enter(ctx context.Context, flow *workflow.Flow, elements []int) (elementsOut []int, err error)     // MARKER: Enter
-	Increment(ctx context.Context, flow *workflow.Flow, element int) (listResultOut []int, err error)  // MARKER: Increment
-	Join(ctx context.Context, flow *workflow.Flow, listResult []int) (listResultOut []int, err error)  // MARKER: Join
+	Increment(ctx context.Context, flow *workflow.Flow, element int) (resultsOut []int, err error)     // MARKER: Increment
+	Join(ctx context.Context, flow *workflow.Flow, results []int) (resultsOut []int, err error)        // MARKER: Join
 	RetryFanOut(ctx context.Context) (graph *workflow.Graph, err error)                                // MARKER: RetryFanOut
 }
 
@@ -194,7 +194,7 @@ func (svc *Intermediate) doIncrement(w http.ResponseWriter, r *http.Request) (er
 	var in retryfanoutflowapi.IncrementIn
 	flow.ParseState(&in)
 	var out retryfanoutflowapi.IncrementOut
-	out.ListResultOut, err = svc.Increment(r.Context(), &flow, in.Element)
+	out.ResultsOut, err = svc.Increment(r.Context(), &flow, in.Element)
 	if err != nil {
 		return err // No trace
 	}
@@ -218,7 +218,7 @@ func (svc *Intermediate) doJoin(w http.ResponseWriter, r *http.Request) (err err
 	var in retryfanoutflowapi.JoinIn
 	flow.ParseState(&in)
 	var out retryfanoutflowapi.JoinOut
-	out.ListResultOut, err = svc.Join(r.Context(), &flow, in.ListResult)
+	out.ResultsOut, err = svc.Join(r.Context(), &flow, in.Results)
 	if err != nil {
 		return err // No trace
 	}

@@ -136,6 +136,9 @@ func (svc *Service) openAPIAggregate(w http.ResponseWriter, r *http.Request) err
 				if op == nil {
 					continue
 				}
+				if !aggregatableFeatureType(op.XFeatureType) {
+					continue
+				}
 				if hostname != "" {
 					op.Tags = append(op.Tags, hostname)
 				}
@@ -236,7 +239,11 @@ func (svc *Service) exploreList(w http.ResponseWriter, r *http.Request) error {
 			if !portMatches(path, reqPort) {
 				continue
 			}
-			count += len(methods)
+			for _, op := range methods {
+				if op != nil && aggregatableFeatureType(op.XFeatureType) {
+					count++
+				}
+			}
 		}
 		if count == 0 {
 			continue
@@ -327,7 +334,7 @@ func (svc *Service) exploreHost(w http.ResponseWriter, r *http.Request, hostname
 			continue
 		}
 		for method, op := range methods {
-			if op == nil {
+			if op == nil || !aggregatableFeatureType(op.XFeatureType) {
 				continue
 			}
 			ops = append(ops, buildExploreOp(doc, method, path, op))
@@ -350,6 +357,8 @@ func (svc *Service) exploreHost(w http.ResponseWriter, r *http.Request, hostname
 }
 
 // openAPISingle is a thin proxy to a single service's `:888/openapi.json`.
+// Operations whose feature type is outside the portal's whitelist (tasks, etc.)
+// are stripped so the per-host view stays consistent with the aggregate.
 func (svc *Service) openAPISingle(w http.ResponseWriter, r *http.Request, hostname string) error {
 	doc, status, err := controlapi.NewClient(svc).ForHost(hostname).OpenAPI(r.Context())
 	if err != nil {
@@ -360,6 +369,43 @@ func (svc *Service) openAPISingle(w http.ResponseWriter, r *http.Request, hostna
 	}
 	if doc == nil {
 		return errors.New("empty openapi document", http.StatusBadGateway)
+	}
+	for path, methods := range doc.Paths {
+		for method, op := range methods {
+			if op == nil || !aggregatableFeatureType(op.XFeatureType) {
+				delete(methods, method)
+			}
+		}
+		if len(methods) == 0 {
+			delete(doc.Paths, path)
+		}
+	}
+	// Drop schemas no longer referenced by any kept operation. Without this,
+	// pruning paths would leak orphan task-only schemas in components.schemas.
+	if doc.Components != nil && len(doc.Components.Schemas) > 0 {
+		keptRefs := collectRefs(doc)
+		// Walk transitively: a kept schema can $ref another schema.
+		changed := true
+		for changed {
+			changed = false
+			for k := range keptRefs {
+				schema, ok := doc.Components.Schemas[k]
+				if !ok {
+					continue
+				}
+				for r := range collectRefsFromValue(schema) {
+					if !keptRefs[r] {
+						keptRefs[r] = true
+						changed = true
+					}
+				}
+			}
+		}
+		for k := range doc.Components.Schemas {
+			if !keptRefs[k] {
+				delete(doc.Components.Schemas, k)
+			}
+		}
 	}
 	body, err := json.Marshal(doc)
 	if err != nil {
@@ -648,6 +694,20 @@ func writeExampleArray(buf *strings.Builder, doc *openapi.Document, schema *json
 	buf.WriteByte('\n')
 	buf.WriteString(indent)
 	buf.WriteByte(']')
+}
+
+// aggregatableFeatureType is the whitelist of x-feature-type values the portal
+// exposes. The connector's :888/openapi.json includes every type (including
+// task) so internal inspectors can discover them, but the portal is a public
+// surface consumed by MCP clients and LLM tool resolution - tasks would
+// otherwise leak as callable tools. Each downstream consumer that should not
+// see tasks runs its own whitelist; the portal's lives here.
+func aggregatableFeatureType(t string) bool {
+	switch t {
+	case openapi.FeatureFunction, openapi.FeatureWeb, openapi.FeatureWorkflow:
+		return true
+	}
+	return false
 }
 
 // portMatches reports whether the OpenAPI path key matches the requested port. Path keys have

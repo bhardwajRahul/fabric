@@ -144,9 +144,11 @@ func TestConnector_OpenAPI(t *testing.T) {
 		assert.True(ok)
 		_, ok = paths["/openapi.connector:428/public-workflow"]
 		assert.True(ok)
-		// Task and inbound-event types are still excluded.
+		// Tasks are now included so internal inspectors (e.g. agentstudio) can
+		// discover task signatures; downstream portals filter them out.
 		_, ok = paths["/openapi.connector:428/hidden-task"]
-		assert.False(ok)
+		assert.True(ok)
+		// Inbound-event types remain excluded.
 		_, ok = paths["/other.host:417/hidden-inbound"]
 		assert.False(ok)
 		// Admin-only sub has RequiredClaims and is hidden from anonymous callers.

@@ -18,6 +18,7 @@ package superflow
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -115,12 +116,17 @@ func (svc *Service) step(ctx context.Context, flow *workflow.Flow, name string) 
 		}
 	}
 	if b.Retry {
-		flow.RetryNow()
+		flow.Retry(math.MaxInt32, 0, 0, 0)
 		return true, nil
 	}
 	if b.Interrupt {
-		flow.Interrupt(map[string]any{"interruptedBy": name})
-		return true, nil
+		_, yield, err := flow.Interrupt(map[string]any{"interruptedBy": name})
+		if err != nil {
+			return true, errors.Trace(err)
+		}
+		if yield {
+			return true, nil
+		}
 	}
 	if b.Goto != "" {
 		flow.Goto(b.Goto)
@@ -175,6 +181,19 @@ func (svc *Service) ErrorHandler(ctx context.Context, flow *workflow.Flow) (err 
 	return err
 }
 
+// RunSuperSub invokes the SuperSub subgraph via flow.Subgraph. It is the conditional branch out of
+// TaskD (when useSubgraph), converging at TaskE.
+func (svc *Service) RunSuperSub(ctx context.Context, flow *workflow.Flow) (err error) { // MARKER: RunSuperSub
+	_, yield, err := flow.Subgraph(superflowapi.SuperSub.URL(), nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if yield {
+		return nil
+	}
+	return nil
+}
+
 // SubTaskA is the entry of the SuperSub subgraph.
 func (svc *Service) SubTaskA(ctx context.Context, flow *workflow.Flow) (err error) { // MARKER: SubTaskA
 	_, err = svc.step(ctx, flow, "SubTaskA")
@@ -207,7 +226,7 @@ func (svc *Service) Super(ctx context.Context) (graph *workflow.Graph, err error
 	graph.AddTask("taskE", superflowapi.TaskE.URL())
 	graph.AddTask("taskZ", superflowapi.TaskZ.URL())
 	graph.AddTask("errorHandler", superflowapi.ErrorHandler.URL())
-	graph.AddSubgraph("superSubCall", superflowapi.SuperSub.URL())
+	graph.AddTask("superSubCall", superflowapi.RunSuperSub.URL())
 
 	// Fan-in points: TaskD for the forEach cohort, TaskE for the conditional.
 	graph.SetFanIn("taskD")

@@ -61,38 +61,44 @@ func (svc *Service) Src(ctx context.Context, flow *workflow.Flow) (started bool,
 }
 
 /*
-A is a normal fan-out branch contributing 1 to sumExecuted.
+A is a normal fan-out branch contributing 1 to executed.
 */
-func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: A
+func (svc *Service) A(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: A
 	return 1, nil
 }
 
 /*
 B is the interrupting branch. On its first run it parks the flow via
-flow.Interrupt and contributes nothing. After Resume injects resumed=true into
-its state, it re-runs, falls through, and contributes 1.
+flow.Interrupt and contributes nothing. After Resume, flow.Interrupt yields
+false, so it re-runs, falls through, and contributes 1.
 */
-func (svc *Service) B(ctx context.Context, flow *workflow.Flow, resumed bool) (sumExecutedOut int, err error) { // MARKER: B
-	if !resumed {
-		flow.Interrupt(map[string]any{"branch": "B"})
+func (svc *Service) B(ctx context.Context, flow *workflow.Flow, resumed bool) (executedOut int, err error) { // MARKER: B
+	// resumed is no longer populated (resume data arrives via flow.Interrupt's return, not state);
+	// re-entry is detected by the yield return instead.
+	_ = resumed
+	_, yield, err := flow.Interrupt(map[string]any{"branch": "B"})
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if yield {
 		return 0, nil
 	}
 	return 1, nil
 }
 
 /*
-C is a normal fan-out branch contributing 1 to sumExecuted.
+C is a normal fan-out branch contributing 1 to executed.
 */
-func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) { // MARKER: C
+func (svc *Service) C(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) { // MARKER: C
 	return 1, nil
 }
 
 /*
-J is the fan-in target. It surfaces the summed sumExecuted (3 once A, B and C
+J is the fan-in target. It surfaces the summed executed (3 once A, B and C
 have all contributed) as totalExecuted.
 */
-func (svc *Service) J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) { // MARKER: J
-	return sumExecuted, nil
+func (svc *Service) J(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) { // MARKER: J
+	return executed, nil
 }
 
 /*
@@ -107,6 +113,7 @@ func (svc *Service) InterruptedFanOut(ctx context.Context) (graph *workflow.Grap
 	graph.AddTask("c", interruptedfanoutflowapi.C.URL())
 	graph.AddTask("j", interruptedfanoutflowapi.J.URL())
 	graph.SetFanIn("j")
+	graph.SetReducer("executed", workflow.ReducerAdd)
 	graph.AddTransition("src", "a")
 	graph.AddTransition("src", "b")
 	graph.AddTransition("src", "c")

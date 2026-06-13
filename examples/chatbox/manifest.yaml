@@ -20,11 +20,11 @@ general:
   description: Chatbox is a demo LLM provider that pattern-matches user messages to demonstrate the tool-calling flow.
   package: github.com/microbus-io/fabric/examples/chatbox
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T06:35:48Z"
+  modifiedAt: "2026-06-04T02:02:47Z"
 
 functions:
   Turn:
-    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage)
+    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage)
     description: |-
       Turn executes a single LLM turn using the chatbox demo provider.
       It pattern-matches math questions and generates tool calls to the calculator.

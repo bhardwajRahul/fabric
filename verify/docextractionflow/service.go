@@ -116,9 +116,9 @@ func (svc *Service) IdentifyChunks(ctx context.Context, flow *workflow.Flow, pag
 TranscribeChunk runs once per chunk. It simulates OCR latency (50-150ms) and a 5%
 failure rate; on failure it retries via flow.Retry (100 attempts, constant 500ms, no
 backoff). On success it contributes one transcription as the single-element
-listTranscriptions delta (append reducer at fan-in).
+transcriptions delta (append reducer at fan-in).
 */
-func (svc *Service) TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) { // MARKER: TranscribeChunk
+func (svc *Service) TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (transcriptions []string, err error) { // MARKER: TranscribeChunk
 	flow.Set("page", nil) // Don't copy down the chain
 	err = svc.Sleep(ctx, 50*time.Millisecond+time.Duration(rand.IntN(101))*time.Millisecond) // 50-150ms
 	if err != nil {
@@ -139,18 +139,18 @@ func (svc *Service) TranscribeChunk(ctx context.Context, flow *workflow.Flow, pa
 /*
 JoinPageTranscriptions is the inner fan-in (over a page's chunks). It joins the
 page's chunk transcriptions and contributes the page text as the single-element
-listPageTexts delta (append reducer at the outer fan-in).
+pageTexts delta (append reducer at the outer fan-in).
 */
-func (svc *Service) JoinPageTranscriptions(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error) { // MARKER: JoinPageTranscriptions
-	return []string{strings.Join(listTranscriptions, " ")}, nil
+func (svc *Service) JoinPageTranscriptions(ctx context.Context, flow *workflow.Flow, transcriptions []string) (pageTexts []string, err error) { // MARKER: JoinPageTranscriptions
+	return []string{strings.Join(transcriptions, " ")}, nil
 }
 
 /*
 JoinDocTranscriptions is the outer fan-in (over all pages). It joins the page
 texts into the final document transcription, one page per line.
 */
-func (svc *Service) JoinDocTranscriptions(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error) { // MARKER: JoinDocTranscriptions
-	return strings.Join(listPageTexts, "\n"), nil
+func (svc *Service) JoinDocTranscriptions(ctx context.Context, flow *workflow.Flow, pageTexts []string) (docTranscription string, err error) { // MARKER: JoinDocTranscriptions
+	return strings.Join(pageTexts, "\n"), nil
 }
 
 /*
@@ -167,6 +167,8 @@ func (svc *Service) DocExtraction(ctx context.Context) (graph *workflow.Graph, e
 	graph.AddTask("joinDocTranscriptions", docextractionflowapi.JoinDocTranscriptions.URL())
 	graph.SetFanIn("joinPageTranscriptions") // inner: chunks -> page
 	graph.SetFanIn("joinDocTranscriptions")  // outer: pages -> doc
+	graph.SetReducer("transcriptions", workflow.ReducerAppend)
+	graph.SetReducer("pageTexts", workflow.ReducerAppend)
 	graph.AddTransitionForEach("scanPDF", "identifyChunks", "pageImages", "page")
 	graph.AddTransitionForEach("identifyChunks", "transcribeChunk", "chunks", "chunk")
 	graph.AddTransition("transcribeChunk", "joinPageTranscriptions")

@@ -59,16 +59,17 @@ type TurnIn struct { // MARKER: Turn
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content   string     `json:"content,omitzero"`
-	ToolCalls []ToolCall `json:"toolCalls,omitzero"`
-	Usage     Usage      `json:"usage,omitzero"`
+	Content    string     `json:"content,omitzero"`
+	ToolCalls  []ToolCall `json:"toolCalls,omitzero"`
+	StopReason string     `json:"stopReason,omitzero"`
+	Usage      Usage      `json:"usage,omitzero"`
 }
 
 // InitChatIn are the input arguments of InitChat.
 type InitChatIn struct { // MARKER: InitChat
-	ListMessages []Message    `json:"listMessages,omitzero"`
-	Tools        []Tool       `json:"tools,omitzero"`
-	Options      *ChatOptions `json:"options,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	ToolURLs []string     `json:"toolURLs,omitzero"`
+	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // InitChatOut are the output arguments of InitChat.
@@ -81,7 +82,7 @@ type InitChatOut struct { // MARKER: InitChat
 type CallLLMIn struct { // MARKER: CallLLM
 	Provider     string    `json:"provider,omitzero"`
 	Model        string    `json:"model,omitzero"`
-	ListMessages []Message `json:"listMessages,omitzero"`
+	Messages []Message `json:"messages,omitzero"`
 }
 
 // CallLLMOut are the output arguments of CallLLM.
@@ -100,35 +101,36 @@ type ProcessResponseIn struct { // MARKER: ProcessResponse
 }
 
 // ProcessResponseOut are the output arguments of ProcessResponse.
+// The running conversation lives entirely in the `messages` state key (Append-reduced across the
+// per-tool-call cohort), which ChatLoop's terminal output reads at flow completion. There is no
+// per-task "messagesOut" accumulator to return: ProcessResponse and ExecuteTool contribute deltas
+// to `messages` via flow.Set, the reducer assembles them, done.
 type ProcessResponseOut struct { // MARKER: ProcessResponse
-	ListMessagesOut []Message `json:"listMessages,omitzero"`
-	ToolsRequested  bool      `json:"toolsRequested,omitzero"`
-	ToolRoundsOut   int       `json:"toolRounds,omitzero"`
-	UsageOut        Usage     `json:"usage,omitzero"`
+	ToolsRequested bool  `json:"toolsRequested,omitzero"`
+	ToolRoundsOut  int   `json:"toolRounds,omitzero"`
+	UsageOut       Usage `json:"usage,omitzero"`
 }
 
 // ExecuteToolIn are the input arguments of ExecuteTool.
 type ExecuteToolIn struct { // MARKER: ExecuteTool
-	ToolExecuted bool `json:"toolExecuted,omitzero"`
 }
 
 // ExecuteToolOut are the output arguments of ExecuteTool.
 type ExecuteToolOut struct { // MARKER: ExecuteTool
-	ToolExecutedOut bool `json:"toolExecuted,omitzero"`
 }
 
 // ChatLoopIn are the input arguments of ChatLoop.
 type ChatLoopIn struct { // MARKER: ChatLoop
-	Provider     string       `json:"provider,omitzero"`
-	Model        string       `json:"model,omitzero"`
-	ListMessages []Message    `json:"listMessages,omitzero"`
-	Tools        []Tool       `json:"tools,omitzero"`
-	Options      *ChatOptions `json:"options,omitzero"`
+	Provider string       `json:"provider,omitzero"`
+	Model    string       `json:"model,omitzero"`
+	Messages []Message    `json:"messages,omitzero"`
+	ToolURLs []string     `json:"toolURLs,omitzero"`
+	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // ChatLoopOut are the output arguments of ChatLoop.
 type ChatLoopOut struct { // MARKER: ChatLoop
-	ListMessagesOut []Message `json:"listMessages,omitzero"`
+	MessagesOut []Message `json:"messages,omitzero"`
 	Usage           Usage     `json:"usage,omitzero"`
 }
 

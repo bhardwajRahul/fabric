@@ -112,16 +112,22 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var lineageID int
 	var flowID int
 	var timeBudgetMs int
+	var interruptDone bool
+	var resumeDataJSON string
+	var subgraphDone bool
+	var subgraphResultJSON string
+	var subgraphErrorStr string
 	switch db.DriverName() {
 	case "pgx", "sqlite":
 		// Single round-trip claim+read: UPDATE ... RETURNING. The CAS predicate
 		// gates the claim, so an unmatched UPDATE yields ErrNoRows from Scan.
 		err = db.QueryRowContext(ctx,
-			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
-				" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()"+
-				" RETURNING step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms",
-			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
-		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC(),"+
+				" started_at=CASE WHEN attempt>0 OR subgraph_done=1 OR interrupt_done=1 THEN started_at ELSE NOW_UTC() END"+
+				" WHERE step_id=? AND status=? AND parked=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()"+
+				" RETURNING step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms, interrupt_done, resume_data, subgraph_done, subgraph_result, subgraph_error",
+			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending, parkedNone,
+		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs, &interruptDone, &resumeDataJSON, &subgraphDone, &subgraphResultJSON, &subgraphErrorStr)
 		if err == sql.ErrNoRows {
 			n = 0
 			err = nil
@@ -132,11 +138,12 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		// SQL Server uses OUTPUT INSERTED.* between SET and WHERE; same single-
 		// round-trip semantics as RETURNING.
 		err = db.QueryRowContext(ctx,
-			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
-				" OUTPUT INSERTED.step_depth, INSERTED.task_name, INSERTED.state, INSERTED.changes, INSERTED.breakpoint_hit, INSERTED.attempt, INSERTED.lineage_id, INSERTED.flow_id, INSERTED.time_budget_ms"+
-				" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
-			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
-		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC(),"+
+				" started_at=CASE WHEN attempt>0 OR subgraph_done=1 OR interrupt_done=1 THEN started_at ELSE NOW_UTC() END"+
+				" OUTPUT INSERTED.step_depth, INSERTED.task_name, INSERTED.state, INSERTED.changes, INSERTED.breakpoint_hit, INSERTED.attempt, INSERTED.lineage_id, INSERTED.flow_id, INSERTED.time_budget_ms, INSERTED.interrupt_done, INSERTED.resume_data, INSERTED.subgraph_done, INSERTED.subgraph_result, INSERTED.subgraph_error"+
+				" WHERE step_id=? AND status=? AND parked=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
+			workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending, parkedNone,
+		).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs, &interruptDone, &resumeDataJSON, &subgraphDone, &subgraphResultJSON, &subgraphErrorStr)
 		if err == sql.ErrNoRows {
 			n = 0
 			err = nil
@@ -148,9 +155,10 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			func() error {
 				// Atomic claim. WHERE clause gates: only one worker wins.
 				res, err := db.ExecContext(ctx,
-					"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC()"+
-						" WHERE step_id=? AND status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
-					workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending,
+					"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC(),"+
+						" started_at=CASE WHEN attempt>0 OR subgraph_done=1 OR interrupt_done=1 THEN started_at ELSE NOW_UTC() END"+
+						" WHERE step_id=? AND status=? AND parked=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC()",
+					workflow.StatusRunning, leaseMs, stepID, workflow.StatusPending, parkedNone,
 				)
 				if err != nil {
 					return errors.Trace(err)
@@ -159,12 +167,12 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 				return nil
 			},
 			func() error {
-				// The UPDATE only mutates status and lease_expires; the columns read
-				// here are stable for the row's lifetime, so this race-reads safely.
+				// The UPDATE only mutates status, lease_expires, updated_at, started_at; the columns
+				// read here are stable for the row's lifetime, so this race-reads safely.
 				err := db.QueryRowContext(ctx,
-					"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms FROM microbus_steps WHERE step_id=?",
+					"SELECT step_depth, task_name, state, changes, breakpoint_hit, attempt, lineage_id, flow_id, time_budget_ms, interrupt_done, resume_data, subgraph_done, subgraph_result, subgraph_error FROM microbus_steps WHERE step_id=?",
 					stepID,
-				).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs)
+				).Scan(&stepDepth, &taskName, &stateJSON, &priorChangesJSON, &breakpointHit, &attempt, &lineageID, &flowID, &timeBudgetMs, &interruptDone, &resumeDataJSON, &subgraphDone, &subgraphResultJSON, &subgraphErrorStr)
 				if err == sql.ErrNoRows {
 					return nil
 				}
@@ -208,9 +216,13 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	flowStatus = strings.TrimSpace(flowStatus)
 	flowToken = strings.TrimSpace(flowToken)
 	if flowStatus == workflow.StatusCancelled || flowStatus == workflow.StatusFailed || flowStatus == workflow.StatusCompleted {
+		// Reset parked alongside the terminal transition: the "step is parked" invariant only
+		// holds while the step is actively waiting (parkedSubgraph or parkedBreaker). Once the
+		// step is terminal, the park slot is by definition gone - leaving parked != 0 would
+		// strand the row outside the selection index for any subsequent Restart/RestartFrom.
 		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
-			flowStatus, stepID,
+			"UPDATE microbus_steps SET status=?, parked=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
+			flowStatus, parkedNone, stepID,
 		)
 		return errors.Trace(err)
 	}
@@ -255,6 +267,30 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	flow.SetRawChanges(priorChanges)
 	flow.SetAttempt(attempt)
 	flow.SetTimestamps(flowCreatedAt, flowUpdatedAt)
+
+	// Materialize an interrupt park's resolution from the step row so flow.Interrupt returns the
+	// resume data (yield=false) on re-entry instead of re-arming. Only a resumed step has
+	// interrupt_done set; an un-resumed step (the common case) needs no materialization.
+	if interruptDone {
+		var resumeData map[string]any
+		err = unmarshalJSONMap(resumeDataJSON, &resumeData)
+		if err != nil {
+			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
+			return errors.Trace(err)
+		}
+		flow.SetInterruptResolution(resumeData)
+	}
+	// Likewise materialize a dynamic subgraph park's resolution so flow.Subgraph returns the child's
+	// result/error (yield=false) on re-entry. Only a step whose child has terminated has subgraph_done set.
+	if subgraphDone {
+		var subgraphResult map[string]any
+		err = unmarshalJSONMap(subgraphResultJSON, &subgraphResult)
+		if err != nil {
+			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
+			return errors.Trace(err)
+		}
+		flow.SetSubgraphResolution(subgraphResult, subgraphErrorStr)
+	}
 
 	// Check breakpoints: pause before executing the task if a breakpoint matches.
 	// Skip if this step already hit a breakpoint (breakpoint_hit flag prevents re-triggering on Resume).
@@ -371,89 +407,6 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 	var actorToken string
 	var execErr error
 
-	// Subgraph handling: if the task is a subgraph, create and start a subgraph flow
-	// instead of executing it as an HTTP task. The surgraph step stays running with
-	// a far-future lease. When the subgraph flow completes, completeSurgraphFlow merges
-	// the result back and re-enqueues this step for transition evaluation.
-	if graph.IsSubgraph(taskName) {
-		// Check if a subgraph flow already exists for this surgraph step.
-		// If it completed, its final_state was already merged into our changes by completeSurgraphFlow.
-		// Skip to transition evaluation (fall through the subgraph block).
-		// If it is still active, park and wait. If none exists, create one.
-		// Scope by surgraph_step_id so that multiple parallel subgraph siblings (fan-out
-		// to several subgraphs at the same step_depth) don't see each other's child flows.
-		var activeSubgraphCount, completedSubgraphCount int
-		err = svc.Parallel(
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status IN (?, ?, ?)",
-					flowID, stepDepth, stepID,
-					workflow.StatusCreated, workflow.StatusRunning, workflow.StatusInterrupted,
-				).Scan(&activeSubgraphCount)
-				return errors.Trace(err)
-			},
-			func() error {
-				err := db.QueryRowContext(ctx,
-					"SELECT COUNT(*) FROM microbus_flows WHERE surgraph_flow_id=? AND surgraph_step_depth=? AND surgraph_step_id=? AND status=?",
-					flowID, stepDepth, stepID, workflow.StatusCompleted,
-				).Scan(&completedSubgraphCount)
-				return errors.Trace(err)
-			},
-		)
-		if err != nil {
-			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-			return errors.Trace(err)
-		}
-		if completedSubgraphCount > 0 {
-			// Subgraph flow already completed - its final_state was merged into our changes by completeSurgraphFlow.
-			// Skip task execution and proceed to post-execution handling.
-			resultFlow = flow
-			goto postExecution
-		}
-		if activeSubgraphCount == 0 {
-			// No subgraph flow exists yet - create and start one. The subgraph workflow URL comes from the node's URL,
-			// not its name (these may differ if the node was registered with an explicit name via AddSubgraph(name, url)).
-			subgraphURL := dispatchURLOf(graph, taskName)
-			subgraphGraph, err := svc.fetchGraph(ctx, subgraphURL)
-			if err != nil {
-				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-				return errors.Trace(err)
-			}
-			mergedState, err := workflow.MergeState(state, priorChanges, nil)
-			if err != nil {
-				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-				return errors.Trace(err)
-			}
-			subgraphFlowID, err := svc.createSubgraphFlow(ctx, shardNum, flowID, stepDepth, stepID, subgraphURL, subgraphGraph, mergedState, actorClaimsJSON, traceParent, breakpointsJSON)
-			if err != nil {
-				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-				return errors.Trace(err)
-			}
-			err = svc.Start(ctx, subgraphFlowID)
-			if err != nil {
-				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-				return errors.Trace(err)
-			}
-		}
-		// Park the surgraph step: extend lease far into the future (only if step is still running).
-		// This is safe because the lease is always cleared by a code path:
-		// - Subgraph flow completes -> completeSurgraphFlow sets step to PENDING with expired lease
-		// - Subgraph flow fails -> failSurgraphFlow fails the surgraph step and flow
-		// - Subgraph flow cancelled -> cancelSurgraphFlow cancels the surgraph flow
-		// - Surgraph cancelled -> Cancel cascades to subgraph flow via cancelSubgraphFlows
-		// The subgraph flow's own steps have normal short leases, so pollPendingSteps
-		// recovers it if the foreman crashes after creating it.
-		parkMs := surgraphParkLease.Milliseconds()
-		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-			parkMs, stepID, workflow.StatusRunning,
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	}
-
 	// Mint an access token from the original actor's claims
 	err = unmarshalJSONMap(actorClaimsJSON, &actorClaims)
 	if err != nil {
@@ -474,8 +427,15 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 
 	// Execute the task. taskName is the graph node name; the dispatch URL is resolved
 	// via the graph so a node can address a different URL than its name (used when the
-	// same task is reused at multiple positions in the graph).
+	// same task is reused at multiple positions in the graph). If the task's breaker is
+	// tripped, this dispatch IS the probe (only probes are parked=0 for tripped tasks, so
+	// selection couldn't have returned anything else) - advance the schedule before dispatch
+	// so the cluster's nextProbeAt reflects "a probe is in flight now". Doing it here, once
+	// per probe admission, matches the rate-limiting the old breakerAdmits gate provided;
+	// late-arriving 404s from in-flight dispatches that pre-dated the trip do not (and must
+	// not) advance the schedule again - they're not probes.
 	svc.LogDebug(ctx, "Executing task", "task", taskName, "flow", workflowName)
+	svc.breakerCommit(taskName)
 	resultFlow, execErr = svc.executeTask(taskCtx, dispatchURLOf(graph, taskName), flow, actorToken, time.Duration(timeBudgetMs)*time.Millisecond)
 	if execErr != nil {
 		// 429 -> the step is bounced back to pending, not failed.
@@ -484,11 +444,26 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 			err := svc.handleBackpressure(ctx, shardNum, stepID, taskName, workflowName)
 			return errors.Trace(err)
 		}
-		// 404 ack-timeout -> the step is bounced; the breaker, not the step,
-		// gates the retry. A handler-emitted 404 lacks the prefix and falls
-		// through.
-		if errors.StatusCode(execErr) == http.StatusNotFound && strings.HasPrefix(execErr.Error(), "ack timeout") {
-			err := svc.handleAckTimeout(ctx, shardNum, stepID, taskName, workflowName)
+		// 404 ack-timeout / 503 Service Unavailable / 529 Site Overloaded (529 is
+		// non-standard, used by Cloudflare and some third-party APIs) -> the step is
+		// bounced; the breaker, not the step, gates the retry. All three want
+		// exponential backoff because rate-cutting (the 429 path) keeps probing a
+		// downstream that is genuinely unreachable, in maintenance, or
+		// capacity-collapsed, drives the rate to zero, and then re-floods on the
+		// recovery curve. The breaker's trip+exponential probe schedule lets the
+		// downstream actually recover before we send the next request.
+		// A handler-emitted 404 lacks the "ack timeout" prefix and falls through.
+		var breakerCause string
+		switch {
+		case errors.StatusCode(execErr) == http.StatusNotFound && strings.HasPrefix(execErr.Error(), "ack timeout"):
+			breakerCause = breakerCauseAckTimeout
+		case errors.StatusCode(execErr) == http.StatusServiceUnavailable:
+			breakerCause = breakerCauseUnavailable
+		case errors.StatusCode(execErr) == 529:
+			breakerCause = breakerCauseOverloaded
+		}
+		if breakerCause != "" {
+			err := svc.handleBreakerTrip(ctx, shardNum, stepID, taskName, workflowName, breakerCause)
 			return errors.Trace(err)
 		}
 		// Record the input state on the span. Use a distinct name so the
@@ -523,8 +498,9 @@ func (svc *Service) processStep(ctx context.Context, stepID int, shardNum int) (
 		return errors.Trace(execErr)
 	}
 
-	// Close the breaker if this dispatch was a probe; no-op otherwise.
-	svc.breakerClose(ctx, taskName)
+	// Close the breaker if this dispatch was a probe; no-op otherwise. Per-shard scope so
+	// recovery is staggered across shards instead of a unison release.
+	svc.breakerClose(ctx, taskName, shardNum)
 
 	// Concurrent-cancel race is handled by two downstream guards instead of a
 	// dedicated SELECT here: the step-complete UPDATE below gates on
@@ -574,6 +550,21 @@ postExecution:
 		}
 	}
 
+	// Single-park guard: a step parks at most once, interrupt XOR subgraph, and never re-parks a slot
+	// that already resolved. interruptDone/subgraphDone are this step's resolution flags materialized
+	// from the row above. A resolved parker returns its cached value without re-arming, so a same-kind
+	// re-arm cannot reach here; this catches a task that arms the OTHER kind of park on re-entry (a
+	// determinism-contract violation). Arming both kinds in one dispatch is already caught above.
+	{
+		_, interruptArmed := resultFlow.InterruptRequested()
+		_, _, subgraphArmed := resultFlow.SubgraphRequested()
+		if (interruptArmed || subgraphArmed) && (interruptDone || subgraphDone) {
+			err = errors.New("task '%s' armed a second park on an already-resolved step", taskName)
+			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
+			return errors.Trace(err)
+		}
+	}
+
 	// Handle interrupt (sleep is irrelevant).
 	// Set flow to interrupted first so that if we crash before updating the step,
 	// the step's lease expires, pollPendingSteps resets it to pending,
@@ -607,14 +598,20 @@ postExecution:
 			return errors.Trace(err)
 		}
 
-		// Interrupt all steps in the chain, persisting changes on the current step via CASE
+		// Interrupt all steps in the chain, persisting changes on the current step via CASE and
+		// flagging interrupt_done on the current step (the one that armed flow.Interrupt) so its
+		// re-dispatch after Resume returns the resume data instead of re-arming. Parent surgraph
+		// steps in the chain are parked for a subgraph, not an interrupt, so they keep interrupt_done=0.
+		// parked=0 on every step in the chain: surgraph parents were parked=1 (subgraph park) and
+		// need to clear since the interrupt status is the discriminator now; the leaf was parked=0
+		// already so this is a no-op for it. Resume re-parks the parents back to parked=1.
 		allStepIDs := append([]any{stepID}, chainStepIDs...)
 		stepPlaceholders := strings.Repeat("?,", len(allStepIDs)-1) + "?"
-		stepArgs := []any{stepID, string(changesJSON), workflow.StatusInterrupted}
+		stepArgs := []any{stepID, string(changesJSON), stepID, workflow.StatusInterrupted, parkedNone}
 		stepArgs = append(stepArgs, allStepIDs...)
 		stepArgs = append(stepArgs, workflow.StatusRunning, workflow.StatusInterrupted)
 		_, err = tx.ExecContext(ctx,
-			"UPDATE microbus_steps SET changes=CASE WHEN step_id=? THEN ? ELSE changes END, status=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id IN ("+stepPlaceholders+") AND status IN (?, ?)",
+			"UPDATE microbus_steps SET changes=CASE WHEN step_id=? THEN ? ELSE changes END, interrupt_done=CASE WHEN step_id=? THEN 1 ELSE interrupt_done END, status=?, parked=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id IN ("+stepPlaceholders+") AND status IN (?, ?)",
 			stepArgs...,
 		)
 		if err != nil {
@@ -690,20 +687,13 @@ postExecution:
 			return errors.Trace(err)
 		}
 
-		// Build the child's initial state: parent merged state + explicit input. The full parent
-		// state passes through unfiltered; any adaptation happens in a Before<NodeName> adapter
-		// task ahead of this call via flow.Transform/Keep/Delete.
-		childInputState, err := workflow.MergeState(state, accumulatedChanges, nil)
-		if err != nil {
-			svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-			return errors.Trace(err)
-		}
-		if subgraphInput != nil {
-			childInputState, err = workflow.MergeState(childInputState, subgraphInput, subgraphGraph.Reducers())
-			if err != nil {
-				svc.failStep(ctx, shardNum, stepID, flowID, flowToken, err, taskName)
-				return errors.Trace(err)
-			}
+		// Build the child's initial state: ONLY the explicit input passed to flow.Subgraph.
+		// Subgraph is a function call - the parent's state does not cross the boundary by
+		// default. A caller that wants the parent's full state can pass flow.Snapshot() (or
+		// a derived map) as input. nil input means "no arguments" (empty state).
+		childInputState := subgraphInput
+		if childInputState == nil {
+			childInputState = map[string]any{}
 		}
 
 		// Create and start the child flow
@@ -718,11 +708,13 @@ postExecution:
 			return errors.Trace(err)
 		}
 
-		// Park the step: extend lease far into the future
-		parkMs := surgraphParkLease.Milliseconds()
+		// Park the step. Status stays 'running' (the step IS running, logically, just waiting
+		// on its child) but parked=1 takes it out of the selection index, the saturation count,
+		// and pollPendingSteps' lease-expiry recovery. completeSurgraphFlow flips it back to
+		// (status='pending', parked=0) when the child resolves.
 		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-			parkMs, stepID, workflow.StatusRunning,
+			"UPDATE microbus_steps SET parked=?, updated_at=NOW_UTC() WHERE step_id=? AND status=?",
+			parkedSubgraph, stepID, workflow.StatusRunning,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -760,8 +752,10 @@ postExecution:
 
 		// State column is invariant. Accumulated changes already include this execution's output.
 		// On the next attempt, the flow builder merges state+changes so the task sees everything.
+		// Clear the park slot so the re-dispatch re-arms it: a retry after a resolved Subgraph re-runs
+		// the child, a retry after a resolved Interrupt re-interrupts. A no-op when the step never parked.
 		_, err = db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, changes=?, attempt=?, not_before=DATE_ADD_MILLIS(NOW_UTC(), ?), lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
+			"UPDATE microbus_steps SET status=?, changes=?, attempt=?, not_before=DATE_ADD_MILLIS(NOW_UTC(), ?), lease_expires=NOW_UTC(), updated_at=NOW_UTC(), interrupt_done=0, resume_data='{}', subgraph_done=0, subgraph_result='{}', subgraph_error='' WHERE step_id=?",
 			workflow.StatusPending, string(changesJSON), attempt+1, retrySleepMs, stepID,
 		)
 		if err != nil {
@@ -801,30 +795,8 @@ postExecution:
 	}
 
 	// Lineage-based advancement. See workflow/CLAUDE.md "Fan-in is explicit via SetFanIn".
-	if errorRouted {
-		// Cancel other branches in our cohort. Cancelled members count as cohort
-		// arrivals (no state contribution) so the FanIn isn't blocked waiting for them.
-		res, err := db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE flow_id=? AND lineage_id=? AND step_id!=? AND status IN (?, ?, ?)",
-			workflow.StatusCancelled, flowID, lineageID, stepID,
-			workflow.StatusPending, workflow.StatusRunning, workflow.StatusInterrupted,
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		cancelled, _ := res.RowsAffected()
-		if cancelled > 0 {
-			_, err = db.ExecContext(ctx,
-				"UPDATE microbus_steps SET cohort_arrivals = cohort_arrivals + ? WHERE step_id=?",
-				cancelled, lineageID,
-			)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			svc.LogDebug(ctx, "Fan-in arrival", "flow", flowID, "spawnCohort", lineageID, "delta", cancelled,
-				"reason", "onError-sibling-cancel", "byStep", stepID, "task", taskName)
-		}
-	}
+	// OnError no longer cancels cohort siblings - they keep running, and the cohort's eventual
+	// fan-in resolution (via cohort_failures) decides whether the flow fails.
 
 	var nextTasks []nextStep
 	if errorRouted {
@@ -940,9 +912,9 @@ postExecution:
 		// predecessor_id is the step that spawned this one (the current step), so the
 		// execution-DAG edge is recorded on the child side (covers linear and fan-out).
 		newStepID, err := tx.InsertReturnID(ctx, "step_id",
-			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), workflow.StatusPending, nextTimeBudget.Milliseconds(), childLineageID, i, stepID, sleepMs, flowPriority, flowFairnessKey, flowFairnessWeight,
+			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, parked, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, not_before, priority, fairness_key, fairness_weight)"+
+				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
+			flowID, nextStepDepth, utils.RandomIdentifier(16), next.taskName, string(stepStateJSON), workflow.StatusPending, svc.initialParkedFor(next.taskName), nextTimeBudget.Milliseconds(), childLineageID, i, stepID, sleepMs, flowPriority, flowFairnessKey, flowFairnessWeight,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -975,7 +947,12 @@ postExecution:
 		svc.LogDebug(ctx, "Fan-out cohort spawned", "flow", flowID, "spawnStep", stepID, "task", taskName, "cohortSize", cohortSize, "childLineage", childLineageID)
 	}
 
-	// Increment cohort_arrivals for each direct FanIn arrival from this transition.
+	// Increment cohort_arrivals for each direct FanIn arrival from this transition. If the
+	// cohort is now fully resolved, fire the fan-in step normally when no failures occurred,
+	// otherwise propagate the failure up the cohort chain (and fail the flow if it reaches root).
+	flowFailed := false
+	flowFailedErr := ""
+	flowFailedFinalState := ""
 	if fanInArrivals > 0 {
 		_, err = tx.ExecContext(ctx,
 			"UPDATE microbus_steps SET cohort_arrivals = cohort_arrivals + ? WHERE step_id=?",
@@ -984,17 +961,18 @@ postExecution:
 		if err != nil {
 			return errors.Trace(err)
 		}
-		var arrivals, size int
+		var arrivals, size, failures, spawnLineageID int
 		err = tx.QueryRowContext(ctx,
-			"SELECT cohort_arrivals, cohort_size FROM microbus_steps WHERE step_id=?",
+			"SELECT cohort_arrivals, cohort_size, cohort_failures, lineage_id FROM microbus_steps WHERE step_id=?",
 			cohortSpawnID,
-		).Scan(&arrivals, &size)
+		).Scan(&arrivals, &size, &failures, &spawnLineageID)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		fire := size > 0 && arrivals >= size
+		fullyResolved := size > 0 && arrivals >= size
+		fire := fullyResolved && failures == 0
 		svc.LogDebug(ctx, "Fan-in arrival", "flow", flowID, "spawnCohort", cohortSpawnID, "delta", fanInArrivals,
-			"arrivals", arrivals, "size", size, "fire", fire, "fanInTask", fanInTaskName,
+			"arrivals", arrivals, "size", size, "failures", failures, "fire", fire, "fanInTask", fanInTaskName,
 			"byStep", stepID, "task", taskName, "lineage", lineageID, "push", isPushTransition)
 		if fire {
 			fanInStepID, err := svc.insertFanInStep(ctx, tx, flowID, nextStepDepth, cohortSpawnID, stepID, fanInTaskName, graph, sleepMs, flowPriority, flowFairnessKey, flowFairnessWeight)
@@ -1002,6 +980,43 @@ postExecution:
 				return errors.Trace(err)
 			}
 			newStepIDs = append(newStepIDs, fanInStepID)
+		} else if fullyResolved && failures > 0 {
+			// Cohort closed with failures. Walk up the cohort chain from this spawn's parent.
+			var failFlow bool
+			if spawnLineageID == 0 {
+				failFlow = true
+			} else {
+				failFlow, err = svc.propagateCohortFailure(ctx, tx, spawnLineageID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+			if failFlow {
+				var sampleErr string
+				tx.QueryRowContext(ctx,
+					"SELECT error FROM microbus_steps WHERE flow_id=? AND status=? AND error!='' LIMIT 1",
+					flowID, workflow.StatusFailed,
+				).Scan(&sampleErr)
+				sampleErr = strings.TrimSpace(sampleErr)
+				if sampleErr == "" {
+					sampleErr = "cohort failed"
+				}
+				finalStateJSON, _, err := svc.computeFinalState(ctx, tx, flowID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				_, err = tx.ExecContext(ctx,
+					"UPDATE microbus_flows SET final_state=?, status=?, error=?, updated_at=NOW_UTC() WHERE flow_id=? AND status NOT IN (?, ?, ?)",
+					finalStateJSON, workflow.StatusFailed, sampleErr, flowID,
+					workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled,
+				)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				flowFailed = true
+				flowFailedErr = sampleErr
+				flowFailedFinalState = finalStateJSON
+			}
 		}
 	}
 
@@ -1009,16 +1024,37 @@ postExecution:
 	if len(newStepIDs) == 1 {
 		nextFlowStepID = newStepIDs[0]
 	}
-	_, err = tx.ExecContext(ctx,
-		"UPDATE microbus_flows SET step_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
-		nextFlowStepID, flowID,
-	)
-	if err != nil {
-		return errors.Trace(err)
+	if !flowFailed {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_flows SET step_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
+			nextFlowStepID, flowID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	err = tx.Commit()
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if flowFailed {
+		compositeID := fmt.Sprintf("%d-%d-%s", shardNum, flowID, flowToken)
+		notifyHostnameTrimmed := strings.TrimSpace(notifyHostname)
+		if notifyHostnameTrimmed != "" {
+			var finalState map[string]any
+			if err := json.Unmarshal([]byte(flowFailedFinalState), &finalState); err == nil {
+				foremanapi.NewMulticastTrigger(svc).ForHost(notifyHostnameTrimmed).OnFlowStopped(ctx, &workflow.FlowOutcome{
+					FlowKey: compositeID,
+					Status:  workflow.StatusFailed,
+					State:   finalState,
+					Error:   flowFailedErr,
+				})
+			}
+		}
+		svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "to", workflow.StatusFailed)
+		foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, compositeID, workflow.StatusFailed)
+		return nil
 	}
 
 	if sleepDur > 0 {

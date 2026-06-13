@@ -1,38 +1,40 @@
-%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
     classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
+    classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em
+    linkStyle default stroke:#32a7c1
 
-    _title{{"soak"}}:::term --> _start
-    _start(( )):::term --> t0
+    _title{{"soak"}}:::term -.-> _start
     t0["seed"]:::task
+    t0_when{"when"}:::term
     t1["fanA"]:::task
+    t2["work"]:::task
     t3["collect"]:::task
+    t3_reduce(("reduce")):::term
+    t3_reduce --> t3
     t4["loop"]:::task
     t5["boomR"]:::task
     t6["recover"]:::task
     t7["boomF"]:::task
     t8["join"]:::task
-    t9["sub"]:::sub
-    subgraph fo_t1 ["for each in items"]
-        direction LR
-        t2["work"]:::task
-    end
-    t0 -->|"if branch == 0"| t1
-    t0 -->|"if branch == 1"| t4
-    t0 -->|"if branch == 2"| t9
-    t0 -->|"if branch == 3"| t5
-    t0 -->|"if branch == 4"| t7
-    t1 -->|"fan out"| t2
-    t2 -->|"fan in"| t3
-    t3 --> t8
+    t8_reduce(("reduce")):::term
+    t8_reduce --> t8
+    t9["sub"]:::task
+    t1 -->|"for each"| t2
+    t2 --> t3_reduce
+    t3 --> t8_reduce
     t4 -->|"goto"| t4
-    t4 --> t8
-    t9 --> t8
+    t4 --> t8_reduce
+    t9 --> t8_reduce
     t5 -->|"onError"| t6
-    t5 --> t8
-    t6 --> t8
-    t7 --> t8
+    t5 --> t8_reduce
+    t6 --> t8_reduce
+    t7 --> t8_reduce
+    t0 --> t0_when
+    t0_when -->|"branch == 0"| t1
+    t0_when -->|"branch == 1"| t4
+    t0_when -->|"branch == 2"| t9
+    t0_when -->|"branch == 3"| t5
+    t0_when -->|"branch == 4"| t7
+    _start(( )):::term --> t0
     t8 --> _end(( )):::term
-    style fo_t1 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

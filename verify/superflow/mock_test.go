@@ -122,6 +122,16 @@ func TestSuperflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_super_sub", func(t *testing.T) { // MARKER: RunSuperSub
+		assert := testarossa.For(t)
+
+		mock.MockRunSuperSub(func(ctx context.Context, flow *workflow.Flow) (err error) {
+			return
+		})
+		err := mock.RunSuperSub(ctx, nil)
+		assert.NoError(err)
+	})
+
 	t.Run("super", func(t *testing.T) { // MARKER: Super
 		assert := testarossa.For(t)
 

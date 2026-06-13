@@ -78,6 +78,17 @@ type SnapshotOut struct { // MARKER: Snapshot
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
+// FingerprintIn are the input arguments of Fingerprint.
+type FingerprintIn struct { // MARKER: Fingerprint
+	FlowKey string `json:"flowKey,omitzero"`
+}
+
+// FingerprintOut are the output arguments of Fingerprint.
+type FingerprintOut struct { // MARKER: Fingerprint
+	Fingerprint string `json:"fingerprint,omitzero"`
+	Status      string `json:"status,omitzero"`
+}
+
 // ResumeIn are the input arguments of Resume.
 type ResumeIn struct { // MARKER: Resume
 	FlowKey    string `json:"flowKey,omitzero"`
@@ -88,16 +99,14 @@ type ResumeIn struct { // MARKER: Resume
 type ResumeOut struct { // MARKER: Resume
 }
 
-// ForkIn are the input arguments of Fork.
-type ForkIn struct { // MARKER: Fork
-	StepKey        string                `json:"stepKey,omitzero"`
-	StateOverrides any                   `json:"stateOverrides,omitzero"`
-	Opts           *workflow.FlowOptions `json:"opts,omitzero"`
+// ResumeBreakIn are the input arguments of ResumeBreak.
+type ResumeBreakIn struct { // MARKER: ResumeBreak
+	FlowKey        string `json:"flowKey,omitzero"`
+	StateOverrides any    `json:"stateOverrides,omitzero"`
 }
 
-// ForkOut are the output arguments of Fork.
-type ForkOut struct { // MARKER: Fork
-	NewFlowKey string `json:"newFlowKey,omitzero"`
+// ResumeBreakOut are the output arguments of ResumeBreak.
+type ResumeBreakOut struct { // MARKER: ResumeBreak
 }
 
 // CancelIn are the input arguments of Cancel.
@@ -120,13 +129,34 @@ type HistoryOut struct { // MARKER: History
 	Steps []FlowStep `json:"steps,omitzero"`
 }
 
-// RetryIn are the input arguments of Retry.
-type RetryIn struct { // MARKER: Retry
-	FlowKey string `json:"flowKey,omitzero"`
+// StepIn are the input arguments of Step.
+type StepIn struct { // MARKER: Step
+	StepKey string `json:"stepKey,omitzero"`
 }
 
-// RetryOut are the output arguments of Retry.
-type RetryOut struct { // MARKER: Retry
+// StepOut are the output arguments of Step.
+type StepOut struct { // MARKER: Step
+	Step *FlowStep `json:"step,omitzero"`
+}
+
+// RestartIn are the input arguments of Restart.
+type RestartIn struct { // MARKER: Restart
+	FlowKey        string `json:"flowKey,omitzero"`
+	StateOverrides any    `json:"stateOverrides,omitzero"`
+}
+
+// RestartOut are the output arguments of Restart.
+type RestartOut struct { // MARKER: Restart
+}
+
+// RestartFromIn are the input arguments of RestartFrom.
+type RestartFromIn struct { // MARKER: RestartFrom
+	StepKey        string `json:"stepKey,omitzero"`
+	StateOverrides any    `json:"stateOverrides,omitzero"`
+}
+
+// RestartFromOut are the output arguments of RestartFrom.
+type RestartFromOut struct { // MARKER: RestartFrom
 }
 
 // DeleteIn are the input arguments of Delete.
@@ -296,11 +326,14 @@ var (
 	Start              = Def{Method: "ANY", Route: ":444/start"}                 // MARKER: Start
 	StartNotify        = Def{Method: "ANY", Route: ":444/start-notify"}          // MARKER: StartNotify
 	Snapshot           = Def{Method: "GET", Route: ":444/snapshot"}              // MARKER: Snapshot
+	Fingerprint        = Def{Method: "GET", Route: ":444/fingerprint"}           // MARKER: Fingerprint
 	Resume             = Def{Method: "POST", Route: ":444/resume"}               // MARKER: Resume
-	Fork               = Def{Method: "POST", Route: ":444/fork"}                 // MARKER: Fork
+	ResumeBreak        = Def{Method: "POST", Route: ":444/resume-break"}         // MARKER: ResumeBreak
+	Restart            = Def{Method: "POST", Route: ":444/restart"}              // MARKER: Restart
+	RestartFrom        = Def{Method: "POST", Route: ":444/restart-from"}         // MARKER: RestartFrom
 	Cancel             = Def{Method: "POST", Route: ":444/cancel"}               // MARKER: Cancel
 	History            = Def{Method: "GET", Route: ":444/history"}               // MARKER: History
-	Retry              = Def{Method: "POST", Route: ":444/retry"}                // MARKER: Retry
+	Step               = Def{Method: "GET", Route: ":444/step"}                  // MARKER: Step
 	List               = Def{Method: "GET", Route: ":444/list"}                  // MARKER: List
 	Delete             = Def{Method: "POST", Route: ":444/delete"}               // MARKER: Delete
 	Purge              = Def{Method: "POST", Route: ":444/purge"}                // MARKER: Purge
@@ -312,7 +345,7 @@ var (
 	Run                = Def{Method: "POST", Route: ":444/run"}                  // MARKER: Run
 	Continue           = Def{Method: "POST", Route: ":444/continue"}             // MARKER: Continue
 	HistoryMermaid     = Def{Method: "GET", Route: ":444/history-mermaid"}       // MARKER: HistoryMermaid
-	SyncValve     = Def{Method: "POST", Route: ":444/sync-valve"}      // MARKER: SyncValve
+	SyncValve          = Def{Method: "POST", Route: ":444/sync-valve"}           // MARKER: SyncValve
 	TripBreaker        = Def{Method: "POST", Route: ":444/trip-breaker"}         // MARKER: TripBreaker
 	OnFlowStopped      = Def{Method: "POST", Route: ":417/on-flow-terminated"}   // MARKER: OnFlowStopped
 	ShardInfo          = Def{Method: "GET", Route: ":444/shard-info"}            // MARKER: ShardInfo

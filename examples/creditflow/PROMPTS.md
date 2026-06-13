@@ -8,7 +8,7 @@ Define an `Applicant` struct in the `creditflowapi` package with fields `Applica
 
 ## CreditApproval Workflow Graph
 
-The main workflow accepts inputs `applicant Applicant` and `faultInjection string`, and produces outputs `approved bool`, `creditVerified bool`, `sumEmploymentFailures int`, `identityVerified bool`.
+The main workflow accepts inputs `applicant Applicant` and `faultInjection string`, and produces outputs `approved bool`, `creditVerified bool`, `employmentFailures int`, `identityVerified bool`.
 
 Graph structure:
 
@@ -28,7 +28,7 @@ Construction details:
 - `graph.AddSubgraph(identityVerification)` - marks IdentityVerification as a subgraph node
 - `graph.AddTransitionOnError(verifyCredit, handleCreditError)` - routes errors from VerifyCredit to HandleCreditError
 - `graph.AddTransitionForEach(submitCreditApplication, verifyEmployment, "employers", "employerName")` - creates one VerifyEmployment invocation per element of the `employers` array, binding each element to `employerName`
-- The state field `sumEmploymentFailures` uses the `sum*` prefix convention, so its values from each forEach branch are summed automatically at fan-in (no explicit `SetReducer` call needed)
+- The state field `employmentFailures` is attached to `workflow.ReducerAdd` via `graph.SetReducer("employmentFailures", workflow.ReducerAdd)` so its values from each forEach branch are summed at fan-in
 - `graph.AddTransitionGoto(reviewCredit, requestMoreInfo)` - declares that ReviewCredit may dynamically goto RequestMoreInfo
 
 ## IdentityVerification Workflow Graph (Subgraph)
@@ -56,7 +56,7 @@ All task endpoints are on port `:428`. Each receives and returns typed state fie
 
 - **HandleCreditError** `:428/handle-credit-error` - inputs `onErr *errors.TracedError`; returns `creditVerified bool`. Logs the error as a warning and returns `false`.
 
-- **VerifyEmployment** `:428/verify-employment` - inputs `applicantName string`, `employerName string`; returns `sumEmploymentFailures int`. Returns `1` if either argument is empty, otherwise `0`.
+- **VerifyEmployment** `:428/verify-employment` - inputs `applicantName string`, `employerName string`; returns `employmentFailures int`. Returns `1` if either argument is empty, otherwise `0`.
 
 - **InitIdentityVerification** `:428/init-identity-verification` - inputs `applicantName`, `ssn`, `address`, `phone`; no outputs. Pass-through; inputs are already set in workflow state.
 
@@ -78,7 +78,7 @@ All task endpoints are on port `:428`. Each receives and returns typed state fie
   - Score < 550: return unchanged (reject)
   Also handles `BadGoto` and `Sleep` faults.
 
-- **Decision** `:428/decision` - inputs `creditVerified bool`, `sumEmploymentFailures int`, `identityVerified bool`; returns `approved bool`. Returns `creditVerified && sumEmploymentFailures == 0 && identityVerified`.
+- **Decision** `:428/decision` - inputs `creditVerified bool`, `employmentFailures int`, `identityVerified bool`; returns `approved bool`. Returns `creditVerified && employmentFailures == 0 && identityVerified`.
 
 ## Fault Injection
 

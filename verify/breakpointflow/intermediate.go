@@ -52,17 +52,17 @@ var (
 
 const (
 	Hostname = breakpointflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	TaskA(ctx context.Context, flow *workflow.Flow) (stepA bool, err error)                       // MARKER: TaskA
-	TaskB(ctx context.Context, flow *workflow.Flow, stepA bool) (stepB bool, err error)           // MARKER: TaskB
-	TaskC(ctx context.Context, flow *workflow.Flow, stepB bool) (stepC bool, err error)           // MARKER: TaskC
-	Breakpoint(ctx context.Context) (graph *workflow.Graph, err error)                            // MARKER: Breakpoint
+	TaskA(ctx context.Context, flow *workflow.Flow) (stepA bool, err error)             // MARKER: TaskA
+	TaskB(ctx context.Context, flow *workflow.Flow, stepA bool) (stepB bool, err error) // MARKER: TaskB
+	TaskC(ctx context.Context, flow *workflow.Flow, stepB bool) (stepC bool, err error) // MARKER: TaskC
+	Breakpoint(ctx context.Context) (graph *workflow.Graph, err error)                  // MARKER: Breakpoint
 }
 
 // NewService creates a new instance of the microservice.
@@ -93,7 +93,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		ToDo:      impl,
 	}
 	svc.SetVersion(Version)
-	svc.SetDescription(`breakpointflow.verify exercises BreakBefore + Resume.`)
+	svc.SetDescription(`breakpointflow.verify exercises BreakBefore + ResumeBreak.`)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
 	svc.SetResFS(resources.FS)

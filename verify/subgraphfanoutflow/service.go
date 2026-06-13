@@ -84,6 +84,22 @@ func (svc *Service) TaskE(ctx context.Context, flow *workflow.Flow, resultB, sub
 	return resultB + "/" + subResult + "/" + resultD, nil
 }
 
+// RunSub invokes the Sub subgraph via flow.Subgraph and adopts its subResult. It is one sibling of the
+// outer fan-out, alongside NormalB and NormalD.
+func (svc *Service) RunSub(ctx context.Context, flow *workflow.Flow) (subResult string, err error) { // MARKER: RunSub
+	out, yield, err := flow.Subgraph(subgraphfanoutflowapi.Sub.URL(), nil)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if yield {
+		return "", nil
+	}
+	if v, ok := out["subResult"].(string); ok {
+		return v, nil
+	}
+	return "", nil
+}
+
 // Sub defines the subgraph X -> Y.
 func (svc *Service) Sub(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: Sub
 	graph = workflow.NewGraph(subgraphfanoutflowapi.Sub.URL())
@@ -99,15 +115,15 @@ func (svc *Service) SubFanOut(ctx context.Context) (graph *workflow.Graph, err e
 	graph = workflow.NewGraph(subgraphfanoutflowapi.SubFanOut.URL())
 	graph.AddTask("taskA", subgraphfanoutflowapi.TaskA.URL())
 	graph.AddTask("normalB", subgraphfanoutflowapi.NormalB.URL())
-	graph.AddSubgraph("sub", subgraphfanoutflowapi.Sub.URL())
+	graph.AddTask("runSub", subgraphfanoutflowapi.RunSub.URL())
 	graph.AddTask("normalD", subgraphfanoutflowapi.NormalD.URL())
 	graph.AddTask("taskE", subgraphfanoutflowapi.TaskE.URL())
 	graph.SetFanIn("taskE")
 	graph.AddTransition("taskA", "normalB")
-	graph.AddTransition("taskA", "sub")
+	graph.AddTransition("taskA", "runSub")
 	graph.AddTransition("taskA", "normalD")
 	graph.AddTransition("normalB", "taskE")
-	graph.AddTransition("sub", "taskE")
+	graph.AddTransition("runSub", "taskE")
 	graph.AddTransition("normalD", "taskE")
 	graph.AddTransition("taskE", workflow.END)
 	return graph, nil

@@ -93,3 +93,22 @@ func (f *RawFlow) SetTimestamps(createdAt, updatedAt time.Time) {
 	f.createdAt = createdAt
 	f.updatedAt = updatedAt
 }
+
+// SetInterruptResolution records that an interrupt park has resolved, with the resume data
+// materialized from the step row's resume_data column, so flow.Interrupt returns it (with yield=false)
+// on re-entry instead of re-arming. The orchestrator calls this only when the step row's interrupt_done
+// is set; an un-resumed step leaves the flow's default (not resolved).
+func (f *RawFlow) SetInterruptResolution(resumeData map[string]any) {
+	f.interruptDone = true
+	f.resumeData = resumeData
+}
+
+// SetSubgraphResolution records that a subgraph park has resolved, with the child's final_state
+// (result) and error materialized from the step row's subgraph_result / subgraph_error columns, so
+// flow.Subgraph returns them (with yield=false) on re-entry instead of re-arming. The orchestrator
+// calls this only when the step row's subgraph_done is set.
+func (f *RawFlow) SetSubgraphResolution(result map[string]any, errStr string) {
+	f.subgraphDone = true
+	f.subgraphResult = result
+	f.subgraphError = errStr
+}

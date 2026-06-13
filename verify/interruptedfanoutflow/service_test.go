@@ -150,8 +150,8 @@ func TestInterruptedfanoutflow_InterruptedFanOut(t *testing.T) { // MARKER: Inte
 			err, nil,
 			status, workflow.StatusCompleted,
 		)
-		// A + B + C each contributed 1 via the sum* reducer at fan-in.
-		assert.Expect(asInt(state["sumExecuted"]), 3)
+		// A + B + C each contributed 1; the Add reducer on `executed` sums them at fan-in.
+		assert.Expect(asInt(state["executed"]), 3)
 		// J surfaced the summed value, proving the fan-in saw 3.
 		assert.Expect(asInt(state["totalExecuted"]), 3)
 	})

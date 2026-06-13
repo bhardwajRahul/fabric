@@ -32,3 +32,10 @@ The exact number of probe attempts that fire during the trip window depends on r
 the exponential schedule (100ms, 200ms, 400ms, ... up to 1m). The test asserts the strong shape
 properties (breaker tripped while Park is off-bus, Echo unaffected, AckDropped drains after
 reactivation) and does not pin probe counts.
+
+Recovery is observed within a few hundred milliseconds of reactivation: the foreman never learns the
+subscription came back, but the timer's `nextProbe` deadline (owned by the breaker subsystem via
+`refreshNextProbeLocked`) fires the next scheduled probe promptly, dispatches a now-reachable `park`,
+and closes the breaker. A regression that lets the backlog poll cadence clobber the breaker's probe
+wake - e.g. folding the probe back into `nextPoll` - would surface here as the parked flows failing to
+drain within the test's window (the original symptom was a ~60s stall, the `backlogPollInterval`).

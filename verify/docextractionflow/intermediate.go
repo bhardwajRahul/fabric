@@ -61,9 +61,9 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	ScanPDF(ctx context.Context, flow *workflow.Flow, pdf []byte) (pageImages [][]byte, pageCount int, err error)                                  // MARKER: ScanPDF
 	IdentifyChunks(ctx context.Context, flow *workflow.Flow, page []byte) (chunks []docextractionflowapi.Rectangle, err error)                     // MARKER: IdentifyChunks
-	TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (listTranscriptions []string, err error) // MARKER: TranscribeChunk
-	JoinPageTranscriptions(ctx context.Context, flow *workflow.Flow, listTranscriptions []string) (listPageTexts []string, err error)             // MARKER: JoinPageTranscriptions
-	JoinDocTranscriptions(ctx context.Context, flow *workflow.Flow, listPageTexts []string) (docTranscription string, err error)                  // MARKER: JoinDocTranscriptions
+	TranscribeChunk(ctx context.Context, flow *workflow.Flow, page []byte, chunk docextractionflowapi.Rectangle) (transcriptions []string, err error) // MARKER: TranscribeChunk
+	JoinPageTranscriptions(ctx context.Context, flow *workflow.Flow, transcriptions []string) (pageTexts []string, err error)                       // MARKER: JoinPageTranscriptions
+	JoinDocTranscriptions(ctx context.Context, flow *workflow.Flow, pageTexts []string) (docTranscription string, err error)                        // MARKER: JoinDocTranscriptions
 	DocExtraction(ctx context.Context) (graph *workflow.Graph, err error)                                                                         // MARKER: DocExtraction
 }
 
@@ -232,7 +232,7 @@ func (svc *Intermediate) doTranscribeChunk(w http.ResponseWriter, r *http.Reques
 	var in docextractionflowapi.TranscribeChunkIn
 	flow.ParseState(&in)
 	var out docextractionflowapi.TranscribeChunkOut
-	out.ListTranscriptions, err = svc.TranscribeChunk(r.Context(), &flow, in.Page, in.Chunk)
+	out.Transcriptions, err = svc.TranscribeChunk(r.Context(), &flow, in.Page, in.Chunk)
 	if err != nil {
 		return err // No trace
 	}
@@ -256,7 +256,7 @@ func (svc *Intermediate) doJoinPageTranscriptions(w http.ResponseWriter, r *http
 	var in docextractionflowapi.JoinPageTranscriptionsIn
 	flow.ParseState(&in)
 	var out docextractionflowapi.JoinPageTranscriptionsOut
-	out.ListPageTexts, err = svc.JoinPageTranscriptions(r.Context(), &flow, in.ListTranscriptions)
+	out.PageTexts, err = svc.JoinPageTranscriptions(r.Context(), &flow, in.Transcriptions)
 	if err != nil {
 		return err // No trace
 	}
@@ -280,7 +280,7 @@ func (svc *Intermediate) doJoinDocTranscriptions(w http.ResponseWriter, r *http.
 	var in docextractionflowapi.JoinDocTranscriptionsIn
 	flow.ParseState(&in)
 	var out docextractionflowapi.JoinDocTranscriptionsOut
-	out.DocTranscription, err = svc.JoinDocTranscriptions(r.Context(), &flow, in.ListPageTexts)
+	out.DocTranscription, err = svc.JoinDocTranscriptions(r.Context(), &flow, in.PageTexts)
 	if err != nil {
 		return err // No trace
 	}

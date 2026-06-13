@@ -380,27 +380,27 @@ func (_c Executor) TaskX(ctx context.Context) (innerStarted bool, err error) { /
 /*
 TaskY creates and runs the TaskY task.
 */
-func (_c Executor) TaskY(ctx context.Context) (sumInnerOut int, err error) { // MARKER: TaskY
+func (_c Executor) TaskY(ctx context.Context) (innerOut int, err error) { // MARKER: TaskY
 	var out TaskYOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskY.Method, TaskY.Route, TaskYIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumInnerOut, err
+	return out.InnerOut, err
 }
 
 /*
 TaskZ creates and runs the TaskZ task.
 */
-func (_c Executor) TaskZ(ctx context.Context) (sumInnerOut int, err error) { // MARKER: TaskZ
+func (_c Executor) TaskZ(ctx context.Context) (innerOut int, err error) { // MARKER: TaskZ
 	var out TaskZOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskZ.Method, TaskZ.Route, TaskZIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumInnerOut, err
+	return out.InnerOut, err
 }
 
 /*
 TaskW creates and runs the TaskW task.
 */
-func (_c Executor) TaskW(ctx context.Context, sumInner int) (innerResult int, err error) { // MARKER: TaskW
+func (_c Executor) TaskW(ctx context.Context, inner int) (innerResult int, err error) { // MARKER: TaskW
 	var out TaskWOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskW.Method, TaskW.Route, TaskWIn{SumInner: sumInner}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskW.Method, TaskW.Route, TaskWIn{Inner: inner}, &out, _c.inFlow, _c.outFlow)
 	return out.InnerResult, err
 }
 

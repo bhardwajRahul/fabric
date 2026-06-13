@@ -60,10 +60,10 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Src(ctx context.Context, flow *workflow.Flow) (started bool, err error)                             // MARKER: Src
-	A(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                         // MARKER: A
-	B(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                         // MARKER: B
-	C(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error)                         // MARKER: C
-	J(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error)         // MARKER: J
+	A(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                         // MARKER: A
+	B(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                         // MARKER: B
+	C(ctx context.Context, flow *workflow.Flow) (executedOut int, err error)                         // MARKER: C
+	J(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error)         // MARKER: J
 	FailedFanOut(ctx context.Context) (graph *workflow.Graph, err error)                                // MARKER: FailedFanOut
 }
 
@@ -208,7 +208,7 @@ func (svc *Intermediate) doA(w http.ResponseWriter, r *http.Request) (err error)
 	var in failedfanoutflowapi.AIn
 	flow.ParseState(&in)
 	var out failedfanoutflowapi.AOut
-	out.SumExecutedOut, err = svc.A(r.Context(), &flow)
+	out.ExecutedOut, err = svc.A(r.Context(), &flow)
 	if err != nil {
 		return err // No trace
 	}
@@ -232,7 +232,7 @@ func (svc *Intermediate) doB(w http.ResponseWriter, r *http.Request) (err error)
 	var in failedfanoutflowapi.BIn
 	flow.ParseState(&in)
 	var out failedfanoutflowapi.BOut
-	out.SumExecutedOut, err = svc.B(r.Context(), &flow)
+	out.ExecutedOut, err = svc.B(r.Context(), &flow)
 	if err != nil {
 		return err // No trace
 	}
@@ -256,7 +256,7 @@ func (svc *Intermediate) doC(w http.ResponseWriter, r *http.Request) (err error)
 	var in failedfanoutflowapi.CIn
 	flow.ParseState(&in)
 	var out failedfanoutflowapi.COut
-	out.SumExecutedOut, err = svc.C(r.Context(), &flow)
+	out.ExecutedOut, err = svc.C(r.Context(), &flow)
 	if err != nil {
 		return err // No trace
 	}
@@ -280,7 +280,7 @@ func (svc *Intermediate) doJ(w http.ResponseWriter, r *http.Request) (err error)
 	var in failedfanoutflowapi.JIn
 	flow.ParseState(&in)
 	var out failedfanoutflowapi.JOut
-	out.TotalExecuted, err = svc.J(r.Context(), &flow, in.SumExecuted)
+	out.TotalExecuted, err = svc.J(r.Context(), &flow, in.Executed)
 	if err != nil {
 		return err // No trace
 	}

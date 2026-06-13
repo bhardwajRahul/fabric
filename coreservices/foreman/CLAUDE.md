@@ -14,11 +14,11 @@ The foreman is the orchestrator for agentic workflows in Microbus. It executes w
 
 **Flow** - A single execution of a workflow graph. Each flow has a unique ID, tracks its current position in the graph, and maintains a state map that evolves as tasks execute. Flows progress through statuses: `created` → `running` → `completed`/`failed`/`cancelled`, with `interrupted` as a parked state for human-in-the-loop scenarios.
 
-**Step** - A single task execution within a flow. Each step captures an immutable state snapshot (input), the changes produced by the task (output), and metadata like status, error, and timing. Steps are numbered sequentially (`step_depth`); parallel fan-out siblings share the same `step_depth`. Once a step reaches a terminal status (`completed`, `failed`, `retried`, `cancelled`), it is immutable. Retry creates a new step rather than modifying the failed one.
+**Step** - A single task execution within a flow. Each step captures an immutable state snapshot (input), the changes produced by the task (output), and metadata like status, error, and timing. Steps are numbered sequentially (`step_depth`); parallel fan-out siblings share the same `step_depth`. Once a step reaches a terminal status (`completed`, `failed`, `cancelled`), it is immutable.
 
-**Reducer** - A merge strategy for state fields during fan-in. When parallel branches converge, each branch's changes are merged using the reducer chosen for that field: `replace` (last write wins, default), `append` (concatenate arrays), `add` (sum numbers), `union` (deduplicate arrays), or `merge` (combine objects, new key wins). Reducers are normally selected by the field name's prefix (`sum*`, `list*`, `set*`); `graph.SetReducer` is the escape hatch for fields whose names don't follow the convention.
+**Reducer** - A merge strategy for state fields during fan-in. When parallel branches converge, each branch's changes are merged using the reducer chosen for that field: `replace` (last write wins, default), `append` (concatenate arrays), `add` (sum numbers), `union` (deduplicate arrays), or `merge` (combine objects, new key wins). A field with no registered reducer uses `replace`; every non-default fan-in field is wired explicitly with `graph.SetReducer(name, reducer)` (the older `sum*`/`list*`/`set*` name-prefix inference was removed).
 
-**Thread** - A chain of flows linked by `Continue`. Each flow has a `thread_id` column that groups it with other flows in the same multi-turn conversation. By default, `thread_id = flow_id` (each flow is its own thread). When `Continue` creates a new flow, it inherits the thread's `thread_id`. Forked flows and subgraph flows always start their own thread (`thread_id = flow_id`) to avoid contaminating the original thread's continuation chain. The flowKey returned by the initial `Create` doubles as the threadKey - callers can pass it (or any flowKey in the chain) to `Continue` or `List` to address the thread.
+**Thread** - A chain of flows linked by `Continue`. Each flow has a `thread_id` column that groups it with other flows in the same multi-turn conversation. By default, `thread_id = flow_id` (each flow is its own thread). When `Continue` creates a new flow, it inherits the thread's `thread_id`. Subgraph flows always start their own thread (`thread_id = flow_id`) to avoid contaminating the original thread's continuation chain. The flowKey returned by the initial `Create` doubles as the threadKey - callers can pass it (or any flowKey in the chain) to `Continue` or `List` to address the thread.
 
 ### Flow Lifecycle
 
@@ -32,7 +32,7 @@ Create ──► created ──► Start ──► running ──► completed
                                    ▼
                          failed ◄──┘
                            │
-                           │ Retry
+                           │ Restart / RestartFrom
                            ▼
                          running ──► ...
 
@@ -44,7 +44,7 @@ Create ──► created ──► Start ──► running ──► completed
 3. A worker picks up the step, executes the task, and evaluates transitions to create next steps
 4. This repeats until no transitions match (flow completes), a task returns an error (flow fails), or the flow is cancelled
 5. Tasks can call `flow.Interrupt()` to pause for external input; `Resume` continues execution
-6. Failed flows can be retried with `Retry`, which re-executes the last failed step
+6. Terminated flows can be re-run with `Restart` (from the entry step) or `RestartFrom` (from a chosen step), optionally with state overrides
 
 ### Foreman Operations
 
@@ -56,21 +56,25 @@ Create ──► created ──► Start ──► running ──► completed
 
 **Snapshot** - Returns the current state, status, task name, and step number of a flow. During fan-out (`step_id=0`), it queries the microbus_steps table directly to find the active steps.
 
-**Resume** - Continues an interrupted flow. Walks up the surgraph chain (`surgraphChain`) and down the interrupted subgraph chain (`interruptedSubgraphChain`) to find the leaf interrupted step. Merges resume data into the leaf step's state (not changes) so the task sees it via `ParseState`. Re-parks intermediate surgraph steps, resets the leaf to `pending`, and transitions all flows in the chain to `running`. Can be called on any flow in the chain (root or subgraph) - propagation goes both directions. If multiple fan-out siblings interrupt, each `Resume` handles one sibling; the flow only transitions to `running` when no more interrupted steps remain.
+**Resume** - Continues a flow paused by `flow.Interrupt`. Walks up the surgraph chain (`surgraphChain`) and down the interrupted subgraph chain (`interruptedSubgraphChain`) to find the leaf interrupted step. Records resume data on the leaf step's `resume_data` column (the leaf already has `interrupt_done=1`, set when the task armed `flow.Interrupt`); on re-dispatch the task's `flow.Interrupt` call returns that data with `yield=false`. Resume data is no longer merged into `state`/`changes` - the task receives it as the return value, not by field name. Re-parks intermediate surgraph steps, resets the leaf to `pending`, and transitions all flows in the chain to `running`. Can be called on any flow in the chain (root or subgraph) - propagation goes both directions. If multiple fan-out siblings interrupt, each `Resume` handles one sibling; the flow only transitions to `running` when no more interrupted steps remain.
 
-**Fork** - Creates a new flow from an existing flow's checkpoint at a given `step_depth`. The forked flow inherits the parent's graph and actor claims, but its scheduling (priority, fairness) comes from the caller-supplied `FlowOptions` (resolved like a fresh `Create`), not the parent. A nil opts gets fresh defaults rather than parent inheritance. Fork is primarily a debug/repro tool: the new flow is an independent investigation, so inheriting the parent's priority (which may need to be lowered for a low-priority debug run) would be surprising. The step at the fork point is re-created with the merged state (state + changes) plus any overrides, in `created` status. The caller must call `Start` to begin execution. Lineage is tracked via `forked_flow_id` and `forked_step_depth`.
+**ResumeBreak** - Continues a flow paused at a `BreakBefore` breakpoint. Shares all of `Resume`'s chain-walking and re-park machinery (both are thin wrappers over the private `resume`), but instead of recording resume data it merges the caller's `stateOverrides` onto the leaf step's `state` (replace semantics via `MergeState(..., nil)`) so the about-to-run task observes the edits - the breakpoint pauses *before* the task runs, so injecting state is the only way to influence it, and editing state is the point of a debug breakpoint. `breakpoint_hit=1` is left set so the re-dispatch skips the breakpoint rather than re-triggering it.
+
+**Resume and ResumeBreak are strictly separated, never auto-routed.** A breakpoint pause and a `flow.Interrupt` pause both carry flow status `interrupted`; the discriminator is the *leaf step*, where exactly one of `interrupt_done=1` (a `flow.Interrupt` park) or `breakpoint_hit=1` with `interrupt_done=0` (a breakpoint) holds. The private `resume` reads those flags and fails with 409 when the leaf's kind does not match the entry point: `Resume` refuses a breakpoint pause, `ResumeBreak` refuses an interrupt pause. This is deliberate - detection tells you *which leaf you are at*, not *what the caller intended*, and the two operations have different observable effects (a resume payload is delivered to `flow.Interrupt`'s return and is **not** merged into state; breakpoint overrides **are** merged into state). Auto-routing a mismatched call would silently merge an interrupt answer into state under field names the task may not read, let the task re-arm its interrupt and re-pause, and strand the caller. The method name is the caller's assertion of the pause kind; a mismatch surfaces loudly instead of doing the wrong thing. The kind stays a *step*-level distinction (not a flow status) because fan-out branches can pause for different reasons at once, which a single flow `status` column cannot represent.
 
 **Cancel** - Aborts a created, running, or interrupted flow. Uses `surgraphChain` to walk up to the root and `allSubgraphFlows` to walk down to all descendants. Atomically cancels all steps across all flows, computes `final_state` for each flow, and cancels all flows with per-flow `final_state` via CASE - all within a single transaction. Can be called on any flow in the chain (root or subgraph).
 
-**Retry** - Re-executes the last failed step. Marks the failed step as `retried` (preserving its error in history), creates a new copy of the step as `pending`, and transitions the flow to `running`. If the flow had fan-out, all failed siblings are retried. The `retried` status is immutable - it serves as an audit trail of previous attempts.
+**Restart** - Re-runs a terminated flow from its entry step. Deletes every step except the entry step (and any descendant subgraph flows), resets the entry step to `pending` with `state = merge(originalEntryState, stateOverrides)`, and flips the flow row to `running`. The flow must be in a terminal status (`completed`/`failed`/`cancelled`/`interrupted`). `stateOverrides` is a top-level shallow replace over the original entry state: keys present win, keys mapped to `nil` are deleted, absent keys are preserved (pass `nil` for none). A fresh attempt, so `created_at`/`started_at` are reset. This replaces the old `Retry` (re-run last failed step) and the old `Fork` (rewind-with-overrides) use cases.
 
-**History** - Returns the step-by-step execution history as a slice of `FlowStep` records. Each `FlowStep` includes the step's key, depth, task name, state, changes, status, error, and timestamp. Steps that executed a subgraph have `Subgraph=true` and their `SubHistory` field contains the nested execution history of the subgraph flow. For forked flows, reconstructs the full lineage by walking `forked_flow_id` up to the root and querying steps across all ancestor flows with bounded `step_depth` ranges.
+**RestartFrom** - Re-runs a flow from a chosen step (a surgical rewind, not a whole-flow restart). Sweeps the target step's downstream DAG subtree (every step reachable via `successor_id`), decrements the affected spawns' cohort counters for the swept members, cascade-deletes descendant subgraph flows spawned by any swept step, UPDATEs the target step in place to `pending` with `state = merge(originalStepState, stateOverrides)`, and flips the flow to `running`. When the target lives inside a subgraph child flow, the sweep cascades up the surgraph chain around each caller step (the parent's downstream consumed the now-stale child result), but the caller's own child flow is not deleted. The target step must be terminal; its flow can be in any non-cancelled status. The flow's run continues, so `started_at` is *not* reset.
+
+**History** - Returns the step-by-step execution history as a slice of `FlowStep` records. Each `FlowStep` includes the step's key, depth, task name, state, changes, status, error, and timestamp. Steps that executed a subgraph have `Subgraph=true` and their `SubHistory` field contains the nested execution history of the subgraph flow.
 
 **List** - Queries flows by status, workflow name, or thread key. Supports cursor-based pagination via `cursorFlowKey` (newest first). Defaults to 100 results. Returns `ThreadKey` in each `FlowSummary`. When filtering by `ThreadKey`, only flows in that thread are returned (scoped to the thread's shard).
 
-**BreakBefore** - Sets or clears a breakpoint that pauses execution before the named task runs. Breakpoints are stored in a `breakpoints` JSON column on the flow row as a `map[string]string` keyed by task name. During `processStep`, if the current task name matches a breakpoint and the step's `breakpoint_hit` flag is false, the foreman interrupts the flow (using the same interrupt propagation as `flow.Interrupt()`) and sets `breakpoint_hit=1` on the step. The flag prevents the breakpoint from re-triggering when the flow is resumed. Breakpoints are inherited by subgraph flows and forked flows.
+**BreakBefore** - Sets or clears a breakpoint that pauses execution before the named task runs. Breakpoints are stored in a `breakpoints` JSON column on the flow row as a `map[string]string` keyed by task name. During `processStep`, if the current task name matches a breakpoint and the step's `breakpoint_hit` flag is false, the foreman interrupts the flow (using the same interrupt propagation as `flow.Interrupt()`) and sets `breakpoint_hit=1` on the step. The flag prevents the breakpoint from re-triggering when the flow is resumed. A breakpoint pause is continued with `ResumeBreak`, not `Resume` (which is for `flow.Interrupt` and rejects a breakpoint pause with 409). Breakpoints are inherited by subgraph flows.
 
-**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. The new flow's `final_state` from the prior turn passes through unfiltered as its initial state, so any field present at the end of one turn is visible at the start of the next; a workflow author who wants narrower turn-to-turn carryover puts an adapter task at the workflow's entry that uses `flow.Keep`/`Delete` to scrub. The new flow's scheduling (priority, fairness) comes from caller-supplied `FlowOptions` like a fresh `Create`; a nil opts uses fresh defaults rather than inheriting from the prior flow.
+**Continue** - Creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The `threadKey` parameter accepts any flowKey belonging to the thread - `Continue` resolves the thread via the flow's `thread_id` column, finds the latest flow in that thread (`ORDER BY flow_id DESC`), validates it is completed, and creates the new flow in the same thread. The new flow uses the same workflow graph and is returned in `created` status. This enables multi-turn patterns where each turn is a separate flow: the caller holds a single threadKey (the flowKey returned by the initial `Create`) and calls `Continue` repeatedly without needing to track intermediate flowKeys. The new flow's `final_state` from the prior turn passes through unfiltered as its initial state, so any field present at the end of one turn is visible at the start of the next; a workflow author who wants narrower turn-to-turn carryover puts an adapter task at the workflow's entry that uses `flow.Delete`/`Transform` to scrub. The new flow's scheduling (priority, fairness) comes from caller-supplied `FlowOptions` like a fresh `Create`; a nil opts uses fresh defaults rather than inheriting from the prior flow.
 
 **Enqueue** - Internal endpoint (port `:444`) that rings the work **doorbell**: it signals that a step is pending. The
 receiving replica does one PK lookup for the announced step's `priority` and `not_before`. If `not_before` is in the
@@ -234,15 +238,26 @@ and the refiller fills a batch up to the full cache capacity.
 
 `pollPendingSteps` no longer enumerates the backlog onto the queue. It recovers expired-lease steps, detects
 orphaned flows, sizes the wake timer to the nearest future `not_before`, and rings the local doorbell each
-cycle. If a due-pending backlog exists it caps the next poll at `backlogPollInterval` (2s) so an idle replica
-that received no doorbell still re-scans promptly - the poll-driven liveness net the old enumerate-and-push
-model provided, without per-step queue stuffing.
+cycle. If a due-pending backlog exists it caps `nextPoll` at `backlogPollInterval` (1 minute) so an idle
+replica that received no doorbell still re-scans - the poll-driven liveness net the old enumerate-and-push
+model provided, without per-step queue stuffing. This is a coarse safety net, not the primary wake path: due
+work is normally picked up immediately by the completion doorbell, and `nextPoll` is shortened to anything
+sooner (a future `not_before`, a valve-window boundary).
+
+The timer waits on **two independent deadlines**, `nextPoll` (above) and `nextProbe`, and wakes on whichever is
+sooner. `nextProbe` is the soonest tripped-breaker probe time, owned end to end by the breaker subsystem
+(`refreshNextProbeLocked`, recomputed only on the infrequent breaker trip/commit/close transitions and read by
+the timer as a lock-free atomic). Keeping it separate from `nextPoll` is load-bearing: an earlier design folded
+the breaker probe into `nextPoll`, but `pollPendingSteps` resets `nextPoll` to the backlog cadence every cycle,
+which clobbered the probe wake whenever a poll landed as the probe came due - collapsing the breaker's 100ms..1m
+exponential schedule to the 1-minute backlog cadence (observed as a ~60s stall before a reachable-again task
+recovered). Because the breaker now owns `nextProbe` outright, no `pollPendingSteps` reset can touch it.
 
 The refiller/`MaxClaims` slot and the crash-recovery lease are orthogonal: the slot is an in-memory admission
 gate on running the selection SQL; the lease is the DB-side crash-recovery timer on the `running` step.
 
 A **timer loop** (`timerLoop`) runs `pollPendingSteps` on the adaptive interval (nearest future `not_before`,
-the 2s backlog cap, or `maxPollInterval`).
+the soonest tripped-breaker probe, the 1-minute backlog cap, or `maxPollInterval`).
 
 ### Query Parallelism
 
@@ -282,6 +297,16 @@ calls `flow.Set(<forEach>, nil)` (or any value) in its task body. That writes th
 the branch wrote) past the fan-in. The use case is a forEach over a very large array where downstream tasks only
 care about the per-element transformation and not the original source.
 
+**Fan-in strip on dynamic fan-out.** `insertFanInStep` deletes `<as>`, `<as>Index`, and `<as>Count` from the merged
+state after the cohort converges. The injected per-branch bookkeeping has no meaning past the fan-in: with the
+Replace reducer, one branch's element value and index would otherwise win arbitrarily and ride forward in every
+downstream step. The strip is the symmetric counterpart to the source-array strip on the way *down* into branches:
+together they keep forEach scratch fully scoped to the per-element subgraph. The names to delete are recovered by
+walking the spawn task's outgoing `forEach` transitions in the graph (`tr.As`); static fan-outs have no `as` and
+trigger no deletion. Multiple `forEach` transitions from one source (rare) all contribute their `as` names to the
+deletion set. A workflow that wants the element value past the fan-in must explicitly forward it under a different
+key (e.g. `flow.Set("chosenOpportunity", flow.GetString("opportunity"))`); the per-branch alias is gone.
+
 **Fan-in** is implicit. When the last sibling at a `step_depth` completes, the foreman merges all siblings' changes using reducers and creates the next step(s) within a transaction. The transaction prevents duplicate next steps when multiple workers finish siblings simultaneously.
 
 **Fan-in does not escalate on cancelled or failed siblings.** If a sibling at the current depth is in `failed` or `cancelled` status when fan-in evaluates, the flow is already being driven by another path: a sibling's `failStep` has cascaded the flow to failed, an external `Cancel` has cancelled it, or an `OnError` sibling-cancel has handed the depth off to an error handler. The fan-in worker bails out with `return nil` instead of calling `failStep` on its own step. Calling `failStep` here races with the OnError handler and incorrectly fails an otherwise-recoverable flow: the OnError handler's next step (e.g. an error-routed alternative path) is in flight at depth `N+1` while the fan-in worker is still finishing depth `N`, and a redundant `failStep` from the fan-in worker would mark the parent flow failed before the OnError path ever runs.
@@ -292,7 +317,7 @@ fan-out from its position in the spawn loop, which is the `forEach` array index 
 so `list`/`append`/`sum`/`set` reducers fold in input-array order rather than non-deterministic completion order;
 `step_id` only breaks ties. The firing gate is unchanged - fan-in still fires when `cohort_arrivals >= cohort_size`,
 which is a counter on the spawn step independent of the merge query, so the merge's status filter cannot deadlock
-fan-in. Only members in `completed` status contribute their `changes`; `failed`/`cancelled`/`retried`/`pending`/
+fan-in. Only members in `completed` status contribute their `changes`; `failed`/`cancelled`/`pending`/
 `running` members contribute no state and are skipped. Excluding `cancelled` from the merge matches the long-standing
 "cancelled members count as arrivals but contribute no state" intent; before this, the unfiltered merge folded their
 empty/partial `changes` in.
@@ -308,11 +333,9 @@ regressed the OnError recovery invariant and made `verify/fanouterrorflow` flaky
 lost the race to its still-running siblings), so it was removed. `verify/failedfanoutflow` and
 `verify/cancelledfanoutflow` still pass without it, confirming poison was never load-bearing for them.
 
-**Retry rejoins its cohort.** The API-level `Retry` insert copies the failed step's `lineage_id` and
-`fan_out_ordinal` onto the new pending step. Without the `lineage_id` copy the retried step would orphan from its
-fan-in cohort (its `lineage_id` would default to 0) and its output would be silently dropped from the merge; the
-`fan_out_ordinal` copy keeps the retried branch in its original list position. The immutable `retried` row is excluded
-from the merge by the `completed`-only filter, so the retry does not double-count under append/sum/union/merge.
+**Retry rejoins its cohort naturally.** `flow.Retry` rewinds the failed step in place - same `step_id`, same
+`lineage_id`, same `fan_out_ordinal`, just `status='pending'` and the prior error/park slot cleared. The merge query
+sees one row per branch regardless of how many attempts that row went through, so retry can't double-count.
 
 ### Execution-DAG edges (`predecessor_id` / `successor_id`)
 
@@ -331,16 +354,23 @@ is *recorded*, not *reconstructed*. Every edge lands on at least one endpoint:
   every cohort *exit* step gets `successor_id=Z`. The exit set is `lineage_id == cohortSpawnID AND task_name IN`
   the graph-predecessor tasks of the fan-in (`fanInPredecessorTasks`) - **not** the whole lineage, so `A`/`B` in
   `forEach->{A->B->C}->J` are excluded and only the `C`s point at `J`.
-- **Retry**: the new step copies the failed step's `predecessor_id` so it slots back into the DAG in place.
-- **Entry / subgraph-entry / fork-entry steps**: `predecessor_id` defaults to 0 (no in-flow predecessor).
+- **Retry / RestartFrom**: rewind the step in place (same row), so `predecessor_id` is preserved and the step stays wired into the DAG.
+- **Entry / subgraph-entry steps**: `predecessor_id` defaults to 0 (no in-flow predecessor).
 
 `renderMermaidSteps` ignores `step_depth` and `lineage_id` entirely: it draws the deduped union of
 `{predecessor_id -> step}` and `{step -> successor_id}`, which is exact for arbitrary nesting (validated by
 `mermaid_test.go` for the per-element pipeline and `forEach`-of-chain shapes). Heads are nodes with no incoming
-edge, tails are nodes with no outgoing edge. Subgraph steps still expand inline via the `SubHistory` recursion;
-edges into/out of a subgraph step attach to its enter/exit markers. Cross-flow fork seams are not wired (the
-forked entry has `predecessor_id=0`), so a forked flow renders as its own connected sub-DAG from `_start` rather
-than stitched to its ancestor - acceptable and arguably clearer than the old depth hack.
+edge, tails are nodes with no outgoing edge.
+
+**Visual grouping via Mermaid `subgraph` blocks.** Subgraph (child workflow) steps render as a brand-pink
+block at 5% fill opacity wrapping the recursively-rendered `SubHistory` — that one is meant to be seen. Fan-out
+cohorts (2+ steps sharing one `predecessor_id`) also get a `subgraph` wrapper, but invisible: empty label, no
+fill, no stroke. The wrapper is there purely as a Mermaid layout container — without it the cohort siblings
+stretch across the full diagram width because Mermaid has nothing telling it they belong together; with the
+container they cluster near their parent. Either kind of block is purely structural — edges go between actual
+task node IDs, never to the block ID. A subgraph step's inner heads become the targets of any incoming edge,
+and its inner tails become the sources of any outgoing edge, so a cross-boundary edge naturally expands N x M
+across multi-head/multi-tail sub-flows. The earlier `_enter` / `_exit` dot markers are gone.
 
 `computeFinalState` also reads the DAG, not `step_depth`. The flow's terminal state is the merge of the tail
 steps - completed steps with `successor_id = 0` (`mergeTerminalSteps`). The earlier `MAX(step_depth)` heuristic
@@ -412,11 +442,11 @@ the elapsed-time guard pattern is one method call away inside any task.
 
 Each step has three JSON columns: `state` (input snapshot), `changes` (output delta produced by task execution), and `interrupt_payload` (data from `flow.Interrupt(payload)`). The `state` column is set at step creation and is normally immutable. The `changes` column is written after task execution.
 
-The next step's `state` is computed as `merge(currentState, changes)` - the merged result overwrites matching fields. This immutability model enables checkpointing, fork, and recovery: the foreman can always reconstruct a step's output by reading its `state` + `changes`.
+The next step's `state` is computed as `merge(currentState, changes)` - the merged result overwrites matching fields. This immutability model enables checkpointing, restart, and recovery: the foreman can always reconstruct a step's output by reading its `state` + `changes`.
 
-**State mutation on retry and resume:** The `state` column is updated in two cases: (1) on `flow.Retry()`, the foreman merges `state + changes` back into the `state` column so the task sees its own prior output on the next attempt; (2) on `Resume`, the resume data is merged into the leaf step's `state` column so the task sees the caller-provided data via `ParseState`. In both cases, `changes` is preserved as-is.
+**State mutation on retry:** On `flow.Retry()`, the foreman merges `state + changes` back into the `state` column so the task sees its own prior output on the next attempt; `changes` is preserved as-is. `Resume` no longer mutates `state`: it writes the caller's data to the leaf step's `resume_data` column, which `flow.Interrupt` returns on re-dispatch (the task no longer reads resume data by field name from `state`).
 
-**Reducer delta convention:** Tasks writing to reducer-managed fields (append, add, union, merge) must set only the **delta**, not the full accumulated value. For example, if `listMessages` uses the append reducer (auto-selected by the `list*` prefix), the task should set `flow.Set("listMessages", []string{newMessage})` - not the entire message history. Violating this causes duplicates during fan-in merge.
+**Reducer delta convention:** Tasks writing to reducer-managed fields (append, add, union, merge) must set only the **delta**, not the full accumulated value. For example, if `messages` is wired to the append reducer via `graph.SetReducer("messages", workflow.ReducerAppend)`, the task should set `flow.Set("messages", []string{newMessage})` - not the entire message history. Violating this causes duplicates during fan-in merge.
 
 **forEach element injection:** When a `forEach` transition spawns task instances, the current element is injected into `state` only (under the `as` key), not into `changes`. This makes the element available to the task but prevents it from participating in fan-in merge.
 
@@ -424,13 +454,22 @@ The next step's `state` is computed as `merge(currentState, changes)` - the merg
 
 Tasks can signal the foreman via control methods on the `Flow` carrier. These are distinct from the API-level operations:
 
-- **`flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool`** - Requests the foreman to re-execute this task with exponential backoff. Returns `true` if a retry will be scheduled (attempts remaining), `false` if exhausted. When `true`, the task should return `nil`. When `false`, the task should return the actual error. The step row is reused (not a new row). The foreman tracks the attempt count in the step's `attempt` column and computes the delay as `min(initialDelay * multiplier^attempt, maxDelay)`. Changes from this execution are preserved, and the foreman merges `state + changes` back into the step's `state` column so the task sees its own prior output on the next attempt via `ParseState`/`GetInt`/etc. This is different from the API-level `Retry`, which creates a new step to replace the failed one.
-- **`flow.RetryNow() bool`** - Shorthand for `flow.Retry(math.MaxInt32, 0, 0, 0)` - retries immediately with no limit. Always returns `true`. The task itself is responsible for deciding when to stop retrying.
+- **`flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool`** - Requests the foreman to re-execute this task with exponential backoff. Returns `true` while attempts remain (the task should return `nil`), `false` once `maxAttempts` is reached (the task should return its error). Call it inside an error branch. Pass zero delays for an immediate retry and `math.MaxInt32` for unlimited attempts. The step row is reused (not a new row). The foreman tracks the attempt count in the step's `attempt` column and computes the delay as `min(initialDelay * multiplier^attempt, maxDelay)`. Changes from this execution are preserved, and the foreman merges `state + changes` back into the step's `state` column so the task sees its own prior output on the next attempt via `ParseState`/`GetInt`/etc. Both `flow.Retry` (task-initiated) and the operator-facing `RestartFrom` rewind a step row in place; `RestartFrom` additionally sweeps the step's downstream subtree and merges optional state overrides, and is meant for operator-driven recovery after a flow has already terminated. **A retry clears the step's park slot** (`interrupt_done`/`subgraph_done` reset to `0`, `resume_data`/`subgraph_result` to `'{}'`, `subgraph_error` to `''`), so a retry after a resolved `flow.Subgraph` re-runs the child and a retry after a resolved `flow.Interrupt` re-interrupts. `flow.Retry` is the **single** retry primitive - it carries no condition, so the task writes the retryable condition explicitly in the surrounding `if` (retry-on-any-error is usually wrong; validation/4xx/business rejections should not be retried). To retry only on a timeout, gate on `errors.StatusCode(err) == http.StatusRequestTimeout` - both a foreman-side `pub.Timeout` expiry and a subscriber-side handler timeout surface as 408.
 
 **No jitter on retry backoff:** The foreman does not add jitter to the computed backoff delay. The worker pool (`Workers` config, default 64) already throttles concurrency per replica - even if multiple retries fire simultaneously, they queue up in the worker pool rather than overwhelming downstream resources. Adding jitter would increase latency for no throughput benefit in this architecture.
 - **`flow.Sleep(duration)`** - The task tells the foreman to delay the next step's execution. Sets the next step's `not_before` timestamp. Useful for rate-limit delays. The timer loop adapts its poll interval to wake up when the sleep expires. Note: sleep delays the *transition to the next step*, not the current step's re-execution. In fan-out, only the last sibling's sleep affects the fan-in point.
 - **`flow.Goto(target)`** - Overrides transition routing. The foreman skips normal condition evaluation and follows the `withGoto` transition to the specified target, if one exists in the graph. Goto transitions are never taken during normal evaluation - only when explicitly requested.
 - **`flow.Interrupt(payload)`** - Pauses execution and parks the flow. The payload is stored in the step's `interrupt_payload` column and propagated up the surgraph chain. The task should return normally after calling Interrupt. The foreman sets the flow to `interrupted` and fires `OnFlowStopped` on the root flow's `notify_hostname`.
+
+**Single-park guard (server side).** A step parks at most once - interrupt XOR subgraph, never both and never the
+other kind on re-entry. `processStep` enforces this after the task returns: the existing competing-signals check
+fails the step if more than one control signal (interrupt, subgraph, retry, goto) is set in one dispatch, and a
+second check fails the step when the returned flow arms a park (`InterruptRequested`/`SubgraphRequested`) while the
+step row's materialized `interrupt_done`/`subgraph_done` shows the *other* kind already resolved. The `workflow`
+package's parkers already reject a conflicting second park at the call site (returning an error in their `err`
+return), so a well-behaved task never reaches this guard; it is the trust boundary for an untrusted returned flow
+(a task that bypasses the parker methods could present both signals). A same-kind re-arm cannot occur because a
+resolved parker returns its cached value without re-arming.
 
 ### Transition Evaluation
 
@@ -452,13 +491,25 @@ At `Create` time, `fetchGraph` does a direct `GET` to the workflow's endpoint UR
 
 ### State Across Subgraphs
 
-State crosses the subgraph boundary unfiltered in both directions.
+**Subgraph is a function call.** Only the explicit `input` map passed to `flow.Subgraph(url, input)` crosses
+into the child as its initial state; only the explicit `out` map (the child's `final_state`) crosses back to
+the calling task. The parent's state and accumulated changes do NOT auto-cross in either direction.
 
-**Into the child:** The parent's full state plus the surgraph step's accumulated changes is computed and becomes the child flow's initial state. For dynamic subgraphs (`flow.Subgraph(url, input)`), the explicit `input` map is merged on top using the *child* graph's reducers before the child starts.
+**Into the child:** `execution.go`'s `SubgraphRequested` branch passes `subgraphInput` directly to
+`createSubgraphFlow` as the child flow's initial state (with `nil` normalized to an empty `{}` so an
+unargumented call is well-defined). No `MergeState` with parent state. If the caller wants the parent's full
+state to cross, the calling task passes `flow.Snapshot()` (or a derived map) as `input` - that's the explicit
+opt-in to inheritance.
 
-**Back to the parent:** The child's `final_state` is merged into the surgraph step's `changes` using the *parent* graph's reducers.
+**Back to the parent:** `completeSurgraphFlow` writes the child's `final_state` to the surgraph step's
+`subgraph_result` column and sets `subgraph_done=1`, then re-dispatches the parent task. The task's
+`flow.Subgraph` call returns that `final_state` as `out` (yield=false), and the task adopts the fields it
+wants. The child output is **not** merged into the parent's `changes` - the calling task scopes it explicitly
+(e.g. returns the wanted fields as its own typed outputs).
 
-The framework does not filter at either boundary. State hygiene is the workflow author's responsibility: a parent that wants to adapt state across the contract boundary brackets the subgraph node with `Before<NodeName>` / `After<NodeName>` adapter tasks that call `flow.Transform`/`Keep`/`Delete`/`Clear`. The adapters are normal graph nodes - visible in the diagram, testable, mockable - and the cost is one extra HTTP dispatch per adapter when adaptation is needed, zero when it is not. The child graph's reducers govern the input merge only; the parent graph's reducers govern the output merge only.
+The function-call shape eliminates the "what does the child see?" surprise surface that the inheriting model
+carried: the answer is exactly what's in `input`. State hygiene is now a matter of choosing what to put in
+`input` and what to read from `out`, not of building adapter tasks around the subgraph node.
 
 ### Surgraph Step Identification
 
@@ -467,17 +518,17 @@ Each subgraph flow's `microbus_flows` row stores `surgraph_flow_id`, `surgraph_s
 This matters in two scenarios that broke earlier (when the lookup was by `flow_id + step_depth + status='running'` only):
 
 1. **Fan-in race:** while `completeSurgraphFlow` is running, a non-subgraph sibling at the same step_depth might be momentarily in `running` status (e.g. mid-execution). The legacy lookup could match that sibling and corrupt its row.
-2. **Parallel subgraphs at the same step_depth:** if a fan-out produces multiple subgraph siblings, every parked surgraph step at the depth has a far-future lease, so a lease-threshold filter can't disambiguate them either.
+2. **Parallel subgraphs at the same step_depth:** if a fan-out produces multiple subgraph siblings, every parked surgraph step at the depth carries `parked=1` so a status-based filter alone can't disambiguate them.
 
-The `surgraph_step_id` PK lookup eliminates both cases. A lease-threshold fallback (5+ minutes lease remaining = parked) is kept for legacy `microbus_flows` rows created before the column existed (`surgraph_step_id = 0` sentinel). Migration `3.sql` adds the column.
+The `surgraph_step_id` PK lookup eliminates both cases. Migration `3.sql` adds the column. (A pre-`11.sql` lease-threshold fallback for legacy rows was removed once parked semantics took over.)
 
-The `IsSubgraph` existence check (`activeSubgraphCount` / `completedSubgraphCount`) in `processStep` is also scoped by `surgraph_step_id`, so parallel subgraph siblings can't see each other's child flows and falsely conclude that "a subgraph already exists" - without this scope, the second sibling would park forever waiting for a subgraph that was never created on its behalf.
+When parallel subgraph caller tasks fan out at the same step_depth, each parks its own `flow.Subgraph` step at `parked=1`; the `surgraph_step_id` PK scoping is what keeps each child flow bound to the step that launched it, so `completeSurgraphFlow` re-dispatches the correct parent and one sibling's completion never resolves another's park.
 
 ### Interrupt/Resume Propagation Across Subgraphs
 
 **Interrupt propagation (up):** When a step inside a subgraph flow is interrupted (breakpoint or `flow.Interrupt()`), the foreman uses `surgraphChain` to walk from the subgraph flow up to the root surgraph, collecting all flow IDs and parked surgraph step IDs. It then interrupts all flows and steps in the chain with bulk `UPDATE ... WHERE flow_id IN (...)` and `UPDATE ... WHERE step_id IN (...)` statements. This ensures the caller awaiting the top-level flow ID sees the `interrupted` status.
 
-**Resume propagation (both directions):** When `Resume` is called on any flow in the chain, the foreman uses `surgraphChain` to walk up and `interruptedSubgraphChain` to walk down. It re-parks intermediate surgraph steps (restore to `running` with far-future lease), merges resume data into the leaf step's state (so the task sees it via `ParseState`), resets the leaf to `pending`, transitions all flows in the chain to `running`, and enqueues the leaf step. All writes are in a single transaction.
+**Resume propagation (both directions):** When `Resume` is called on any flow in the chain, the foreman uses `surgraphChain` to walk up and `interruptedSubgraphChain` to walk down. It re-parks intermediate surgraph steps (restore to `status='running', parked=1`), records resume data on the leaf step's `resume_data` column (returned to the task via `flow.Interrupt` on re-dispatch, not merged into `state`), resets the leaf to `pending`, transitions all flows in the chain to `running`, and enqueues the leaf step. All writes are in a single transaction.
 
 **Fan-out interaction:** During fan-out, one sibling may interrupt while others continue running. The flow is marked `interrupted` by the first sibling, but other siblings run to completion. `Resume` handles one interrupted sibling at a time; the flow only transitions to `running` when no more interrupted steps remain at any level in the chain.
 
@@ -605,16 +656,16 @@ selection query never has to join `microbus_flows` on the hot path - the same sp
 back to the `DefaultPriority` config, the fairness key falls back to the `tid`/`tenant` actor claim then the
 `""` bucket, and the weight falls back to `1`. The three values are immutable for the life of a flow (no
 `Reprioritize` in v1; switching a flow's fairness key mid-run would be a self-promotion abuse vector).
-`Create`/`CreateTask` resolve from options/claim; `Continue`, `Fork`, and `createSubgraphFlow` **inherit** the
+`Create`/`CreateTask` resolve from options/claim; `Continue` and `createSubgraphFlow` **inherit** the
 parent/thread flow's three values (read from its row) rather than re-resolving, so a high-priority parent never
 silently spawns default-priority descendants.
 
 Propagation onto step rows takes one of two shapes, both correct because the flow's values are immutable and
 authoritative:
 
-- Where the resolved values are already in hand (entry step in `createWithGraph`, the `Fork` step, the API
-  `Retry` insert which copies them off the failed step row like `lineage_id`), they are written as literal
-  bind parameters.
+- Where the resolved values are already in hand (the entry step in `createWithGraph`), they are written as
+  literal bind parameters. `Restart`/`RestartFrom` rewind their target step in place via UPDATE, so the row's
+  immutable priority/fairness values are already present and need no re-propagation.
 - In the deep `processStep` paths (next-step fan-out and the two fan-in inserts), the values are read once
   per step execution as part of the parallel flow-row SELECT at the top of `processStep`, then threaded
   through the call chain into the INSERTs as literal bind parameters. The previous design used scalar
@@ -823,12 +874,114 @@ for the admissible subset, while preventing head-of-line blocking: one rate-limi
 tenant's queue does not freeze the tenant's admissible work for other tasks. The weight assigned
 to a fairness key follows the same rule - taken from the oldest *admissible* step.
 
-### Per-Task Breaker (404 ack-timeouts)
+### Step Parking (`parked` column)
+
+`microbus_steps.parked SMALLINT NOT NULL DEFAULT 0` is a discriminator that takes a step
+out of the selection band without changing its `status`. The selection index
+`(status, parked, priority, fairness_key)` and the saturation index `(status, parked, task_name)`
+both lead with the partitioning columns, so parked rows are physically excluded from every
+hot-path scan - no in-memory filter is needed at refill time. The `parked` value labels *why*
+the step is held:
+
+- `parked=0` (`parkedNone`, the default) - active. Selection sees the row; `pollPendingSteps`
+  recovers it if its lease expires; saturation counts it as one in-flight slot for its task.
+- `parked=1` (`parkedSubgraph`) - the step called `flow.Subgraph` and is waiting for the child
+  flow to resolve. `status='running'` (the step IS running, logically; it's just blocked on its
+  child) but the parked discriminator excludes it from the selection scan, the saturation count,
+  AND the lease-expiry recovery in `pollPendingSteps`. There is no lease deadline on a parked
+  surgraph step - the row sits indefinitely until `completeSurgraphFlow` flips it back to
+  `(status='pending', parked=0)`. This replaces an earlier design that used `lease_expires =
+  NOW + 7 days` as the "park" indicator, which broke for subgraphs that ran longer than 7 days
+  (the lease lapsed, `pollPendingSteps` recovered the parent, and the task re-ran - launching a
+  duplicate child).
+- `parked=2` (`parkedBreaker`) - the step's task has a tripped breaker and this step is on the
+  held-back backlog. `breakerBulkPark` (in `breaker.go`) parks every pending step for the task
+  to parked=2 in a single UPDATE, then elevates the oldest per shard back to parked=0 as the
+  probe. Both UPDATEs run inside one per-shard tx, so the elevated probe is guaranteed
+  status=pending at commit time (the park UPDATE's row locks block concurrent Cancel/Fail
+  until the tx commits). The probe's `not_before` carries the exponential probe schedule. New
+  steps inserted for the task while the breaker is tripped are born parked=2 (via
+  `initialParkedFor` consulted at INSERT time) so they join the held-back set without burning
+  a wasted dispatch attempt. On probe success `breakerClose` runs `breakerBulkUnpark` scoped
+  to *that shard only* - the parked steps on other shards stay held until their own probes
+  succeed. Symmetric with trip (which is also per-shard), and produces a rolling-wave
+  recovery instead of a unison flood.
+
+The two reasons coexist in the same column because they share the same selection-time
+exclusion. New park reasons (e.g. dependency-wait, manual operator hold) can take additional
+small-int values without schema migration; only the SQL-side `parked=0` predicate and the
+in-memory enum-to-name mapping for logs/metrics would need updating.
+
+**Terminal status implies `parked=parkedNone`.** The park value is meaningful only while a step
+is actively waiting for something - a subgraph child to finish (`parkedSubgraph`), or a tripped
+breaker to admit the next probe (`parkedBreaker`). Once the step is in any terminal status
+(`completed`/`failed`/`cancelled`), the park slot is by definition gone, and the column
+must read `parkedNone`. Every code path that transitions a step into a terminal status resets
+`parked` in the same UPDATE: the `failStep` originating-step write (`completion.go`), the
+`deliverSubgraphError` child-leaf write, the `Cancel` cascade UPDATEs across the flow chain and
+the surgraph caller chain (`service.go`), and the `processStep` terminal-flow guard
+(`execution.go`) all include `parked=parkedNone`. Without this invariant, a step that was
+`parkedSubgraph` when its flow was cancelled (or `parkedBreaker` when its breaker held it during
+a cancel) would sit in a terminal state with non-zero `parked` - invisible to the selection
+index but never re-leased. The selection index `(status, parked, priority, fairness_key)` would
+then strand any subsequent `Restart` or `RestartFrom` on that step: the rewind sets
+`status=pending` but the partitioned index still excludes the row because `parked != 0`. The
+flow looks `running` but no worker ever picks the entry up - the user-visible "stuck after
+Restart" symptom. `Restart` and `RestartFrom` also re-zero `parked` in their target-step
+UPDATE as defense-in-depth, so a future code path that introduces a third cascade and forgets
+the rule still doesn't wedge the rewind.
+
+**Insert paths consult the in-memory breaker map** via `initialParkedFor(taskName)` and bind
+the result into the `parked` column. The PENDING-inserting sites are the fan-out children
+(`processStep` in `execution.go`) and the linear and fan-in transitions (`transitions.go`). The
+CREATED-inserting site (`createWithGraph` entry step) leaves `parked=0` because the row isn't yet
+selectable; `Start` runs `parkTrippedSteps` inside its transition transaction to honor the breaker
+at the moment CREATED becomes PENDING. `Restart`/`RestartFrom` rewind their target step via UPDATE
+rather than insert, re-zeroing `parked` (see above).
+
+**No stale-dispatch race during trip.** `handleBreakerTrip` bounces the failed step to
+`parked=parkedBreaker` (not `parkedNone`), so the refiller's `parked=0` filter cannot pick
+up the just-bounced row during the window before `breakerBulkPark` runs. The tx that wraps
+`breakerBulkPark`'s park-then-elevate then holds row locks on every pending step for the
+task across the SELECT and the elevate UPDATE; concurrent Cancel/Fail paths wait on those
+locks, so the chosen probe is guaranteed `status=pending` when the tx commits. The
+insert-time consult (`initialParkedFor`) prevents a brand-new insert from landing at
+parked=0 while the breaker is tripped.
+
+The park-then-elevate tx is the only thing that leaves a `parked=parkedNone` probe behind, so
+if it rolls back on lock contention the task is left with *no* probe: nothing dispatches, no
+further 404 re-trips, and nothing re-runs bulk-park - recovery wedges permanently.
+`handleBreakerTrip` therefore retries `breakerBulkPark` on `sequel.IsLockContentionError`
+(a few short attempts) so a probe is re-elected before it returns. This matters on SQLite,
+where a contended write fails fast rather than blocking; the server dialects usually block on
+the row locks instead, but the retry is harmless there.
+
+### Per-Task Breaker (404 ack-timeouts, 503 unavailable, 529 overloaded)
 
 A separate per-task circuit breaker rides alongside the valve in `breaker.go`. The valve handles
-429 backpressure ("the downstream is overloaded"); the breaker handles 404 ack-timeouts ("no one
-is home"). Both gate at the same `admittable()` closure in `runRefill`; the breaker check runs
-first so a tripped task short-circuits without consulting the valve at all.
+429 backpressure ("the downstream is rate-limiting"); the breaker handles 404 ack-timeouts ("no
+one is home"), 503 Service Unavailable ("downstream not ready / in maintenance"), and 529
+overloaded ("the downstream is collapsed"). The valve gates at the `admittable()` closure in
+`runRefill` via `valvePeek`; the breaker doesn't participate in admittable() at all - it gates
+via the `parked` column (see "Step Parking" above), which takes blocked rows out of the
+selection index entirely. The valve and breaker operate independently; a task with both signals
+tripped has its rate cut AND its backlog parked.
+
+**Why 503 and 529 go to the breaker, not the valve.** 503 Service Unavailable (the standard
+"I'm here but unavailable" signal - in-flight deploy, startup not finished, key store not
+loaded, etc.) and 529 (Site Overloaded; non-standard, used by Cloudflare and some third-party
+APIs) both mean the downstream is unavailable, not that it is serving requests at a reduced
+rate. The valve's additive-decrease-with-CUBIC-recovery is designed for the latter: cut the
+rate by 1, keep dispatching at a slower pace, ride the recovery curve back up. Applied to a
+downed downstream, every dispatch keeps tripping 503/529, the rate drives toward zero, and the
+recovery curve then re-floods the still-down service. The breaker's trip + exponential probe
+schedule (100ms, 200ms, 400ms, ..., capped at 1m) lets the downstream actually recover before
+we send the next request. The `executeTask` check is symmetric to the 404 case: a switch on
+`StatusCode` routes 404-with-`ack timeout:`-prefix, 503, and 529 all into `handleBreakerTrip`
+with the same trip-and-bounce mechanics; only the cause label distinguishes them in metrics
+and logs. A handler-emitted 503 is a deliberate "back off and try later" signal from the
+downstream - the breaker's exponential schedule is the right response. Other 5xx (500, 502,
+504) remain task-level decisions; see "5xx is not the breaker's business" below.
 
 **Why per-task and not per-step.** A per-step exponential backoff (the obvious first answer) is
 structurally wrong because it scales with backlog depth: with 100 flows blocked on a 404'ing task,
@@ -836,76 +989,139 @@ every refill cycle would dispatch all 100 and bounce them all on their individua
 schedules - an avalanche that displaces work for healthy tasks. The throttle has to live at the
 *task name* level so one schedule governs all blocked flows.
 
-**The breaker is the gate; `not_before` carries no throttling load while tripped.** A 404-bounced
-step goes back to `pending` with `not_before = NOW_UTC()` and no added delay. While the breaker
-is tripped, `breakerAdmits` is the only mechanism that gates dispatch for that task; the N
-blocked rows for it sit with `not_before` in the past indefinitely and the refill short-circuits
-at the in-memory check before any candidate logic. This is the central simplification over a
-per-step-backoff design and the load-bearing reason that probe recovery doesn't need a
-dam-release UPDATE: the N-1 still-blocked rows are already due, so the next refill picks them up
-under normal priority/fairness as soon as the breaker flips closed.
+**The parked column is the gate; the probe rides on `not_before`.** When a breaker trips,
+`breakerBulkPark` runs a per-shard tx that parks every pending step for the task to
+`parked=2` (single UPDATE), then SELECTs the oldest of those parked rows and elevates it
+back to `parked=0` as the probe (second UPDATE). The selection index
+`(status, parked, priority, fairness_key)` is partitioned on parked, so parked rows are
+physically excluded from the candidate scan - the refill never sees the held-back backlog and
+needs no in-memory `breakerAdmits` filter. The surviving probe step's `not_before` is set to
+`nextProbeAt`, so the existing selection machinery (which already honors `not_before` for
+`flow.Sleep` and retry backoff) naturally schedules the probe at the exponential cadence.
+When the probe succeeds, `breakerClose` runs `breakerBulkUnpark` scoped to the success
+shard - one UPDATE on that shard only. Other shards stay parked until their own probes
+succeed. While tripped, *new* pending steps inserted for the task consult the in-memory
+breaker map at insert time (via `initialParkedFor`) and are born `parked=2` so they join
+the held-back backlog without burning a wasted dispatch attempt.
 
-**Detection is the literal `ack timeout:` prefix.** The connector's unicast publisher synthesizes
-the `404 Not Found` for an unacknowledged request as `errors.New("ack timeout: %s", req.Canonical())`
-in `connector/publish.go`. A 404 from a subscriber that actually ran (e.g. a wrapped REST API
-returning "not found") does *not* carry that prefix, so the breaker only fires for genuine
-transport-level "no subscriber" 404s. The detection check in `executeTask` is therefore the
+**404 detection is the literal `ack timeout:` prefix.** The connector's unicast publisher
+synthesizes the `404 Not Found` for an unacknowledged request as
+`errors.New("ack timeout: %s", req.Canonical())` in `connector/publish.go`. A 404 from a
+subscriber that actually ran (e.g. a wrapped REST API returning "not found") does *not* carry
+that prefix, so the breaker only fires for genuine transport-level "no subscriber" 404s. The
+detection check in `executeTask` is therefore the
 `StatusCode == 404 && strings.HasPrefix(err.Error(), "ack timeout")` pair, and a handler-emitted
-404 falls through to OnError/failStep like any other error.
+404 falls through to OnError/failStep like any other error. 503 and 529 need no payload sniff
+because their legitimate meanings ("unavailable" and "overloaded") align with the breaker's
+behavior - any handler emitting them is signaling "back off", which is exactly what the breaker
+provides; all 503/529 responses route to the breaker.
 
-**Trip on the first 404.** Any single `ack timeout:` flips the breaker to tripped - no
-consecutive-nack counter, no threshold to tune. The cost of an over-trip is exactly one
-`breakerInitialProbeDelay` (100ms) of added latency on the next dispatch attempt for that task:
-trip -> 100ms wait -> probe -> success (when the blip was transient) -> close. The cost of an
-under-trip would be the avalanche. With the cost of a false trip pinned to ~one probe interval,
-there is no reason to delay tripping; matches the TCP analogy where one loss event triggers
-congestion response. A flaky downstream produces frequent trip/close oscillation which shows up
-cleanly in `microbus_task_breaker_trips_total` - useful operational signal, not a bug.
+**Trip on the first signal.** Any single `ack timeout:` 404, 503, or 529 flips the breaker
+to tripped - no consecutive-nack counter, no threshold to tune. The cost of an over-trip is
+exactly one `breakerInitialProbeDelay` (100ms) of added latency on the next dispatch attempt
+for that task: trip -> 100ms wait -> probe -> success (when the blip was transient) -> close.
+The cost of an under-trip would be the avalanche. With the cost of a false trip pinned to
+~one probe interval, there is no reason to delay tripping; matches the TCP analogy where one
+loss event triggers congestion response. A flaky downstream produces frequent trip/close
+oscillation which shows up cleanly in `microbus_task_breaker_trips_total` - useful
+operational signal, not a bug.
 
-**Probe schedule is local, exponential, capped.** When tripped, the breaker admits at most one
-probe per refill cycle per replica, gated on `now >= nextProbeAt`. The schedule advances by
-`probeBackoff(probeAttempt+1) = breakerInitialProbeDelay * 2^probeAttempt` (capped at
-`breakerMaxProbeDelay`) on each admission. `nextProbeAt` and `probeAttempt` are deliberately
-*not* gossiped; each replica probes on its own schedule. The soft-cap overshoot of one probe
-per replica per probe-window across the cluster is acceptable. All four constants
-(`breakerInitialProbeDelay` = 100ms, `breakerProbeMultiplier`
-= 2.0, `breakerMaxProbeDelay` = 1m, trip-after-first) live in `breaker.go` rather than configs:
-the 100ms initial makes one-off blips nearly invisible, the 1m cap bounds recovery-detection
-latency, and the values are short enough that test fixtures run in real time without config
-overrides. Sequence: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 51.2s, 60s,
-60s, ... ; full convergence to the cap takes ~2 minutes of continuous failure.
+**Probe schedule is local, exponential, capped.** When tripped, exactly one step per shard
+per task is left unparked as the probe, gated on `not_before <= NOW`. The schedule advances
+on each genuine probe DISPATCH, not on failure: `processStep` calls `breakerCommit(taskName)`
+just before `executeTask` for any step whose task has a tripped breaker, and `breakerCommit`
+advances only when the probe's `nextProbeAt` has actually arrived (`now >= nextProbeAt`),
+no-op otherwise. That probe-time gate is load-bearing because not every dispatch of a tripped
+task is a real probe: a burst of dispatches admitted just before the trip stays in flight and
+returns 404s afterward, and the candidate cache can still hand a worker a step that was parked
+after being offered (the claim CAS rejects it, but only after a pop). Counting those as probe
+attempts would ramp `probeAttempt` straight to the cap and stall recovery. On a genuine probe,
+`breakerCommit` advances `probeAttempt` and recomputes `nextProbeAt = now +
+probeBackoff(probeAttempt)`; the failure path then writes that deadline to the probe's
+`not_before` when `breakerBulkPark` re-runs. Advancing at admission - one bump per probe -
+matches the rate-limiting the original `breakerAdmits` gate provided; advancing on
+*failure* would over-penalize because a burst of in-flight 404s from pre-trip dispatches
+would each bump `probeAttempt` and ramp the backoff to its cap in one window. `nextProbeAt`
+and `probeAttempt` are deliberately *not* gossiped; each replica advances its own state on
+observed admissions, and the probe's `not_before` is a last-writer-wins UPDATE across
+replicas - converging within clock skew. All four constants (`breakerInitialProbeDelay` =
+100ms, `breakerProbeMultiplier` = 2.0, `breakerMaxProbeDelay` = 1m, trip-after-first) live in
+`breaker.go` rather than configs: the 100ms initial makes one-off blips nearly invisible, the
+1m cap bounds recovery-detection latency, and the values are short enough that test fixtures
+run in real time without config overrides. Sequence: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s,
+6.4s, 12.8s, 25.6s, 51.2s, 60s, 60s, ... ; full convergence to the cap takes ~2 minutes of
+continuous failure.
 
-**`breakerAdmits` is read-only; `breakerProbeCommitted` advances the schedule.** `runRefill`
-calls `admittable(taskName)` twice per refill cycle - once filtering rows into fairness
-buckets, once re-checking at the bucket head. An admit-with-side-effect predicate would
-advance `probeAttempt` and `nextProbeAt` on the first call and then reject itself on the
-second (since `now < nextProbeAt` after the freshly-advanced anchor), so the probe step
-would never reach the batch and the breaker would never recover. The split keeps the
-predicate pure and moves the schedule advance to the single point where the step actually
-commits to the batch. `breakerProbeCommitted` also calls `shortenNextPoll(nextProbeAt)` so
-the poll timer wakes at the next probe time regardless of the default 2s `backlogPollInterval`
-- without this, the breaker schedule would be clamped to the polling cadence rather than
-honoring the exponential curve.
+**`breakerTrip` arms the schedule; `breakerCommit` advances it; `refreshNextProbeLocked`
+syncs the timer.** There's no separate `breakerAdmits` predicate (it would do nothing now
+that parked rows are physically out of the selection index). `breakerTrip` is called for
+every observed 404/529 - on a fresh trip it arms the first probe (`probeAttempt = 0`,
+`nextProbeAt = now + 100ms`); on a repeat trip it is a no-op so concurrent in-flight 404s
+from pre-trip dispatches don't ratchet the schedule. `breakerCommit` (called from
+`processStep` at probe admission) advances `probeAttempt` and `nextProbeAt`. `breakerClose`
+zeroes the state. All three paths call `refreshNextProbeLocked`, which recomputes the
+cluster's soonest probe into the timer's `nextProbe` deadline and nudges the timer. The
+timer wakes at the next probe time regardless of the 1-minute `backlogPollInterval`.
+`nextProbe` is a *separate* deadline from `nextPoll` precisely so `pollPendingSteps`'
+per-cycle `nextPoll` reset cannot clobber the probe wake; an earlier design that shortened
+`nextPoll` for the probe collapsed the breaker's exponential schedule to the backlog
+cadence whenever a poll landed as the probe came due (see the timer's two-deadline note
+above).
 
 **`TripBreaker` gossips only the trip event, payload-free.** The wire is just `(taskName)` -
-no timestamp, no state field. Each peer stamps `time.Now()` on receipt and seeds its local
-probe schedule from that moment. Cross-replica clock skew (NTP-synced, same datacenter;
-milliseconds) is negligible against the probe timescale (100ms to 1m), and the slight stagger
-from per-replica stamping actually helps spread probes naturally across the cluster. A trip
-received while already tripped is a no-op (we don't refresh the schedule, because that would
-arbitrarily reset `probeAttempt` and undo accumulated backoff).
+no timestamp, no state field. Each peer stamps `time.Now()` on receipt, seeds its local
+probe schedule from that moment, AND runs `breakerBulkPark` so its view of the task's
+pending set is consistent with the originating replica's. Cross-replica clock skew
+(NTP-synced, same datacenter; milliseconds) is negligible against the probe timescale (100ms
+to 1m). `breakerBulkPark` is idempotent SQL - multiple replicas converging on the same trip
+all run it; the result is a single shared probe step per shard with the rest of the
+pending backlog at `parked=2`. A trip received while already tripped is a no-op (we don't
+re-park or refresh the schedule, because that would arbitrarily reset `probeAttempt` and
+undo accumulated backoff).
 
-**Closures are deliberately NOT gossiped.** A replica that probes successfully drops its local
-`trippedAt` to zero and closes silently. Peers keep their own gate until their own probe
-succeeds. This is the load-bearing simplification on top of the valve's design: instead of one
-replica's success thundering-herd-releasing N replicas' worth of pent-up backlog onto the
-just-recovered downstream, the cluster ramps gradually as each replica's staggered probe
-schedule fires. Worst-case full cluster recovery is bounded by `breakerMaxProbeDelay` = 1m. The
-shape is analogous to TCP slow-start: aggressive on cut, gentle on recovery.
+**Closures are deliberately NOT gossiped, and the unpark UPDATE is shard-scoped.** A replica
+that probes successfully drops its local `trippedAt` to zero and runs `breakerBulkUnpark`
+against the success shard only - the parked rows on other shards stay parked=2 until each of
+those shards' own probes succeeds. This is symmetric with the per-shard trip (which leaves
+one probe per shard at parked=0) and produces a rolling-wave recovery: each shard's released
+backlog hits downstream as that shard's probe succeeds, spread over hundreds of milliseconds
+or seconds of natural dispatch variance instead of every shard's backlog flooding in unison.
+If downstream is flaky and 404s again after a shard recovers, the next dispatch on that shard
+re-trips the breaker and bulk-park runs again - independently of other shards' state. The
+TCP slow-start analogy still holds: aggressive on cut, gentle on recovery.
+
+**Small consistency window across replicas.** Closures aren't gossiped, so when replica R1's
+probe on shard X succeeds and unparks shard X's rows, R2's in-memory breaker for the task
+is still tripped. Until R2 also probes successfully (which happens naturally when R2 picks
+up one of the newly-unparked rows and dispatches it), R2's `initialParkedFor` would insert
+new steps at parked=2 even though shard X is now healthy. This stuck-parked-2 row sits
+invisible until R2's own close fires and bulk-unparks - one-dispatch-per-replica bounded
+window. Acceptable per the design (matches the original "locally self-correcting" closure
+philosophy) and not worth a gossip RPC.
 
 The state is collapsed to a single `trippedAt time.Time` field that doubles as the indicator
 (zero = closed). No bool, no constants for the state value. The gossip merge is just "set my
 trippedAt if I was closed" - idempotent under re-receipt, no convergence-rule reasoning needed.
+
+**Reconstitution on startup.** A restarting replica's in-memory breaker map is empty, but
+`parked=parkedBreaker` rows from a prior replica survive in the DB and are invisible to the
+selection index. Without intervention those rows would sit forever - `pollPendingSteps` only
+recovers `parked=0` steps, and the breaker's own probe-elevation only runs on a fresh trip.
+`reconstituteBreakers` (called inside `OnStartup` between the breakers-map init and the worker
+goroutine starts) scans each shard for `SELECT DISTINCT task_name FROM microbus_steps WHERE
+parked=parkedBreaker AND status=pending` and calls `breakerTrip(taskName)` for each result. The
+schedule starts fresh on this replica (`probeAttempt=0`, first probe at `now+100ms`), independent
+of where peers are in their own schedules - the breaker subsystem is per-replica by design. **No
+multicast.** The gossip merge rule is "latest tCong wins"; sending our `time.Now()` would clobber
+peers' accumulated `probeAttempt` with a newer timestamp, undoing their backoff. Reconstitution
+is strictly a local fix-up for this replica's in-memory state. The DB-side state (parked rows +
+the probe row per shard) is already what `breakerBulkPark` would produce, so no SQL writes are
+issued. If the task has actually been fixed during downtime, the first reconstituted probe
+(at `now+100ms`) succeeds and `breakerClose` un-parks the backlog normally - recovery latency is
+one probe interval. The alternative considered and rejected - a blanket `UPDATE parked=0 WHERE
+parked=parkedBreaker` at startup - would mass-unpark every replica's held backlog in a
+multi-replica deployment, causing a dispatch flood into a known-broken endpoint before each
+replica's breaker re-trips and re-parks. Local reconstitution avoids that thrash entirely.
 
 **No auto-give-up on a forever-tripped breaker.** Flow lifetime is workflow-author's
 responsibility - same argument as the "Flow lifetime is workflow-author's responsibility"
@@ -915,10 +1131,12 @@ comes from `microbus_task_breaker_state{task_name}` and `microbus_task_breaker_p
 {task_name, outcome}`; bulk remediation (cancel everything blocked on task X) is operator
 surface area that's not yet built, and is deliberately out of scope for the breaker itself.
 
-**5xx is not the breaker's business.** A 5xx response means the downstream exists and answered
-with a server error - that is a task-level decision (use `flow.Retry`, an `onError` transition,
-or just propagate as flow failure). Same applies to any non-2xx, non-404, non-429. The breaker
-is specifically for "no one home" via the `ack timeout:` prefix.
+**Other 5xx (500, 502, 504, ...) are not the breaker's business.** A 5xx response other than
+503/529 means the downstream exists, served the request, and answered with a server error -
+that is a task-level decision (use `flow.Retry`, an `onError` transition, or just propagate
+as flow failure). The breaker is specifically for "I cannot serve right now" signals: 404
+ack-timeout via the `ack timeout:` prefix (no subscriber acknowledged), 503 (handler emitting
+"unavailable"), or 529 (Cloudflare/proxy "overloaded"). Everything else falls through.
 
 ## Schema Column Catalog
 
@@ -938,8 +1156,6 @@ rationale and the meaning of every column live here.
 | `actor_claims` | JSON of the caller's JWT claims captured at `Create`; a fresh access token is minted from these before each task |
 | `status` | Flow lifecycle: `created`/`running`/`interrupted`/`completed`/`failed`/`cancelled` |
 | `step_id` | The flow's current step; `0` during fan-out (multiple steps active at one depth) |
-| `forked_flow_id` | Ancestor flow id if this flow was produced by `Fork`; `0` otherwise |
-| `forked_step_depth` | The ancestor `step_depth` the fork was taken from |
 | `surgraph_flow_id` | Parent (surgraph) flow id if this is a subgraph flow; `0` otherwise |
 | `surgraph_step_depth` | The parent's `step_depth` that spawned this subgraph |
 | `surgraph_step_id` | (`3.sql`) PK of the parent's parked surgraph step, so a subgraph flow identifies its surgraph step unambiguously when parallel parked surgraph steps coexist at one depth. `0` = legacy row, falls back to the lease-threshold search |
@@ -947,16 +1163,17 @@ rationale and the meaning of every column live here.
 | `thread_token` | Token component of the thread's flowKey |
 | `trace_parent` | W3C `traceparent` for distributed-trace continuity across the flow |
 | `notify_hostname` | Set by `StartNotify`; `OnFlowStopped` fires here when the flow stops. `''` = no notification |
-| `final_state` | JSON state computed at termination - the full merged state of the terminal step(s), unfiltered. Any narrowing happens in the workflow's terminal task via `flow.Keep`/`Delete` |
+| `final_state` | JSON state computed at termination - the full merged state of the terminal step(s), unfiltered. Any narrowing happens in the workflow's terminal task via `flow.Delete`/`Transform` |
 | `breakpoints` | JSON `map[taskName]string` of `BreakBefore` breakpoints |
-| `created_at` | UTC creation time. Append-only and PK-correlated; `idx_*_created_at` relies on this for time-window queries. Surfaced to tasks via `Flow.CreatedAt()` for elapsed-time guards |
+| `created_at` | UTC creation time. Append-only and PK-correlated; `idx_*_created_at` relies on this for time-window queries. Surfaced to tasks via `Flow.CreatedAt()` for elapsed-time guards. Reset by `Restart` (which is a fresh attempt); NOT reset by `RestartFrom` (which is a surgical rewind) |
+| `started_at` | (`15.sql`) UTC time this attempt began dispatching. Stamped by `Start` when the flow transitions `created` → `running`. Reset by `Restart` (fresh attempt). NOT reset by `RestartFrom` (the flow's run continues, only a subtree is rewound). Distinct from `created_at` because a flow can sit in `created` indefinitely waiting for `Start`, or be parked behind a tripped breaker for hours before its entry step actually dispatches; `started_at` skips that pre-run delay. Drives `FlowSummary.Duration()` (`updated_at - started_at`) so the duration column in operator UIs reflects execution time, not row age |
 | `updated_at` | UTC time of the last status transition; bumped on every state change. Surfaced to tasks via `Flow.UpdatedAt()` |
-| `priority` | (`8.sql`) Scheduling priority, integer >= 1, lower runs first. Resolved at `Create` from `FlowOptions` (an explicit priority is >= 1; a 0/unset `FlowOptions.Priority` falls back) else the `DefaultPriority` config; inherited unchanged by `Continue`/`Fork`/subgraph. Immutable after creation |
+| `priority` | (`8.sql`) Scheduling priority, integer >= 1, lower runs first. Resolved at `Create` from `FlowOptions` (an explicit priority is >= 1; a 0/unset `FlowOptions.Priority` falls back) else the `DefaultPriority` config; inherited unchanged by `Continue`/subgraph. Immutable after creation |
 | `fairness_key` | (`8.sql`) Fairness bucket, typically a tenant. From `FlowOptions`, else the `tid`/`tenant` actor claim, else `''`. Immutable after creation |
 | `fairness_weight` | (`8.sql`) Relative dispatch share of the `fairness_key`. From `FlowOptions`, else `1` |
 | `error` | (`9.sql`) Task error string for `failed` flows. Written by `failStep` to every flow in the surgraph chain in the same UPDATE that sets `status='failed'`; the existing `WHERE status NOT IN (terminal)` clause makes the write first-failure-wins for the flow row even under concurrent sibling failures. `''` for non-failed flows. Surfaced as `FlowOutcome.Error` |
 | `cancel_reason` | (`9.sql`) Reason string passed to `Cancel(flowKey, reason)`. Written to every flow in the cancellation chain (root + descendants) in the same UPDATE that sets `status='cancelled'`, gated by the same WHERE-clause for first-cancel-wins semantics. `''` when no reason was given or for non-cancelled flows. Surfaced as `FlowOutcome.CancelReason` |
-| `tenant_id` | (`9.sql`) Tenant identifier read from `frame.Of(ctx).Tenant()` at flow creation. `0` is the no-tenant sentinel (returned by `Tenant()` when no actor is on the frame or the actor has no `tid`/`tenant` claim). Inherited by subgraph (worker context has no frame) and Fork (matches Fork's actor_claims inheritance). `Continue` and `CreateTask` read from the caller's frame like `Create`. Immutable after creation. Filterable via `Query.TenantID` for operator multi-tenant queries. |
+| `tenant_id` | (`9.sql`) Tenant identifier read from `frame.Of(ctx).Tenant()` at flow creation. `0` is the no-tenant sentinel (returned by `Tenant()` when no actor is on the frame or the actor has no `tid`/`tenant` claim). Inherited by subgraph (worker context has no frame). `Continue` and `CreateTask` read from the caller's frame like `Create`. Immutable after creation. Filterable via `Query.TenantID` for operator multi-tenant queries. |
 
 #### `microbus_steps`
 
@@ -969,8 +1186,13 @@ rationale and the meaning of every column live here.
 | `task_name` | Graph node name of the task this step executes |
 | `state` | JSON input snapshot. Immutable except on retry/resume (see "State mutation on retry and resume") |
 | `changes` | JSON output delta the task produced |
-| `interrupt_payload` | JSON payload from `flow.Interrupt()` |
-| `status` | Step lifecycle: `created`/`pending`/`running`/`interrupted`/`completed`/`failed`/`retried`/`cancelled` |
+| `interrupt_payload` | JSON outbound payload from `flow.Interrupt()` - what the awaiting caller sees |
+| `interrupt_done` | (`10.sql`) `1` once the interrupt park armed by `flow.Interrupt` has been resumed; drives `flow.Interrupt`'s return-vs-arm decision on re-dispatch. `0` for breakpoint pauses (so a task resumed past a breakpoint arms its interrupt fresh) |
+| `resume_data` | (`10.sql`) JSON inbound payload recorded by `Resume`; returned by `flow.Interrupt` on re-dispatch. `'{}'` until resumed |
+| `subgraph_done` | (`10.sql`) `1` once a `flow.Subgraph` park has resolved (child completed/failed); drives `flow.Subgraph`'s return-vs-arm decision on re-dispatch. A retry clears it back to `0` to re-run the child |
+| `subgraph_result` | (`10.sql`) JSON child `final_state` returned by `flow.Subgraph` on re-dispatch. `'{}'` until resolved |
+| `subgraph_error` | (`10.sql`) child error text for a failed `flow.Subgraph` park, returned as the `err` from `flow.Subgraph`. `''` when none |
+| `status` | Step lifecycle: `created`/`pending`/`running`/`interrupted`/`completed`/`failed`/`cancelled` |
 | `goto_next` | Task-requested `flow.Goto` target; `''` = none |
 | `error` | Error text when `failed`; `''` otherwise |
 | `time_budget_ms` | Execution budget; the HTTP timeout on the task call |
@@ -979,16 +1201,18 @@ rationale and the meaning of every column live here.
 | `not_before` | Earliest UTC time the step may execute (`flow.Sleep` / retry backoff) |
 | `lease_expires` | Crash-recovery lease; `pollPendingSteps` reclaims `running` steps past this |
 | `created_at` | UTC creation time |
+| `started_at` | (`14.sql`) UTC time the *current attempt* of this step first dispatched - i.e. the first lease of attempt 0, or the first lease after a Restart/RestartFrom rewind. The lease UPDATE uses a CASE expression to stamp `started_at = NOW_UTC()` only when this is a fresh attempt's first dispatch (`attempt = 0 AND subgraph_done = 0 AND interrupt_done = 0`), and **preserves** the existing value when the lease is a *continuation* within the same attempt: a `flow.Subgraph` re-dispatch (`subgraph_done = 1`), an `Interrupt`/`ResumeBreak` re-dispatch (`interrupt_done = 1`), or a `flow.Retry` re-dispatch (`attempt > 0`). The "retry stays inside the step" rule matters: a retried step's duration includes every attempt's task body, not just the last attempt's. Defaults to `NOW_UTC()` at INSERT so a never-leased row carries a valid value; consumers ignore it for non-`HasStarted` statuses (`created`/`pending`), where it has no operational meaning. Drives per-step body duration (`updated_at - started_at`) and inter-step wait labels (`next.started_at - prev.updated_at`) in `FlowRenderer`; the latter measures only the *transition gap* (DB commit + queue + dispatch overhead), not the inside-the-step retry/park time |
 | `updated_at` | UTC time of the last status transition |
 | `lineage_id` | (`5.sql`) Cohort frame: the spawn step's `step_id` on a push, else inherited. Drives explicit `SetFanIn` arrival counting and the merge. A cohort-counting device, **not** a DAG. `0` = no `SetFanIn` |
 | `cohort_size` | (`5.sql`) On a fan-out spawn step: number of branches spawned |
 | `cohort_arrivals` | (`5.sql`) On a fan-out spawn step: branches that reached the fan-in; fan-in fires when `arrivals >= size` |
-| `fan_out_ordinal` | (`6.sql`) This branch's index in its fan-out (forEach array index / static declaration order); fan-in merges in this order so list/sum reducers are deterministic. Retry copies it. `0` = not part of a fan-out |
-| `predecessor_id` | (`7.sql`) Step that ran immediately before this one in the execution DAG. `0` = none (entry/subgraph-entry/fork-entry) |
+| `fan_out_ordinal` | (`6.sql`) This branch's index in its fan-out (forEach array index / static declaration order); fan-in merges in this order so list/sum reducers are deterministic. Preserved across an in-place rewind (`flow.Retry`/`RestartFrom`). `0` = not part of a fan-out |
+| `predecessor_id` | (`7.sql`) Step that ran immediately before this one in the execution DAG. `0` = none (entry/subgraph-entry) |
 | `successor_id` | (`7.sql`) Step that runs immediately after this one. `0` = none (exit) |
 | `priority` | (`8.sql`) Denormalized copy of the owning flow's `priority` for the hot selection path. Copied at every step-insert path so selection never joins `microbus_flows`. Read by the two-level selection |
 | `fairness_key` | (`8.sql`) Denormalized copy of the flow's `fairness_key` |
 | `fairness_weight` | (`8.sql`) Denormalized copy of the flow's `fairness_weight` |
+| `parked` | (`11.sql`) Selection discriminator. `0` = active (visible to selection); `1` = surgraph park (the step called `flow.Subgraph` and is waiting for the child); `2` = breaker park (the task has a tripped breaker and this row is on the held-back backlog). The selection and saturation indexes lead with `(status, parked)` so non-zero rows are physically excluded from the hot-path scan. See "Step Parking" above for the full design |
 
 ## Database Indexing Strategy
 
@@ -1024,23 +1248,23 @@ The foreman's `microbus_flows` and `microbus_steps` tables grow indefinitely as 
 | `idx_microbus_steps_flow_id` | `(flow_id, step_id)` on MySQL; `(flow_id)` on pgx/mssql | Per-flow step queries (history, fan-in siblings, cancel) |
 | `idx_microbus_steps_status` | `(status, updated_at)` - partial on pgx: `WHERE status IN ('pending', 'running')` | `pollPendingSteps` recovery and pending step discovery. Only non-terminal statuses are queried through this index |
 | `idx_microbus_steps_created_at` | `(created_at)` (migration `4.sql`) | Time-window queries; append-only, same minimal-maintenance rationale as the flows index |
-| `idx_microbus_steps_selection` | `(status, priority, fairness_key)` (migration `8.sql`) - partial `WHERE status IN ('pending', 'running')` on pgx/mssql/sqlite, full on mysql | Two-level priority+fairness candidate selection. Read by the refiller (band MIN(priority), then candidate rows by key) |
-| `idx_microbus_steps_saturation` | `(status, task_name)` (migration `8.sql`) - partial as above | Per-task max-concurrency saturated-set aggregate. Created but not yet read (reserved for a future backpressure deliverable) |
+| `idx_microbus_steps_selection` | `(status, parked, priority, fairness_key)` (migrations `8.sql` + `11.sql`) - partial `WHERE status IN ('pending', 'running')` on pgx/mssql/sqlite, full on mysql | Two-level priority+fairness candidate selection. Read by the refiller (band MIN(priority), then candidate rows by key). The `parked` second column physically excludes parked rows (surgraph park, breaker park) without an in-memory filter |
+| `idx_microbus_steps_saturation` | `(status, parked, task_name)` (migrations `8.sql` + `11.sql`) - partial as above | Per-task in-flight count for the adaptive backpressure controller. Parked rows are excluded so a surgraph parent doesn't inflate the executing-slot count for its task |
 
 ### Data Retention
 
 The foreman does not auto-purge flows. Workflows are durable and every flow row remains
 potentially-resurrectable: an `interrupted` flow via `Resume`, a `completed` flow via `Continue`
-into the same thread, a `failed`/`cancelled` flow via `Fork` from a checkpoint. Killing rows on a
-fixed timer would silently break any of these patterns, and no single retention policy fits both a
-1-hour batch job and a 30-day human-approval workflow.
+into the same thread, a `failed` flow via `Restart`/`RestartFrom`. Killing rows on a fixed timer would silently
+break any of these patterns, and no single retention policy fits both a 1-hour batch job and a
+30-day human-approval workflow.
 
 For operator-driven retention the foreman exposes two endpoints:
 
 - **`Delete(flowKey)`** removes one flow and its steps in a transaction. Refuses to act on a
-  running flow (409). Subgraph children, forked flows, and thread descendants are left dangling
-  (their parent references become stale rows); this matches the framework's stance that
-  `Continue`/`Fork` lineage is best-effort and not guaranteed across operator-driven retention.
+  running flow (409). Subgraph children and thread descendants are left dangling (their parent
+  references become stale rows); this matches the framework's stance that `Continue` lineage is
+  best-effort and not guaranteed across operator-driven retention.
 - **`Purge(Query)`** bulk-deletes flows matching the query, except running. Same `Query` shape
   as `List` (Status, WorkflowName, ThreadKey, TaskName, OlderThan, Shard, Limit). Capped at
   10000 flows per call; returns the count of flows actually deleted. The non-running guard is
@@ -1085,16 +1309,18 @@ dispatch, not a guard on the foreman's own DB writes.
 
 ### Shutdown ordering: drain workers, then timer, then refiller
 
-`shortenNextPoll` signals the timer via `select { case svc.wakeTimer <- struct{}{}: default: }`. The
-`default` only guards against a *full* channel - a send on a *closed* channel still panics, even inside a
-`select`. The only callers of `shortenNextPoll` are worker goroutines (`processStep` and its retry/sleep/
-poison paths); `timerLoop` only ever receives from `wakeTimer`. So `OnShutdown` drains the worker pool
-before closing `wakeTimer`, then stops the refiller, and returns:
+`signalTimer` (the sender behind `shortenNextPoll` / `refreshNextProbeLocked`) nudges the timer via
+`select { case svc.wakeTimer <- struct{}{}: default: }`. The `default` only guards against a *full* channel -
+a send on a *closed* channel still panics, even inside a `select`. The senders are not just worker goroutines:
+the breaker subsystem and the `Enqueue` / `TripBreaker` RPC handlers also signal the timer, so there is no
+drain point after which a `wakeTimer` send is guaranteed impossible. `wakeTimer` is therefore **never closed**
+(the same rationale as `refillTrigger`), and `timerLoop` is terminated by a dedicated `timerStop` channel it
+selects on. `OnShutdown` drains the worker pool, then stops the timer, then the refiller, and returns:
 
 ```
 cache.close()        // unblocks blocked candidate pops independently of any channel
 workers.Wait()       // no shortenNextPoll / requestRefill worker caller remains
-close(wakeTimer)     // timerLoop's only termination signal
+close(timerStop)     // timerLoop's termination signal (wakeTimer is never closed)
 timerWorker.Wait()   // timerLoop fully exited (last requestRefill caller gone)
 close(refillStop)    // refiller's termination signal
 refiller.Wait()      // refiller fully exited; its DB ops complete
@@ -1102,19 +1328,20 @@ refiller.Wait()      // refiller fully exited; its DB ops complete
 ```
 
 The timer and refiller each live on their own WaitGroup (`timerWorker`, `refiller`), separate from the
-worker pool, so the close-then-wait order can be staged: `timerLoop` exits only when `wakeTimer` closes, so
-draining it before `close(wakeTimer)` would deadlock. `refillTrigger` is **never closed** and is only ever
-sent to non-blockingly, so a late coalesced `requestRefill` from the timer's final poll during the drain
-window is a harmless no-op rather than a `send on closed channel` panic - the refiller is stopped by closing
-the *separate* `refillStop` channel instead. A `cache.refill` into the already-closed cache is a no-op, so a
-refiller run still in flight during the drain cannot resurrect a popped-from cache. The earlier (pre-Phase-2)
-code closed `wakeTimer` before `workers.Wait()`, so a worker mid-`processStep` (e.g. the retry-sleep
-`shortenNextPoll` after a 408/ack-timeout failStep) raced the close and panicked (caught by `workerLoop`'s
-`errors.CatchPanic`, but spurious and a real ordering hazard).
+worker pool, so the close-then-wait order can be staged. `timerStop` is drained before `refillStop` because
+`timerLoop`'s final poll can still `requestRefill`; stopping the refiller first would lose that work or race
+the trigger. `refillTrigger`, like `wakeTimer`, is **never closed** and is only ever sent to non-blockingly,
+so a late coalesced `requestRefill` from the timer's final poll during the drain window is a harmless no-op
+rather than a `send on closed channel` panic - the refiller is stopped by closing the *separate* `refillStop`
+channel instead. A `cache.refill` into the already-closed cache is a no-op, so a refiller run still in flight
+during the drain cannot resurrect a popped-from cache. Using never-closed nudge channels plus dedicated
+`timerStop` / `refillStop` termination signals removes the ordering hazard an earlier design carried, where
+closing `wakeTimer` before `workers.Wait()` let a worker mid-`processStep` (e.g. the retry-sleep
+`shortenNextPoll` after a 408/ack-timeout failStep) race the close and panic.
 
 ### Transactions
 
-`Start`, `Resume`, `Retry`, and `Cancel` wrap their step and flow mutations in a transaction with **steps-first-then-flow lock ordering** to prevent deadlocks. `processStep`'s transition evaluation (insert next steps + update flow's `step_id`) also runs in a transaction.
+`Start`, `Resume`, `Restart`, `RestartFrom`, and `Cancel` wrap their step and flow mutations in a transaction with **steps-first-then-flow lock ordering** to prevent deadlocks. `processStep`'s transition evaluation (insert next steps + update flow's `step_id`) also runs in a transaction.
 
 ### Lease-Based Crash Recovery
 
@@ -1128,7 +1355,7 @@ Transactions don't help when a worker crashes during task execution (an HTTP cal
 
 ### Per-Function Analysis
 
-#### Create / CreateTask / Fork
+#### Create / CreateTask
 
 **Write order:** Insert flow (`created`) → insert step (`created`) → update flow's `step_id`.
 
@@ -1146,9 +1373,9 @@ Transactions don't help when a worker crashes during task execution (an HTTP cal
 
 #### Retry
 
-**Transaction:** Marks failed steps as `retried`, inserts new copies as `pending`, updates the flow to `running` with the new `step_id`, atomically.
+**Transaction:** Resets the failed step row in place (`status='pending'`, prior error cleared, park slot cleared, `attempt++`) and transitions the flow to `running`, atomically.
 
-**Partial failure:** If the process crashes after committing the transaction but before enqueuing, the new steps are `pending` and the flow is `running`. `pollPendingSteps` picks them up when their leases expire. The original failed steps remain as `retried` with their error preserved.
+**Partial failure:** If the process crashes after committing the transaction but before enqueuing, the step is `pending` and the flow is `running`. `pollPendingSteps` picks it up when its lease expires.
 
 **Verdict:** Self-healing.
 
@@ -1178,7 +1405,7 @@ Transactions don't help when a worker crashes during task execution (an HTTP cal
 
 #### Resume
 
-**Transaction:** Walks up (`surgraphChain`) and down (`interruptedSubgraphChain`). Clears interrupt payloads, re-parks surgraph steps, merges resume data into the leaf step's state, resets the leaf to `pending`, and transitions all flows to `running` - atomically in a single transaction. After commit, re-propagates the next sibling's interrupt payload (if any) and enqueues the leaf step.
+**Transaction:** Walks up (`surgraphChain`) and down (`interruptedSubgraphChain`). Clears interrupt payloads, re-parks surgraph steps, records resume data on the leaf step's `resume_data` column (not merged into `state`), resets the leaf to `pending`, and transitions all flows to `running` - atomically in a single transaction. After commit, re-propagates the next sibling's interrupt payload (if any) and enqueues the leaf step.
 
 **Partial failure:** If the process crashes before committing, nothing changes - the transaction rolls back and the caller can retry `Resume`. If it crashes after committing but before enqueue, `pollPendingSteps` picks up the leaf step.
 
@@ -1220,7 +1447,7 @@ The foreman supports distributing flows across multiple database shards to scale
 
 **Shard routing:** External flow IDs encode the shard number: `{shard}-{flowID}-{token}`. Every operation parses the shard from the flow ID and routes to the correct database connection via `svc.shard(n)`.
 
-**Shard affinity:** Subgraph flows and forked flows are created on the same shard as their parent. This avoids cross-shard references during active execution (subgraph completion) and history reconstruction (fork lineage). Only top-level flow creation picks a random shard.
+**Shard affinity:** Subgraph flows are created on the same shard as their parent. This avoids cross-shard references during active execution (subgraph completion) and history reconstruction. Only top-level flow creation picks a random shard.
 
 **Polling and purging:** All replicas poll all shards for pending steps and purge expired flows across all shards. The atomic CAS update on step acquisition ensures correctness when multiple replicas race.
 
@@ -1260,3 +1487,103 @@ hazard that callers couldn't distinguish from a complete result.
 
 **DSN format:** When `NumShards > 1`, the `SQLDataSourceName` must contain `%d` which is replaced with the shard index (0-based). In testing mode (SQLite), each shard gets a separate in-memory database via a unique test ID suffix.
 
+
+
+## Flow Rendering (`foremanapi.FlowRenderer`)
+
+`FlowRenderer` produces a Mermaid flowchart from a `History` response. Diagnostic intent: at a
+glance answer "where did the time go in this flow?" The defaults render the brand palette in
+top-down orientation; `With*Colors` swap palettes; `WithLinks` enables per-node click directives.
+
+### CSS-variable theming model
+
+Color values flow through `classDef` and `style` directives. The renderer does NOT emit a
+themeVariables init block. Callers pass either hex literals (static rendering used by
+`cmd/genworkflowmmd` and `HistoryMermaid`) or CSS custom-property references like
+`var(--bespa-primary-container)` (host pages that want the diagram to track a page-level theme).
+With `var()` values, browsers resolve the references through the SVG's CSS cascade, and the
+diagram re-colors automatically on light/dark toggle without any renderer reinvocation. The
+CSS-mode pattern is: pass `"currentColor"` for the fill and `""` (empty) for the text - the
+generated classDef omits the `color:` property, host CSS sets `color` on the class for the shape
+and `.nodeLabel` for the inner text, and Mermaid inherits via `currentColor`.
+
+### Color knobs and status groups
+
+Four palette pairs map to seven step statuses plus chrome:
+
+| Pair | Statuses |
+|---|---|
+| primary | `completed`, `running` (running gets a dashed border) |
+| secondary | `pending` + chrome (`_start`, `_end`, fan-out cohort wrappers, subgraph block fills) |
+| error | `failed`, `cancelled` |
+| attention | `interrupted` (intentionally distinct from error - "needs human eyes," not hard failure) |
+
+### DAG-edge model
+
+The execution DAG is reconstructed from `PredecessorID` / `SuccessorID` columns, NOT from
+`step_depth`. Every edge is recorded on at least one endpoint - fan-out via each child's
+`PredecessorID`, fan-in via each cohort exit's `SuccessorID`, linear on both - and the rendered
+edge set is their deduped union, exact for arbitrary nesting.
+
+### Subgraph caller decomposition
+
+A subgraph caller step renders as **two** visual elements: the caller's task node (call site) and
+a visible Mermaid subgraph wrapper block containing the recursively-rendered SubHistory. No
+return-marker chrome between them.
+
+The caller node's duration label is the **net** caller cost:
+
+```
+net = (caller.UpdatedAt - caller.StartedAt) - subgraph_wall_time
+```
+
+where `subgraph_wall_time = max(SubHistory*.UpdatedAt) - min(SubHistory*.CreatedAt)` walked
+recursively. The net is the caller's own pre-call + post-return body time. It is independent of,
+and additive with, the inner steps' own durations - total call cost reconstructs as
+`net + subgraph_wall_time` without either number double-counting the other. The label is omitted
+when the caller or any inner step is in-flight (subgraph wall time is not yet defined).
+
+Edges thread:
+
+```
+predecessor --> caller         (parent DAG, transition gap label)
+caller --> innerHead           (the call, queue-wait label)
+innerTail --> Y.entries        (the return, transition gap label)
+```
+
+`byID[caller].exits` is set to the subgraph's inner tails, so the existing `addEdge(caller, Y)`
+machinery naturally emits one edge per inner-tail × parent-DAG-successor combination - covering
+whichever shape the caller's transitions produced (static fan-out, forEach, withWhen, withGoto).
+The transition-gap label is computed from the step records (`Y.StartedAt - caller.UpdatedAt`)
+regardless of which inner tail the edge visually originates from. A terminal subgraph caller (no
+parent-flow successor) surfaces its inner tails as outer tails, and `Render` connects them to
+`_end`.
+
+### Node and edge label semantics
+
+**Node label** = `UpdatedAt - StartedAt` (task body time) for any non-caller step that has run
+and reached a terminal status. Pending/created/in-flight steps render with just the task name.
+Subgraph callers render the *net* cost (above), not body time.
+
+**Edge label** = `to.StartedAt - from.UpdatedAt` (transition gap: DB commit + queue + dispatch).
+Computed from the step records, not from the visual src/dst.
+
+**Call edge label** = `entry.StartedAt - entry.CreatedAt` (queue wait on the subgraph's entry
+step). Without this label, the time would be inside `subgraph_wall_time` but invisible on any
+rendered edge, and the right-path arithmetic wouldn't reconcile with sibling fan-in waits. With
+the label, every visible interval in the diagram adds up to the wall clock.
+
+### Fan-out cohort wrappers
+
+Two-or-more steps sharing one `PredecessorID` get wrapped in an invisible Mermaid `subgraph`
+block (empty label, no fill, no stroke). Purely a layout container so siblings cluster near
+their parent instead of stretching across the full diagram width. Edges always go between actual
+task nodes; nothing terminates at the cohort wrapper.
+
+### Truncation in label formatting
+
+`formatDuration` uses integer-millisecond truncation for sub-second values (`%dms` from
+`d.Milliseconds()`). A diagram with N labeled edges accumulates up to ~N/2 ms of systematic
+underestimation in any path sum. Diagnostically irrelevant (the goal is to spot where time went,
+not to reconcile to the millisecond); if exact reconciliation ever matters, switch sub-second
+formatting to `%.1fms`.

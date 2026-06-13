@@ -2,6 +2,14 @@
 
 Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`.
 
+## Vocabulary
+
+In this codebase, **"workflow", "agent", and "agentic workflow" all refer to the same thing**: a `workflow.Graph` of tasks orchestrated by the Foreman. The everything in this file applies whether the workflow is rule-based and deterministic, driven by a small specialized model, or built around `llmapi.ChatLoop` and a frontier LLM. An LLM call is *not* a prerequisite for a workflow to be an agent - an agent is autonomous software that perceives state, decides, and acts toward a goal, and a Microbus workflow satisfies that definition regardless of which task types it contains.
+
+So when a user says "create an agent", "create an agentic workflow", or "create a workflow", treat them as the same request and use the `add-workflow` skill. The same applies to "agent step" / "workflow step" / "agentic task" - all map to a single task endpoint and the `add-task` skill. The presence or absence of an LLM-driven task does not change which skill to use, which conventions apply, or which file structure to produce.
+
+Naming convention for agent microservices: a microservice whose sole reason for existing is to expose one workflow is conventionally named `<role>.agent` (e.g. `planner.agent`, `researcher.agent`, `coordinator.agent`). This is just a naming convention, not a framework requirement - the microservice itself is built and registered exactly like any other Microbus microservice.
+
 ## Task Endpoints
 
 A task endpoint is a functional endpoint that performs a single step of a workflow. Its signature always includes `ctx context.Context` and `flow *workflow.Flow` as the first two parameters, followed by input arguments sourced from the flow's state, and returns output arguments written back to the state plus `err error`.
@@ -75,51 +83,58 @@ Task URLs in the graph are obtained from the generated API package constants (e.
 Control signals on `Flow`:
 
 - `flow.Goto(taskURL)` - override transition routing to jump to a specific task
-- `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true if attempts remain, false if exhausted
-- `flow.RetryNow() bool` - re-execute this task immediately with no limit; shorthand for `Retry(math.MaxInt32, 0, 0, 0)`
-- `flow.RetryOnTimeout(err, maxAttempts, initialDelay, multiplier, maxDelay) bool` - retry only when `err` carries HTTP status 408; returns false (so the caller can surface the error) for any other status
+- `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true while attempts remain, false once `maxAttempts` is reached. The single retry primitive: it carries no condition of its own, so the task writes the retryable predicate explicitly in the surrounding `if`. Immediate retry is zero delays; unlimited is `math.MaxInt32`. Timeout-only retry is `if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(...)` - both foreman-side `pub.Timeout` and subscriber-side handler timeouts surface as 408
 - `flow.Sleep(duration)` - delay the next step by a duration
-- `flow.Interrupt(payload)` - pause the flow for external input (human-in-the-loop)
-- `flow.Subgraph(workflowURL, input)` - dynamically launch a child workflow; the step is parked until the child completes, then re-executed with the child's output merged into state (see [Dynamic Subgraphs](#dynamic-subgraphs))
+- `flow.Interrupt(payload) (resumeData, yield, err)` - park the step for external input (human-in-the-loop). On the first call returns `yield=true` and the task must `return nil` immediately. On re-entry after `Resume(flowKey, data)`, returns `(data, false, nil)` so the task proceeds (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
+- `flow.Subgraph(workflowURL, input) (out, yield, err)` - park the step and launch a child workflow. On the first call returns `yield=true` and the task must `return nil` immediately. On re-entry after the child terminates, returns `(out, false, nil)` on success (child's `final_state`) or `(nil, false, childErr)` on failure - the task adopts what it wants from `out` or branches on `err` (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
 
 **`workflow.Graph`** defines workflow structure:
 
 - `NewGraph(name)` - create a new graph
 - `AddTask(taskURL)` - register a task node (first added becomes default entry point)
-- `AddSubgraph(workflowName)` - register a child workflow as a subgraph node
 - `SetEntryPoint(taskURL)` - override the default entry point
-- `AddTransition(from, to)` - unconditional transition
-- `AddTransitionWhen(from, to, when)` - conditional transition based on state expression
-- `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called
+- `AddTransition(from, to)` - unconditional transition; sibling unconditional/`When` transitions from the same node all fire in parallel (fan-out)
+- `AddTransitionWhen(from, to, when)` - conditional transition based on state expression; sibling `When` transitions are evaluated independently and *all* matching ones fire (fan-out, not first-match)
+- `AddTransitionSwitch(from, to, when)` - first-match-wins routing; siblings are evaluated in registration order and only the first whose expression matches fires. Use `when="true"` as the last branch for a default. Only one branch ever runs, so no `SetFanIn` is needed. See [Switch Transitions](#switch-transitions) below
+- `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called from the task body
 - `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
-- `SetFanIn(taskURL)` - mark a node as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in))
+- `SetFanIn(taskURL)` - mark a node as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in)). `Switch` transitions do **not** count as fan-out and need no `SetFanIn`
 - `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
 - `AddTransitionOnTimeout(from, to)` - error transition taken only when the source task's error carries HTTP status 408 (both foreman-side and task-side timeouts). Wins over a plain OnError when the status matches
-- `SetReducer(field, reducer)` - escape hatch to override the prefix-driven reducer for a state field (rarely needed; see Reducers below)
+- `SetReducer(field, reducer)` - attach a fan-in merge strategy to a state field (mandatory whenever a fan-in field needs anything other than last-write-wins; see Reducers below)
+- `Annotate(taskName, note)` - attach a short note that renders beneath the node in the Mermaid diagram (see [Annotating Tasks](#annotating-tasks) below)
 - `workflow.END` - pseudo-node indicating workflow termination
 
-**Reducers** control how state fields are merged at fan-in points. The reducer is normally chosen by the field name's prefix, with no explicit configuration:
+**Reducers** control how state fields are merged at fan-in points. Every field that needs anything other than last-write-wins must be wired explicitly with `graph.SetReducer(field, reducer)` at graph-build time. Fields without a registered reducer use `Replace` (last write wins). State field names carry no hidden semantics - name them naturally (e.g. `messages`, `total`, `tags`) and attach the reducer separately.
 
-- `sum*` - numeric add (e.g. `sumFailures`, `sumScore`)
-- `list*` - array append, duplicates kept, ordered (e.g. `listMessages`, `listEvents`)
-- `set*` - polymorphic: array union (dedupe) or object merge (new key wins) depending on the value's JSON kind (e.g. `setUsers`, `setRoles`)
-- anything else - replace (last write wins)
+```go
+graph.SetReducer("messages", workflow.ReducerAppend)  // accumulate per-branch deltas
+graph.SetReducer("total",    workflow.ReducerAdd)     // sum numeric contributions
+graph.SetReducer("seen",     workflow.ReducerUnion)   // dedupe across branches
+graph.SetReducer("approved", workflow.ReducerAnd)     // all branches must approve
+graph.SetReducer("flagged",  workflow.ReducerOr)      // any branch flags
+graph.SetReducer("notes",    workflow.ReducerConcat)  // join string deltas
+graph.SetReducer("attrs",    workflow.ReducerMerge)   // merge per-branch objects
+```
 
-The character right after the prefix must be uppercase. `summary`, `listening`, `setup` do not match; `sumScore`, `listMessages`, `setUsers` do. This boundary rule prevents accidental matches against English words.
+The supported reducer values:
 
-**These prefixes are reserved. Do not name a state field or task argument `sum*`, `list*`, or `set*` unless it is meant to be reduced at a fan-in.** Unless you override it with `graph.SetReducer`, the reducer for a field is inferred from its name prefix, so a field innocently named `listFiles`, `sumTotal`, or `setConfig` is silently appended/added/unioned (not replaced) the moment it is written on more than one parallel branch, producing duplicated or accumulated values that are hard to trace back to the name. For an ordinary field that is not a fan-in accumulator, pick a name that does not start with these prefixes (e.g. `files`, `total`, `config`, `allUsers`). Reach for a prefix only when the task writes a per-branch delta into a field that converges at a `SetFanIn` node.
+- `workflow.ReducerReplace` - last write wins (default; identity none)
+- `workflow.ReducerAppend` - concatenate arrays (identity `[]`)
+- `workflow.ReducerAdd` - sum numeric values (identity `0`)
+- `workflow.ReducerUnion` - merge arrays, deduplicate by JSON value (identity `[]`)
+- `workflow.ReducerMerge` - merge objects, new key wins on collision (identity `{}`)
+- `workflow.ReducerAnd` - logical AND of booleans (identity `false`)
+- `workflow.ReducerOr` - logical OR of booleans (identity `false`)
+- `workflow.ReducerConcat` - concatenate strings (identity `""`)
 
-If a state field's name is dictated by an external schema and cannot follow the prefix convention, attach a reducer explicitly with `graph.SetReducer(field, reducer)`. The supported reducer values are:
+Reducers are strict on their input type. `ReducerUnion` rejects object values, `ReducerMerge` rejects array values, `ReducerAdd` rejects strings, etc. A cleared slot (Go nil or JSON null) short-circuits to the reducer's identity (the Go zero value for the underlying type) rather than failing the type check, so `flow.Clear` contributions are ignored at fan-in.
 
-- `workflow.ReducerReplace` - last write wins (default)
-- `workflow.ReducerAppend` - concatenate arrays
-- `workflow.ReducerAdd` - sum numeric values
-- `workflow.ReducerUnion` - merge arrays, deduplicate by JSON value
-- `workflow.ReducerMerge` - merge objects, new key wins on collision
+**Empty-cohort behavior.** A `forEach` that spawns zero branches still fires the fan-in. The field takes the reducer's identity. Both `ReducerAnd` and `ReducerOr` return `false` on an empty cohort - there is no "vacuously true" mode. If you need an empty cohort to be treated as approval, branch on the cohort size downstream rather than relying on the reducer.
 
-Explicit reducers are strict: `ReducerUnion` rejects object values, `ReducerMerge` rejects array values. Only the prefix-driven `set*` is polymorphic.
+**Order sensitivity.** `Append` (arrays) and `Concat` (strings) preserve the cohort merge order, which is `updated_at, step_id` - not creation order under shard scatter. If you need a specific ordering, sort downstream rather than relying on fan-in order.
 
-Tasks writing to reducer-managed fields must set only the **delta**, not the full accumulated value. For example, with `listMessages` (auto-append), each fan-out branch should set just the new messages it produced - not the full conversation history.
+Tasks writing to reducer-managed fields must set only the **delta**, not the full accumulated value. For example, with `messages` attached to `ReducerAppend`, each fan-out branch should set just the new messages it produced - not the full conversation history.
 
 ## Fan-Out and Fan-In
 
@@ -155,8 +170,8 @@ The same rule applies to a `forEach` fan-out: `graph.AddTransitionForEach("split
 by `graph.AddTransition("worker", "join")` and `graph.SetFanIn("join")`. An empty `items` array spawns zero branches;
 the foreman then creates the fan-in step directly, so the flow still continues past the join.
 
-State fields produced by the parallel branches are merged at the fan-in node by reducers (see Reducers above), so name
-them with the `sum*`, `list*`, or `set*` prefix, or attach a reducer with `SetReducer`. Each branch writes only its own
+State fields produced by the parallel branches are merged at the fan-in node by reducers (see Reducers above). Attach
+the appropriate reducer at graph-build time with `graph.SetReducer(field, reducer)`. Each branch writes only its own
 delta, never the accumulated value.
 
 ### `forEach` Branch State
@@ -178,6 +193,12 @@ For `AddTransitionForEach("split", "worker", "items", "item")` the branch sees `
 A task argument by that name (e.g. `func Worker(... item string, itemIndex int, itemCount int)`) is auto-populated
 from state like any other. These fields are present only for `forEach` fan-out, not static fan-out.
 
+`<as>`, `<as>Index`, and `<as>Count` are also **dropped from the merged state at fan-in**, symmetric to the source-
+array strip on the way down. They are per-element bookkeeping with no meaning past the cohort, so the foreman
+deletes them after merging the cohort's contributions. A workflow that needs the element value past the fan-in
+must forward it under a different key in the branch (e.g. `flow.SetString("chosenItem", item)`); the `as` alias
+itself is gone downstream of the fan-in.
+
 To suppress the source array past the fan-in (useful when it is very large and only the per-element transformation
 matters downstream), have the branch call `flow.Set("<forEach>", nil)` in its task body. That writes the new value
 into the branch's `changes`, the replace reducer folds it over the spawn-step base at fan-in, and the field is
@@ -187,6 +208,41 @@ To reuse one task at two graph positions across a fan-in boundary (for example, 
 the same task URL under two distinct names with `AddTask`; each name is a separate node with its own lineage scope. See
 `examples/creditflow/service.go` for a worked graph that combines fan-out/fan-in, `forEach`, subgraphs, goto loops, and
 error transitions.
+
+## Switch Transitions
+
+`AddTransitionSwitch(from, to, when)` declares a first-match-wins outgoing transition. When the source task finishes, the foreman walks the source's `Switch` transitions in declaration order, evaluates each `when` expression against the post-task state, and follows the **first** one that matches. The remaining `Switch` transitions are skipped on that step. Because exactly one branch ever fires, the downstream branches do **not** need to converge on a `SetFanIn` node.
+
+```go
+graph.AddTask("router", myserviceapi.Router.URL())
+graph.AddTask("highValue", myserviceapi.HighValue.URL())
+graph.AddTask("midValue", myserviceapi.MidValue.URL())
+graph.AddTask("lowValue", myserviceapi.LowValue.URL())
+graph.AddTransitionSwitch("router", "highValue", "amount >= 10000")
+graph.AddTransitionSwitch("router", "midValue",  "amount >= 1000")
+graph.AddTransitionSwitch("router", "lowValue",  "true") // default branch
+graph.AddTransition("highValue", workflow.END)
+graph.AddTransition("midValue", workflow.END)
+graph.AddTransition("lowValue", workflow.END)
+```
+
+Rules the validator enforces:
+
+- `when` is required on every `Switch` transition. Use `"true"` for the default catch-all.
+- A node that uses `Switch` must declare **every** success-path outgoing transition as `Switch`. Mixing `Switch` with `When`, plain `AddTransition`, `AddTransitionForEach`, or `AddTransitionGoto` from the same source is rejected. `AddTransitionOnError` / `AddTransitionOnTimeout` stay allowed because they live on a different axis (error vs. success).
+- `Switch` cannot combine with `ForEach`, `WithGoto`, or `OnError` on the same transition.
+
+If no `Switch` matches at runtime, the flow ends at the source node (no successor is created, the source step completes, and the flow transitions to `completed` via the normal "no next steps" path). To make termination explicit, target `workflow.END` from a final `Switch` with a tail predicate.
+
+### When to choose Switch vs. When vs. Goto
+
+Prefer in this order:
+
+1. **`AddTransitionSwitch`** for any routing where you want exactly one branch to run based on data the graph can see. It's the safest of the three: the validator guarantees mutual exclusivity (so two siblings can't accidentally both fire and leak a parallel branch), there's no `SetFanIn` to forget downstream, and the Mermaid diagram labels each arm with its predicate. The cost is rigidity: every success-path edge from the source must be `Switch` once any of them is, so you commit the whole node to switch-style routing.
+2. **`AddTransitionWhen`** when the source genuinely **does** fan out under multiple matching conditions, or when one of the siblings is unconditional and represents a "do this in addition to" branch. `When` predicates are evaluated independently and any number of them can match - that's the right semantic for parallel work, the wrong one for routing. If you're writing two `AddTransitionWhen` calls whose predicates are intended to be mutually exclusive (`x>0` and `x<=0`), convert them to `Switch` so the validator enforces what you meant; non-exclusive `When` predicates are a footgun (both fire, you suddenly need `SetFanIn`).
+3. **`AddTransitionGoto`** only for runtime control-flow decisions the task body makes - loop-back from a fan-in node, "ask for more input then retry", LLM tool loops. `Goto` is invisible to the graph's structural rules (no lineage push/pop), so reach for it only when the branching condition is not a function of state that the graph could evaluate.
+
+In short: `Switch` is the new default for branching. Use `When` only for genuine fan-out, `Goto` only when the task body must decide at runtime.
 
 ## Error Transitions
 
@@ -204,85 +260,246 @@ func (svc *Service) HandleMyError(ctx context.Context, flow *workflow.Flow, onEr
 
 If the error handler itself returns an error, the flow fails normally.
 
-## Subgraphs
+## Subgraphs and Interrupts
 
-A subgraph is a child workflow that executes as a single step in the parent workflow. Register it with `graph.AddSubgraph(workflowName)` and use it as a transition target like any task. On entry, the parent's full state crosses the boundary unchanged. On completion, the child's full final state is merged into the parent step's changes using the parent graph's reducers. The framework does not filter at either boundary - state hygiene is the workflow author's responsibility.
+A subgraph is a child workflow that executes inside a parent step. **This is the only correct way for one workflow to invoke another - do not call `foremanapi.NewClient(svc).Run` on a child workflow from a task body; doing so spawns an independent flow and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation.** Subgraphs are launched from a task body via `flow.Subgraph(workflowURL, input)`; the parent step parks while the child runs and re-enters the task once the child terminates.
 
-Interrupts propagate up through the subgraph chain to the root flow. Cancellation cascades down from parent to all child subgraph flows. The parent step is parked until the child completes.
+**Subgraph is a function call.** Only the explicit `input` map crosses the boundary into the child, and only the explicit `out` map crosses back. The parent's state is NOT inherited automatically in either direction. `nil` input means "no arguments" - the child starts with an empty state. A caller that wants the parent's full state to cross can pass `flow.Snapshot()` (or a derived map) as `input`.
 
-### State Transformation Around a Subgraph
+### The park-and-resume pattern
 
-A subgraph and its parent are two contracts. When they don't line up - the parent stores fields under different names than the subgraph expects, the subgraph emits internal scratch the parent doesn't want, or either side curates a subset of what crosses - bracket the subgraph node in the parent's graph with a pair of **adapter tasks**: a `Before<NodeName>` task immediately upstream of the subgraph adapts parent state into the subgraph's expected input, and an `After<NodeName>` task immediately downstream adapts the subgraph's output back into the parent's vocabulary. The suffix is the subgraph node's name in PascalCase. Either adapter is optional - write only the side that needs to adapt.
-
-Both adapters are ordinary task endpoints, scaffolded with the `add-task` skill. They use the four state-mutation primitives on `*workflow.Flow`:
-
-- `flow.Delete(names...)` - drop the listed fields (variadic; mirrors Go's `delete(m, k)`).
-- `flow.Clear()` - drop every field (mirrors Go's `clear(m)`); typical inside a `Before<NodeName>` adapter that builds a fresh subgraph input from scratch.
-- `flow.Keep(names...)` - drop everything except the listed fields.
-- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names (pairs of `newKey, oldKey`).
-
-Example: a parent calls `IdentityVerification` as a subgraph. The subgraph only needs `ssn` and `address` from the parent, and produces a `identityVerified` boolean plus internal scratch fields the parent doesn't want polluting its state.
+`flow.Subgraph` and `flow.Interrupt` share one shape: park-the-step now, return the resolved value on re-entry.
 
 ```go
-// In the parent's graph builder
-graph.AddTask("beforeIdentityVerification", myserviceapi.BeforeIdentityVerification.URL())
-graph.AddSubgraph("identityVerification", idverifyapi.IdentityVerification.URL())
-graph.AddTask("afterIdentityVerification", myserviceapi.AfterIdentityVerification.URL())
-graph.AddTransition("beforeIdentityVerification", "identityVerification")
-graph.AddTransition("identityVerification", "afterIdentityVerification")
+out, yield, err := flow.Subgraph(otherapi.SomeWorkflow.URL(), map[string]any{
+    "inputField": "value",
+})
+if yield {
+    return nil          // first pass: parked, child running
+}
+if err != nil {
+    // Child failed. The task may inspect err and retry, route, or propagate.
+    if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(3, time.Second, 2.0, 30*time.Second) {
+        return nil      // re-arms a fresh child on re-dispatch
+    }
+    return errors.Trace(err)
+}
+// Resolved + succeeded: adopt the fields the parent wants from `out` into its own state.
+result, _ := out["resultField"].(string)
+flow.Set("parentResult", result)
+return nil
 ```
+
+`flow.Interrupt` is symmetric:
 
 ```go
-// BeforeIdentityVerification adapts parent state into the subgraph's expected input.
-func (svc *Service) BeforeIdentityVerification(ctx context.Context, flow *workflow.Flow) (err error) {
-    flow.Keep("ssn", "address")
-    return nil
+resumeData, yield, err := flow.Interrupt(map[string]any{"request": "userInput"})
+if yield {
+    return nil          // first pass: parked, waiting for Resume
 }
-
-// AfterIdentityVerification adapts the subgraph's output back into the parent's vocabulary,
-// dropping internal scratch the parent doesn't need.
-func (svc *Service) AfterIdentityVerification(ctx context.Context, flow *workflow.Flow, identityVerified bool) (identityVerifiedOut bool, err error) {
-    flow.Keep("identityVerified")
-    return identityVerified, nil
-}
+// resumeData carries the Resume payload; err is always nil for Interrupt
 ```
-
-Use the `Before` / `After` naming even when the adaptation is trivial. The convention pays off in two places: the mermaid diagram shows the contract boundary as explicit graph nodes rather than hiding the adaptation inside an unrelated task, and a reader can find the boundary by searching for the subgraph's name. Both adapters are visible in the diagram, testable in isolation, and mockable like any other task.
-
-For **dynamic** subgraphs - those triggered by `flow.Subgraph(workflowURL, input)` from inside a task body - the adaptation happens inside the task itself: the task builds the `input` map (the "before" adaptation) and reads the child's output on re-entry (the "after" adaptation). No separate graph nodes are needed because the dynamic subgraph isn't a transition target.
-
-## Dynamic Subgraphs
-
-Static subgraphs are registered at graph-definition time with `graph.AddSubgraph(workflowName)`. Dynamic subgraphs are triggered at runtime by a task calling `flow.Subgraph(workflowURL, input)`. Both follow the same execution model - the only difference is when the parent-child association is established.
-
-`flow.Subgraph` follows the same mental model as `flow.Interrupt`:
 
 | | `flow.Interrupt()` | `flow.Subgraph()` |
 |---|---|---|
-| **Signal** | Pause, wait for human input | Pause, wait for child workflow |
-| **Foreman** | Parks step, waits for `Resume` | Parks step, creates and starts child flow |
-| **Interrupts** | This IS the interrupt | Child interrupts propagate up |
-| **On completion** | `Resume` sets step to PENDING | Child output merged, step set to PENDING |
-| **Re-entry** | Task re-runs with resumed data | Task re-runs with child output in state |
+| **Signal** | Park, wait for external `Resume` | Park, wait for child workflow |
+| **Foreman** | Parks the step, sets `interrupt_done=0` | Parks the step, launches child, sets `subgraph_done=0` |
+| **On completion** | `Resume(flowKey, data)` writes `resume_data` and re-dispatches | Child terminal outcome writes `subgraph_result`/`subgraph_error` and re-dispatches |
+| **Re-entry signal** | `yield=false`, `resumeData` is the Resume payload | `yield=false`, `out` is the child's `final_state` (success) or `err` is the child's failure |
+| **Failure mode** | None (always succeeds on Resume) | Child failure delivered to parent as `err`; parent decides retry/route/propagate |
 
-**Re-entry detection**: Before signaling the subgraph, the task should set a flag (e.g. via a typed `Out` suffix argument like `toolExecutedOut = true`). On re-entry, the task checks the flag to know the child completed and processes the result.
+**Re-entry is signaled by the parker's `yield` bool, not by a state field.** Do not invent a `*Out`-suffix flag or a "have I run before" arg - the framework already tracks it via `interrupt_done`/`subgraph_done` columns and surfaces it as `yield`. The `if yield { return nil }` line is the **before-resume region** and runs on every dispatch (first pass, re-entry, every retry attempt); everything after it is the **after-resume region** and runs once per resolution. Exactly-once side effects (firing an event, charging a card) belong after the guard.
 
-**Control signal exclusivity**: A task must set at most one control signal (Goto, Retry, Interrupt, or Subgraph). Setting multiple signals fails the step.
+**A step parks at most once per dispatch, interrupt XOR subgraph, never both and never two of the same kind.** Sequential side-trips are sequential tasks in the graph, not multiple parks in one task. The guard fires in two places: the `Flow` rejects a second park synchronously with an error from the parker; the foreman re-checks the returned flow after the task returns (trust boundary for a bypassed parker).
+
+**No auto-merge.** The child's `final_state` is returned to the calling task as `out`, not merged into the parent's state. This is the "scope state at the subgraph boundary" payoff: the parent picks fields explicitly with `flow.Set`, `flow.Transform`, or just plain Go code over `out`. Adapter tasks upstream or downstream of the subgraph are no longer required for the common case - the task itself does the reshape.
+
+**Interrupts propagate up through the subgraph chain to the root flow.** A child subgraph can call `flow.Interrupt`; the foreman walks the surgraph chain up to the root, the external awaiter of the root flow sees the interrupt with the child's payload, and `Resume` propagates back down to the leaf. The parent's surgraph step stays parked across the whole interrupt/resume cycle; the parent task does **not** re-run for it. This is orthogonal to `subgraph_done` (interrupt rides the step status; `subgraph_done` flips only on terminal completion or failure).
+
+**Cancellation cascades the whole tree.** Cancelling a child cancels its parents. There is no "recover from a bad child" via cancel-of-child; that need is served by the failure-as-`err` path (child timeout surfaces as `err` with 408, parent does `flow.Retry`, an `OnError` route, or propagates).
+
+**Single control signal per dispatch.** A task must set at most one of `Goto`, `Retry`, `Interrupt`, or `Subgraph`. Setting multiple fails the step.
+
+### State Transformation Around a Subgraph
+
+`input` scopes what crosses *into* the child; `out` scopes what comes back. If the parent and child use different field names, reshape inline: build `input` with the names the child expects, then read `out` with the names the child wrote. The `flow.Transform` / `Delete` / `Clear` primitives help when the reshape is non-trivial (see [Best Practices](#best-practices)). The calling task does the reshape itself; no dedicated adapter task is involved.
+
+## Using LLMs in Workflows
+
+There is exactly one way to use an LLM inside a workflow: **compose `llmapi.ChatLoop` as a subgraph**
+with a *prepare* task immediately upstream and a *handle* task immediately downstream. Do not call
+`llmapi.Chat` from a task body (it blocks one worker for the entire multi-turn conversation, with no
+foreman persistence between turns) and do not call `llmapi.Turn` directly (it is the raw single-turn
+primitive each provider microservice implements; you would be bypassing the tool-calling loop, usage
+aggregation, and re-entry semantics that `ChatLoop` provides).
+
+### The Two-Task Shape
+
+`ChatLoop` is launched as a dynamic subgraph from a caller task. A second task downstream reads
+the conversation result. The two tasks are connected by a single `AddTransition`; the subgraph is
+not a graph node.
 
 ```go
-func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, executed bool) (executedOut bool, err error) {
-    if executed {
-        // Re-entry: child workflow completed, its output is in state
-        // Process the result...
-        return true, nil
-    }
-    // First run: launch child workflow
-    flow.Subgraph(otherserviceapi.SomeWorkflow.URL(), map[string]any{
-        "inputField": "value",
-    })
-    return true, nil
+func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) {
+    graph = workflow.NewGraph(myapi.MyWorkflow.URL())
+    graph.AddTask("runChat", myapi.RunChat.URL())               // calls flow.Subgraph(llmapi.ChatLoop, ...)
+    graph.AddTask("handleResponse", myapi.HandleResponse.URL()) // reads the final assistant message
+    graph.AddTransition("runChat", "handleResponse")
+    graph.AddTransition("handleResponse", workflow.END)
+    return graph, nil
 }
 ```
+
+Every turn (`CallLLM`, `ProcessResponse`, each `ExecuteTool`) becomes its own persisted foreman step,
+so a worker crash mid-conversation resumes at the last completed step, the full transcript appears in
+the audit trail, and the subgraph releases the worker between turns. No worker is ever pinned for the
+whole loop.
+
+### The *Run* Task
+
+The run task builds the `ChatLoop` input, calls `flow.Subgraph`, and adopts the conversation result
+from `out` on re-entry. The five input fields are the `ChatLoop` input contract:
+
+- `provider string` - target provider hostname (e.g. `claudellmapi.Hostname`, `chatgptllmapi.Hostname`,
+  `geminillmapi.Hostname`).
+- `model string` - model identifier from the provider's `*api` constants (e.g.
+  `claudellmapi.ModelHaiku45`, `chatgptllmapi.ModelGPT4o`). Typed constants make a typo a compile
+  error.
+- `messages []llmapi.Message` - the initial conversation (system prompt + user turn + any prior
+  history the workflow is replaying).
+- `toolURLs []string` - canonical Microbus endpoint URLs the LLM may call (see "Exposing Tools"
+  below). Empty or nil disables tool calling. `InitChat` resolves each URL to a tool schema by
+  fetching its host's OpenAPI document at the start of the conversation.
+- `options *llmapi.ChatOptions` - optional `MaxTokens`, `Temperature`, `MaxToolRounds`. `nil`
+  accepts defaults.
+
+```go
+func (svc *Service) RunChat(ctx context.Context, flow *workflow.Flow, userQuestion string) (
+    messages []llmapi.Message, usage llmapi.Usage, err error,
+) { // MARKER: RunChat
+    out, yield, err := flow.Subgraph(llmapi.ChatLoop.URL(), map[string]any{
+        "provider": claudellmapi.Hostname,
+        "model":    claudellmapi.ModelHaiku45,
+        "messages": []llmapi.Message{
+            {Role: "system", Content: "You are a helpful assistant."},
+            {Role: "user", Content: userQuestion},
+        },
+        "toolURLs": []string{
+            // canonical endpoint URLs the LLM is allowed to call - see "Exposing Tools" below.
+            // e.g. calculatorapi.Arithmetic.URL(),
+        },
+        "options": &llmapi.ChatOptions{MaxTokens: 1024},
+    })
+    if yield {
+        return nil, llmapi.Usage{}, nil
+    }
+    if err != nil {
+        return nil, llmapi.Usage{}, errors.Trace(err)
+    }
+    // Adopt the child's declared outputs from `out`. The keys match the JSON tags on
+    // llmapi.ChatLoopOut: "messages" and "usage".
+    raw, _ := json.Marshal(out)
+    var resp llmapi.ChatLoopOut
+    err = json.Unmarshal(raw, &resp)
+    if err != nil {
+        return nil, llmapi.Usage{}, errors.Trace(err)
+    }
+    return resp.MessagesOut, resp.Usage, nil
+}
+```
+
+### The *Handle* Task
+
+The handle task receives the conversation result via its typed arguments, populated by the run
+task's outputs. The two fields are the `ChatLoop` output contract:
+
+- `messages []llmapi.Message` - the full conversation appended in turn order: the original
+  system/user prompt, every assistant reply, every tool result, and the final assistant reply that
+  ended the loop. The subgraph's internal `Append` reducer assembles this across the per-tool-call
+  fan-in; the parent receives one merged value.
+- `usage llmapi.Usage` - aggregated token usage across every turn (input, output, cache-read,
+  cache-write tokens, plus the resolved model and turn count).
+
+The last message in `messages` is the LLM's final answer:
+
+```go
+func (svc *Service) HandleResponse(ctx context.Context, flow *workflow.Flow,
+    messages []llmapi.Message, usage llmapi.Usage,
+) (answer string, totalTokens int, err error) { // MARKER: HandleResponse
+    if len(messages) == 0 {
+        return "", 0, errors.New("empty conversation")
+    }
+    last := messages[len(messages)-1]
+    if last.Role != "assistant" {
+        // The loop exited mid-conversation (round limit hit, etc.); decide policy.
+        return "", 0, errors.New("conversation did not end with an assistant message")
+    }
+    return last.Content, usage.InputTokens + usage.OutputTokens, nil
+}
+```
+
+If the parent workflow only needs the final answer, persist that field and `flow.Delete("messages")`
+to drop the verbose conversation history from downstream state and shrink the audit trail.
+
+### Exposing Tools
+
+Each entry in `toolURLs` is the canonical URL of a Microbus endpoint the LLM is allowed to call
+mid-conversation, taken from the endpoint's `Def` (e.g. `calculatorapi.Arithmetic.URL()`). Typed
+constants from each microservice's `*api` package make a typo a compile error and let the prepare
+task concatenate URLs across multiple `*api` packages without collision. `InitChat` resolves each
+URL to a tool schema by fetching its host's OpenAPI document, so the prepare task only chooses
+*which* endpoints to expose, never how to describe them.
+
+Choose the endpoint type by what the tool needs to do:
+
+- **Functional endpoints** (`FeatureFunction` on `:443`). The default. A typed input/output function
+  that performs a single, atomic, bounded-latency operation - a calculator, a DB lookup, a
+  classifier, a unit converter. The LLM service dispatches the call as a direct bus request and
+  returns the function's output to the next turn.
+- **Workflow endpoints** (`FeatureWorkflow` on `:428`). Use when the tool itself needs the foreman
+  machinery: bounded retries on transient failures (`flow.Retry`), error routing to a fallback
+  task (`AddTransitionOnError`), per-step time budgets, a multi-step sequence, or a nested
+  subgraph. The LLM service dispatches the call as a **dynamic subgraph**, so every step inside the
+  tool's workflow appears in the parent flow's audit trail and re-entry/replay works the same as
+  for any other subgraph. Reach for this when "the tool sometimes fails and the LLM shouldn't see
+  the failure" or "the tool itself orchestrates multiple steps."
+
+Only `FeatureFunction`, `FeatureWeb`, and `FeatureWorkflow` endpoints can be exposed as tools.
+Tasks and outbound events are filtered out at the OpenAPI document level, so a URL pointing at
+either is silently skipped during resolution.
+
+Authorization for tool calls piggybacks on the calling actor: `InitChat` runs with the workflow's
+actor context, so the host's OpenAPI handler omits operations the actor cannot satisfy and a tool
+whose endpoint declares `requiredClaims` will simply disappear from the LLM's tool list.
+
+When two endpoints across the supplied URLs share the same operation name, the first keeps the
+bare name and subsequent ones get `_2`, `_3`, ... suffixes in argument order.
+
+### Notes
+
+- **The `messages` boundary field.** Pre-v1.37.0 the field was named `listMessages` and the `list*`
+  prefix wired the reducer; v1.37.0 renamed it to `messages` with an explicit `SetReducer` inside
+  the subgraph. Parents that maintained a `listMessages` field need a one-time rename or a tiny
+  upstream task that calls `flow.Transform("messages", "listMessages")` (see "State Transformation
+  Around a Subgraph" above). The parent itself normally needs no reducer on `messages` - the
+  subgraph is the only contributor, so last-write-wins is correct. Only when the parent has
+  multiple branches that *also* write to `messages` and converge on a fan-in does the parent need
+  `graph.SetReducer("messages", workflow.ReducerAppend)`.
+- **Mocking.** Mock the underlying provider's `Turn` (`claudellm.NewMock().MockTurn(handler)`,
+  etc.) rather than mocking `ChatLoop` itself - the loop logic, tool dispatch, and usage
+  aggregation stay real, and the test exercises the same code path as production.
+
+## Annotating Tasks
+
+`graph.Annotate(taskName, "short note")` attaches a note that renders as small teal text directly beneath the node in the Mermaid diagram. Use it to describe the **business meaning** of the step - what role it plays in the workflow's story - not what it does technically. The task name and the diagram already convey the implementation; the annotation is what makes the diagram readable as a business process to a non-engineer (or future-you six months later).
+
+Examples:
+
+- `"primes the conversation with the customer's question"`
+- `"decides if the model is done or needs more tools"`
+- `"records the approved amount and notifies the customer"`
+
+Skip annotations that restate the task name, describe diagram shape ("fan-out", "subgraph", "switch"), or list arguments. Annotations may be up to 30 words and wrap, so multi-sentence is fine when the meaning warrants it. Pass `""` to clear an existing annotation; re-annotating replaces.
 
 ## Best Practices
 
@@ -290,16 +507,15 @@ A short list of high-leverage choices that emerge from operating these workflows
 
 **Prefer typed input/output arguments over `flow.Get` / `flow.Set`.** The task signature *is* the state contract - the marshaler binds inputs from state on entry and writes outputs back on exit, mocks get typed handlers, and a reader sees what the task reads and produces without scanning the body. Reach for `flow.Get` / `flow.Set` only when a key's name is dynamic, or when the value's type is internal to the microservice (not part of the API package and not worth promoting). The output `Out` suffix convention covers the read-modify-write case (`counter` in, `counterOut` out, both mapped to state key `counter`).
 
-**Use `flow.Delete` / `flow.Clear` / `flow.Keep` to drop state the rest of the flow does not need.** LLM responses, parsed documents, raw API bodies, image bytes - anything a task consumes once and would otherwise ride through every downstream step's persisted snapshot and bloat both the wire and the audit trail. The four primitives mirror Go's map builtins and compose for any cleanup pattern:
+**Use `flow.Delete` / `flow.Clear` / `flow.Transform` to drop state the rest of the flow does not need.** LLM responses, parsed documents, raw API bodies, image bytes - anything a task consumes once and would otherwise ride through every downstream step's persisted snapshot and bloat both the wire and the audit trail. The three primitives compose for any cleanup pattern:
 
 - `flow.Delete(names...)` - drop the listed fields (variadic; mirrors `delete(m, k)`).
-- `flow.Clear()` - drop every field (mirrors `clear(m)`); useful in an adapter task that is about to populate a fresh subgraph input from scratch.
-- `flow.Keep(names...)` - drop everything except the listed fields.
-- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names (pairs of `newKey, oldKey`). Convenient for adapter tasks that reshape state across a contract boundary.
+- `flow.Clear()` - drop every field (mirrors `clear(m)`); useful in a task that is about to populate a fresh subgraph input from scratch.
+- `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names (pairs of `newKey, oldKey`). Convenient for tasks that reshape state across a contract boundary; doubles as a "keep these" primitive when you pass `("name", "name")` pairs.
 
-All four record JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail. For Replace-reduced fields, null drops the field from merged state at the next fan-in. For reducer-managed fields (`sum*`, `list*`, `set*`), a cleared contribution is treated as the reducer's identity and contributes nothing to the merge. None of these methods are restricted to boundaries - call them mid-flow whenever a field has served its purpose.
+All three record JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail. For Replace-reduced fields, null drops the field from merged state at the next fan-in. For reducer-managed fields (those wired with `SetReducer`), a cleared contribution is treated as the reducer's identity and contributes nothing to the merge. None of these methods are restricted to boundaries - call them mid-flow whenever a field has served its purpose.
 
-**Prefer `AddTransitionWhen` for routing the graph knows about; reserve `AddTransitionGoto` for runtime loops the task body decides.** A `When` transition is part of the static graph - the validator sees it, the Mermaid diagram renders it as a labeled branch, and lineage scoping handles it like any other fan-out. A `Goto` is an out-of-band edge that's only taken when the task calls `flow.Goto`, so it shows in the diagram but doesn't shape lineage. The canonical use for `Goto` is a fan-in node looping back ("ask for more info, retry the review"); for any branch a `When` expression can evaluate, prefer `When`.
+**Prefer `Switch` > `When` > `Goto` for branching.** `AddTransitionSwitch` (first-match-wins, validator-enforced mutual exclusivity, no `SetFanIn` needed) is the right tool for any routing where exactly one branch should run. Drop to `AddTransitionWhen` only when you genuinely want parallel branches firing under independent predicates - `When` is fan-out, not routing, and two `When` predicates intended to be mutually exclusive should be a `Switch` instead. Reserve `AddTransitionGoto` for runtime loops the task body must decide (fan-in looping back, "ask for more info then retry"). See [Switch Transitions](#switch-transitions) for the full rationale and validation rules.
 
 **Tasks that fire external side effects must be idempotent.** `flow.Retry`, foreman lease-recovery after a worker dies mid-step, and Subgraph re-entry all replay the task body from the top. A task that charges a card, sends an email, or writes to a non-transactional store must either carry its own dedupe key (per-flow idempotency id, per-step natural key) or check first whether the effect has already happened. The framework does not deduplicate side effects for you. Tasks that are pure computation over state need no special treatment - replay just recomputes the same output.
 
@@ -358,6 +574,11 @@ func (svc *Service) PollJobStatus(ctx context.Context, flow *workflow.Flow, jobI
 A separate "kick off the job" task should run before the polling task in the graph, writing `jobID` into state for the poller to read. The two patterns can be combined: trigger work in one task, then either interrupt-and-resume or poll in a downstream task to await completion.
 
 ## Running Workflows
+
+**Boundary rule.** A workflow microservice exposes its graph(s) and tasks, nothing else. Do not wrap the foreman in pass-through endpoints like `RunMyWorkflow`, `StartMyWorkflow`, `CancelMyWorkflow`, `MyWorkflowStatus`, etc. - they add a hop, hide foreman options (`FlowOptions`, breakpoints, notify-hostname) behind a narrower surface, and pull the foreman into the microservice's call graph for no benefit. Two consequences follow:
+
+- **To launch a workflow, the upstream caller talks to the foreman directly** via `foremanapi.NewClient(svc).Run(...)` (or `Create + Start + Await`). The workflow's microservice is not in the launch path.
+- **To call another workflow from inside a workflow, embed it as a subgraph** by calling `flow.Subgraph(otherflowapi.OtherFlow.URL(), input)` from a task body. A task that invokes `foremanapi.NewClient(svc).Run` on another workflow is doing it wrong: the child runs as a separate flow rather than a subgraph, so the parent loses re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation.
 
 The Foreman core service orchestrates workflow execution. Use `foremanapi.NewClient(svc)` to interact with it:
 

@@ -91,14 +91,14 @@ type TaskMIn struct { // MARKER: TaskM
 	BProcessed string `json:"bProcessed,omitzero"`
 }
 
-// TaskMOut are the output arguments of TaskM. Contributes one item to the outer set-reducer field.
+// TaskMOut are the output arguments of TaskM. Contributes one item to the outer Union-reduced field.
 type TaskMOut struct { // MARKER: TaskM
-	SetMerged []string `json:"setMerged,omitzero"`
+	MergedItems []string `json:"mergedItems,omitzero"`
 }
 
 // TaskLIn are the input arguments of TaskL.
 type TaskLIn struct { // MARKER: TaskL
-	SetMerged []string `json:"setMerged,omitzero"`
+	MergedItems []string `json:"mergedItems,omitzero"`
 }
 
 // TaskLOut are the output arguments of TaskL.

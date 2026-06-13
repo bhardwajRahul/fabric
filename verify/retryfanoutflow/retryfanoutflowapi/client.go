@@ -362,29 +362,29 @@ func (_c Executor) Enter(ctx context.Context, elements []int) (elementsOut []int
 /*
 Increment creates and runs the Increment task.
 */
-func (_c Executor) Increment(ctx context.Context, element int) (listResultOut []int, err error) { // MARKER: Increment
+func (_c Executor) Increment(ctx context.Context, element int) (resultsOut []int, err error) { // MARKER: Increment
 	var out IncrementOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, Increment.Method, Increment.Route, IncrementIn{Element: element}, &out, _c.inFlow, _c.outFlow)
-	return out.ListResultOut, err // No trace
+	return out.ResultsOut, err // No trace
 }
 
 /*
 Join creates and runs the Join task.
 */
-func (_c Executor) Join(ctx context.Context, listResult []int) (listResultOut []int, err error) { // MARKER: Join
+func (_c Executor) Join(ctx context.Context, results []int) (resultsOut []int, err error) { // MARKER: Join
 	var out JoinOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, Join.Method, Join.Route, JoinIn{ListResult: listResult}, &out, _c.inFlow, _c.outFlow)
-	return out.ListResultOut, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, Join.Method, Join.Route, JoinIn{Results: results}, &out, _c.inFlow, _c.outFlow)
+	return out.ResultsOut, err // No trace
 }
 
 /*
 RetryFanOut creates and runs the RetryFanOut workflow, blocking until termination.
 */
-func (_c Executor) RetryFanOut(ctx context.Context, elements []int) (listResult []int, status string, err error) { // MARKER: RetryFanOut
+func (_c Executor) RetryFanOut(ctx context.Context, elements []int) (results []int, status string, err error) { // MARKER: RetryFanOut
 	if _c.runner == nil {
-		return listResult, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return results, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out RetryFanOutOut
 	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, RetryFanOut.URL(), RetryFanOutIn{Elements: elements}, &out)
-	return out.ListResult, status, err
+	return out.Results, status, err
 }

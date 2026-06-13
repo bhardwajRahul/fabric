@@ -152,8 +152,8 @@ func TestCancelledfanoutflow_CancelledFanOut(t *testing.T) { // MARKER: Cancelle
 		// two were cancelled while still pending and never ran.
 		assert.Expect(svc.Executed(), 1)
 		// The running branch's result was discarded and the fan-in (J) never ran,
-		// so the summed sumExecuted is absent/0 in the final state.
-		assert.Expect(asInt(state["sumExecuted"]), 0)
+		// so the summed executed is absent/0 in the final state.
+		assert.Expect(asInt(state["executed"]), 0)
 		assert.Expect(asInt(state["totalExecuted"]), 0)
 	})
 }
@@ -212,6 +212,6 @@ func TestCancelledfanoutflow_AwaitTimeoutDoesNotInvalidate(t *testing.T) {
 			err, nil,
 			status, workflow.StatusCompleted,
 		)
-		assert.Expect(asInt(state["sumExecuted"]), 3) // A+B+C all contributed; fan-in intact
+		assert.Expect(asInt(state["executed"]), 3) // A+B+C all contributed; fan-in intact
 	})
 }

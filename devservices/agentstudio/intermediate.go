@@ -1,0 +1,230 @@
+package agentstudio
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/microbus-io/errors"
+	"github.com/microbus-io/fabric/cfg"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/fabric/httpx"
+	"github.com/microbus-io/fabric/sub"
+	"github.com/microbus-io/fabric/utils"
+	"github.com/microbus-io/fabric/workflow"
+
+	"github.com/microbus-io/fabric/devservices/agentstudio/agentstudioapi"
+	"github.com/microbus-io/fabric/devservices/agentstudio/resources"
+)
+
+var (
+	_ context.Context
+	_ json.Encoder
+	_ http.Request
+	_ strconv.NumError
+	_ time.Duration
+	_ errors.TracedError
+	_ cfg.Option
+	_ httpx.BodyReader
+	_ sub.Option
+	_ utils.SyncMap[string, string]
+	_ agentstudioapi.Client
+	_ *workflow.Flow
+)
+
+const (
+	Hostname = agentstudioapi.Hostname
+	Version  = 7
+)
+
+// ToDo is implemented by the service or mock.
+// The intermediate delegates handling to this interface.
+type ToDo interface {
+	OnStartup(ctx context.Context) (err error)
+	OnShutdown(ctx context.Context) (err error)
+	ListFlows(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: ListFlows
+	FlowDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: FlowDetail
+	StepDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: StepDetail
+	ListWorkflows(w http.ResponseWriter, r *http.Request) (err error)  // MARKER: ListWorkflows
+	WorkflowDetail(w http.ResponseWriter, r *http.Request) (err error) // MARKER: WorkflowDetail
+	RunWorkflow(w http.ResponseWriter, r *http.Request) (err error)    // MARKER: RunWorkflow
+	ContinueFlow(w http.ResponseWriter, r *http.Request) (err error)   // MARKER: ContinueFlow
+	ResumeFlow(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: ResumeFlow
+	RestartFlow(w http.ResponseWriter, r *http.Request) (err error)    // MARKER: RestartFlow
+	RestartFromStep(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RestartFromStep
+	PollFlow(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: PollFlow
+	TaskDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: TaskDetail
+	Dashboard(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: Dashboard
+	Assets(w http.ResponseWriter, r *http.Request) (err error)         // MARKER: Assets
+}
+
+// NewService creates a new instance of the microservice.
+func NewService() *Service {
+	svc := &Service{}
+	svc.Intermediate = NewIntermediate(svc)
+	return svc
+}
+
+// Init enables a single-statement pattern for initializing the microservice.
+func (svc *Service) Init(initializer func(svc *Service) (err error)) *Service {
+	svc.Connector.Init(func(_ *connector.Connector) (err error) {
+		return initializer(svc)
+	})
+	return svc
+}
+
+// Intermediate extends and customizes the generic base connector.
+type Intermediate struct {
+	*connector.Connector
+	ToDo
+}
+
+// NewIntermediate creates a new instance of the intermediate.
+func NewIntermediate(impl ToDo) *Intermediate {
+	svc := &Intermediate{
+		Connector: connector.New(Hostname),
+		ToDo:      impl,
+	}
+	svc.SetVersion(Version)
+	svc.SetDescription(`AgentStudio is a developer console for inspecting flows running under the Foreman.`)
+	svc.SetOnStartup(svc.OnStartup)
+	svc.SetOnShutdown(svc.OnShutdown)
+	svc.SetResFS(resources.FS)
+	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
+	svc.SetOnConfigChanged(svc.doOnConfigChanged)
+
+	// HINT: Add functional endpoints here
+
+	// HINT: Add web endpoints here
+	svc.Subscribe( // MARKER: ListFlows
+		"ListFlows", svc.ListFlows,
+		sub.At(agentstudioapi.ListFlows.Method, agentstudioapi.ListFlows.Route),
+		sub.Description(`ListFlows renders an HTML page with a paginated, sortable table of flows.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: FlowDetail
+		"FlowDetail", svc.FlowDetail,
+		sub.At(agentstudioapi.FlowDetail.Method, agentstudioapi.FlowDetail.Route),
+		sub.Description(`FlowDetail renders an HTML page with the details, DAG diagram, and step log of a flow.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: StepDetail
+		"StepDetail", svc.StepDetail,
+		sub.At(agentstudioapi.StepDetail.Method, agentstudioapi.StepDetail.Route),
+		sub.Description(`StepDetail renders an HTML page with the details of one execution step.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: ListWorkflows
+		"ListWorkflows", svc.ListWorkflows,
+		sub.At(agentstudioapi.ListWorkflows.Method, agentstudioapi.ListWorkflows.Route),
+		sub.Description(`ListWorkflows renders an HTML page listing the workflows available in the system.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: WorkflowDetail
+		"WorkflowDetail", svc.WorkflowDetail,
+		sub.At(agentstudioapi.WorkflowDetail.Method, agentstudioapi.WorkflowDetail.Route),
+		sub.Description(`WorkflowDetail renders an HTML page with the structure and definition of a single workflow graph.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: RunWorkflow
+		"RunWorkflow", svc.RunWorkflow,
+		sub.At(agentstudioapi.RunWorkflow.Method, agentstudioapi.RunWorkflow.Route),
+		sub.Description(`RunWorkflow renders a form to create and start a workflow with an initial state and FlowOptions.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: ContinueFlow
+		"ContinueFlow", svc.ContinueFlow,
+		sub.At(agentstudioapi.ContinueFlow.Method, agentstudioapi.ContinueFlow.Route),
+		sub.Description(`ContinueFlow renders a form to continue a completed flow's thread with additional state.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: ResumeFlow
+		"ResumeFlow", svc.ResumeFlow,
+		sub.At(agentstudioapi.ResumeFlow.Method, agentstudioapi.ResumeFlow.Route),
+		sub.Description(`ResumeFlow renders a form to resume an interrupted flow with a resume payload.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: RestartFlow
+		"RestartFlow", svc.RestartFlow,
+		sub.At(agentstudioapi.RestartFlow.Method, agentstudioapi.RestartFlow.Route),
+		sub.Description(`RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: RestartFromStep
+		"RestartFromStep", svc.RestartFromStep,
+		sub.At(agentstudioapi.RestartFromStep.Method, agentstudioapi.RestartFromStep.Route),
+		sub.Description(`RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: PollFlow
+		"PollFlow", svc.PollFlow,
+		sub.At(agentstudioapi.PollFlow.Method, agentstudioapi.PollFlow.Route),
+		sub.Description(`PollFlow returns a JSON status payload driving the FlowDetail live-update progress bar.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: TaskDetail
+		"TaskDetail", svc.TaskDetail,
+		sub.At(agentstudioapi.TaskDetail.Method, agentstudioapi.TaskDetail.Route),
+		sub.Description(`TaskDetail renders an HTML page with the metadata of a single task in a workflow graph.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Dashboard
+		"Dashboard", svc.Dashboard,
+		sub.At(agentstudioapi.Dashboard.Method, agentstudioapi.Dashboard.Route),
+		sub.Description(`Dashboard renders an HTML page with operator dashboards for flows and workflows.`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Assets
+		"Assets", svc.Assets,
+		sub.At(agentstudioapi.Assets.Method, agentstudioapi.Assets.Route),
+		sub.Description(`Assets serves the bespa CSS and JavaScript assets at /bespa/.`),
+		sub.Web(),
+	)
+
+	// HINT: Add metrics here
+
+	// HINT: Add tickers here
+
+	// HINT: Add configs here
+
+	// HINT: Add inbound event sinks here
+
+	// HINT: Add task endpoints here
+
+	// HINT: Add graph endpoints here
+
+	_ = marshalFunction
+	return svc
+}
+
+// doOnObserveMetrics is called when metrics are produced.
+func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
+	return svc.Parallel(
+	// HINT: Call JIT observers to record the metric here
+	)
+}
+
+// doOnConfigChanged is called when the config of the microservice changes.
+func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
+	// HINT: Call named callbacks here
+	return nil
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}

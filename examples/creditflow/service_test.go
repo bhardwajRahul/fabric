@@ -233,9 +233,9 @@ func TestCreditFlow_VerifyEmployment(t *testing.T) { // MARKER: VerifyEmployment
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			sumEmploymentFailuresOut, err := exec.WithOutputFlow(&outFlow).VerifyEmployment(ctx, applicantName, employerName)
+			employmentFailuresOut, err := exec.WithOutputFlow(&outFlow).VerifyEmployment(ctx, applicantName, employerName)
 			if assert.NoError(err) {
-				assert.Expect(sumEmploymentFailuresOut, 0)
+				assert.Expect(employmentFailuresOut, 0)
 			}
 		})
 	*/
@@ -243,18 +243,18 @@ func TestCreditFlow_VerifyEmployment(t *testing.T) { // MARKER: VerifyEmployment
 	t.Run("employed", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		sumEmploymentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "Acme Corp")
+		employmentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "Acme Corp")
 		if assert.NoError(err) {
-			assert.Expect(sumEmploymentFailuresOut, 0)
+			assert.Expect(employmentFailuresOut, 0)
 		}
 	})
 
 	t.Run("empty_name", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		sumEmploymentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "")
+		employmentFailuresOut, err := exec.VerifyEmployment(ctx, "Alice", "")
 		if assert.NoError(err) {
-			assert.Expect(sumEmploymentFailuresOut, 1)
+			assert.Expect(employmentFailuresOut, 1)
 		}
 	})
 }
@@ -574,7 +574,7 @@ func TestCreditFlow_Decision(t *testing.T) { // MARKER: Decision
 			assert := testarossa.For(t)
 
 			var outFlow workflow.Flow
-			approved, err := exec.WithOutputFlow(&outFlow).Decision(ctx, creditVerified, sumEmploymentFailures, identityVerified)
+			approved, err := exec.WithOutputFlow(&outFlow).Decision(ctx, creditVerified, employmentFailures, identityVerified)
 			if assert.NoError(err) {
 				assert.Expect(approved, true)
 			}
@@ -629,7 +629,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			approved, creditVerified, sumEmploymentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...})
+			approved, creditVerified, employmentFailures, identityVerified, status, err := exec.CreditApproval(ctx, creditflowapi.Applicant{...})
 			assert.Expect(
 				err, nil,
 				status, workflow.StatusCompleted,
@@ -802,7 +802,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		)
 
 		// Resume the flow past the breakpoint
-		err = foremanClient.Resume(ctx, flowKey, nil)
+		err = foremanClient.ResumeBreak(ctx, flowKey, nil)
 		assert.NoError(err)
 
 		// Wait for completion

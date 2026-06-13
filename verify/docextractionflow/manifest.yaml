@@ -20,7 +20,7 @@ general:
   description: docextractionflow.verify simulates a nested forEach document-extraction pipeline with per-chunk latency, a 5% failure rate, and bounded retry.
   package: github.com/microbus-io/fabric/verify/docextractionflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-26T14:37:45Z"
 
 tasks:
   ScanPDF:
@@ -32,15 +32,15 @@ tasks:
     description: IdentifyChunks detects chunk rectangles on a page (inner forEach source).
     route: :428/identify-chunks
   TranscribeChunk:
-    signature: TranscribeChunk(page []byte, chunk Rectangle) (listTranscriptions []string)
+    signature: TranscribeChunk(page []byte, chunk Rectangle) (transcriptions []string)
     description: TranscribeChunk OCRs one chunk, with simulated latency and a 5% failure rate retried with backoff.
     route: :428/transcribe-chunk
   JoinPageTranscriptions:
-    signature: JoinPageTranscriptions(listTranscriptions []string) (listPageTexts []string)
+    signature: JoinPageTranscriptions(transcriptions []string) (pageTexts []string)
     description: JoinPageTranscriptions is the inner fan-in over a page's chunks.
     route: :428/join-page-transcriptions
   JoinDocTranscriptions:
-    signature: JoinDocTranscriptions(listPageTexts []string) (docTranscription string)
+    signature: JoinDocTranscriptions(pageTexts []string) (docTranscription string)
     description: JoinDocTranscriptions is the outer fan-in over all pages.
     route: :428/join-doc-transcriptions
 

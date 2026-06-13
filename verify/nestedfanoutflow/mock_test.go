@@ -66,6 +66,16 @@ func TestNestedfanoutflow_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("run_inner", func(t *testing.T) { // MARKER: RunInner
+		assert := testarossa.For(t)
+
+		mock.MockRunInner(func(ctx context.Context, flow *workflow.Flow) (innerResult int, err error) {
+			return
+		})
+		_, err := mock.RunInner(ctx, nil)
+		assert.NoError(err)
+	})
+
 	t.Run("task_x", func(t *testing.T) { // MARKER: TaskX
 		assert := testarossa.For(t)
 
@@ -79,7 +89,7 @@ func TestNestedfanoutflow_Mock(t *testing.T) {
 	t.Run("task_y", func(t *testing.T) { // MARKER: TaskY
 		assert := testarossa.For(t)
 
-		mock.MockTaskY(func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) {
+		mock.MockTaskY(func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) {
 			return
 		})
 		_, err := mock.TaskY(ctx, nil)
@@ -89,7 +99,7 @@ func TestNestedfanoutflow_Mock(t *testing.T) {
 	t.Run("task_z", func(t *testing.T) { // MARKER: TaskZ
 		assert := testarossa.For(t)
 
-		mock.MockTaskZ(func(ctx context.Context, flow *workflow.Flow) (sumInnerOut int, err error) {
+		mock.MockTaskZ(func(ctx context.Context, flow *workflow.Flow) (innerOut int, err error) {
 			return
 		})
 		_, err := mock.TaskZ(ctx, nil)
@@ -99,11 +109,11 @@ func TestNestedfanoutflow_Mock(t *testing.T) {
 	t.Run("task_w", func(t *testing.T) { // MARKER: TaskW
 		assert := testarossa.For(t)
 
-		mock.MockTaskW(func(ctx context.Context, flow *workflow.Flow, sumInner int) (innerResult int, err error) {
+		mock.MockTaskW(func(ctx context.Context, flow *workflow.Flow, inner int) (innerResult int, err error) {
 			return
 		})
-		var sumInner int
-		_, err := mock.TaskW(ctx, nil, sumInner)
+		var inner int
+		_, err := mock.TaskW(ctx, nil, inner)
 		assert.NoError(err)
 	})
 

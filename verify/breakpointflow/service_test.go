@@ -54,7 +54,6 @@ var (
 	_ breakpointflowapi.Client
 )
 
-
 // outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
 func outcomeStatus(o *workflow.FlowOutcome) string {
 	if o == nil {
@@ -123,7 +122,6 @@ func TestBreakpointflow_Breakpoint(t *testing.T) { // MARKER: Breakpoint
 
 		outcome, err := foremanClient.Await(ctx, flowKey)
 
-
 		status, state := outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
@@ -134,21 +132,26 @@ func TestBreakpointflow_Breakpoint(t *testing.T) { // MARKER: Breakpoint
 		assert.Expect(state["stepB"] == nil || state["stepB"] == false, true)
 		assert.Expect(state["stepC"] == nil || state["stepC"] == false, true)
 
-		// Resume past the breakpoint.
+		// Resume is the interrupt path and must refuse a breakpoint pause.
 		err = foremanClient.Resume(ctx, flowKey, map[string]any{})
+		assert.Equal(http.StatusConflict, errors.StatusCode(err))
+
+		// ResumeBreak continues past the breakpoint, injecting a state override. TaskB reads stepA
+		// as its input and TaskC chains off stepB, so overriding stepA=false propagates all the way to
+		// stepC - proving the override reached the about-to-run task.
+		err = foremanClient.ResumeBreak(ctx, flowKey, map[string]any{"stepA": false})
 		if !assert.NoError(err) {
 			return
 		}
 
 		outcome, err = foremanClient.Await(ctx, flowKey)
 
-
 		status, state = outcomeStatusState(outcome)
 		if !assert.NoError(err) {
 			return
 		}
 		assert.Expect(status, workflow.StatusCompleted)
-		// All three steps ran.
-		assert.Expect(state["stepC"], true)
+		// The injected stepA=false flowed through TaskB and TaskC.
+		assert.Expect(state["stepC"], false)
 	})
 }

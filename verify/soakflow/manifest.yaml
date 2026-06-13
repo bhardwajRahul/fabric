@@ -6,7 +6,7 @@ general:
   description: soakflow.verify is a high-volume liveness soak over a complex input-driven workflow.
   package: github.com/microbus-io/fabric/verify/soakflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T23:29:33Z"
+  modifiedAt: "2026-05-31T00:55:27Z"
 
 tasks:
   Seed:
@@ -49,6 +49,10 @@ tasks:
     signature: InnerEntry() (done bool)
     description: InnerEntry is the single task of the Inner subgraph.
     route: :428/inner-entry
+  RunSub:
+    signature: RunSub() (done bool)
+    description: RunSub invokes the Inner subgraph via flow.Subgraph.
+    route: :428/run-sub
 
 workflows:
   Soak:

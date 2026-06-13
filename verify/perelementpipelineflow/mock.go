@@ -36,14 +36,14 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTaskS                   func(ctx context.Context, flow *workflow.Flow, items []string) (itemsOut []string, err error)                        // MARKER: TaskS
-	mockTaskH                   func(ctx context.Context, flow *workflow.Flow, item string) (itemUpper string, err error)                            // MARKER: TaskH
-	mockTaskA                   func(ctx context.Context, flow *workflow.Flow, itemUpper string) (aProcessed string, err error)                      // MARKER: TaskA
-	mockTaskB                   func(ctx context.Context, flow *workflow.Flow, itemUpper string) (bProcessed string, err error)                      // MARKER: TaskB
-	mockTaskM                   func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (setMerged []string, err error) // MARKER: TaskM
-	mockTaskL                   func(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error)                       // MARKER: TaskL
-	mockPerElementPipelineGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                         // MARKER: PerElementPipeline
-	unsubMockPerElementPipeline func() error                                                                                                         // MARKER: PerElementPipeline
+	mockTaskS                   func(ctx context.Context, flow *workflow.Flow, items []string) (itemsOut []string, err error)                          // MARKER: TaskS
+	mockTaskH                   func(ctx context.Context, flow *workflow.Flow, item string) (itemUpper string, err error)                              // MARKER: TaskH
+	mockTaskA                   func(ctx context.Context, flow *workflow.Flow, itemUpper string) (aProcessed string, err error)                        // MARKER: TaskA
+	mockTaskB                   func(ctx context.Context, flow *workflow.Flow, itemUpper string) (bProcessed string, err error)                        // MARKER: TaskB
+	mockTaskM                   func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (mergedItems []string, err error) // MARKER: TaskM
+	mockTaskL                   func(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error)                       // MARKER: TaskL
+	mockPerElementPipelineGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                           // MARKER: PerElementPipeline
+	unsubMockPerElementPipeline func() error                                                                                                           // MARKER: PerElementPipeline
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -124,29 +124,29 @@ func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow, itemUpper strin
 }
 
 // MockTaskM sets up a mock handler for TaskM.
-func (svc *Mock) MockTaskM(handler func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (setMerged []string, err error)) *Mock { // MARKER: TaskM
+func (svc *Mock) MockTaskM(handler func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (mergedItems []string, err error)) *Mock { // MARKER: TaskM
 	svc.mockTaskM = handler
 	return svc
 }
 
 // TaskM executes the mock handler.
-func (svc *Mock) TaskM(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (setMerged []string, err error) { // MARKER: TaskM
+func (svc *Mock) TaskM(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (mergedItems []string, err error) { // MARKER: TaskM
 	if svc.mockTaskM != nil {
-		setMerged, err = svc.mockTaskM(ctx, flow, aProcessed, bProcessed)
+		mergedItems, err = svc.mockTaskM(ctx, flow, aProcessed, bProcessed)
 	}
-	return setMerged, errors.Trace(err)
+	return mergedItems, errors.Trace(err)
 }
 
 // MockTaskL sets up a mock handler for TaskL.
-func (svc *Mock) MockTaskL(handler func(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error)) *Mock { // MARKER: TaskL
+func (svc *Mock) MockTaskL(handler func(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error)) *Mock { // MARKER: TaskL
 	svc.mockTaskL = handler
 	return svc
 }
 
 // TaskL executes the mock handler.
-func (svc *Mock) TaskL(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error) { // MARKER: TaskL
+func (svc *Mock) TaskL(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error) { // MARKER: TaskL
 	if svc.mockTaskL != nil {
-		finalCount, err = svc.mockTaskL(ctx, flow, setMerged)
+		finalCount, err = svc.mockTaskL(ctx, flow, mergedItems)
 	}
 	return finalCount, errors.Trace(err)
 }

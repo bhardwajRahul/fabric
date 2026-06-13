@@ -60,7 +60,7 @@ func TestDynamicfanoutflow_Mock(t *testing.T) {
 	t.Run("task_b", func(t *testing.T) { // MARKER: TaskB
 		assert := testarossa.For(t)
 
-		mock.MockTaskB(func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) {
+		mock.MockTaskB(func(ctx context.Context, flow *workflow.Flow, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) {
 			return
 		})
 		var item string
@@ -74,18 +74,18 @@ func TestDynamicfanoutflow_Mock(t *testing.T) {
 	t.Run("task_c", func(t *testing.T) { // MARKER: TaskC
 		assert := testarossa.For(t)
 
-		mock.MockTaskC(func(ctx context.Context, flow *workflow.Flow, sumProcessed int) (processedCount int, err error) {
+		mock.MockTaskC(func(ctx context.Context, flow *workflow.Flow, processed int) (processedCount int, err error) {
 			return
 		})
-		var sumProcessed int
-		_, err := mock.TaskC(ctx, nil, sumProcessed)
+		var processed int
+		_, err := mock.TaskC(ctx, nil, processed)
 		assert.NoError(err)
 	})
 
 	t.Run("dynamic_fan_out", func(t *testing.T) { // MARKER: DynamicFanOut
 		assert := testarossa.For(t)
 
-		mock.MockDynamicFanOut(func(ctx context.Context, flow *workflow.Flow, items []string, clearItems bool) (processedCount int, itemsOut []string, listSeenIndices []int, setSeenCounts []int, err error) {
+		mock.MockDynamicFanOut(func(ctx context.Context, flow *workflow.Flow, items []string, clearItems bool) (processedCount int, itemsOut []string, seenIndices []int, seenCounts []int, err error) {
 			return
 		})
 		graph, err := mock.DynamicFanOut(ctx)

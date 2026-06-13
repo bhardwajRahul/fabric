@@ -36,13 +36,13 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTaskA        func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                                                                           // MARKER: TaskA
-	mockTaskB        func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)                                             // MARKER: TaskB
-	mockTaskC        func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)                                             // MARKER: TaskC
-	mockTaskD        func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)                                             // MARKER: TaskD
-	mockTaskE        func(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string, err error) // MARKER: TaskE
-	mockReducerGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                       // MARKER: Reducer
-	unsubMockReducer func() error                                                                                                                                                       // MARKER: Reducer
+	mockTaskA        func(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                                                                 // MARKER: TaskA
+	mockTaskB        func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)                                             // MARKER: TaskB
+	mockTaskC        func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)                                             // MARKER: TaskC
+	mockTaskD        func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)                                             // MARKER: TaskD
+	mockTaskE        func(ctx context.Context, flow *workflow.Flow, total int, tags []string, seen []string) (finalSum int, finalList []string, finalSet []string, err error) // MARKER: TaskE
+	mockReducerGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                                             // MARKER: Reducer
+	unsubMockReducer func() error                                                                                                                                             // MARKER: Reducer
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -81,57 +81,57 @@ func (svc *Mock) TaskA(ctx context.Context, flow *workflow.Flow) (started bool, 
 }
 
 // MockTaskB sets up a mock handler for TaskB.
-func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)) *Mock { // MARKER: TaskB
+func (svc *Mock) MockTaskB(handler func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)) *Mock { // MARKER: TaskB
 	svc.mockTaskB = handler
 	return svc
 }
 
 // TaskB executes the mock handler.
-func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) { // MARKER: TaskB
+func (svc *Mock) TaskB(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) { // MARKER: TaskB
 	if svc.mockTaskB != nil {
-		sumTotalOut, listTagsOut, setSeenOut, err = svc.mockTaskB(ctx, flow)
+		totalOut, tagsOut, seenOut, err = svc.mockTaskB(ctx, flow)
 	}
-	return sumTotalOut, listTagsOut, setSeenOut, errors.Trace(err)
+	return totalOut, tagsOut, seenOut, errors.Trace(err)
 }
 
 // MockTaskC sets up a mock handler for TaskC.
-func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)) *Mock { // MARKER: TaskC
+func (svc *Mock) MockTaskC(handler func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)) *Mock { // MARKER: TaskC
 	svc.mockTaskC = handler
 	return svc
 }
 
 // TaskC executes the mock handler.
-func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) { // MARKER: TaskC
+func (svc *Mock) TaskC(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) { // MARKER: TaskC
 	if svc.mockTaskC != nil {
-		sumTotalOut, listTagsOut, setSeenOut, err = svc.mockTaskC(ctx, flow)
+		totalOut, tagsOut, seenOut, err = svc.mockTaskC(ctx, flow)
 	}
-	return sumTotalOut, listTagsOut, setSeenOut, errors.Trace(err)
+	return totalOut, tagsOut, seenOut, errors.Trace(err)
 }
 
 // MockTaskD sets up a mock handler for TaskD.
-func (svc *Mock) MockTaskD(handler func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error)) *Mock { // MARKER: TaskD
+func (svc *Mock) MockTaskD(handler func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error)) *Mock { // MARKER: TaskD
 	svc.mockTaskD = handler
 	return svc
 }
 
 // TaskD executes the mock handler.
-func (svc *Mock) TaskD(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) { // MARKER: TaskD
+func (svc *Mock) TaskD(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) { // MARKER: TaskD
 	if svc.mockTaskD != nil {
-		sumTotalOut, listTagsOut, setSeenOut, err = svc.mockTaskD(ctx, flow)
+		totalOut, tagsOut, seenOut, err = svc.mockTaskD(ctx, flow)
 	}
-	return sumTotalOut, listTagsOut, setSeenOut, errors.Trace(err)
+	return totalOut, tagsOut, seenOut, errors.Trace(err)
 }
 
 // MockTaskE sets up a mock handler for TaskE.
-func (svc *Mock) MockTaskE(handler func(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string, err error)) *Mock { // MARKER: TaskE
+func (svc *Mock) MockTaskE(handler func(ctx context.Context, flow *workflow.Flow, total int, tags []string, seen []string) (finalSum int, finalList []string, finalSet []string, err error)) *Mock { // MARKER: TaskE
 	svc.mockTaskE = handler
 	return svc
 }
 
 // TaskE executes the mock handler.
-func (svc *Mock) TaskE(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string, err error) { // MARKER: TaskE
+func (svc *Mock) TaskE(ctx context.Context, flow *workflow.Flow, total int, tags []string, seen []string) (finalSum int, finalList []string, finalSet []string, err error) { // MARKER: TaskE
 	if svc.mockTaskE != nil {
-		finalSum, finalList, finalSet, err = svc.mockTaskE(ctx, flow, sumTotal, listTags, setSeen)
+		finalSum, finalList, finalSet, err = svc.mockTaskE(ctx, flow, total, tags, seen)
 	}
 	return finalSum, finalList, finalSet, errors.Trace(err)
 }

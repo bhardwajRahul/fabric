@@ -362,18 +362,18 @@ func (_c Executor) TaskA(ctx context.Context, items []string) (itemsOut []string
 /*
 TaskB creates and runs the TaskB task.
 */
-func (_c Executor) TaskB(ctx context.Context, item string, itemIndex int, itemCount int, clearItems bool) (sumProcessedOut int, listSeenIndicesOut []int, setSeenCountsOut []int, err error) { // MARKER: TaskB
+func (_c Executor) TaskB(ctx context.Context, item string, itemIndex int, itemCount int, clearItems bool) (processedOut int, seenIndicesOut []int, seenCountsOut []int, err error) { // MARKER: TaskB
 	var out TaskBOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskB.Method, TaskB.Route, TaskBIn{Item: item, ItemIndex: itemIndex, ItemCount: itemCount, ClearItems: clearItems}, &out, _c.inFlow, _c.outFlow)
-	return out.SumProcessedOut, out.ListSeenIndicesOut, out.SetSeenCountsOut, err // No trace
+	return out.ProcessedOut, out.SeenIndicesOut, out.SeenCountsOut, err // No trace
 }
 
 /*
 TaskC creates and runs the TaskC task.
 */
-func (_c Executor) TaskC(ctx context.Context, sumProcessed int) (processedCount int, err error) { // MARKER: TaskC
+func (_c Executor) TaskC(ctx context.Context, processed int) (processedCount int, err error) { // MARKER: TaskC
 	var out TaskCOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskC.Method, TaskC.Route, TaskCIn{SumProcessed: sumProcessed}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TaskC.Method, TaskC.Route, TaskCIn{Processed: processed}, &out, _c.inFlow, _c.outFlow)
 	return out.ProcessedCount, err // No trace
 }
 

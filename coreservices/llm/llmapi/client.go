@@ -139,9 +139,9 @@ func (_c Client) Chat(ctx context.Context, provider string, model string, messag
 type TurnResponse multicastResponse // MARKER: Turn
 
 // Get unpacks the return arguments of Turn.
-func (_res *TurnResponse) Get() (content string, toolCalls []ToolCall, usage Usage, err error) { // MARKER: Turn
+func (_res *TurnResponse) Get() (content string, toolCalls []ToolCall, stopReason string, usage Usage, err error) { // MARKER: Turn
 	_d := _res.data.(*TurnOut)
-	return _d.Content, _d.ToolCalls, _d.Usage, _res.err
+	return _d.Content, _d.ToolCalls, _d.StopReason, _d.Usage, _res.err
 }
 
 /*
@@ -160,6 +160,7 @@ Input:
 Output:
   - content: content is the LLM's text response, if any
   - toolCalls: toolCalls is the list of tool calls requested by the LLM
+  - stopReason: stopReason is the normalized reason the turn ended (see llmapi.StopReason*)
   - usage: usage is the token consumption for this single turn (Turns=1)
 */
 func (_c MulticastClient) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
@@ -193,13 +194,14 @@ Input:
 Output:
   - content: content is the LLM's text response, if any
   - toolCalls: toolCalls is the list of tool calls requested by the LLM
+  - stopReason: stopReason is the normalized reason the turn ended (see llmapi.StopReason*)
   - usage: usage is the token consumption for this single turn (Turns=1)
 */
-func (_c Client) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, usage Usage, err error) { // MARKER: Turn
+func (_c Client) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, stopReason string, usage Usage, err error) { // MARKER: Turn
 	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
-	return _out.Content, _out.ToolCalls, _out.Usage, err // No trace
+	return _out.Content, _out.ToolCalls, _out.StopReason, _out.Usage, err // No trace
 }
 
 // multicastResponse packs the response of a functional multicast.
@@ -508,13 +510,14 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *wo
 }
 
 /*
-InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
+InitChat resolves tool URLs into tool schemas via each host's OpenAPI document and stores
+the resolved tools and options in flow state.
 */
-func (_c Executor) InitChat(ctx context.Context, listMessages []Message, tools []Tool, options *ChatOptions) (err error) { // MARKER: InitChat
+func (_c Executor) InitChat(ctx context.Context, messages []Message, toolURLs []string, options *ChatOptions) (err error) { // MARKER: InitChat
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{
-		ListMessages: listMessages,
-		Tools:        tools,
-		Options:      options,
+		Messages: messages,
+		ToolURLs: toolURLs,
+		Options:  options,
 	}, &InitChatOut{}, _c.inFlow, _c.outFlow)
 	return err // No trace
 }
@@ -522,12 +525,12 @@ func (_c Executor) InitChat(ctx context.Context, listMessages []Message, tools [
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (_c Executor) CallLLM(ctx context.Context, provider string, model string, listMessages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
+func (_c Executor) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{
 		Provider:     provider,
 		Model:        model,
-		ListMessages: listMessages,
+		Messages: messages,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, err // No trace
 }
@@ -535,7 +538,7 @@ func (_c Executor) CallLLM(ctx context.Context, provider string, model string, l
 /*
 ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
 */
-func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (listMessagesOut []Message, toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
+func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
 	var out ProcessResponseOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{
 		LLMContent:    llmContent,
@@ -543,34 +546,32 @@ func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnU
 		ToolRounds:    toolRounds,
 		MaxToolRounds: maxToolRounds,
 	}, &out, _c.inFlow, _c.outFlow)
-	return out.ListMessagesOut, out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
+	return out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
 }
 
 /*
 ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
 */
-func (_c Executor) ExecuteTool(ctx context.Context, toolExecuted bool) (toolExecutedOut bool, err error) { // MARKER: ExecuteTool
+func (_c Executor) ExecuteTool(ctx context.Context) (err error) { // MARKER: ExecuteTool
 	var out ExecuteToolOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ExecuteTool.Method, ExecuteTool.Route, ExecuteToolIn{
-		ToolExecuted: toolExecuted,
-	}, &out, _c.inFlow, _c.outFlow)
-	return out.ToolExecutedOut, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ExecuteTool.Method, ExecuteTool.Route, ExecuteToolIn{}, &out, _c.inFlow, _c.outFlow)
+	return err // No trace
 }
 
 /*
 ChatLoop creates and runs the ChatLoop workflow, blocking until termination.
 */
-func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, listMessages []Message, tools []Tool, options *ChatOptions) (listMessagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
+func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
 	if _c.runner == nil {
 		return nil, Usage{}, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out ChatLoopOut
 	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, ChatLoop.URL(), ChatLoopIn{
-		Provider:     provider,
-		Model:        model,
-		ListMessages: listMessages,
-		Tools:        tools,
-		Options:      options,
+		Provider: provider,
+		Model:    model,
+		Messages: messages,
+		ToolURLs: toolURLs,
+		Options:  options,
 	}, &out)
-	return out.ListMessagesOut, out.Usage, status, err
+	return out.MessagesOut, out.Usage, status, err
 }

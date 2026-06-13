@@ -95,10 +95,11 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		content, toolCalls, usage, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
+		content, toolCalls, stopReason, usage, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(content, "Hello from Claude!")
 			assert.Expect(len(toolCalls), 0)
+			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.Expect(usage.InputTokens, 10)
 			assert.Expect(usage.OutputTokens, 5)
 			assert.Expect(usage.Turns, 1)
@@ -121,10 +122,11 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		_, toolCalls, _, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
+		_, toolCalls, stopReason, _, err := client.Turn(ctx, claudellmapi.ModelHaiku45, messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(toolCalls), 1)
 			assert.Expect(toolCalls[0].Name, "Arithmetic")
+			assert.Expect(stopReason, llmapi.StopReasonToolUse)
 		}
 	})
 }

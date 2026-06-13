@@ -24,4 +24,4 @@ per-element pipeline independence.
 - Dynamic fan-out (`forEach`) followed by a per-element inner pipeline
 - Inner fan-out per element (`{A, B}`) with inner lineage fan-in at `taskM`
 - Outer lineage fan-in across elements at `taskL`
-- `set*` union reducer consolidating per-element results
+- Explicit `SetReducer("mergedItems", ReducerUnion)` consolidating per-element results

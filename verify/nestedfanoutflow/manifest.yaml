@@ -20,7 +20,7 @@ general:
   description: nestedfanoutflow.verify exercises nested fan-out via the subgraph escape hatch.
   package: github.com/microbus-io/fabric/verify/nestedfanoutflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-31T00:57:11Z"
 
 tasks:
   TaskA:
@@ -31,20 +31,24 @@ tasks:
     signature: NormalB() (normalResult string)
     description: NormalB is the non-subgraph sibling.
     route: :428/normal-b
+  RunInner:
+    signature: RunInner() (innerResult int)
+    description: RunInner invokes the Inner subgraph via flow.Subgraph and adopts its innerResult.
+    route: :428/run-inner
   TaskX:
     signature: TaskX() (innerStarted bool)
     description: TaskX is the inner subgraph entry.
     route: :428/task-x
   TaskY:
-    signature: TaskY() (sumInnerOut int)
+    signature: TaskY() (innerOut int)
     description: TaskY contributes a delta to the inner sum reducer.
     route: :428/task-y
   TaskZ:
-    signature: TaskZ() (sumInnerOut int)
+    signature: TaskZ() (innerOut int)
     description: TaskZ contributes a delta to the inner sum reducer.
     route: :428/task-z
   TaskW:
-    signature: TaskW(sumInner int) (innerResult int)
+    signature: TaskW(inner int) (innerResult int)
     description: TaskW is the inner subgraph fan-in.
     route: :428/task-w
   TaskJ:

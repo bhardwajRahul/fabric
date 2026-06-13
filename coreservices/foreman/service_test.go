@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,7 +67,6 @@ var (
 // MARKER: History
 
 // MARKER: Continue
-
 
 // outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
 func outcomeStatus(o *workflow.FlowOutcome) string {
@@ -119,19 +119,17 @@ func TestForeman_LowLevel(t *testing.T) {
 
 		// Verify flow row
 		var status, workflowName, graphJSON, actorClaimsJSON, traceParent, notifyHostname, finalState, breakpointsJSON, threadToken string
-		var stepID, forkedFlowID, forkedStepDepth, surgraphFlowID, surgraphStepDepth, threadID int
+		var stepID, surgraphFlowID, surgraphStepDepth, threadID int
 		err = db.QueryRowContext(ctx,
-			"SELECT flow_token, workflow_name, graph, actor_claims, status, step_id, forked_flow_id, forked_step_depth, surgraph_flow_id, surgraph_step_depth, thread_id, thread_token, trace_parent, notify_hostname, final_state, breakpoints FROM microbus_flows WHERE flow_id=?",
+			"SELECT flow_token, workflow_name, graph, actor_claims, status, step_id, surgraph_flow_id, surgraph_step_depth, thread_id, thread_token, trace_parent, notify_hostname, final_state, breakpoints FROM microbus_flows WHERE flow_id=?",
 			flowID,
-		).Scan(&flowToken, &workflowName, &graphJSON, &actorClaimsJSON, &status, &stepID, &forkedFlowID, &forkedStepDepth, &surgraphFlowID, &surgraphStepDepth, &threadID, &threadToken, &traceParent, &notifyHostname, &finalState, &breakpointsJSON)
+		).Scan(&flowToken, &workflowName, &graphJSON, &actorClaimsJSON, &status, &stepID, &surgraphFlowID, &surgraphStepDepth, &threadID, &threadToken, &traceParent, &notifyHostname, &finalState, &breakpointsJSON)
 		assert.NoError(err)
 		assert.Expect(
 			len(flowToken) > 0, true,
 			workflowName, "https://test.workflow.host:428/my-workflow",
 			strings.TrimSpace(status), workflow.StatusCreated,
 			stepID > 0, true,
-			forkedFlowID, 0,
-			forkedStepDepth, 0,
 			surgraphFlowID, 0,
 			surgraphStepDepth, 0,
 			threadID, flowID,
@@ -183,10 +181,10 @@ func TestForeman_LowLevel(t *testing.T) {
 		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
-		// Verify flow transitioned to running
-		var status string
-		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&status)
-		assert.Equal(workflow.StatusRunning, strings.TrimSpace(status))
+		// Don't snapshot the intermediate "running" state - a two-task no-sleep
+		// workflow can race to completed before the SELECT lands. The terminal
+		// status assertion below proves Start transitioned the flow out of
+		// "created".
 
 		// Wait for completion
 		outcome, err := foremanClient.Await(ctx, flowKey)
@@ -197,6 +195,7 @@ func TestForeman_LowLevel(t *testing.T) {
 		)
 
 		// Verify flow row is completed with filtered final_state
+		var status string
 		var finalStateJSON string
 		db.QueryRowContext(ctx, "SELECT status, final_state FROM microbus_flows WHERE flow_id=?", flowID).Scan(&status, &finalStateJSON)
 		assert.Equal(workflow.StatusCompleted, strings.TrimSpace(status))
@@ -280,6 +279,69 @@ func TestForeman_LowLevel(t *testing.T) {
 		assert.Equal(1, breakpointHit)
 	})
 
+	t.Run("resume_breakpoint", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Pause before task-b via a breakpoint (task-a sets result="hello")
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", nil, nil)
+		assert.NoError(err)
+		_, flowID, _, _ := parseFlowKey(flowKey)
+
+		err = foremanClient.BreakBefore(ctx, flowKey, "https://test.workflow.host:428/task-b", true)
+		assert.NoError(err)
+		err = foremanClient.Start(ctx, flowKey)
+		assert.NoError(err)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+		assert.NoError(err)
+		assert.Equal(workflow.StatusInterrupted, outcomeStatus(outcome))
+
+		// Resume (the interrupt path) must refuse a breakpoint pause
+		err = foremanClient.Resume(ctx, flowKey, map[string]any{"result": "wrong"})
+		assert.Equal(http.StatusConflict, errors.StatusCode(err))
+
+		// ResumeBreak injects state overrides; task-b appends " world" to the overridden result
+		err = foremanClient.ResumeBreak(ctx, flowKey, map[string]any{"result": "HELLO"})
+		assert.NoError(err)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+		status, state := outcomeStatusState(outcome)
+		if assert.NoError(err) {
+			assert.Expect(
+				status, workflow.StatusCompleted,
+				state["result"], "HELLO world",
+			)
+		}
+
+		var flowStatus string
+		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus)
+		assert.Equal(workflow.StatusCompleted, strings.TrimSpace(flowStatus))
+	})
+
+	t.Run("resume_breakpoint_rejects_interrupt", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// A genuine flow.Interrupt pause must reject ResumeBreak
+		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{
+			"needInput": true,
+		}, nil)
+		assert.NoError(err)
+
+		err = foremanClient.Start(ctx, flowKey)
+		assert.NoError(err)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+		assert.NoError(err)
+		assert.Equal(workflow.StatusInterrupted, outcomeStatus(outcome))
+
+		err = foremanClient.ResumeBreak(ctx, flowKey, map[string]any{"needInput": false})
+		assert.Equal(http.StatusConflict, errors.StatusCode(err))
+
+		// The interrupt path still works, completing the flow
+		err = foremanClient.Resume(ctx, flowKey, map[string]any{"needInput": false})
+		assert.NoError(err)
+		outcome, err = foremanClient.Await(ctx, flowKey)
+		assert.NoError(err)
+		assert.Equal(workflow.StatusCompleted, outcomeStatus(outcome))
+	})
+
 	t.Run("interrupt_and_resume", func(t *testing.T) {
 		assert := testarossa.For(t)
 
@@ -331,68 +393,6 @@ func TestForeman_LowLevel(t *testing.T) {
 		// Verify flow is completed in the database
 		db.QueryRowContext(ctx, "SELECT status FROM microbus_flows WHERE flow_id=?", flowID).Scan(&flowStatus)
 		assert.Equal(workflow.StatusCompleted, strings.TrimSpace(flowStatus))
-	})
-
-	t.Run("fork", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// Run to completion
-		flowKey, err := foremanClient.Create(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "original"}, nil)
-		assert.NoError(err)
-		err = foremanClient.Start(ctx, flowKey)
-		assert.NoError(err)
-		outcome, err := foremanClient.Await(ctx, flowKey)
-
-		status := outcomeStatus(outcome)
-		assert.NoError(err)
-		assert.Equal(workflow.StatusCompleted, status)
-
-		// Get history to find a step key
-		steps, err := foremanClient.History(ctx, flowKey)
-		if !assert.NoError(err) || !assert.True(len(steps) >= 1) {
-			return
-		}
-		stepKey := steps[0].StepKey // First step (task-a)
-
-		// Fork from that step with state overrides
-		forkedFlowKey, err := foremanClient.Fork(ctx, stepKey, map[string]any{"input": "forked"}, nil)
-		assert.NoError(err)
-		_, forkedFlowID, _, _ := parseFlowKey(forkedFlowKey)
-
-		// Verify forked flow was created with lineage
-		var forkedStatus, forkedWorkflowName string
-		var forkedFlowIDRef, forkedStepDepth int
-		db.QueryRowContext(ctx,
-			"SELECT status, workflow_name, forked_flow_id, forked_step_depth FROM microbus_flows WHERE flow_id=?",
-			forkedFlowID,
-		).Scan(&forkedStatus, &forkedWorkflowName, &forkedFlowIDRef, &forkedStepDepth)
-		_, origFlowID, _, _ := parseFlowKey(flowKey)
-		assert.Expect(
-			strings.TrimSpace(forkedStatus), workflow.StatusCreated,
-			forkedWorkflowName, "https://test.workflow.host:428/my-workflow",
-			forkedFlowIDRef, origFlowID,
-			forkedStepDepth, steps[0].StepDepth,
-		)
-
-		// Verify the forked step's state contains the override
-		var stateJSON string
-		db.QueryRowContext(ctx, "SELECT state FROM microbus_steps WHERE flow_id=? AND step_depth=?", forkedFlowID, steps[0].StepDepth).Scan(&stateJSON)
-		var state map[string]any
-		assert.NoError(json.Unmarshal([]byte(stateJSON), &state))
-		assert.Equal("forked", state["input"])
-
-		// Run the forked flow and verify it completes
-		err = foremanClient.Start(ctx, forkedFlowKey)
-		assert.NoError(err)
-		outcome, err = foremanClient.Await(ctx, forkedFlowKey)
-
-		status, fState := outcomeStatusState(outcome)
-		if assert.NoError(err) {
-			assert.Expect(
-				status, workflow.StatusCompleted,
-				fState["result"], "hello world",
-			)
-		}
 	})
 
 	t.Run("continue", func(t *testing.T) {
@@ -485,14 +485,178 @@ func newTestWorkflowSvc() *connector.Connector {
 				return err
 			}
 			if f.GetBool("needInput") {
-				f.Interrupt(map[string]any{"request": "more data"})
-				return json.NewEncoder(w).Encode(&f)
+				_, yield, err := f.Interrupt(map[string]any{"request": "more data"})
+				if err != nil {
+					return err
+				}
+				if yield {
+					return json.NewEncoder(w).Encode(&f)
+				}
 			}
 			f.SetString("result", f.GetString("result")+" world")
 			w.Header().Set("Content-Type", "application/json")
 			return json.NewEncoder(w).Encode(&f)
 		},
 		sub.At("POST", ":428/task-b"),
+		sub.Web(),
+	)
+	// Dynamic-subgraph error delivery: ParentSub calls flow.Subgraph on a child whose only task fails.
+	// The child error is delivered to ParentSub via flow.Subgraph's err return (not cascaded), and
+	// ParentSub returns it so the parent flow fails with that error.
+	graphSvc.Subscribe("ParentSubWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.workflow.host:428/parent-sub-workflow")
+			g.AddTask("parentSub", "https://test.workflow.host:428/parent-sub")
+			g.AddTransition("parentSub", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/parent-sub-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("ParentSub",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			out, yield, err := f.Subgraph("https://test.workflow.host:428/child-fail-workflow", nil)
+			if yield {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			if err != nil {
+				// Surface the child's error: the parent flow fails with it.
+				return err
+			}
+			f.Set("childOut", out)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/parent-sub"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("ChildFailWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.workflow.host:428/child-fail-workflow")
+			g.AddTask("childFail", "https://test.workflow.host:428/child-fail")
+			g.AddTransition("childFail", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/child-fail-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("ChildFail",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return errors.New("child boom")
+		},
+		sub.At("POST", ":428/child-fail"),
+		sub.Web(),
+	)
+	// Single-park guard: doublePark arms an interrupt, and after Resume arms a subgraph on the same
+	// step. The second park is illegal because the step's interrupt slot already resolved, so the
+	// foreman fails the step (and the flow) instead of launching the child.
+	graphSvc.Subscribe("DoubleParkWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.workflow.host:428/double-park-workflow")
+			g.AddTask("doublePark", "https://test.workflow.host:428/double-park")
+			g.AddTransition("doublePark", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/double-park-workflow"),
+		sub.Web(),
+	)
+	// Retry clears the park slot: retrySub arms a subgraph whose child fails on its first invocation
+	// and succeeds on the second. The parent's flow.Retry after the failed child clears subgraph_done,
+	// so the re-dispatch re-arms the subgraph and runs a fresh child that succeeds.
+	var retryChildAttempts atomic.Int32
+	graphSvc.Subscribe("RetrySubWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.workflow.host:428/retry-sub-workflow")
+			g.AddTask("retrySub", "https://test.workflow.host:428/retry-sub")
+			g.AddTransition("retrySub", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/retry-sub-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("RetrySub",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			out, yield, err := f.Subgraph("https://test.workflow.host:428/retry-child-workflow", nil)
+			if yield {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			if err != nil && f.Retry(5, 0, 0, 0) {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			if err != nil {
+				return err
+			}
+			f.Set("childResult", out["childResult"])
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/retry-sub"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("RetryChildWorkflow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.workflow.host:428/retry-child-workflow")
+			g.AddTask("retryChild", "https://test.workflow.host:428/retry-child")
+			g.AddTransition("retryChild", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/retry-child-workflow"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("RetryChild",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			if retryChildAttempts.Add(1) == 1 {
+				return errors.New("child fails on first attempt")
+			}
+			f.Set("childResult", "ok")
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/retry-child"),
+		sub.Web(),
+	)
+	graphSvc.Subscribe("DoublePark",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			_, yield, err := f.Interrupt(map[string]any{"request": "first"})
+			if err != nil {
+				return err
+			}
+			if yield {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			// Resumed: the interrupt slot is resolved. Arming a subgraph on the same step is illegal.
+			_, yield, err = f.Subgraph("https://test.workflow.host:428/child-fail-workflow", nil)
+			if err != nil {
+				return err
+			}
+			if yield {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/double-park"),
 		sub.Web(),
 	)
 	return graphSvc
@@ -567,6 +731,92 @@ func TestForeman_StartNotify(t *testing.T) {
 	assert.Equal(workflow.StatusCompleted, status)
 }
 
+// TestForeman_DynamicSubgraphError verifies that a failing dynamic subgraph child delivers its error to
+// the parent task via flow.Subgraph's err return (rather than cascading), and that the parent surfacing
+// that error fails the parent flow with it.
+func TestForeman_DynamicSubgraphError(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+	assert := testarossa.For(t)
+
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/parent-sub-workflow", nil, nil)
+	if !assert.NoError(err) {
+		return
+	}
+	err = client.Start(ctx, flowKey)
+	assert.NoError(err)
+	outcome, err := client.Await(ctx, flowKey)
+	assert.NoError(err)
+	assert.Equal(workflow.StatusFailed, outcomeStatus(outcome))
+	assert.True(strings.Contains(outcome.Error, "child boom"))
+}
+
+// TestForeman_SingleParkGuard verifies that a task arming a second park of a different kind on a
+// step whose slot already resolved is rejected: doublePark interrupts, and after Resume arms a
+// subgraph on the same step, which fails the step (and the flow) with a clear message.
+func TestForeman_SingleParkGuard(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+	assert := testarossa.For(t)
+
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/double-park-workflow", nil, nil)
+	if !assert.NoError(err) {
+		return
+	}
+	err = client.Start(ctx, flowKey)
+	assert.NoError(err)
+	outcome, err := client.Await(ctx, flowKey)
+	assert.NoError(err)
+	assert.Equal(workflow.StatusInterrupted, outcomeStatus(outcome))
+
+	// Resume: on re-entry the task arms a subgraph on the already-resolved interrupt slot.
+	err = client.Resume(ctx, flowKey, map[string]any{})
+	assert.NoError(err)
+	outcome, err = client.Await(ctx, flowKey)
+	assert.NoError(err)
+	assert.Equal(workflow.StatusFailed, outcomeStatus(outcome))
+	assert.True(strings.Contains(outcome.Error, "already parked for an interrupt"))
+}
+
+// TestForeman_RetryClearsSubgraphPark verifies that flow.Retry after a failed dynamic subgraph clears the
+// step's park slot, so the re-dispatch re-arms the subgraph and runs a fresh child. The child fails on its
+// first invocation and succeeds on the second; the parent flow completes with the child's result.
+func TestForeman_RetryClearsSubgraphPark(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newTestWorkflowSvc(), tester)
+	app.RunInTest(t)
+	assert := testarossa.For(t)
+
+	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/retry-sub-workflow", nil, nil)
+	if !assert.NoError(err) {
+		return
+	}
+	err = client.Start(ctx, flowKey)
+	assert.NoError(err)
+	outcome, err := client.Await(ctx, flowKey)
+	assert.NoError(err)
+	status, state := outcomeStatusState(outcome)
+	assert.Equal(workflow.StatusCompleted, status)
+	assert.Equal("ok", state["childResult"])
+}
+
 func TestForeman_Cancel(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -586,7 +836,6 @@ func TestForeman_Cancel(t *testing.T) {
 	assert.NoError(err)
 
 	outcome, err := client.Snapshot(ctx, flowKey)
-
 
 	status := outcomeStatus(outcome)
 	assert.NoError(err)
@@ -631,50 +880,6 @@ func TestForeman_Resume(t *testing.T) {
 	}
 }
 
-func TestForeman_Fork(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	svc := NewService()
-	tester := connector.New("tester.client")
-	client := foremanapi.NewClient(tester)
-	app := application.New()
-	app.Add(svc, newTestWorkflowSvc(), tester)
-	app.RunInTest(t)
-	assert := testarossa.For(t)
-
-	// Run to completion
-	flowKey, err := client.Create(ctx, "https://test.workflow.host:428/my-workflow", nil, nil)
-	if !assert.NoError(err) {
-		return
-	}
-	err = client.Start(ctx, flowKey)
-	assert.NoError(err)
-	client.Await(ctx, flowKey)
-
-	// Fork from first step
-	steps, err := client.History(ctx, flowKey)
-	if !assert.NoError(err) || !assert.True(len(steps) >= 1) {
-		return
-	}
-	forkedKey, err := client.Fork(ctx, steps[0].StepKey, map[string]any{"input": "forked"}, nil)
-	if !assert.NoError(err) {
-		return
-	}
-
-	// Run the forked flow
-	err = client.Start(ctx, forkedKey)
-	assert.NoError(err)
-	outcome, err := client.Await(ctx, forkedKey)
-
-	status, state := outcomeStatusState(outcome)
-	if assert.NoError(err) {
-		assert.Expect(
-			status, workflow.StatusCompleted,
-			state["result"], "hello world",
-		)
-	}
-}
-
 func TestForeman_BreakBefore(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -701,8 +906,8 @@ func TestForeman_BreakBefore(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(workflow.StatusInterrupted, status)
 
-	// Resume past the breakpoint
-	err = client.Resume(ctx, flowKey, nil)
+	// Resume past the breakpoint (the debug path; Resume is for interrupts and would reject this pause)
+	err = client.ResumeBreak(ctx, flowKey, nil)
 	assert.NoError(err)
 	outcome, err = client.Await(ctx, flowKey)
 
@@ -848,75 +1053,6 @@ func TestForeman_List(t *testing.T) {
 	}
 }
 
-func TestForeman_Retry(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	assert := testarossa.For(t)
-
-	// Set up a workflow with a task that fails once then succeeds
-	graphSvc := connector.New("test.fail.host")
-	graphSvc.Subscribe("FailWorkflow",
-		func(w http.ResponseWriter, r *http.Request) error {
-			g := workflow.NewGraph("https://test.fail.host:428/fail-workflow")
-			g.AddTask("failTask", "https://test.fail.host:428/fail-task")
-			g.AddTransition("failTask", workflow.END)
-			w.Header().Set("Content-Type", "application/json")
-			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
-		},
-		sub.At("GET", ":428/fail-workflow"),
-		sub.Web(),
-	)
-	// This task fails on first attempt, succeeds on retry
-	var failOnce bool
-	graphSvc.Subscribe("FailTask",
-		func(w http.ResponseWriter, r *http.Request) error {
-			if !failOnce {
-				failOnce = true
-				return errors.New("transient error")
-			}
-			var f workflow.Flow
-			json.NewDecoder(r.Body).Decode(&f)
-			f.SetString("result", "recovered")
-			w.Header().Set("Content-Type", "application/json")
-			return json.NewEncoder(w).Encode(&f)
-		},
-		sub.At("POST", ":428/fail-task"),
-		sub.Web(),
-	)
-
-	tester := connector.New("tester.retry")
-	app := application.New()
-	svc := NewService()
-	app.Add(svc, graphSvc, tester)
-	app.RunInTest(t)
-	retryClient := foremanapi.NewClient(tester)
-
-	flowKey, err := retryClient.Create(ctx, "https://test.fail.host:428/fail-workflow", nil, nil)
-	if !assert.NoError(err) {
-		return
-	}
-	err = retryClient.Start(ctx, flowKey)
-	assert.NoError(err)
-	outcome, err := retryClient.Await(ctx, flowKey)
-
-	status := outcomeStatus(outcome)
-	assert.NoError(err)
-	assert.Equal(workflow.StatusFailed, status)
-
-	// Retry the failed step
-	err = retryClient.Retry(ctx, flowKey)
-	assert.NoError(err)
-	outcome, err = retryClient.Await(ctx, flowKey)
-
-	status, state := outcomeStatusState(outcome)
-	if assert.NoError(err) {
-		assert.Expect(
-			status, workflow.StatusCompleted,
-			state["result"], "recovered",
-		)
-	}
-}
-
 func TestForeman_Run(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -929,7 +1065,6 @@ func TestForeman_Run(t *testing.T) {
 	assert := testarossa.For(t)
 
 	outcome, err := client.Run(ctx, "https://test.workflow.host:428/my-workflow", map[string]any{"input": "test"}, nil)
-
 
 	status, state := outcomeStatusState(outcome)
 	if assert.NoError(err) {
@@ -1158,6 +1293,7 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 		startTask      = "https://test.race.host:428/start"
 		slowTask       = "https://test.race.host:428/slow-task"
 		finalTask      = "https://test.race.host:428/final-task"
+		runSubTask     = "https://test.race.host:428/run-sub"
 		subTask        = "https://test.race.host:428/sub-task"
 		slowTaskSleep  = 100 * time.Millisecond
 		expectedResult = "done"
@@ -1189,6 +1325,27 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 		sub.At("POST", ":428/sub-task"),
 		sub.Web(),
 	)
+	// RunSub invokes the subgraph via flow.Subgraph; its parked step stays running at the fan-out
+	// depth while slow-task runs, reproducing the completeSurgraphFlow race.
+	graphSvc.Subscribe("RunSub",
+		func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			_, yield, err := f.Subgraph(subWorkflow, nil)
+			if err != nil {
+				return err
+			}
+			if yield {
+				return json.NewEncoder(w).Encode(&f)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		},
+		sub.At("POST", ":428/run-sub"),
+		sub.Web(),
+	)
 
 	// Main workflow: start fans out to {slow-task, sub-workflow}; both fan in to final-task.
 	// slow-task is registered FIRST so it gets the lower step_id.
@@ -1197,7 +1354,7 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 			g := workflow.NewGraph(mainWorkflow)
 			g.AddTask("startTask", startTask)
 			g.AddTask("slowTask", slowTask)
-			g.AddSubgraph("subWorkflow", subWorkflow)
+			g.AddTask("subWorkflow", runSubTask)
 			g.AddTask("finalTask", finalTask)
 			g.SetFanIn("finalTask")
 			g.AddTransition("startTask", "slowTask")
@@ -1266,7 +1423,6 @@ func TestForeman_SubgraphFanInRace(t *testing.T) {
 
 	outcome, err := client.Run(runCtx, mainWorkflow, nil, nil)
 
-
 	status, state := outcomeStatusState(outcome)
 	if !assert.NoError(err) {
 		return
@@ -1293,6 +1449,8 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 		subB          = "https://test.parsubs.host:428/sub-b"
 		taskA         = "https://test.parsubs.host:428/task-a"
 		taskB         = "https://test.parsubs.host:428/task-b"
+		runA          = "https://test.parsubs.host:428/run-a"
+		runB          = "https://test.parsubs.host:428/run-b"
 		startTask     = "https://test.parsubs.host:428/start"
 		finalTask     = "https://test.parsubs.host:428/final-task"
 		expectedValue = "ok"
@@ -1305,7 +1463,7 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 	// in the parent's fan-out) to complete first. Each subgraph writes to a distinct output
 	// field so we can verify both completions reached the parent state correctly - if the
 	// wrong surgraph step is matched on completion, one or both outputs go missing.
-	registerSub := func(name, workflowRoute, taskRoute, workflowURL, taskURL, outputField, outputValue string, delay time.Duration) {
+	registerSub := func(name, workflowRoute, taskRoute, runRoute, workflowURL, taskURL, outputField, outputValue string, delay time.Duration) {
 		graphSvc.Subscribe(name+"Workflow",
 			func(w http.ResponseWriter, r *http.Request) error {
 				g := workflow.NewGraph(workflowURL)
@@ -1333,19 +1491,44 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 			sub.At("POST", taskRoute),
 			sub.Web(),
 		)
+		// Caller task: invokes the subgraph via flow.Subgraph and adopts its output field. Two of these
+		// run in parallel from the main fan-out, parking at the same step_depth with far-future leases -
+		// the surgraph_step_id PK lookup is what keeps their completions from matching each other's step.
+		graphSvc.Subscribe(name+"Run",
+			func(w http.ResponseWriter, r *http.Request) error {
+				var f workflow.Flow
+				if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+					return err
+				}
+				out, yield, err := f.Subgraph(workflowURL, nil)
+				if err != nil {
+					return err
+				}
+				if yield {
+					return json.NewEncoder(w).Encode(&f)
+				}
+				if v, ok := out[outputField].(string); ok {
+					f.SetString(outputField, v)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				return json.NewEncoder(w).Encode(&f)
+			},
+			sub.At("POST", runRoute),
+			sub.Web(),
+		)
 	}
 	// SubA inserted first into the parent's fan-out (lower step_id) but slow to complete.
 	// SubB inserted second (higher step_id) but completes immediately.
-	registerSub("SubA", ":428/sub-a", ":428/task-a", subA, taskA, "outA", "from-A", 100*time.Millisecond)
-	registerSub("SubB", ":428/sub-b", ":428/task-b", subB, taskB, "outB", "from-B", 0)
+	registerSub("SubA", ":428/sub-a", ":428/task-a", ":428/run-a", subA, taskA, "outA", "from-A", 100*time.Millisecond)
+	registerSub("SubB", ":428/sub-b", ":428/task-b", ":428/run-b", subB, taskB, "outB", "from-B", 0)
 
 	// Main: start fans out to both subgraphs; both fan in to final-task.
 	graphSvc.Subscribe("MainWorkflow",
 		func(w http.ResponseWriter, r *http.Request) error {
 			g := workflow.NewGraph(mainWorkflow)
 			g.AddTask("startTask", startTask)
-			g.AddSubgraph("subA", subA)
-			g.AddSubgraph("subB", subB)
+			g.AddTask("subA", runA)
+			g.AddTask("subB", runB)
 			g.AddTask("finalTask", finalTask)
 			g.SetFanIn("finalTask")
 			g.AddTransition("startTask", "subA")
@@ -1398,7 +1581,6 @@ func TestForeman_MultipleParallelSubgraphs(t *testing.T) {
 	defer cancel()
 
 	outcome, err := client.Run(runCtx, mainWorkflow, nil, nil)
-
 
 	status, state := outcomeStatusState(outcome)
 	if !assert.NoError(err) {
@@ -1768,7 +1950,6 @@ func TestForeman_List_CrossShardPagination(t *testing.T) {
 	}
 }
 
-
 func TestForeman_Delete(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -1908,4 +2089,88 @@ func TestForeman_Query_TenantID(t *testing.T) {
 		assert.NoError(err)
 		assert.True(len(flows) >= 6)
 	})
+}
+
+// newSwitchWorkflowSvc creates a workflow with a router task that uses Switch transitions
+// to route to one of three handlers (A/B/default) based on the input "kind" state field.
+// Each handler sets result="A"/"B"/"default". The router task is a no-op pass-through.
+func newSwitchWorkflowSvc() *connector.Connector {
+	svc := connector.New("test.switch.host")
+	svc.Subscribe("SwitchFlow",
+		func(w http.ResponseWriter, r *http.Request) error {
+			g := workflow.NewGraph("https://test.switch.host:428/switch-flow")
+			g.AddTask("router", "https://test.switch.host:428/router")
+			g.AddTask("a", "https://test.switch.host:428/handler-a")
+			g.AddTask("b", "https://test.switch.host:428/handler-b")
+			g.AddTask("default", "https://test.switch.host:428/handler-default")
+			g.AddTransitionSwitch("router", "a", `kind=="a"`)
+			g.AddTransitionSwitch("router", "b", `kind=="b"`)
+			g.AddTransitionSwitch("router", "default", "true")
+			g.AddTransition("a", workflow.END)
+			g.AddTransition("b", workflow.END)
+			g.AddTransition("default", workflow.END)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(map[string]any{"graph": g})
+		},
+		sub.At("GET", ":428/switch-flow"),
+		sub.Web(),
+	)
+	passthrough := func(w http.ResponseWriter, r *http.Request) error {
+		var f workflow.Flow
+		if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+			return err
+		}
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(&f)
+	}
+	setResult := func(value string) func(http.ResponseWriter, *http.Request) error {
+		return func(w http.ResponseWriter, r *http.Request) error {
+			var f workflow.Flow
+			if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+				return err
+			}
+			f.SetString("result", value)
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(&f)
+		}
+	}
+	svc.Subscribe("Router", passthrough, sub.At("POST", ":428/router"), sub.Web())
+	svc.Subscribe("HandlerA", setResult("A"), sub.At("POST", ":428/handler-a"), sub.Web())
+	svc.Subscribe("HandlerB", setResult("B"), sub.At("POST", ":428/handler-b"), sub.Web())
+	svc.Subscribe("HandlerDefault", setResult("default"), sub.At("POST", ":428/handler-default"), sub.Web())
+	return svc
+}
+
+func TestForeman_SwitchFirstMatchWins(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	app := application.New()
+	app.Add(svc, newSwitchWorkflowSvc(), tester)
+	app.RunInTest(t)
+	assert := testarossa.For(t)
+
+	cases := []struct {
+		kind   string
+		expect string
+	}{
+		{"a", "A"},
+		{"b", "B"},
+		{"c", "default"},
+		{"", "default"},
+	}
+	for _, tc := range cases {
+		outcome, err := client.Run(ctx,
+			"https://test.switch.host:428/switch-flow",
+			map[string]any{"kind": tc.kind},
+			nil,
+		)
+		if !assert.NoError(err) {
+			continue
+		}
+		assert.Expect(outcome.Status, "completed")
+		assert.Expect(outcome.State["result"], tc.expect)
+	}
 }

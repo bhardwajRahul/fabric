@@ -19,9 +19,10 @@ package geminillm
 import "encoding/json"
 
 type geminiRequest struct {
-	Contents         []geminiContent  `json:"contents"`
-	Tools            []geminiToolDec  `json:"tools,omitzero"`
-	GenerationConfig *geminiGenConfig `json:"generationConfig,omitzero"`
+	Contents          []geminiContent  `json:"contents"`
+	Tools             []geminiToolDec  `json:"tools,omitzero"`
+	GenerationConfig  *geminiGenConfig `json:"generationConfig,omitzero"`
+	SystemInstruction *geminiContent   `json:"systemInstruction,omitzero"`
 }
 
 type geminiGenConfig struct {
@@ -30,14 +31,33 @@ type geminiGenConfig struct {
 }
 
 type geminiContent struct {
-	Role  string       `json:"role"`
+	Role  string       `json:"role,omitzero"`
 	Parts []geminiPart `json:"parts"`
 }
 
 type geminiPart struct {
 	Text             string          `json:"text,omitzero"`
+	Thought          bool            `json:"thought,omitzero"`
+	ThoughtSignature string          `json:"thoughtSignature,omitzero"`
 	FunctionCall     *geminiFuncCall `json:"functionCall,omitzero"`
 	FunctionResponse *geminiFuncResp `json:"functionResponse,omitzero"`
+	// InlineData carries non-text content (images, audio, video, documents) directly in the
+	// request/response. Data must be the raw bytes - encoding/json's base64 treatment of []byte
+	// matches Gemini's wire format exactly, so no manual encoding is needed.
+	InlineData *geminiInlineData `json:"inlineData,omitzero"`
+	// FileData references a pre-uploaded artifact (Gemini File API URI like
+	// "https://generativelanguage.googleapis.com/v1beta/files/abc-123") or a public HTTPS URL.
+	FileData *geminiFileData `json:"fileData,omitzero"`
+}
+
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     []byte `json:"data"`
+}
+
+type geminiFileData struct {
+	MimeType string `json:"mimeType,omitzero"`
+	FileURI  string `json:"fileUri"`
 }
 
 type geminiFuncCall struct {
@@ -62,9 +82,10 @@ type geminiFunc struct {
 
 type geminiResponse struct {
 	Candidates []struct {
-		Content geminiContent `json:"content"`
+		Content      geminiContent `json:"content"`
+		FinishReason string        `json:"finishReason"`
 	} `json:"candidates"`
-	ModelVersion  string             `json:"modelVersion"`
+	ModelVersion  string              `json:"modelVersion"`
 	UsageMetadata geminiUsageMetadata `json:"usageMetadata"`
 }
 
@@ -72,4 +93,9 @@ type geminiUsageMetadata struct {
 	PromptTokenCount        int `json:"promptTokenCount"`
 	CandidatesTokenCount    int `json:"candidatesTokenCount"`
 	CachedContentTokenCount int `json:"cachedContentTokenCount"`
+	// ThoughtsTokenCount is the number of tokens spent on internal reasoning by Gemini 2.5
+	// thinking models. Billed but reported separately from CandidatesTokenCount. We fold this
+	// into llmapi.Usage.OutputTokens so OutputTokens reflects total billed completion across
+	// providers, and surface the breakdown via llmapi.Usage.ThinkingTokens.
+	ThoughtsTokenCount int `json:"thoughtsTokenCount"`
 }

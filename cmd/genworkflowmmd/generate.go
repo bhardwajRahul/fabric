@@ -24,8 +24,11 @@ import (
 	"text/template"
 )
 
-// generateMain returns the source of a tmp/main.go that, when `go run`, writes
-// one MMD file per workflow into the microservice directory.
+// generateMain returns the source of a tmp/main.go that, when `go run`,
+// writes one MMD file per workflow in the microservice being rendered.
+// Subgraph nodes always render as a pink placeholder box; expansion was
+// removed because a rendered subgraph could go silently stale when the
+// child workflow's implementation changes.
 func generateMain(importPath, pkgAlias, dir string, workflows []workflowFn) ([]byte, error) {
 	data := struct {
 		ImportPath string
@@ -73,6 +76,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/microbus-io/fabric/workflow"
+
 	{{.PkgAlias}} "{{.ImportPath}}"
 )
 
@@ -94,7 +99,11 @@ func main() {
 		if err != nil {
 			panic(fmt.Errorf("{{.Method}}: %w", err))
 		}
-		write(dir, {{.OutputLit}}, g.Mermaid())
+		mmd, err := workflow.NewGraphRenderer(g).Render()
+		if err != nil {
+			panic(fmt.Errorf("{{.Method}}: %w", err))
+		}
+		write(dir, {{.OutputLit}}, mmd)
 	}
 {{end}}
 }

@@ -36,11 +36,11 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockEnter            func(ctx context.Context, flow *workflow.Flow, elements []int) (elementsOut []int, err error)     // MARKER: Enter
-	mockIncrement        func(ctx context.Context, flow *workflow.Flow, element int) (listResultOut []int, err error)      // MARKER: Increment
-	mockJoin             func(ctx context.Context, flow *workflow.Flow, listResult []int) (listResultOut []int, err error) // MARKER: Join
-	mockRetryFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                      // MARKER: RetryFanOut
-	unsubMockRetryFanOut func() error                                                                                      // MARKER: RetryFanOut
+	mockEnter            func(ctx context.Context, flow *workflow.Flow, elements []int) (elementsOut []int, err error) // MARKER: Enter
+	mockIncrement        func(ctx context.Context, flow *workflow.Flow, element int) (resultsOut []int, err error)     // MARKER: Increment
+	mockJoin             func(ctx context.Context, flow *workflow.Flow, results []int) (resultsOut []int, err error)   // MARKER: Join
+	mockRetryFanOutGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                  // MARKER: RetryFanOut
+	unsubMockRetryFanOut func() error                                                                                  // MARKER: RetryFanOut
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -79,37 +79,37 @@ func (svc *Mock) Enter(ctx context.Context, flow *workflow.Flow, elements []int)
 }
 
 // MockIncrement sets up a mock handler for Increment.
-func (svc *Mock) MockIncrement(handler func(ctx context.Context, flow *workflow.Flow, element int) (listResultOut []int, err error)) *Mock { // MARKER: Increment
+func (svc *Mock) MockIncrement(handler func(ctx context.Context, flow *workflow.Flow, element int) (resultsOut []int, err error)) *Mock { // MARKER: Increment
 	svc.mockIncrement = handler
 	return svc
 }
 
 // Increment executes the mock handler.
-func (svc *Mock) Increment(ctx context.Context, flow *workflow.Flow, element int) (listResultOut []int, err error) { // MARKER: Increment
+func (svc *Mock) Increment(ctx context.Context, flow *workflow.Flow, element int) (resultsOut []int, err error) { // MARKER: Increment
 	if svc.mockIncrement != nil {
-		listResultOut, err = svc.mockIncrement(ctx, flow, element)
+		resultsOut, err = svc.mockIncrement(ctx, flow, element)
 	}
-	return listResultOut, errors.Trace(err)
+	return resultsOut, errors.Trace(err)
 }
 
 // MockJoin sets up a mock handler for Join.
-func (svc *Mock) MockJoin(handler func(ctx context.Context, flow *workflow.Flow, listResult []int) (listResultOut []int, err error)) *Mock { // MARKER: Join
+func (svc *Mock) MockJoin(handler func(ctx context.Context, flow *workflow.Flow, results []int) (resultsOut []int, err error)) *Mock { // MARKER: Join
 	svc.mockJoin = handler
 	return svc
 }
 
 // Join executes the mock handler.
-func (svc *Mock) Join(ctx context.Context, flow *workflow.Flow, listResult []int) (listResultOut []int, err error) { // MARKER: Join
+func (svc *Mock) Join(ctx context.Context, flow *workflow.Flow, results []int) (resultsOut []int, err error) { // MARKER: Join
 	if svc.mockJoin != nil {
-		listResultOut, err = svc.mockJoin(ctx, flow, listResult)
+		resultsOut, err = svc.mockJoin(ctx, flow, results)
 	}
-	return listResultOut, errors.Trace(err)
+	return resultsOut, errors.Trace(err)
 }
 
 // MockRetryFanOut sets up a mock handler for the RetryFanOut workflow.
 // The handler receives typed inputs from the workflow's state and returns typed outputs.
 // A nil handler clears the mock.
-func (svc *Mock) MockRetryFanOut(handler func(ctx context.Context, flow *workflow.Flow, elements []int) (listResult []int, err error)) *Mock { // MARKER: RetryFanOut
+func (svc *Mock) MockRetryFanOut(handler func(ctx context.Context, flow *workflow.Flow, elements []int) (results []int, err error)) *Mock { // MARKER: RetryFanOut
 	if svc.unsubMockRetryFanOut != nil {
 		svc.unsubMockRetryFanOut()
 		svc.unsubMockRetryFanOut = nil
@@ -134,11 +134,11 @@ func (svc *Mock) MockRetryFanOut(handler func(ctx context.Context, flow *workflo
 		snap := f.Snapshot()
 		var in retryfanoutflowapi.RetryFanOutIn
 		f.ParseState(&in)
-		listResult, err := handler(r.Context(), &f, in.Elements)
+		results, err := handler(r.Context(), &f, in.Elements)
 		if err != nil {
 			return err // No trace
 		}
-		out := retryfanoutflowapi.RetryFanOutOut{ListResult: listResult}
+		out := retryfanoutflowapi.RetryFanOutOut{Results: results}
 		f.SetChanges(out, snap)
 		w.Header().Set("Content-Type", "application/json")
 		return json.NewEncoder(w).Encode(&f)

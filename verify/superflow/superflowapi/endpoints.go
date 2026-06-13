@@ -45,6 +45,7 @@ var (
 	ErrorHandler = Def{Method: "POST", Route: ":428/error-handler"} // MARKER: ErrorHandler
 	SubTaskA     = Def{Method: "POST", Route: ":428/sub-task-a"}    // MARKER: SubTaskA
 	SubTaskB     = Def{Method: "POST", Route: ":428/sub-task-b"}    // MARKER: SubTaskB
+	RunSuperSub  = Def{Method: "POST", Route: ":428/run-super-sub"} // MARKER: RunSuperSub
 	Super        = Def{Method: "GET", Route: ":428/super"}          // MARKER: Super
 	SuperSub     = Def{Method: "GET", Route: ":428/super-sub"}      // MARKER: SuperSub
 )
@@ -57,7 +58,7 @@ type TaskBehavior struct {
 	ErrorStatus int    `json:"errorStatus,omitzero" jsonschema:"description=ErrorStatus returns an error with this HTTP status code"`
 	Interrupt   bool   `json:"interrupt,omitzero" jsonschema:"description=Interrupt calls flow.Interrupt(payload) instead of returning normally"`
 	Goto        string `json:"goto,omitzero" jsonschema:"description=Goto calls flow.Goto(target) before returning"`
-	Retry       bool   `json:"retry,omitzero" jsonschema:"description=Retry calls flow.RetryNow() and returns nil"`
+	Retry       bool   `json:"retry,omitzero" jsonschema:"description=Retry calls flow.Retry with an unlimited cap and returns nil"`
 }
 
 // SuperflowState is the shape of the Super workflow's shared state.
@@ -121,6 +122,12 @@ type SubTaskBIn struct{} // MARKER: SubTaskB
 
 // SubTaskBOut are the output arguments of SubTaskB.
 type SubTaskBOut struct{} // MARKER: SubTaskB
+
+// RunSuperSubIn are the input arguments of RunSuperSub.
+type RunSuperSubIn struct{} // MARKER: RunSuperSub
+
+// RunSuperSubOut are the output arguments of RunSuperSub.
+type RunSuperSubOut struct{} // MARKER: RunSuperSub
 
 // SuperIn are the input arguments of the Super workflow.
 type SuperIn struct { // MARKER: Super

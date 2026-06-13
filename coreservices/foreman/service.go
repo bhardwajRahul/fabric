@@ -18,7 +18,9 @@ package foreman
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -28,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/microbus-io/errors"
@@ -62,12 +65,93 @@ const (
 	// is orphan recovery (crashed worker; bounded above by lease expiry of time_budget+leaseMargin,
 	// ~2.5min) and any state we missed. One minute is a comfortable cap for those.
 	backlogPollInterval = 1 * time.Minute
-	// surgraphParkLease is the lease extension for a parked surgraph step while its subgraph runs
-	// or its interrupt awaits Resume. Long enough that no realistic subgraph or interrupt window
-	// exceeds it; pollPendingSteps would otherwise reclaim the step prematurely. Crash recovery
-	// still works - the subgraph's own steps have normal short leases.
-	surgraphParkLease = 7 * 24 * time.Hour
 )
+
+// parked encodes why a step is excluded from the selection band. Steps with parked != 0 are
+// physically excluded from idx_microbus_steps_selection and idx_microbus_steps_saturation, so
+// the refill scan, saturation count, and lease-expiry recovery never see them. Two reasons today:
+//   - parkedSubgraph: surgraph parent waiting for its child flow to resolve. Status stays
+//     'running' (the step IS running, logically), no lease is consulted, and the step returns to
+//     parked=0 + status='pending' when completeSurgraphFlow re-dispatches it.
+//   - parkedBreaker: pending step held back because the breaker for its task name is tripped.
+//     The breaker leaves the oldest one unparked as the probe; the rest sit at parked=2 until
+//     the probe succeeds and the breaker closes (bulk-unpark).
+// Parked discriminator values for microbus_steps.parked. The DB column is SMALLINT so the
+// index leaf entries are 2 bytes each; the Go-side type stays untyped so call sites bind these
+// directly into queries without `int16(x)` casts at every use.
+const (
+	parkedNone     = 0
+	parkedSubgraph = 1
+	parkedBreaker  = 2
+)
+
+// initialParkedFor returns the parked value a new pending step for taskName should be inserted
+// with, given the local breaker state. When the local breaker is tripped, the new step is born
+// parked=2 so the selection scan never sees it - avoiding the wasted dispatch attempt + 404 +
+// gossip + bulk-park cycle that would otherwise self-correct one step at a time. When the
+// breaker is closed (the common case), parked=0 and the step is immediately selectable.
+func (svc *Service) initialParkedFor(taskName string) int {
+	if svc.BreakerTripped(taskName) {
+		return parkedBreaker
+	}
+	return parkedNone
+}
+
+// parkTrippedSteps scans the pending steps of flowID, finds those whose task has a locally-tripped
+// breaker, and parks them (parked=2) within the given transaction. Cheap shortcut when no
+// breakers are tripped on this replica - skips the SELECT entirely. Used by Start (CREATED ->
+// PENDING transition) and Retry (which inserts a fresh PENDING row). One additional UPDATE per
+// affected task; off the hot path.
+func (svc *Service) parkTrippedSteps(ctx context.Context, tx sequel.Executor, flowID int) error {
+	svc.breakersLock.RLock()
+	if len(svc.breakers) == 0 {
+		svc.breakersLock.RUnlock()
+		return nil
+	}
+	trippedTasks := make(map[string]struct{}, len(svc.breakers))
+	for name, b := range svc.breakers {
+		if !b.trippedAt.IsZero() {
+			trippedTasks[name] = struct{}{}
+		}
+	}
+	svc.breakersLock.RUnlock()
+	if len(trippedTasks) == 0 {
+		return nil
+	}
+	// Pull only the task names that actually appear in this flow's pending set so we
+	// avoid running a per-task UPDATE for tasks that aren't in this graph.
+	rows, err := tx.QueryContext(ctx,
+		"SELECT DISTINCT task_name FROM microbus_steps WHERE flow_id=? AND status=? AND parked=?",
+		flowID, workflow.StatusPending, parkedNone,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer rows.Close()
+	affectedTasks := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return errors.Trace(err)
+		}
+		if _, ok := trippedTasks[name]; ok {
+			affectedTasks = append(affectedTasks, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Trace(err)
+	}
+	for _, name := range affectedTasks {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET parked=?, updated_at=NOW_UTC() WHERE flow_id=? AND task_name=? AND status=? AND parked=?",
+			parkedBreaker, flowID, name, workflow.StatusPending, parkedNone,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
 
 /*
 Service implements the foreman.core microservice.
@@ -97,12 +181,27 @@ type Service struct {
 	refiller           sync.WaitGroup
 	lastRefillPriority int // most recent band the refiller selected; 0 when none
 
-	// Timer goroutine for polling delayed steps. timerWorker is a WaitGroup
-	// separate from the worker pool so OnShutdown can drain the workers (the only
-	// callers of shortenNextPoll) before closing wakeTimer.
+	// Timer goroutine for polling delayed steps. timerWorker is a WaitGroup separate from the worker
+	// pool so OnShutdown can stage the drain.
+	//
+	// The timer wakes on whichever of two independent deadlines is sooner:
+	//   - nextPoll: the work cadence (nearest not_before, valve window, backlog cap). Reset by
+	//     pollPendingSteps every cycle; shortened by shortenNextPoll.
+	//   - nextProbe: the soonest tripped-breaker probe, owned solely by the breaker subsystem
+	//     (UnixNano; 0 = none). Kept separate so pollPendingSteps' nextPoll reset can never clobber
+	//     a pending probe - the bug that let the breaker's 100ms..1m schedule collapse to the 1m
+	//     backlog cadence.
+	//
+	// wakeTimer is the nudge channel: signalTimer sends on it non-blockingly. It is buffered(1) and
+	// NEVER closed, so a send can never panic regardless of which goroutine nudges (workers, the
+	// breaker subsystem via refreshNextProbeLocked, the Enqueue/TripBreaker RPC handlers) or how it
+	// races shutdown - the same rationale as refillTrigger. The timer is stopped by closing the
+	// dedicated timerStop.
 	nextPoll     time.Time
 	nextPollLock sync.Mutex
+	nextProbe    atomic.Int64
 	wakeTimer    chan struct{}
+	timerStop    chan struct{}
 	timerWorker  sync.WaitGroup
 
 	// Wait registry for Await (keyed by flowKey)
@@ -146,9 +245,16 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	svc.refillTrigger = make(chan struct{}, 1)
 	svc.refillStop = make(chan struct{})
 	svc.wakeTimer = make(chan struct{}, 1)
-	svc.nextPoll = time.Now().Add(5 * time.Minute)
+	svc.timerStop = make(chan struct{})
+	svc.nextPoll = time.Now() // recover any lease-expired steps left running by a prior replica
 	svc.valves = map[string]*taskValve{}
 	svc.breakers = map[string]*taskBreaker{}
+	// Reconstitute breakers from the DB before workers start. A previous replica may have left
+	// parked=parkedBreaker rows that are invisible to the selection index; without re-arming the
+	// in-memory state, this replica wouldn't know a probe schedule is due.
+	if err := svc.reconstituteBreakers(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	svc.graphCache = lru.New[graphCacheKey, *workflow.Graph](256, 15*time.Minute)
 	// Workers, timer, and refiller share svc.Lifetime() as their root context. OnShutdown
 	// drains them in strict order before the connector cancels the lifetime ctx, so in-flight
@@ -217,13 +323,13 @@ func (svc *Service) refillerLoop(ctx context.Context) {
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	svc.cache.close() // Terminate workerLoop (unblocks blocked pops independently of any channel)
-	// Drain the worker pool before closing wakeTimer. Workers are the only callers
-	// of shortenNextPoll, which sends on wakeTimer; a send on a closed channel
-	// panics even inside a select with a default. cache.close() unblocks workers
-	// independently of wakeTimer, so this cannot deadlock.
 	svc.workers.Wait()
-	if svc.wakeTimer != nil {
-		close(svc.wakeTimer) // Terminate timerLoop (no shortenNextPoll callers remain)
+	// Stop the timer via its dedicated timerStop; wakeTimer is never closed. signalTimer (via
+	// shortenNextPoll / refreshNextProbeLocked) sends on wakeTimer from workers, the breaker
+	// subsystem, and the Enqueue/TripBreaker RPC handlers - a never-closed buffered channel
+	// makes every such send safe regardless of drain ordering, the same rationale as refillTrigger.
+	if svc.timerStop != nil {
+		close(svc.timerStop) // Terminate timerLoop
 	}
 	svc.timerWorker.Wait()
 	// Workers and timer have drained, so no requestRefill caller remains. Stop the
@@ -382,36 +488,14 @@ func (svc *Service) HistoryMermaid(w http.ResponseWriter, r *http.Request) (err 
 		return errors.Trace(err)
 	}
 
-	var buf strings.Builder
-	buf.WriteString("flowchart TD\n")
-	buf.WriteString("    classDef completed fill:#32a7c1,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef failed fill:#f15922,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef interrupted fill:#ed2e92,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef retried fill:#c1884a,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef pending fill:#c1cccc,color:#434343,stroke:#434343\n")
-	buf.WriteString("    classDef running fill:#2e8a9e,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef cancelled fill:#7a8a8a,color:#f4f2ef,stroke:#434343\n")
-	buf.WriteString("    classDef term fill:#e5f4f3,color:#434343,stroke:#434343\n")
-
-	startID := "_start"
-	endID := "_end"
-	fmt.Fprintf(&buf, "    %s((\" \")):::term\n", startID)
-	fmt.Fprintf(&buf, "    %s((\" \")):::term\n", endID)
-	var startDate time.Time
-	if len(steps) > 0 {
-		startDate = steps[0].UpdatedAt.UTC()
-	}
-	heads, tails := renderMermaidSteps(&buf, "", steps, startDate)
-	for _, h := range heads {
-		fmt.Fprintf(&buf, "    %s --> %s\n", startID, h)
-	}
-	for _, t := range tails {
-		fmt.Fprintf(&buf, "    %s --> %s\n", t, endID)
+	mmd, err := foremanapi.NewFlowRenderer(steps).WithLinks("step").Render()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	if r.URL.Query().Get("format") == "raw" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprint(w, buf.String())
+		fmt.Fprint(w, mmd)
 		return nil
 	}
 
@@ -433,7 +517,7 @@ body { font-family: sans-serif; margin: 2em; background: #fafafa; }
 </pre>
 <script>mermaid.initialize({startOnLoad:true, securityLevel:'loose'});</script>
 </body>
-</html>`, flowKey, buf.String())
+</html>`, flowKey, mmd)
 	return nil
 }
 
@@ -651,8 +735,8 @@ func (svc *Service) createWithGraphTx(ctx context.Context, db *sequel.DB, flowTo
 	defer tx.Rollback()
 
 	newFlowID, err = tx.InsertReturnID(ctx, "flow_id",
-		"INSERT INTO microbus_flows (flow_token, workflow_name, graph, actor_claims, status, forked_flow_id, forked_step_depth, trace_parent, priority, fairness_key, fairness_weight, tenant_id)"+
-			" VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)",
+		"INSERT INTO microbus_flows (flow_token, workflow_name, graph, actor_claims, status, trace_parent, priority, fairness_key, fairness_weight, tenant_id)"+
+			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		flowToken, workflowName, string(graphJSON), string(actorClaimsJSON), workflow.StatusCreated, traceParent, opts.Priority, opts.FairnessKey, opts.FairnessWeight, tenantID,
 	)
 	if err != nil {
@@ -753,9 +837,20 @@ func (svc *Service) StartNotify(ctx context.Context, flowKey string, notifyHostn
 		return errors.Trace(err)
 	}
 
+	// If any of the just-transitioned steps belong to a task whose local breaker is currently
+	// tripped, park them at insert-into-the-pending-pool time so selection never sees them. One
+	// extra UPDATE per tripped task in this flow's graph; bounded by graph fan-out, off the hot
+	// path. Skipped entirely when no breakers are tripped (the common case).
+	err = svc.parkTrippedSteps(ctx, tx, flowID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	notifyHostname = strings.TrimSpace(notifyHostname)
+	// started_at stamps the moment this run actually began dispatching. Mirrors the per-step
+	// started_at semantics: distinct from created_at (row insert), reset on Restart/RestartFrom.
 	res, err := tx.ExecContext(ctx,
-		"UPDATE microbus_flows SET status=?, notify_hostname=?, updated_at=NOW_UTC() WHERE flow_id=? AND status=?",
+		"UPDATE microbus_flows SET status=?, notify_hostname=?, started_at=NOW_UTC(), updated_at=NOW_UTC() WHERE flow_id=? AND status=?",
 		workflow.StatusRunning, notifyHostname, flowID, workflow.StatusCreated,
 	)
 	if err != nil {
@@ -904,10 +999,85 @@ queryFlow:
 	}, nil
 }
 
+// Fingerprint returns a sha256-based opaque hash of the flow's status, total step count, and
+// max(step.updated_at) — walked across the flow and all descendant subgraph flows. Cheap to call:
+// one PK lookup on microbus_flows plus a recursive descendant walk plus a single aggregate
+// SELECT against microbus_steps. Designed as the change-detection probe for long-polling
+// watchers — every diagram-affecting change moves the hash, no-op events don't.
+func (svc *Service) Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error) { // MARKER: Fingerprint
+	shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	db, err := svc.shard(shardNum)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	err = db.QueryRowContext(ctx,
+		"SELECT status FROM microbus_flows WHERE flow_id=? AND flow_token=?",
+		flowID, flowToken,
+	).Scan(&status)
+	if err == sql.ErrNoRows {
+		return "", "", errors.New("flow not found", http.StatusNotFound)
+	}
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	status = strings.TrimSpace(status)
+
+	flowIDs := []any{flowID}
+	descendants, err := svc.allDescendantSubgraphFlows(ctx, db, flowID)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	for _, id := range descendants {
+		flowIDs = append(flowIDs, id)
+	}
+
+	ph := strings.Repeat("?,", len(flowIDs)-1) + "?"
+	var count int
+	// MAX(updated_at) is an untyped aggregate expression; SQLite returns it as a
+	// string (no column affinity) while other dialects return a time value. Scan
+	// into any and hash its string form — the fingerprint only needs a stable,
+	// change-detecting digest, not a parsed timestamp.
+	var maxUpdated any
+	err = db.QueryRowContext(ctx,
+		"SELECT COUNT(*), MAX(updated_at) FROM microbus_steps WHERE flow_id IN ("+ph+")",
+		flowIDs...,
+	).Scan(&count, &maxUpdated)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	if b, ok := maxUpdated.([]byte); ok {
+		maxUpdated = string(b)
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%d|%v", status, count, maxUpdated)))
+	return hex.EncodeToString(sum[:]), status, nil
+}
+
 /*
-Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.
+Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt (recorded on the
+leaf step's resume_data column and returned by flow.Interrupt on re-entry). It fails with 409 if the flow is paused
+at a breakpoint rather than an interrupt; ResumeBreak is the entry point for that case.
 */
 func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) (err error) { // MARKER: Resume
+	return svc.resume(ctx, flowKey, false, resumeData)
+}
+
+/*
+ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so
+the about-to-run task observes them (replace semantics; the task has not run yet). It fails with 409 if the flow is
+paused at an interrupt rather than a breakpoint; Resume is the entry point for that case.
+*/
+func (svc *Service) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: ResumeBreak
+	return svc.resume(ctx, flowKey, true, stateOverrides)
+}
+
+// resume is the shared machinery for Resume (interrupt) and ResumeBreak. It locates the leaf interrupted step,
+// verifies its park kind matches breakpoint, applies the kind-specific write to the leaf, re-parks intermediate
+// surgraph steps, transitions the chain's flows back to running, and enqueues the leaf. data is the resume payload
+// for an interrupt or the state overrides for a breakpoint.
+func (svc *Service) resume(ctx context.Context, flowKey string, breakpoint bool, data any) (err error) {
 	shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
 	if err != nil {
 		return errors.Trace(err)
@@ -958,52 +1128,59 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 	parkStepIDs := append([]any{}, upStepIDs...)
 	parkStepIDs = append(parkStepIDs, downStepIDs[:len(downStepIDs)-1]...)
 
-	// Load the leaf step's changes and its flow's graph (for reducers).
-	// State column is invariant - resumeData is merged into changes so it
-	// accumulates alongside the task's prior output and is visible during fan-in.
-	var leafChangesJSON string
-	var leafGraphJSON string
+	// Verify the leaf's park kind matches the caller's intent. interrupt_done=1 marks a flow.Interrupt park
+	// (set when the task armed it); a breakpoint pause leaves it 0 with breakpoint_hit=1. The two are
+	// mutually exclusive at the leaf, so each entry point rejects the other's pause outright rather than
+	// silently mishandling it.
+	var leafInterruptDone, leafBreakpointHit bool
+	var leafStateJSON string
 	err = db.QueryRowContext(ctx,
-		"SELECT s.changes, f.graph FROM microbus_steps s JOIN microbus_flows f ON s.flow_id=f.flow_id WHERE s.step_id=? AND s.status=?",
-		leafStepID, workflow.StatusInterrupted,
-	).Scan(&leafChangesJSON, &leafGraphJSON)
-	if err == sql.ErrNoRows {
-		return errors.New("step is already being resumed", http.StatusConflict)
-	}
+		"SELECT interrupt_done, breakpoint_hit, state FROM microbus_steps WHERE step_id=?",
+		leafStepID,
+	).Scan(&leafInterruptDone, &leafBreakpointHit, &leafStateJSON)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if breakpoint && (leafInterruptDone || !leafBreakpointHit) {
+		return errors.New("flow is not paused at a breakpoint; use Resume to continue an interrupt", http.StatusConflict)
+	}
+	if !breakpoint && !leafInterruptDone {
+		return errors.New("flow is not paused at an interrupt; use ResumeBreak to continue a breakpoint", http.StatusConflict)
+	}
 
-	// Merge resumeData into the leaf step's changes (not state) so it accumulates
-	// with the task's prior output and is visible during fan-in.
-	newChangesJSON := leafChangesJSON
-	if resumeData != nil {
-		resumeDataJSON, err := json.Marshal(resumeData)
+	// Prepare the kind-specific leaf write. For an interrupt, the payload is recorded on resume_data and
+	// returned by flow.Interrupt on re-dispatch (state/changes untouched). For a breakpoint, the overrides
+	// are merged onto the leaf's input state with replace semantics so the about-to-run task observes them;
+	// resume_data stays empty since the task arms its interrupt fresh.
+	resumeDataJSON := "{}"
+	breakpointStateJSON := leafStateJSON
+	if breakpoint {
+		var leafState map[string]any
+		err = json.Unmarshal([]byte(leafStateJSON), &leafState)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		merged, err := workflow.MergeState(leafState, data, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		mergedJSON, err := json.Marshal(merged)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		breakpointStateJSON = string(mergedJSON)
+	} else if data != nil {
+		b, err := json.Marshal(data)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		var resumeMap map[string]any
-		if err = json.Unmarshal(resumeDataJSON, &resumeMap); err != nil {
+		err = json.Unmarshal(b, &resumeMap)
+		if err != nil {
 			return errors.Trace(err)
 		}
 		if len(resumeMap) > 0 {
-			var leafGraph workflow.Graph
-			if err = json.Unmarshal([]byte(leafGraphJSON), &leafGraph); err != nil {
-				return errors.Trace(err)
-			}
-			var leafChanges map[string]any
-			if err = json.Unmarshal([]byte(leafChangesJSON), &leafChanges); err != nil {
-				return errors.Trace(err)
-			}
-			merged, err := workflow.MergeState(leafChanges, resumeMap, leafGraph.Reducers())
-			if err != nil {
-				return errors.Trace(err)
-			}
-			mergedJSON, err := json.Marshal(merged)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			newChangesJSON = string(mergedJSON)
+			resumeDataJSON = string(b)
 		}
 	}
 
@@ -1025,14 +1202,15 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 		return errors.Trace(err)
 	}
 
-	// Re-park surgraph steps (restore to running with far-future lease)
+	// Re-park surgraph steps: restore to (status='running', parked=1). No lease manipulation -
+	// the parked column itself excludes them from selection/saturation/recovery while the leaf
+	// re-runs and propagates resolution back up.
 	if len(parkStepIDs) > 0 {
-		parkMs := surgraphParkLease.Milliseconds()
 		parkPlaceholders := strings.Repeat("?,", len(parkStepIDs)-1) + "?"
-		parkArgs := append([]any{workflow.StatusRunning, parkMs}, parkStepIDs...)
+		parkArgs := append([]any{workflow.StatusRunning, parkedSubgraph}, parkStepIDs...)
 		parkArgs = append(parkArgs, workflow.StatusInterrupted)
 		_, err = tx.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, lease_expires=DATE_ADD_MILLIS(NOW_UTC(), ?), updated_at=NOW_UTC() WHERE step_id IN ("+parkPlaceholders+") AND status=?",
+			"UPDATE microbus_steps SET status=?, parked=?, updated_at=NOW_UTC() WHERE step_id IN ("+parkPlaceholders+") AND status=?",
 			parkArgs...,
 		)
 		if err != nil {
@@ -1040,11 +1218,21 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 		}
 	}
 
-	// Reset the leaf step to pending with updated changes (resume data merged into changes)
-	res, err := tx.ExecContext(ctx,
-		"UPDATE microbus_steps SET status=?, changes=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
-		workflow.StatusPending, newChangesJSON, leafStepID, workflow.StatusInterrupted,
-	)
+	// Reset the leaf step to pending. An interrupt records resumeData on resume_data (state/changes
+	// untouched, interrupt_done was set at park time); a breakpoint writes the merged input state and
+	// leaves breakpoint_hit=1 so the re-dispatch skips the breakpoint instead of re-triggering it.
+	var res sql.Result
+	if breakpoint {
+		res, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET status=?, state=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
+			workflow.StatusPending, breakpointStateJSON, leafStepID, workflow.StatusInterrupted,
+		)
+	} else {
+		res, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET status=?, resume_data=?, lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=? AND status=?",
+			workflow.StatusPending, resumeDataJSON, leafStepID, workflow.StatusInterrupted,
+		)
+	}
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1108,137 +1296,6 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 	return nil
 }
 
-/*
-Fork creates a new flow from an existing step's checkpoint. The step identified by stepKey is re-executed in the
-new flow with the (optionally overridden) state. Fork is primarily a debug/repro tool: the new flow is an
-independent investigation, so its scheduling and lifetime come from the caller-supplied opts (resolved against
-the foreman's defaults like a fresh Create), not from the parent. A nil opts gets fresh defaults, not the
-parent's priority/fairness/deadline.
-*/
-func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Fork
-	shardNum, stepID, stepToken, err := parseStepKey(stepKey)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	db, err := svc.shard(shardNum)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	opts = svc.resolveFlowOptions(ctx, opts)
-
-	// Look up the step by step key
-	var flowID, stepDepth int
-	var taskName, stateStr string
-	err = db.QueryRowContext(ctx,
-		"SELECT flow_id, step_depth, task_name, state FROM microbus_steps WHERE step_id=? AND step_token=?",
-		stepID, stepToken,
-	).Scan(&flowID, &stepDepth, &taskName, &stateStr)
-	if err == sql.ErrNoRows {
-		return "", errors.New("step not found", http.StatusNotFound)
-	}
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	// Look up the parent flow for graph + actor + trace + breakpoint + tenant inheritance.
-	// Fork preserves the parent's identity properties (it's a debug/repro tool); scheduling
-	// (priority/fairness) comes from opts, not the parent.
-	var workflowName, graphJSON, actorClaimsJSON, traceParent, parentBreakpointsJSON string
-	var parentTenantID int
-	err = db.QueryRowContext(ctx,
-		"SELECT workflow_name, graph, actor_claims, trace_parent, breakpoints, tenant_id FROM microbus_flows WHERE flow_id=?",
-		flowID,
-	).Scan(&workflowName, &graphJSON, &actorClaimsJSON, &traceParent, &parentBreakpointsJSON, &parentTenantID)
-	if err == sql.ErrNoRows {
-		return "", errors.New("flow not found", http.StatusNotFound)
-	}
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	// Parse the graph for reducers and time budgets
-	var graph workflow.Graph
-	if err = json.Unmarshal([]byte(graphJSON), &graph); err != nil {
-		return "", errors.Trace(err)
-	}
-
-	// Start from the step's immutable state, then merge overrides using reducers
-	var rawState map[string]any
-	if err = json.Unmarshal([]byte(stateStr), &rawState); err != nil {
-		return "", errors.Trace(err)
-	}
-	if stateOverrides != nil {
-		overridesJSON, err := json.Marshal(stateOverrides)
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		var overridesMap map[string]any
-		if err = json.Unmarshal(overridesJSON, &overridesMap); err != nil {
-			return "", errors.Trace(err)
-		}
-		if len(overridesMap) > 0 {
-			mergedState, err := workflow.MergeState(rawState, overridesMap, graph.Reducers())
-			if err != nil {
-				return "", errors.Trace(err)
-			}
-			rawState = mergedState
-		}
-	}
-	mergedStateJSON, err := json.Marshal(rawState)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	newFlowToken := utils.RandomIdentifier(16)
-
-	// Atomically create the forked flow and its step within a transaction
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	defer tx.Rollback()
-
-	newFlowID, err := tx.InsertReturnID(ctx, "flow_id",
-		"INSERT INTO microbus_flows (flow_token, workflow_name, graph, actor_claims, status, forked_flow_id, forked_step_depth, trace_parent, breakpoints, priority, fairness_key, fairness_weight, tenant_id)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		newFlowToken, workflowName, graphJSON, actorClaimsJSON, workflow.StatusCreated, flowID, stepDepth, traceParent, parentBreakpointsJSON, opts.Priority, opts.FairnessKey, opts.FairnessWeight, parentTenantID,
-	)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	forkTimeBudget := svc.taskTimeBudget()
-	forkStartDelayMs := int64(0)
-	if !opts.StartAt.IsZero() {
-		if d := time.Until(opts.StartAt).Milliseconds(); d > 0 {
-			forkStartDelayMs = d
-		}
-	}
-	newStepID, err := tx.InsertReturnID(ctx, "step_id",
-		"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, not_before, lease_expires, priority, fairness_key, fairness_weight)"+
-			" VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD_MILLIS(NOW_UTC(), ?), DATE_ADD_MILLIS(NOW_UTC(), ?), ?, ?, ?)",
-		newFlowID, stepDepth, utils.RandomIdentifier(16), taskName, string(mergedStateJSON), workflow.StatusCreated, forkTimeBudget.Milliseconds(), forkStartDelayMs, leaseMargin.Milliseconds(), opts.Priority, opts.FairnessKey, opts.FairnessWeight,
-	)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		"UPDATE microbus_flows SET step_id=?, updated_at=NOW_UTC() WHERE flow_id=?",
-		newStepID, newFlowID,
-	)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	svc.LogDebug(ctx, "Forked flow", "stepKey", stepKey, "workflow", workflowName)
-
-	return fmt.Sprintf("%d-%d-%s", shardNum, newFlowID, newFlowToken), nil
-}
 
 /*
 Cancel cancels a flow that is not yet in a terminal status.
@@ -1357,25 +1414,30 @@ func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (
 	}
 	defer tx.Rollback()
 
-	// Cancel all active steps across all flows in one UPDATE per table
+	// Cancel all active steps across all flows in one UPDATE per table. parked=parkedNone keeps the
+	// terminal-implies-unparked invariant: many of these steps are subgraph callers waiting on a
+	// child (parked=parkedSubgraph) or pending rows held by a tripped breaker (parked=parkedBreaker);
+	// leaving them parked would strand them outside the selection index for a future Restart.
 	flowPlaceholders := strings.Repeat("?,", len(allFlowIDs)-1) + "?"
-	stepArgs := append([]any{workflow.StatusCancelled}, allFlowIDs...)
+	stepArgs := append([]any{workflow.StatusCancelled, parkedNone}, allFlowIDs...)
 	stepArgs = append(stepArgs, workflow.StatusCreated, workflow.StatusPending, workflow.StatusInterrupted, workflow.StatusRunning)
 	_, err = tx.ExecContext(ctx,
-		"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status IN (?, ?, ?, ?)",
+		"UPDATE microbus_steps SET status=?, parked=?, updated_at=NOW_UTC() WHERE flow_id IN ("+flowPlaceholders+") AND status IN (?, ?, ?, ?)",
 		stepArgs...,
 	)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// Cancel surgraph steps in the chain (if any)
+	// Cancel surgraph caller steps in the chain (if any). These are precisely the steps that were
+	// parked=parkedSubgraph waiting for their child to resolve - the case where leaving parked != 0
+	// causes the wedged-Restart symptom this whole invariant exists to prevent.
 	if len(surgraphStepIDs) > 0 {
 		surgraphStepPlaceholders := strings.Repeat("?,", len(surgraphStepIDs)-1) + "?"
-		surgraphStepArgs := append([]any{workflow.StatusCancelled}, surgraphStepIDs...)
+		surgraphStepArgs := append([]any{workflow.StatusCancelled, parkedNone}, surgraphStepIDs...)
 		surgraphStepArgs = append(surgraphStepArgs, workflow.StatusCreated, workflow.StatusPending, workflow.StatusInterrupted, workflow.StatusRunning)
 		_, err = tx.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id IN ("+surgraphStepPlaceholders+") AND status IN (?, ?, ?, ?)",
+			"UPDATE microbus_steps SET status=?, parked=?, updated_at=NOW_UTC() WHERE step_id IN ("+surgraphStepPlaceholders+") AND status IN (?, ?, ?, ?)",
 			surgraphStepArgs...,
 		)
 		if err != nil {
@@ -1448,6 +1510,693 @@ func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (
 }
 
 /*
+Restart re-executes a terminated flow from its entry step. Every step except the entry step is
+deleted, descendant subgraph flows (and their steps) are deleted, the entry step is reset to
+pending with state = merge(originalEntryState, stateOverrides), and the flow row is flipped to
+running. The flow must be in a terminal status (completed/failed/cancelled/interrupted).
+
+stateOverrides is a top-level shallow replace over the original entry state: keys present in
+overrides win; keys mapped to null (nil) are deleted; keys absent in overrides are preserved.
+*/
+func (svc *Service) Restart(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Restart
+	shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	db, err := svc.shard(shardNum)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var flowStatus string
+	err = db.QueryRowContext(ctx,
+		"SELECT status FROM microbus_flows WHERE flow_id=? AND flow_token=?",
+		flowID, flowToken,
+	).Scan(&flowStatus)
+	if err == sql.ErrNoRows {
+		return errors.New("flow not found", http.StatusNotFound)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+	flowStatus = strings.TrimSpace(flowStatus)
+	if !isRestartable(flowStatus) {
+		return errors.New("flow is not in a terminal status (status: %s)", flowStatus, http.StatusConflict)
+	}
+
+	// Find the entry step: the one with predecessor_id=0 in this flow. Read its current state so
+	// we can apply overrides before reset.
+	var entryStepID int
+	var entryState string
+	err = db.QueryRowContext(ctx,
+		"SELECT step_id, state FROM microbus_steps WHERE flow_id=? AND predecessor_id=0",
+		flowID,
+	).Scan(&entryStepID, &entryState)
+	if err == sql.ErrNoRows {
+		return errors.New("flow has no entry step", http.StatusInternalServerError)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	mergedStateJSON, err := mergeWithOverrides(entryState, stateOverrides)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	descendantFlowIDs, err := svc.allDescendantSubgraphFlows(ctx, db, flowID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer tx.Rollback()
+
+	if len(descendantFlowIDs) > 0 {
+		ph := strings.Repeat("?,", len(descendantFlowIDs)-1) + "?"
+		args := make([]any, 0, len(descendantFlowIDs))
+		for _, id := range descendantFlowIDs {
+			args = append(args, id)
+		}
+		_, err = tx.ExecContext(ctx,
+			"DELETE FROM microbus_steps WHERE flow_id IN ("+ph+")",
+			args...,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		_, err = tx.ExecContext(ctx,
+			"DELETE FROM microbus_flows WHERE flow_id IN ("+ph+")",
+			args...,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// Wipe every step of this flow except the entry step. The DELETE clears every spawn step too,
+	// so cohort_arrivals/cohort_failures bookkeeping resets automatically.
+	_, err = tx.ExecContext(ctx,
+		"DELETE FROM microbus_steps WHERE flow_id=? AND step_id<>?",
+		flowID, entryStepID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// created_at is reset on the entry step alongside the in-place rewind so duration math and the
+	// step's fairness-key age reflect this attempt, not the original failed run. parked=parkedNone
+	// is defensive: the terminal transition that left this step in its prior state should already
+	// have reset parked (see "Step Parking" in CLAUDE.md), but Restart-explicit re-zeroing keeps
+	// it self-contained - any future code path that leaves a terminal step parked can't wedge a
+	// Restart by hiding the entry step from the selection index.
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_steps SET status=?, parked=?, state=?, changes='{}', error='', goto_next='',"+
+			" attempt=0, breakpoint_hit=0, interrupt_done=0, resume_data='{}',"+
+			" subgraph_done=0, subgraph_result='{}', subgraph_error='',"+
+			" successor_id=0, cohort_arrivals=0, cohort_failures=0,"+
+			" not_before=NOW_UTC(), lease_expires=NOW_UTC(), created_at=NOW_UTC(), updated_at=NOW_UTC()"+
+			" WHERE step_id=?",
+		workflow.StatusPending, parkedNone, mergedStateJSON, entryStepID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Reset created_at on the flow row too: Flow.CreatedAt() is exposed to tasks for elapsed-time
+	// guards, and a guard wired against the original creation moment would fire immediately on
+	// every restarted attempt past the threshold. started_at is reset alongside so duration
+	// metrics reflect this attempt's wall time, not the original run's.
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_flows SET status=?, step_id=?, error='', cancel_reason='', final_state='{}', created_at=NOW_UTC(), started_at=NOW_UTC(), updated_at=NOW_UTC()"+
+			" WHERE flow_id=? AND flow_token=?",
+		workflow.StatusRunning, entryStepID, flowID, flowToken,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "from", flowStatus, "to", workflow.StatusRunning, "via", "Restart")
+	foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, flowKey, workflow.StatusRunning)
+	foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, entryStepID)
+	return nil
+}
+
+/*
+RestartFrom re-executes a flow from the named step. The DAG subtree downstream of the step (walked
+via successor_id) is deleted; cohort counters on every affected spawn are decremented to reflect
+the swept members' contributions; descendant subgraph flows spawned by any swept step are
+cascade-deleted; the target step is UPDATEd in place to pending with state =
+merge(originalStepState, stateOverrides); the flow row is flipped to running.
+
+When the target step lives inside a subgraph child flow, every ancestor in the surgraph chain gets
+the same treatment around its caller step: the caller's downstream DAG subtree in the parent is
+swept, the caller is reset to its parked-subgraph state, and the parent flow is flipped to running.
+Sweeping cascades up because the parent's downstream consumed the (now stale) result of the child
+that's about to re-run. The caller's own child flow is NOT deleted — that's the one we're operating
+in.
+
+The target step must be in a terminal status (completed/failed/cancelled/interrupted). The target's
+flow can be in any non-cancelled status.
+*/
+func (svc *Service) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
+	shardNum, stepID, stepToken, err := parseStepKey(stepKey)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	db, err := svc.shard(shardNum)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var flowID, lineageID, predecessorID int
+	var stepStatus, stepState string
+	err = db.QueryRowContext(ctx,
+		"SELECT flow_id, status, state, lineage_id, predecessor_id FROM microbus_steps WHERE step_id=? AND step_token=?",
+		stepID, stepToken,
+	).Scan(&flowID, &stepStatus, &stepState, &lineageID, &predecessorID)
+	if err == sql.ErrNoRows {
+		return errors.New("step not found", http.StatusNotFound)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+	stepStatus = strings.TrimSpace(stepStatus)
+	if !isRestartableStep(stepStatus) {
+		return errors.New("step is not in a terminal status (status: %s)", stepStatus, http.StatusConflict)
+	}
+
+	var flowStatus, flowToken string
+	err = db.QueryRowContext(ctx,
+		"SELECT status, flow_token FROM microbus_flows WHERE flow_id=?",
+		flowID,
+	).Scan(&flowStatus, &flowToken)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	flowStatus = strings.TrimSpace(flowStatus)
+	flowToken = strings.TrimSpace(flowToken)
+	if flowStatus == workflow.StatusCancelled {
+		return errors.New("flow is cancelled and cannot be restarted from a step", http.StatusConflict)
+	}
+
+	// Within-flow sweep of the target's downstream.
+	subtree, err := svc.collectDAGSubtree(ctx, db, flowID, stepID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Walk up the surgraph chain so each ancestor's caller step (the one that called flow.Subgraph
+	// down toward this flow) and that caller's downstream get the same sweep. Same shard throughout
+	// (subgraph children share their parent's shard).
+	upFlowIDs, upStepIDs, _, err := svc.surgraphChain(ctx, shardNum, flowID, flowToken)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	type parentLevel struct {
+		flowID       int
+		flowToken    string
+		flowStatus   string
+		callerStepID int
+		subtree      []sweptMember
+	}
+	var parents []parentLevel
+	for i, sid := range upStepIDs {
+		parentFlowID, ok := upFlowIDs[i+1].(int)
+		if !ok {
+			return errors.New("unexpected non-int parent flowID at level %d", i)
+		}
+		callerStepID, ok := sid.(int)
+		if !ok {
+			return errors.New("unexpected non-int surgraph stepID at level %d", i)
+		}
+		var pTok, pStatus string
+		err = db.QueryRowContext(ctx,
+			"SELECT flow_token, status FROM microbus_flows WHERE flow_id=?",
+			parentFlowID,
+		).Scan(&pTok, &pStatus)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		pStatus = strings.TrimSpace(pStatus)
+		if pStatus == workflow.StatusCancelled {
+			return errors.New("ancestor surgraph flow is cancelled and cannot be restarted into", http.StatusConflict)
+		}
+		pSub, err := svc.collectDAGSubtree(ctx, db, parentFlowID, callerStepID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		parents = append(parents, parentLevel{
+			flowID:       parentFlowID,
+			flowToken:    strings.TrimSpace(pTok),
+			flowStatus:   pStatus,
+			callerStepID: callerStepID,
+			subtree:      pSub,
+		})
+	}
+
+	mergedStateJSON, err := mergeWithOverrides(stepState, stateOverrides)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer tx.Rollback()
+
+	// Cascade-delete subgraph flows rooted at any swept step, in the target's flow and at each
+	// parent level. Caller steps themselves are NOT in any swept set (their child flows are the
+	// surgraph chain we're operating in), so they survive untouched.
+	sweepEverywhere := func(members []sweptMember) error {
+		for _, m := range members {
+			err = svc.deleteSubgraphFlowsRootedAt(ctx, tx, m.stepID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}
+	err = sweepEverywhere(subtree)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, p := range parents {
+		err = sweepEverywhere(p.subtree)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// Tally per-spawn decrements across every swept member (target's local subtree, the target
+	// itself, and each parent level's subtree). Caller steps stay put and don't participate.
+	type cohortDelta struct{ arrivalsDelta, failuresDelta int }
+	deltaBySpawn := map[int]*cohortDelta{}
+	bump := func(spawnID int, status string) {
+		if spawnID == 0 {
+			return
+		}
+		d, ok := deltaBySpawn[spawnID]
+		if !ok {
+			d = &cohortDelta{}
+			deltaBySpawn[spawnID] = d
+		}
+		switch status {
+		case workflow.StatusCompleted, workflow.StatusCancelled, workflow.StatusFailed:
+			d.arrivalsDelta++
+		}
+		if status == workflow.StatusFailed {
+			d.failuresDelta++
+		}
+	}
+	for _, m := range subtree {
+		bump(m.lineageID, m.status)
+	}
+	bump(lineageID, stepStatus)
+	for _, p := range parents {
+		for _, m := range p.subtree {
+			bump(m.lineageID, m.status)
+		}
+	}
+
+	// Delete swept rows in one statement per level.
+	deleteIDs := func(members []sweptMember) error {
+		if len(members) == 0 {
+			return nil
+		}
+		ids := make([]any, 0, len(members))
+		for _, m := range members {
+			ids = append(ids, m.stepID)
+		}
+		ph := strings.Repeat("?,", len(ids)-1) + "?"
+		_, err = tx.ExecContext(ctx,
+			"DELETE FROM microbus_steps WHERE step_id IN ("+ph+")",
+			ids...,
+		)
+		return errors.Trace(err)
+	}
+	err = deleteIDs(subtree)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, p := range parents {
+		err = deleteIDs(p.subtree)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if predecessorID != 0 {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET successor_id=0 WHERE step_id=? AND successor_id<>?",
+			predecessorID, stepID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	for spawnID, d := range deltaBySpawn {
+		err = svc.undoCohortBumps(ctx, tx, spawnID, d.arrivalsDelta, d.failuresDelta)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// created_at reset so duration math reflects this attempt; the surrounding flow's created_at is
+	// left intact since only this step is being rewound, not the whole flow. parked=parkedNone is
+	// defensive (see Restart for the rationale): keep the target step self-contained against any
+	// future code path that might leave a terminal step parked.
+	_, err = tx.ExecContext(ctx,
+		"UPDATE microbus_steps SET status=?, parked=?, state=?, changes='{}', error='', goto_next='',"+
+			" attempt=0, breakpoint_hit=0, interrupt_done=0, resume_data='{}',"+
+			" subgraph_done=0, subgraph_result='{}', subgraph_error='',"+
+			" successor_id=0,"+
+			" not_before=NOW_UTC(), lease_expires=NOW_UTC(), created_at=NOW_UTC(), updated_at=NOW_UTC()"+
+			" WHERE step_id=?",
+		workflow.StatusPending, parkedNone, mergedStateJSON, stepID,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Reset each parent surgraph caller step back to its parked-waiting-for-child state. Its
+	// subgraph_done/result/error are cleared so completeSurgraphFlow re-fires when the restarted
+	// child eventually completes. successor_id is cleared because the caller's old successor was
+	// just swept.
+	for _, p := range parents {
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_steps SET status=?, parked=?, subgraph_done=0, subgraph_result='{}', subgraph_error='', successor_id=0, error='', goto_next='', lease_expires=NOW_UTC(), updated_at=NOW_UTC() WHERE step_id=?",
+			workflow.StatusRunning, parkedSubgraph, p.callerStepID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if flowStatus != workflow.StatusRunning {
+		// RestartFrom is a surgical rewind, not a fresh attempt. The flow's started_at is
+		// preserved so duration metrics reflect the full lifespan since the original Start.
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_flows SET status=?, error='', cancel_reason='', final_state='{}', updated_at=NOW_UTC()"+
+				" WHERE flow_id=? AND flow_token=? AND status<>?",
+			workflow.StatusRunning, flowID, flowToken, workflow.StatusCancelled,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	for _, p := range parents {
+		if p.flowStatus == workflow.StatusRunning {
+			continue
+		}
+		_, err = tx.ExecContext(ctx,
+			"UPDATE microbus_flows SET status=?, error='', cancel_reason='', final_state='{}', updated_at=NOW_UTC()"+
+				" WHERE flow_id=? AND flow_token=? AND status<>?",
+			workflow.StatusRunning, p.flowID, p.flowToken, workflow.StatusCancelled,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	flowKey := fmt.Sprintf("%d-%d-%s", shardNum, flowID, flowToken)
+	if flowStatus != workflow.StatusRunning {
+		svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "from", flowStatus, "to", workflow.StatusRunning, "via", "RestartFrom", "step", stepID)
+		foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, flowKey, workflow.StatusRunning)
+	}
+	for _, p := range parents {
+		if p.flowStatus == workflow.StatusRunning {
+			continue
+		}
+		parentFlowKey := fmt.Sprintf("%d-%d-%s", shardNum, p.flowID, p.flowToken)
+		svc.LogInfo(ctx, "Flow status transition", "flow", p.flowID, "from", p.flowStatus, "to", workflow.StatusRunning, "via", "RestartFrom", "surgraphStep", p.callerStepID)
+		foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, parentFlowKey, workflow.StatusRunning)
+	}
+	foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, stepID)
+	return nil
+}
+
+// skipSurgraphForward walks past any surgraph-step wrappers on the forward
+// path: if id is a step that has a subgraph attached, return that subgraph's
+// entry step instead. Loops for nested subgraphs. Returns id unchanged when it
+// is 0 or not a surgraph step.
+func (svc *Service) skipSurgraphForward(ctx context.Context, db *sequel.DB, id int) (int, error) {
+	for id > 0 {
+		var childFlow int
+		err := db.QueryRowContext(ctx,
+			"SELECT flow_id FROM microbus_flows WHERE surgraph_step_id=?",
+			id,
+		).Scan(&childFlow)
+		if err == sql.ErrNoRows {
+			return id, nil
+		}
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		if childFlow == 0 {
+			return id, nil
+		}
+		var entry int
+		err = db.QueryRowContext(ctx,
+			"SELECT step_id FROM microbus_steps WHERE flow_id=? AND predecessor_id=0 ORDER BY step_id LIMIT 1",
+			childFlow,
+		).Scan(&entry)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return id, nil
+			}
+			return 0, errors.Trace(err)
+		}
+		id = entry
+	}
+	return id, nil
+}
+
+// skipSurgraphBackward is the backward counterpart: if id is a surgraph
+// wrapper, return the subgraph's exit step (completed, with successor_id=0).
+// Loops for nested subgraphs.
+func (svc *Service) skipSurgraphBackward(ctx context.Context, db *sequel.DB, id int) (int, error) {
+	for id > 0 {
+		var childFlow int
+		err := db.QueryRowContext(ctx,
+			"SELECT flow_id FROM microbus_flows WHERE surgraph_step_id=?",
+			id,
+		).Scan(&childFlow)
+		if err == sql.ErrNoRows {
+			return id, nil
+		}
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		if childFlow == 0 {
+			return id, nil
+		}
+		var exit int
+		err = db.QueryRowContext(ctx,
+			"SELECT step_id FROM microbus_steps WHERE flow_id=? AND successor_id=0 AND status='completed' ORDER BY step_id DESC LIMIT 1",
+			childFlow,
+		).Scan(&exit)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return id, nil
+			}
+			return 0, errors.Trace(err)
+		}
+		id = exit
+	}
+	return id, nil
+}
+
+/*
+Step returns the full detail of one execution step, including the state,
+changes and interrupt payload that History intentionally omits to keep
+flow-wide responses bounded.
+*/
+func (svc *Service) Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error) { // MARKER: Step
+	shardNum, stepID, stepToken, err := parseStepKey(stepKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	db, err := svc.shard(shardNum)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var taskName, statusStr, errMsg string
+	var stateJSON, changesJSON, interruptJSON string
+	var stepDepth, attempt, predID, succID int
+	var createdAt, updatedAt time.Time
+	err = db.QueryRowContext(ctx,
+		"SELECT step_depth, task_name, attempt, state, changes, interrupt_payload, status, error, created_at, updated_at, predecessor_id, successor_id FROM microbus_steps WHERE step_id=? AND step_token=?",
+		stepID, stepToken,
+	).Scan(&stepDepth, &taskName, &attempt, &stateJSON, &changesJSON, &interruptJSON, &statusStr, &errMsg, &createdAt, &updatedAt, &predID, &succID)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("step not found", http.StatusNotFound)
+	}
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	fs := &foremanapi.FlowStep{
+		StepKey:       stepKey,
+		StepID:        stepID,
+		StepDepth:     stepDepth,
+		TaskName:      taskName,
+		Attempt:       attempt,
+		PredecessorID: predID,
+		SuccessorID:   succID,
+		Status:        strings.TrimSpace(statusStr),
+		Error:         strings.TrimSpace(errMsg),
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+	err = json.Unmarshal([]byte(stateJSON), &fs.State)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	err = json.Unmarshal([]byte(changesJSON), &fs.Changes)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if interruptJSON != "" {
+		err = json.Unmarshal([]byte(interruptJSON), &fs.InterruptPayload)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	// Navigation skips the surgraph wrapper entirely: it's a routing/structural
+	// step (parked while the subgraph runs) and isn't on the execution timeline
+	// the user wants to walk. We resolve the effective neighbor in three steps:
+	//
+	//   1. Start with the intra-flow predecessor_id / successor_id.
+	//   2. If the current step is a subgraph entry/exit (predID/succID == 0),
+	//      stitch across the seam to the *parent's* surgraph-step's intra-flow
+	//      neighbor (skipping the wrapper itself).
+	//   3. If the current step is itself a surgraph (has a child flow attached),
+	//      jump straight to that child flow's entry on successor.
+	//   4. Repeat the "neighbor is a surgraph -> descend" walk until the
+	//      effective neighbor is a regular step. Nested subgraphs naturally
+	//      unwrap in one direction or the other.
+	effectivePredID := predID
+	effectiveSuccID := succID
+	if predID == 0 || succID == 0 {
+		// We may be inside a subgraph - look up our own flow's surgraph linkage.
+		var surgraphStepID int
+		err = db.QueryRowContext(ctx,
+			"SELECT f.surgraph_step_id FROM microbus_steps s JOIN microbus_flows f ON s.flow_id = f.flow_id WHERE s.step_id=?",
+			stepID,
+		).Scan(&surgraphStepID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, errors.Trace(err)
+		}
+		if surgraphStepID > 0 {
+			// Cross-flow ascend: skip the surgraph wrapper and jump to its
+			// intra-flow neighbor in the parent flow.
+			var parentPred, parentSucc int
+			err = db.QueryRowContext(ctx,
+				"SELECT predecessor_id, successor_id FROM microbus_steps WHERE step_id=?",
+				surgraphStepID,
+			).Scan(&parentPred, &parentSucc)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, errors.Trace(err)
+			}
+			if effectivePredID == 0 && parentPred > 0 {
+				effectivePredID = parentPred
+			}
+			if effectiveSuccID == 0 && parentSucc > 0 {
+				effectiveSuccID = parentSucc
+			}
+		}
+	}
+	// If the current step itself is a surgraph, descend on the successor side
+	// (entry of its subgraph) so navigation enters the child instead of skipping
+	// past it.
+	var ownChildFlow int
+	err = db.QueryRowContext(ctx,
+		"SELECT flow_id FROM microbus_flows WHERE surgraph_step_id=?",
+		stepID,
+	).Scan(&ownChildFlow)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, errors.Trace(err)
+	}
+	if ownChildFlow > 0 {
+		var entry int
+		err = db.QueryRowContext(ctx,
+			"SELECT step_id FROM microbus_steps WHERE flow_id=? AND predecessor_id=0 ORDER BY step_id LIMIT 1",
+			ownChildFlow,
+		).Scan(&entry)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, errors.Trace(err)
+		}
+		if entry > 0 {
+			effectiveSuccID = entry
+		}
+	}
+	// Walk past any surgraph wrapper that the effective neighbor lands on,
+	// descending into the appropriate end of the subgraph (entry for forward,
+	// exit for backward). Loop in case of nested subgraphs.
+	effectiveSuccID, err = svc.skipSurgraphForward(ctx, db, effectiveSuccID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	effectivePredID, err = svc.skipSurgraphBackward(ctx, db, effectivePredID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// Resolve predecessor/successor step keys for navigation. The cross-flow
+	// fallbacks above still land on the same shard (subgraph flows have shard
+	// affinity with their parent), so one IN query fetches both rows.
+	if effectivePredID > 0 || effectiveSuccID > 0 {
+		var ids []any
+		if effectivePredID > 0 {
+			ids = append(ids, effectivePredID)
+		}
+		if effectiveSuccID > 0 && effectiveSuccID != effectivePredID {
+			ids = append(ids, effectiveSuccID)
+		}
+		placeholders := strings.Repeat("?,", len(ids))
+		placeholders = placeholders[:len(placeholders)-1]
+		nrows, err := db.QueryContext(ctx,
+			"SELECT step_id, step_token FROM microbus_steps WHERE step_id IN ("+placeholders+")",
+			ids...,
+		)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		defer nrows.Close()
+		for nrows.Next() {
+			var nid int
+			var ntoken string
+			if err := nrows.Scan(&nid, &ntoken); err != nil {
+				return nil, errors.Trace(err)
+			}
+			key := fmt.Sprintf("%d-%d-%s", shardNum, nid, strings.TrimSpace(ntoken))
+			if nid == effectivePredID {
+				fs.PrevKey = key
+			}
+			if nid == effectiveSuccID {
+				fs.NextKey = key
+			}
+		}
+	}
+	return fs, nil
+}
+
+/*
 History returns the step-by-step execution history of a flow.
 */
 func (svc *Service) History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error) { // MARKER: History
@@ -1477,161 +2226,6 @@ func (svc *Service) History(ctx context.Context, flowKey string) (steps []forema
 	return svc.historyBeforeStep(ctx, shardNum, flowID, 0)
 }
 
-/*
-Retry re-executes the last failed step of a flow.
-*/
-func (svc *Service) Retry(ctx context.Context, flowKey string) (err error) { // MARKER: Retry
-	shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	db, err := svc.shard(shardNum)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// Validate that the flow is failed and get the current step
-	var flowStatus string
-	var flowStepID int
-	err = db.QueryRowContext(ctx,
-		"SELECT status, step_id FROM microbus_flows WHERE flow_id=? AND flow_token=?",
-		flowID, flowToken,
-	).Scan(&flowStatus, &flowStepID)
-	if err == sql.ErrNoRows {
-		return errors.New("flow not found", http.StatusNotFound)
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-	flowStatus = strings.TrimSpace(flowStatus)
-	if flowStatus != workflow.StatusFailed {
-		return errors.New("flow is not failed (status: %s)", flowStatus, http.StatusConflict)
-	}
-	fanOut := flowStepID == 0
-
-	// Load failed step(s) for duplication
-	type failedStep struct {
-		stepID         int
-		stepDepth      int
-		taskName       string
-		state          string
-		timeBudgetMs   int
-		lineageID      int
-		fanOutOrdinal  int
-		predecessorID  int
-		priority       int
-		fairnessKey    string
-		fairnessWeight float64
-	}
-	var failedSteps []failedStep
-	if fanOut {
-		// Potentially multiple failed steps
-		rows, err := db.QueryContext(ctx,
-			"SELECT step_id, step_depth, task_name, state, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, priority, fairness_key, fairness_weight FROM microbus_steps WHERE flow_id=? AND status=?",
-			flowID, workflow.StatusFailed,
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var fs failedStep
-			err := rows.Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs, &fs.lineageID, &fs.fanOutOrdinal, &fs.predecessorID, &fs.priority, &fs.fairnessKey, &fs.fairnessWeight)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			failedSteps = append(failedSteps, fs)
-		}
-		if err := rows.Err(); err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		var fs failedStep
-		err = db.QueryRowContext(ctx,
-			"SELECT step_id, step_depth, task_name, state, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, priority, fairness_key, fairness_weight FROM microbus_steps WHERE step_id=? AND status=?",
-			flowStepID, workflow.StatusFailed,
-		).Scan(&fs.stepID, &fs.stepDepth, &fs.taskName, &fs.state, &fs.timeBudgetMs, &fs.lineageID, &fs.fanOutOrdinal, &fs.predecessorID, &fs.priority, &fs.fairnessKey, &fs.fairnessWeight)
-		if err != nil && err != sql.ErrNoRows {
-			return errors.Trace(err)
-		}
-		if err == nil {
-			failedSteps = []failedStep{fs}
-		}
-	}
-	if len(failedSteps) == 0 {
-		return errors.New("flow is already being retried", http.StatusConflict)
-	}
-
-	// Atomically mark failed steps as retried, insert new copies, and update flow within a transaction
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer tx.Rollback()
-
-	// Mark failed steps as retried (preserves error and history)
-	placeholders := strings.Repeat("?,", len(failedSteps)-1) + "?"
-	args := []any{workflow.StatusRetried}
-	for _, fs := range failedSteps {
-		args = append(args, fs.stepID)
-	}
-	args = append(args, workflow.StatusFailed)
-	res, err := tx.ExecContext(ctx,
-		"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE step_id IN ("+placeholders+") AND status=?",
-		args...,
-	)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return errors.New("flow is already being retried", http.StatusConflict)
-	}
-
-	// Insert new copies of the failed steps with pending status
-	var newStepIDs []int
-	for _, fs := range failedSteps {
-		// Carry lineage_id and fan_out_ordinal so the retried step rejoins its fan-in
-		// cohort in its original position; without lineage_id it would orphan from the
-		// cohort. Carry predecessor_id so it slots back into the execution DAG where
-		// the failed step was.
-		newStepID, err := tx.InsertReturnID(ctx, "step_id",
-			"INSERT INTO microbus_steps (flow_id, step_depth, step_token, task_name, state, status, time_budget_ms, lineage_id, fan_out_ordinal, predecessor_id, priority, fairness_key, fairness_weight)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			flowID, fs.stepDepth, utils.RandomIdentifier(16), fs.taskName, fs.state, workflow.StatusPending, fs.timeBudgetMs, fs.lineageID, fs.fanOutOrdinal, fs.predecessorID, fs.priority, fs.fairnessKey, fs.fairnessWeight,
-		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		newStepIDs = append(newStepIDs, int(newStepID))
-	}
-
-	// Update flow's step_id to point to the new step(s)
-	nextFlowStepID := newStepIDs[0]
-	if len(newStepIDs) > 1 {
-		nextFlowStepID = 0 // Fan out
-	}
-	_, err = tx.ExecContext(ctx,
-		"UPDATE microbus_flows SET status=?, step_id=?, updated_at=NOW_UTC() WHERE flow_id=? AND status=?",
-		workflow.StatusRunning, nextFlowStepID, flowID, workflow.StatusFailed,
-	)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	svc.LogInfo(ctx, "Flow status transition", "flow", flowID, "from", workflow.StatusFailed, "to", workflow.StatusRunning)
-	foremanapi.NewMulticastClient(svc).NotifyStatusChange(ctx, flowKey, workflow.StatusRunning)
-
-	// Ring the doorbell once; the refiller's DB scan picks up the rest of the
-	// retried steps in priority order. See CLAUDE.md "Queue-as-cache, doorbell".
-	if len(newStepIDs) > 0 {
-		foremanapi.NewMulticastClient(svc).Enqueue(ctx, shardNum, int(newStepIDs[0]))
-	}
-	return nil
-}
 
 // ShardInfo probes every database shard in parallel and returns per-shard health (latency, row
 // counts, error). A shard that fails any of its probes contributes an entry with non-empty
@@ -1739,22 +2333,25 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 			return func() error { return nil }
 		}
 		return func() (err error) {
+			db, err := svc.shard(shardIdx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			conditions := []string{whereSQL}
 			args := append([]any(nil), baseArgs...)
 			if cur, ok := perShardCursor[shardIdx]; ok {
 				conditions = append(conditions, "f.flow_id<?")
 				args = append(args, cur)
 			}
+			if sc, scArgs := searchClause(db.DriverName(), shardIdx, query.Search); sc != "" {
+				conditions = append(conditions, sc)
+				args = append(args, scArgs...)
+			}
 			args = append(args, perShardLimit)
-			stmt := "SELECT f.flow_id, f.flow_token, f.thread_id, f.thread_token, f.workflow_name, f.status, s.task_name, f.error, f.cancel_reason" +
+			stmt := "SELECT f.flow_id, f.flow_token, f.thread_id, f.thread_token, f.workflow_name, f.status, s.task_name, f.error, f.cancel_reason, f.created_at, f.started_at, f.updated_at" +
 				" FROM microbus_flows f" + joinSQL +
 				" WHERE " + strings.Join(conditions, " AND ") +
 				" ORDER BY f.flow_id DESC LIMIT_OFFSET(?, 0)"
-
-			db, err := svc.shard(shardIdx)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			rows, err := db.QueryContext(ctx, stmt, args...)
 			if err != nil {
 				return errors.Trace(err)
@@ -1766,7 +2363,7 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 				var flowToken, threadToken, flowError, cancelReason string
 				var threadID int
 				var taskName sql.NullString
-				err = rows.Scan(&lr.flowID, &flowToken, &threadID, &threadToken, &lr.summary.WorkflowName, &lr.summary.Status, &taskName, &flowError, &cancelReason)
+				err = rows.Scan(&lr.flowID, &flowToken, &threadID, &threadToken, &lr.summary.WorkflowName, &lr.summary.Status, &taskName, &flowError, &cancelReason, &lr.summary.CreatedAt, &lr.summary.StartedAt, &lr.summary.UpdatedAt)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -1841,6 +2438,25 @@ func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []f
 	return flows, nextCursor, nil
 }
 
+// searchClause builds the per-shard SQL predicate and bind args for Query.Search. The match
+// is case-insensitive substring against workflow_name, current task_name, error, cancel_reason,
+// and the composed flow key "{shard}-{flow_id}-{flow_token}". Empty search yields "", nil.
+func searchClause(driverName string, shardIdx int, search string) (sql string, args []any) {
+	if search == "" {
+		return "", nil
+	}
+	pattern := "%" + strings.ToLower(search) + "%"
+	var flowKeyExpr string
+	switch driverName {
+	case "mysql", "mssql":
+		flowKeyExpr = fmt.Sprintf("CONCAT('%d-', f.flow_id, '-', TRIM(f.flow_token))", shardIdx)
+	default:
+		flowKeyExpr = fmt.Sprintf("'%d-' || f.flow_id || '-' || TRIM(f.flow_token)", shardIdx)
+	}
+	sql = "(LOWER(f.workflow_name) LIKE ? OR LOWER(s.task_name) LIKE ? OR LOWER(f.error) LIKE ? OR LOWER(f.cancel_reason) LIKE ? OR LOWER(" + flowKeyExpr + ") LIKE ?)"
+	return sql, []any{pattern, pattern, pattern, pattern, pattern}
+}
+
 // queryClauses resolves a Query into the SQL fragments shared by List, Purge, and other
 // query-driven endpoints. Returns the FROM-clause join, the WHERE-clause body (without a leading
 // "WHERE"), the bind args matching whereSQL placeholders, and a restrictShardNum which (when non-
@@ -1900,6 +2516,8 @@ func (svc *Service) queryClauses(ctx context.Context, query foremanapi.Query) (j
 		conditions = append(conditions, "f.updated_at >= DATE_ADD_MILLIS(NOW_UTC(), ?)")
 		args = append(args, -int64(query.NewerThan/time.Millisecond))
 	}
+	// Note: query.Search is applied per-shard by searchClause, since the composed flow key
+	// "{shard}-{flow_id}-{flow_token}" needs the shard literal baked into the SQL.
 
 	joinSQL = " LEFT JOIN microbus_steps s ON f.step_id = s.step_id"
 	whereSQL = strings.Join(conditions, " AND ")
@@ -1908,9 +2526,9 @@ func (svc *Service) queryClauses(ctx context.Context, query foremanapi.Query) (j
 
 /*
 Delete removes a flow and its steps from the database. The flow must not be running. Subgraph
-children, forked flows, and thread descendants are left dangling (their parent references become
-stale); this matches the framework's stance that Continue/Fork lineage is best-effort and not
-guaranteed across operator-driven retention.
+children and thread descendants are left dangling (their parent references become stale); this
+matches the framework's stance that Continue lineage is best-effort and not guaranteed across
+operator-driven retention.
 */
 func (svc *Service) Delete(ctx context.Context, flowKey string) (err error) { // MARKER: Delete
 	shardNum, flowID, flowToken, err := parseFlowKey(flowKey)
@@ -1990,15 +2608,19 @@ func (svc *Service) Purge(ctx context.Context, query foremanapi.Query) (deleted 
 			return func() error { return nil }
 		}
 		return func() error {
-			args := append([]any(nil), baseArgs...)
-			args = append(args, workflow.StatusRunning, perShardLimit)
-			selectIDs := "SELECT DISTINCT f.flow_id FROM microbus_flows f" + joinSQL +
-				" WHERE " + whereSQL + " AND f.status<>? LIMIT_OFFSET(?, 0)"
-
 			db, err := svc.shard(shardIdx)
 			if err != nil {
 				return errors.Trace(err)
 			}
+			where := whereSQL
+			args := append([]any(nil), baseArgs...)
+			if sc, scArgs := searchClause(db.DriverName(), shardIdx, query.Search); sc != "" {
+				where += " AND " + sc
+				args = append(args, scArgs...)
+			}
+			args = append(args, workflow.StatusRunning, perShardLimit)
+			selectIDs := "SELECT DISTINCT f.flow_id FROM microbus_flows f" + joinSQL +
+				" WHERE " + where + " AND f.status<>? LIMIT_OFFSET(?, 0)"
 			rows, err := db.QueryContext(ctx, selectIDs, args...)
 			if err != nil {
 				return errors.Trace(err)
@@ -2137,23 +2759,37 @@ func (svc *Service) workerLoop(ctx context.Context) {
 	}
 }
 
-// timerLoop sleeps until nextPoll, then calls pollPendingSteps. It re-evaluates
-// whenever wakeTimer is signaled or the sleep expires. Capped at maxPollInterval.
+// timerLoop sleeps until the sooner of nextPoll / nextProbe, then calls pollPendingSteps. It
+// re-evaluates whenever wakeTimer is signaled or the sleep expires, and exits when timerStop is
+// closed. Capped at maxPollInterval.
 func (svc *Service) timerLoop(ctx context.Context) {
 	for {
 		svc.nextPollLock.Lock()
 		deadline := svc.nextPoll
 		svc.nextPollLock.Unlock()
 
+		// Wake for a tripped breaker's probe too, on its own deadline. Floor an overdue probe to
+		// breakerInitialProbeDelay so a probe still being dispatched (selection picked it up but
+		// the schedule hasn't been advanced yet by the next breakerTrip on failure) doesn't spin
+		// the timer at zero delay.
+		if probeNanos := svc.nextProbe.Load(); probeNanos != 0 {
+			probe := time.Unix(0, probeNanos)
+			if floor := time.Now().Add(breakerInitialProbeDelay); probe.Before(floor) {
+				probe = floor
+			}
+			if probe.Before(deadline) {
+				deadline = probe
+			}
+		}
+
 		delay := max(0, min(time.Until(deadline), maxPollInterval))
 
 		select {
+		case <-svc.timerStop:
+			return // Shutting down
 		case <-time.After(delay):
-		case _, ok := <-svc.wakeTimer:
-			if !ok {
-				return // Channel closed, shutting down
-			}
-			continue // Re-evaluate nextPoll
+		case <-svc.wakeTimer:
+			continue // Nudged: re-evaluate the deadline
 		}
 
 		err := svc.pollPendingSteps(ctx)
@@ -2300,8 +2936,10 @@ func (svc *Service) SyncValve(ctx context.Context, taskName string, wCong int, t
 	return nil
 }
 
-// TripBreaker receives a per-task breaker trip from a peer foreman replica
-// and stamps the local clock. No-op if already tripped.
+// TripBreaker receives a per-task breaker trip from a peer foreman replica. Stamps the local
+// clock and drives bulk-park exactly as a local trip does so this replica's view of the task's
+// pending steps converges with the originating replica's. Closures are not gossiped; each peer
+// closes locally when its own probe succeeds.
 func (svc *Service) TripBreaker(ctx context.Context, taskName string) (err error) { // MARKER: TripBreaker
 	if frame.Of(ctx).FromHost() != foremanapi.Hostname {
 		return nil // gated to foreman peers; verified source is set by the connector
@@ -2309,18 +2947,16 @@ func (svc *Service) TripBreaker(ctx context.Context, taskName string) (err error
 	if taskName == "" {
 		return nil
 	}
-	now := time.Now()
-	svc.breakersLock.Lock()
-	defer svc.breakersLock.Unlock()
-	b, ok := svc.breakers[taskName]
-	if !ok {
-		b = &taskBreaker{}
-		svc.breakers[taskName] = b
+	// Use breakerTrip with the gossip cause label; cause is preserved on the first replica's
+	// trip and re-stamped here only if we hadn't seen this breaker yet. The "ack_timeout" label
+	// is a reasonable default for the gossip path since the gossip itself doesn't carry cause.
+	fresh, nextProbeAt := svc.breakerTrip(taskName, breakerCauseAckTimeout)
+	if !fresh {
+		return nil // already tripped here too; no fresh bulk-park needed
 	}
-	if b.trippedAt.IsZero() {
-		b.trippedAt = now
-		b.probeAttempt = 0
-		b.nextProbeAt = now.Add(breakerProbeBackoff(1))
+	err = svc.breakerBulkPark(ctx, taskName, nextProbeAt)
+	if err != nil {
+		svc.LogError(ctx, "Bulk-park on gossip trip", "task", taskName, "error", err)
 	}
 	return nil
 }

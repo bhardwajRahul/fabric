@@ -29,6 +29,7 @@ type Mock struct {
 	mockErrorHandler  func(ctx context.Context, flow *workflow.Flow) (err error)   // MARKER: ErrorHandler
 	mockSubTaskA      func(ctx context.Context, flow *workflow.Flow) (err error)   // MARKER: SubTaskA
 	mockSubTaskB      func(ctx context.Context, flow *workflow.Flow) (err error)   // MARKER: SubTaskB
+	mockRunSuperSub   func(ctx context.Context, flow *workflow.Flow) (err error)   // MARKER: RunSuperSub
 	mockSuperGraph    func(ctx context.Context) (graph *workflow.Graph, err error) // MARKER: Super
 	unsubMockSuper    func() error                                                 // MARKER: Super
 	mockSuperSubGraph func(ctx context.Context) (graph *workflow.Graph, err error) // MARKER: SuperSub
@@ -178,6 +179,20 @@ func (svc *Mock) MockSubTaskB(handler func(ctx context.Context, flow *workflow.F
 func (svc *Mock) SubTaskB(ctx context.Context, flow *workflow.Flow) (err error) { // MARKER: SubTaskB
 	if svc.mockSubTaskB != nil {
 		err = svc.mockSubTaskB(ctx, flow)
+	}
+	return errors.Trace(err)
+}
+
+// MockRunSuperSub sets up a mock handler for RunSuperSub.
+func (svc *Mock) MockRunSuperSub(handler func(ctx context.Context, flow *workflow.Flow) (err error)) *Mock { // MARKER: RunSuperSub
+	svc.mockRunSuperSub = handler
+	return svc
+}
+
+// RunSuperSub executes the mock handler.
+func (svc *Mock) RunSuperSub(ctx context.Context, flow *workflow.Flow) (err error) { // MARKER: RunSuperSub
+	if svc.mockRunSuperSub != nil {
+		err = svc.mockRunSuperSub(ctx, flow)
 	}
 	return errors.Trace(err)
 }

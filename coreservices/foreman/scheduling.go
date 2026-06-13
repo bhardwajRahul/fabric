@@ -76,9 +76,9 @@ func (svc *Service) scanPriorityBand(ctx context.Context, prevBand int) (int, []
 	err := svc.eachShard(ctx, func(ctx context.Context, db *sequel.DB, shard int) error {
 		rows, err := db.QueryContext(ctx,
 			"SELECT step_id, task_name, fairness_key, fairness_weight, priority, DATE_DIFF_MILLIS(NOW_UTC(), created_at) FROM microbus_steps"+
-				" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?"+
+				" WHERE status=? AND parked=0 AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?"+
 				" AND priority=(SELECT MIN(priority) FROM microbus_steps"+
-				" WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?)"+
+				" WHERE status=? AND parked=0 AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() AND priority>?)"+
 				" ORDER BY step_id",
 			workflow.StatusPending, prevBand, workflow.StatusPending, prevBand,
 		)
@@ -142,20 +142,17 @@ func (svc *Service) runRefill(ctx context.Context) error {
 	capacity := svc.cache.capacity()
 	batch := make([]job, 0, capacity)
 
-	// admittedProbe records which tripped tasks have already received their one probe this refill.
-	// The throttle owns dispatch-rate accounting via valvePeek / valveCommit; this map exists
-	// solely so breakerAdmits caps a tripped task at one probe per cycle.
-	admittedProbe := map[string]bool{}
 	// valveDropped is set when any candidate row was refused by valvePeek (rate-limited task,
 	// throttle full this window). At the end of the refill, if true, we advance the next poll to
 	// the throttle window boundary so the foreman wakes when the throttle has rotated. Without
 	// this, valve-saturated work would wait the full backlogPollInterval (default 2s) instead of
 	// the throttle window (1s).
 	valveDropped := false
+	// Breaker admission is no longer a per-pop predicate: parked rows are physically excluded
+	// from idx_microbus_steps_selection. On trip, breakerBulkPark moves all but one step for the
+	// task to parked=2 and sets the surviving probe's not_before to the schedule, so the
+	// candidate scan never sees the held-back backlog.
 	admittable := func(task string) bool {
-		if !svc.breakerAdmits(task, admittedProbe[task], now) {
-			return false
-		}
 		if !svc.valvePeek(task, now) {
 			valveDropped = true
 			return false
@@ -260,11 +257,8 @@ func (svc *Service) runRefill(ctx context.Context) error {
 			c := kb.steps[0]
 			kb.steps = kb.steps[1:]
 			batch = append(batch, job{stepID: c.stepID, shard: c.shard})
-			admittedProbe[c.task] = true
 			// Consume one throttle slot for this dispatch (no-op when the task has no valve recorded yet).
 			svc.valveCommit(c.task, now)
-			// Advance the breaker's probe schedule iff this commit was a probe (no-op when the task has no tripped breaker).
-			svc.breakerCommit(c.task, now)
 		}
 		chosenBand = band
 		break

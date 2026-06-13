@@ -59,7 +59,7 @@ func TestFailedfanoutflow_Mock(t *testing.T) {
 	t.Run("a", func(t *testing.T) { // MARKER: A
 		assert := testarossa.For(t)
 
-		mock.MockA(func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) {
+		mock.MockA(func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) {
 			return
 		})
 		_, err := mock.A(ctx, nil)
@@ -69,7 +69,7 @@ func TestFailedfanoutflow_Mock(t *testing.T) {
 	t.Run("b", func(t *testing.T) { // MARKER: B
 		assert := testarossa.For(t)
 
-		mock.MockB(func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) {
+		mock.MockB(func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) {
 			return
 		})
 		_, err := mock.B(ctx, nil)
@@ -79,7 +79,7 @@ func TestFailedfanoutflow_Mock(t *testing.T) {
 	t.Run("c", func(t *testing.T) { // MARKER: C
 		assert := testarossa.For(t)
 
-		mock.MockC(func(ctx context.Context, flow *workflow.Flow) (sumExecutedOut int, err error) {
+		mock.MockC(func(ctx context.Context, flow *workflow.Flow) (executedOut int, err error) {
 			return
 		})
 		_, err := mock.C(ctx, nil)
@@ -89,18 +89,18 @@ func TestFailedfanoutflow_Mock(t *testing.T) {
 	t.Run("j", func(t *testing.T) { // MARKER: J
 		assert := testarossa.For(t)
 
-		mock.MockJ(func(ctx context.Context, flow *workflow.Flow, sumExecuted int) (totalExecuted int, err error) {
+		mock.MockJ(func(ctx context.Context, flow *workflow.Flow, executed int) (totalExecuted int, err error) {
 			return
 		})
-		var sumExecuted int
-		_, err := mock.J(ctx, nil, sumExecuted)
+		var executed int
+		_, err := mock.J(ctx, nil, executed)
 		assert.NoError(err)
 	})
 
 	t.Run("failed_fan_out", func(t *testing.T) { // MARKER: FailedFanOut
 		assert := testarossa.For(t)
 
-		mock.MockFailedFanOut(func(ctx context.Context, flow *workflow.Flow) (sumExecuted int, totalExecuted int, err error) {
+		mock.MockFailedFanOut(func(ctx context.Context, flow *workflow.Flow) (executed int, totalExecuted int, err error) {
 			return
 		})
 		graph, err := mock.FailedFanOut(ctx)

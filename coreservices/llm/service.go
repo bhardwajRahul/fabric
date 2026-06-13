@@ -100,12 +100,32 @@ func (svc *Service) logCompletion(ctx context.Context, provider string, content 
 }
 
 // turn calls the provider's Turn endpoint over the bus.
-func (svc *Service) turn(ctx context.Context, providerHost string, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) {
-	content, toolCalls, usage, err = llmapi.NewClient(svc).ForHost(providerHost).Turn(ctx, model, messages, tools, options)
+func (svc *Service) turn(ctx context.Context, providerHost string, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
+	content, toolCalls, stopReason, usage, err = llmapi.NewClient(svc).ForHost(providerHost).Turn(ctx, model, messages, tools, options)
 	if err != nil {
-		return "", nil, llmapi.Usage{}, errors.Trace(err)
+		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
-	return content, toolCalls, usage, nil
+	return content, toolCalls, stopReason, usage, nil
+}
+
+// stopReasonError returns nil when the turn's stop reason is a normal completion
+// (end_turn / stop_sequence / refusal / tool_use), and an error otherwise. Truncation
+// (max_tokens), provider extensions (pause_turn), and unknown values fall through to
+// the error path so silent partial responses cannot flow downstream.
+func stopReasonError(stopReason, provider, model string) error {
+	switch stopReason {
+	case llmapi.StopReasonEndTurn, llmapi.StopReasonStopSequence, llmapi.StopReasonRefusal, llmapi.StopReasonToolUse:
+		return nil
+	case llmapi.StopReasonMaxTokens:
+		return errors.New("LLM response truncated at max_tokens",
+			"provider", provider, "model", model, http.StatusInsufficientStorage)
+	case llmapi.StopReasonPauseTurn:
+		return errors.New("LLM returned pause_turn (provider extension not handled)",
+			"provider", provider, "model", model, http.StatusBadGateway)
+	default:
+		return errors.New("LLM returned unknown stop reason",
+			"provider", provider, "model", model, "stopReason", stopReason, http.StatusBadGateway)
+	}
 }
 
 /*
@@ -113,8 +133,8 @@ Turn on llm.core is a stub. The interface contract is defined here so providers 
 but llm.core does not route or delegate. Callers should ForHost(<providerHostname>) directly to
 hit a specific provider, or use Chat for the full conversation loop.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
-	return "", nil, llmapi.Usage{}, errors.New("not implemented on llm.core; call ForHost(<provider>).Turn or use Chat", http.StatusNotImplemented)
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+	return "", nil, "", llmapi.Usage{}, errors.New("not implemented on llm.core; call ForHost(<provider>).Turn or use Chat", http.StatusNotImplemented)
 }
 
 /*
@@ -173,15 +193,23 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 	for range maxRounds {
 		// Call the LLM
 		svc.logPrompt(ctx, currentMessages)
-		content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, tools, turnOpts)
+		content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, tools, turnOpts)
 		if err != nil {
 			return nil, usage, errors.Trace(err)
 		}
 		svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
 		usage.Add(turnUsage)
 
-		// If no tool calls, we're done
-		if len(toolCalls) == 0 {
+		// Surface non-completion stop reasons so a truncated or paused turn never flows
+		// downstream as if it were end_turn.
+		err = stopReasonError(stopReason, provider, model)
+		if err != nil {
+			return nil, usage, errors.Trace(err)
+		}
+
+		// end_turn / stop_sequence / refusal: the model is done. Emit the assistant content
+		// and exit. tool_use without any tool calls is a provider bug; treat as done too.
+		if stopReason != llmapi.StopReasonToolUse || len(toolCalls) == 0 {
 			if content != "" {
 				messagesOut = append(messagesOut, llmapi.Message{
 					Role:    "assistant",
@@ -220,12 +248,16 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 
 	// Exhausted tool rounds - make one final call without tools to get a text response
 	svc.logPrompt(ctx, currentMessages)
-	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, nil, turnOpts)
+	content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, nil, turnOpts)
 	if err != nil {
 		return nil, usage, errors.Trace(err)
 	}
 	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
 	usage.Add(turnUsage)
+	err = stopReasonError(stopReason, provider, model)
+	if err != nil {
+		return nil, usage, errors.Trace(err)
+	}
 	if content != "" {
 		messagesOut = append(messagesOut, llmapi.Message{
 			Role:    "assistant",
@@ -236,9 +268,23 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 }
 
 /*
-InitChat stores the caller-supplied tools and options in flow state for use by the chat loop.
+InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document
+and stores them, along with chat options, in flow state for use by the rest of the chat loop.
+
+Input:
+  - messages: messages is the initial conversation history sent to the LLM
+  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
+  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
+
+Output:
+  - maxToolRounds: maxToolRounds is the resolved per-conversation tool-round ceiling
+  - toolRounds: toolRounds is the starting round counter (always zero)
 */
-func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, listMessages []llmapi.Message, tools []llmapi.Tool, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
+func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
+	tools, err := svc.fetchTools(ctx, toolURLs)
+	if err != nil {
+		return 0, 0, errors.Trace(err)
+	}
 	if len(tools) > 0 {
 		flow.Set("toolSchemas", tools)
 	}
@@ -259,7 +305,7 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, listMessa
 /*
 CallLLM sends the current messages and tools to the LLM provider.
 */
-func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, listMessages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
+func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
 	// Read tool schemas
 	var tools []llmapi.Tool
 	flow.Get("toolSchemas", &tools)
@@ -269,12 +315,20 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	flow.Get("turnOptions", &turnOpts)
 
 	// Call the LLM
-	svc.logPrompt(ctx, listMessages)
-	content, toolCalls, turnUsage, err := svc.turn(ctx, provider, model, listMessages, tools, turnOpts)
+	svc.logPrompt(ctx, messages)
+	content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, messages, tools, turnOpts)
 	if err != nil {
 		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
+
+	// Truncation, pause_turn, or unknown stop reasons fail the step so the workflow's
+	// OnError route (if any) handles it instead of feeding a partial response into the
+	// next graph node.
+	err = stopReasonError(stopReason, provider, model)
+	if err != nil {
+		return "", nil, llmapi.Usage{}, errors.Trace(err)
+	}
 
 	return content, toolCalls, turnUsage, nil
 }
@@ -285,94 +339,98 @@ When the conversation is complete (no tool calls or round limit exhausted), it c
 flow.Goto(workflow.END) to exit the chat loop. Otherwise the forEach transition fans out
 one ExecuteTool per pending tool call.
 */
-func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (listMessagesOut []llmapi.Message, toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
+func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// Read internal state
 	var pending []llmapi.ToolCall
 	flow.Get("pendingToolCalls", &pending)
+	{
+		snap := flow.Snapshot()
+		keys := make([]string, 0, len(snap))
+		for k := range snap {
+			keys = append(keys, k)
+		}
+		var teVal any
+		flow.Get("toolExecuted", &teVal)
+		svc.LogDebug(ctx, "ProcessResponse entry",
+			"toolRounds", toolRounds,
+			"pendingCount", len(pending),
+			"stateKeys", keys,
+			"toolExecutedInState", teVal,
+		)
+	}
 
-	// Get accumulated response messages and usage
-	flow.Get("messagesOut", &listMessagesOut)
 	flow.Get("usage", &usageOut)
 	usageOut.Add(turnUsage)
 
 	toolRoundsOut = toolRounds
 
+	// CRITICAL: messagesOut is declared in the return signature with JSON tag "messages" (see
+	// ProcessResponseOut). The auto-generated marshaler runs flow.SetChanges(out, snap) after
+	// this function returns, and a non-nil messagesOut there would write the FULL accumulated
+	// list to the "messages" state key -- overwriting the delta-only flow.Set("messages", ...)
+	// calls below and producing Append-reducer duplication on the next turn. We return nil for
+	// messagesOut and let the running "messages" state key (driven by ReducerAppend) carry the
+	// full transcript; the workflow's ChatLoopOut.MessagesOut (json:"messages") reads from that
+	// same state key when the flow terminates.
 	done := len(pending) == 0 || toolRounds >= maxToolRounds
 	if done {
 		toolsRequested = false
 		if llmContent != "" {
-			listMessagesOut = append(listMessagesOut, llmapi.Message{
+			flow.Set("messages", []llmapi.Message{{
 				Role:    "assistant",
 				Content: llmContent,
-			})
+			}})
 		}
+		// Strip in-loop scratch so the flow's final_state contains only the
+		// declared ChatLoopOut surface (`messages`, `usage`). This matters when
+		// ChatLoop runs as a subgraph or feeds Continue: state crosses the
+		// boundary unfiltered, and these fields would otherwise pollute the
+		// parent's state. toolRounds and toolsRequested are in ProcessResponseOut
+		// and re-written by the auto-marshaler regardless, so they survive — the
+		// long-term fix is a scratch-naming convention the framework strips at
+		// subgraph boundaries.
+		flow.Delete(
+			"toolSchemas",
+			"turnOptions",
+			"pendingToolCalls",
+			"maxToolRounds",
+			"llmContent",
+			"turnUsage",
+		)
 		flow.Goto(workflow.END)
-		return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
+		return toolsRequested, toolRoundsOut, usageOut, nil
 	}
 
-	// Tool calls present - record assistant message and set up forEach
+	// Tool calls present - record assistant message and set up forEach.
+	// The assistant message MUST carry the tool calls so that, on the next turn, claudellm can
+	// emit a tool_use block whose id matches the tool_use_id on the upcoming tool_result.
+	// Without this, Anthropic rejects the next call with
+	//   "unexpected tool_use_id found in tool_result blocks: ...".
+	//
+	// `messages` has reducer ReducerAppend on the parent graph. The spawn-step's changes are
+	// merged through that reducer when the forEach cohort is created, so writing the full
+	// accumulated list here would concatenate the entire history onto itself. We write only
+	// the delta -- the single assistant message that this turn produced -- and let the reducer
+	// append it onto the prior snapshot.
 	toolsRequested = true
 	toolRoundsOut = toolRounds + 1
-	if llmContent != "" {
-		listMessagesOut = append(listMessagesOut, llmapi.Message{
-			Role:    "assistant",
-			Content: llmContent,
-		})
-		// Also add to conversation history for the LLM
-		var listMessages []llmapi.Message
-		flow.Get("listMessages", &listMessages)
-		listMessages = append(listMessages, llmapi.Message{
-			Role:    "assistant",
-			Content: llmContent,
-		})
-		flow.Set("listMessages", listMessages)
+	toolCallsJSON, _ := json.Marshal(pending)
+	assistantMsg := llmapi.Message{
+		Role:      "assistant",
+		Content:   llmContent,
+		ToolCalls: string(toolCallsJSON),
 	}
-	flow.Set("messagesOut", listMessagesOut)
-	flow.Set("usage", usageOut)
+	flow.Set("messages", []llmapi.Message{assistantMsg})
 
-	return listMessagesOut, toolsRequested, toolRoundsOut, usageOut, nil
+	return toolsRequested, toolRoundsOut, usageOut, nil
 }
 
 /*
-ExecuteTool executes a single tool call identified by the currentTool forEach variable.
-On re-entry after a dynamic subgraph completes, toolExecuted is true and the child's
-output is in state.
+ExecuteTool executes a single tool call identified by the currentTool forEach variable. Workflow tools run as
+dynamic subgraphs via flow.Subgraph, which parks the step and returns the child's result on re-entry; regular
+tools run via a direct bus call.
 */
-func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolExecuted bool) (toolExecutedOut bool, err error) { // MARKER: ExecuteTool
-	if toolExecuted {
-		// Re-entry after a workflow subgraph completed.
-		// Identify child output by diffing current state keys against the pre-subgraph snapshot.
-		var preKeys []string
-		flow.Get("preSubgraphKeys", &preKeys)
-		preKeySet := make(map[string]bool, len(preKeys))
-		for _, k := range preKeys {
-			preKeySet[k] = true
-		}
-
-		// Any state field not in the pre-subgraph snapshot is child output
-		snap := flow.Snapshot()
-		childOutput := make(map[string]any)
-		for k, v := range snap {
-			if !preKeySet[k] {
-				childOutput[k] = v
-			}
-		}
-		if len(childOutput) == 0 {
-			childOutput["status"] = "completed"
-		}
-		resultJSON, _ := json.Marshal(childOutput)
-
-		var listMessages []llmapi.Message
-		flow.Get("listMessages", &listMessages)
-		listMessages = append(listMessages, llmapi.Message{
-			Role:    "tool",
-			Content: string(resultJSON),
-		})
-		flow.Set("listMessages", listMessages)
-		return true, nil
-	}
-
-	// First run - execute the tool
+func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow) (err error) { // MARKER: ExecuteTool
 	var currentTool llmapi.ToolCall
 	flow.Get("currentTool", &currentTool)
 	var tools []llmapi.Tool
@@ -387,41 +445,51 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, toolEx
 		}
 	}
 	if def.URL == "" {
-		return false, errors.New("tool not found: %s", currentTool.Name)
+		return errors.New("tool not found: %s", currentTool.Name)
 	}
 
-	// Workflow tools are executed as dynamic subgraphs
+	// Workflow tools are executed as dynamic subgraphs. flow.Subgraph parks the step on the first
+	// call (yield) and returns the child's final_state on re-entry.
 	if def.Type == "workflow" {
-		// Snapshot current state keys so we can identify child output on re-entry
-		snap := flow.Snapshot()
-		stateKeys := make([]string, 0, len(snap))
-		for k := range snap {
-			stateKeys = append(stateKeys, k)
-		}
-		flow.Set("preSubgraphKeys", stateKeys)
-
 		inputState := make(map[string]any)
 		if currentTool.Arguments != nil {
 			json.Unmarshal(currentTool.Arguments, &inputState)
 		}
-		flow.Subgraph(def.URL, inputState)
-		return true, nil
+		out, yield, err := flow.Subgraph(def.URL, inputState)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if yield {
+			return nil // parked, child workflow running
+		}
+		// Re-entry: the child's final_state is the tool result. `messages` has reducer ReducerAppend,
+		// so contribute only the new tool_result delta.
+		childOutput := out
+		if len(childOutput) == 0 {
+			childOutput = map[string]any{"status": "completed"}
+		}
+		resultJSON, _ := json.Marshal(childOutput)
+		flow.Set("messages", []llmapi.Message{{
+			Role:       "tool",
+			ToolCallID: currentTool.ID,
+			Content:    string(resultJSON),
+		}})
+		return nil
 	}
 
 	// Regular endpoint tools are executed via direct bus call
 	result, err := svc.executeTool(ctx, currentTool, tools)
 	if err != nil {
-		return false, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
-	var listMessages []llmapi.Message
-	flow.Get("listMessages", &listMessages)
-	listMessages = append(listMessages, llmapi.Message{
-		Role:    "tool",
-		Content: string(result),
-	})
-	flow.Set("listMessages", listMessages)
-	return true, nil
+	// `messages` has reducer ReducerAppend. Branch contributes only the new tool_result delta.
+	flow.Set("messages", []llmapi.Message{{
+		Role:       "tool",
+		ToolCallID: currentTool.ID,
+		Content:    string(result),
+	}})
+	return nil
 }
 
 /*
@@ -440,14 +508,17 @@ func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err er
 	graph.AddTask("processResponse", llmapi.ProcessResponse.URL())
 	graph.AddTask("executeTool", llmapi.ExecuteTool.URL())
 	graph.SetFanIn("nextLLM")
+	// messages is the conversation history shared with the LLM each turn. forEach branches each
+	// contribute their tool result message; Append reducer concatenates them at the fan-in so the
+	// next CallLLM sees the full history.
+	graph.SetReducer("messages", workflow.ReducerAppend)
 	graph.AddTransition("initChat", "firstLLM")
 	graph.AddTransition("firstLLM", "processResponse")
 	// When ProcessResponse decides the conversation is done (no tools requested or round
 	// limit exceeded), it calls flow.Goto(workflow.END) to exit the loop.
 	graph.AddTransitionGoto("processResponse", workflow.END)
 	// Otherwise the forEach fans out one ExecuteTool per pending tool call; all branches
-	// converge at nextLLM via the fan-in. The merged listMessages (auto-appended via the
-	// list* prefix reducer) reaches the LLM with the full conversation history.
+	// converge at nextLLM via the fan-in.
 	graph.AddTransitionForEach("processResponse", "executeTool", "pendingToolCalls", "currentTool")
 	graph.AddTransition("executeTool", "nextLLM")
 	graph.AddTransition("nextLLM", "processResponse")

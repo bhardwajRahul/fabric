@@ -19,8 +19,6 @@ package workflow
 import (
 	"encoding/json"
 	"maps"
-	"math"
-	"net/http"
 	"reflect"
 	"time"
 
@@ -44,6 +42,16 @@ type Flow struct {
 	// Dynamic subgraph
 	subgraphWorkflow string
 	subgraphInput    map[string]any
+
+	// Park resolution (inbound), set by the orchestrator on dispatch from the step row.
+	// interruptDone/resumeData resolve an Interrupt park; subgraphDone/subgraphResult/
+	// subgraphError resolve a Subgraph park. A parker returns its resolved value once the
+	// matching *Done flag is set, instead of re-arming.
+	interruptDone  bool
+	resumeData     map[string]any
+	subgraphDone   bool
+	subgraphResult map[string]any
+	subgraphError  string
 
 	// Backoff retry
 	attempt                int
@@ -221,27 +229,12 @@ func (f *Flow) Delete(keys ...string) {
 }
 
 // Clear removes every state field. Equivalent to Delete on every current key.
-// Useful at workflow boundaries (e.g. a Before<NodeName> adapter task that
-// builds a fresh subgraph input from a curated subset of parent state) or
-// anywhere a task wants a blank slate before populating it.
+// Useful at workflow boundaries (e.g. a task that builds a fresh subgraph input
+// from a curated subset of parent state) or anywhere a task wants a blank slate
+// before populating it.
 func (f *Flow) Clear() {
 	for k := range f.state {
 		f.deleteOne(k)
-	}
-}
-
-// Keep deletes every state field except those listed. The listed names that
-// are absent from state are ignored. Symmetric to Delete: where Delete names
-// what to drop, Keep names what to preserve.
-func (f *Flow) Keep(keepers ...string) {
-	keep := make(map[string]bool, len(keepers))
-	for _, k := range keepers {
-		keep[k] = true
-	}
-	for k := range f.state {
-		if !keep[k] {
-			f.deleteOne(k)
-		}
 	}
 }
 
@@ -251,8 +244,8 @@ func (f *Flow) Keep(keepers ...string) {
 // that were absent or already null are skipped (the new key is not introduced
 // as null). Panics on an odd number of arguments.
 //
-// Typical use: a Before<NodeName> adapter task that reshapes parent state
-// into the subgraph's expected input.
+// Typical use: a small task immediately upstream of a subgraph node that
+// reshapes parent state into the subgraph's expected input.
 //
 //	flow.Transform("subInput1", "parentVarA", "subInput2", "parentVarB")
 func (f *Flow) Transform(pairs ...string) {
@@ -332,54 +325,122 @@ func (f *Flow) Goto(taskName string) {
 	f.gotoNext = taskName
 }
 
-// Interrupt pauses the flow execution and requests external input.
-// The payload is propagated up through the surgraph chain and surfaced
-// via State() so the caller can see what data the task needs.
-// The task should return normally after calling Interrupt.
-func (f *Flow) Interrupt(payload any) {
-	f.interrupt = true
+/*
+Interrupt parks the flow to await external input, or returns the resume data once it has arrived.
+
+On the first call (not yet resumed) it records the interrupt request with the given payload - propagated up
+the surgraph chain and surfaced to the awaiting caller so it can see what data the task needs - and returns
+yield=true. The task must return immediately.
+
+On re-entry after Resume it returns the resume data with yield=false and does not re-arm; the task proceeds.
+The returned err is non-nil only if the payload fails to marshal; interrupt itself has no failure mode, so
+err is otherwise always nil. The three returns let Interrupt, Subgraph, and Retry share one convention.
+
+	resumeData, yield, err := flow.Interrupt(map[string]any{"request": "userInput"})
+	if yield {
+	    return nil // parked, awaiting Resume
+	}
+	// proceed with resumeData
+*/
+func (f *Flow) Interrupt(payload any) (resumeData map[string]any, yield bool, err error) {
+	if f.interruptDone {
+		return f.resumeData, false, nil
+	}
+	// Single-park guard: a step parks at most once - interrupt XOR subgraph, and at most once per kind.
+	// Reject arming an interrupt when this step already parked for a subgraph (resolved subgraphDone, or
+	// armed earlier in this same dispatch via subgraphWorkflow)...
+	if f.subgraphDone || f.subgraphWorkflow != "" {
+		return nil, false, errors.New("cannot interrupt: step already parked for a subgraph")
+	}
+	// ...or when an interrupt was already armed earlier in this same dispatch: a second flow.Interrupt
+	// call before the task returns would otherwise silently overwrite the payload.
+	if f.interrupt {
+		return nil, false, errors.New("cannot interrupt: step already armed an interrupt this dispatch")
+	}
+	var payloadMap map[string]any
 	if payload != nil {
 		payloadJSON, err := json.Marshal(payload)
-		if err == nil {
-			var payloadMap map[string]any
-			if err = json.Unmarshal(payloadJSON, &payloadMap); err == nil {
-				f.interruptPayload = payloadMap
-			}
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+		err = json.Unmarshal(payloadJSON, &payloadMap)
+		if err != nil {
+			return nil, false, errors.Trace(err)
 		}
 	}
-}
-
-// Subgraph signals the orchestrator to create and run a child workflow before
-// this step completes. The step is parked until the child finishes - similar to
-// how Interrupt pauses until Resume is called. When the child completes, its
-// final state is filtered through the child's DeclareOutputs and merged into
-// this step's changes using the parent graph's reducers, then the task is
-// re-executed. On re-entry the task sees the child's output in its state and
-// should return normally without calling Subgraph again.
-//
-// The child's initial state is built from the parent's full state plus the
-// surgraph step's accumulated changes; the explicit input map is then merged on
-// top using the child graph's reducers, and the result is filtered through the
-// child's DeclareInputs.
-func (f *Flow) Subgraph(workflowURL string, input map[string]any) {
-	f.subgraphWorkflow = workflowURL
-	f.subgraphInput = input
+	f.interrupt = true
+	f.interruptPayload = payloadMap
+	return nil, true, nil
 }
 
 /*
-Retry requests the orchestrator to retry this task with exponential backoff.
-Returns true if a retry will be scheduled (attempts remaining), false if exhausted.
-When true, the task should return nil. When false, the task should return its error.
-The delay for attempt N is min(initialDelay * multiplier^N, maxDelay).
+Subgraph runs a child workflow and returns its result once it completes, parking the step in between.
 
-Example:
+Semantically a function call: only the explicit input map crosses the boundary into the child, and only the explicit
+out map crosses back. The parent's state does NOT auto-cross either direction. A nil input means "no arguments" (the
+child starts with empty state). A caller that wants the parent's full state to cross can pass flow.Snapshot() (or a
+derived map) as input.
+
+On the first call (child not yet run) it arms the subgraph park with the child workflow URL and the explicit input
+map and returns yield=true; the task must return immediately.
+
+On re-entry after the child terminates it returns the child's final_state as out with yield=false, and err set if the
+child failed. The task adopts the fields it wants from out. Does not re-arm on re-entry.
+
+	out, yield, err := flow.Subgraph(childURL, map[string]any{"value": value})
+	if yield {
+	    return nil // parked, child running
+	}
+	if err != nil {
+	    if flow.Retry(5, time.Second, 2.0, 30*time.Second) {
+	        return nil
+	    }
+	    return errors.Trace(err)
+	}
+	// adopt fields from out
+*/
+func (f *Flow) Subgraph(workflowURL string, input map[string]any) (out map[string]any, yield bool, err error) {
+	if f.subgraphDone {
+		if f.subgraphError != "" {
+			return f.subgraphResult, false, errors.New(f.subgraphError)
+		}
+		return f.subgraphResult, false, nil
+	}
+	// Single-park guard: a step parks at most once - interrupt XOR subgraph, and at most once per kind.
+	// Reject arming a subgraph when this step already parked for an interrupt (resolved interruptDone, or
+	// armed earlier in this same dispatch via interrupt)...
+	if f.interruptDone || f.interrupt {
+		return nil, false, errors.New("cannot start subgraph: step already parked for an interrupt")
+	}
+	// ...or when a subgraph was already armed earlier in this same dispatch: a second flow.Subgraph call
+	// before the task returns would otherwise silently overwrite the child workflow/input.
+	if f.subgraphWorkflow != "" {
+		return nil, false, errors.New("cannot start subgraph: step already armed a subgraph this dispatch")
+	}
+	f.subgraphWorkflow = workflowURL
+	f.subgraphInput = input
+	return nil, true, nil
+}
+
+/*
+Retry requests the orchestrator to re-execute this task with exponential backoff.
+Returns true while attempts remain (the caller should return nil); false once maxAttempts is
+reached (the caller should return its error). The delay for attempt N is
+min(initialDelay * multiplier^N, maxDelay); pass zero delays for an immediate retry. For genuine
+unlimited retry pass math.MaxInt32 as maxAttempts.
+
+Retry carries no condition of its own - it is the single retry primitive, called inside whatever
+error branch the task decides is retryable. Keeping the condition explicit at the call site avoids
+the "retry on every error" trap (most errors - validation, 4xx, business rejections - should not be
+retried). To retry only on a timeout, gate on the 408 status; both a foreman-side pub.Timeout expiry
+and a subscriber-side handler timeout surface as http.StatusRequestTimeout:
 
 	result, err := callExternalAPI(ctx)
 	if err != nil {
-	    if flow.Retry(5, 1*time.Second, 2.0, 30*time.Second) {
-	        return result, nil // retry scheduled, don't report error
+	    if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(5, 1*time.Second, 2.0, 30*time.Second) {
+	        return result, nil // transient timeout: retry scheduled, don't report error
 	    }
-	    return result, err // retries exhausted, report the error
+	    return result, err // non-retryable, or attempts exhausted
 	}
 */
 func (f *Flow) Retry(maxAttempts int, initialDelay time.Duration, multiplier float64, maxDelay time.Duration) bool {
@@ -393,40 +454,6 @@ func (f *Flow) Retry(maxAttempts int, initialDelay time.Duration, multiplier flo
 	f.backoffDelayMultiplier = multiplier
 	f.backoffMaxDelay = maxDelay
 	return true
-}
-
-// RetryNow signals the orchestrator to re-execute this task immediately with no limit.
-// Equivalent to Retry(math.MaxInt32, 0, 0, 0).
-func (f *Flow) RetryNow() bool {
-	return f.Retry(math.MaxInt32, 0, 0, 0)
-}
-
-// RetryOnTimeout retries the task only when err carries HTTP status 408
-// (Request Timeout), and otherwise returns false so the caller can surface
-// the error to the workflow. Returns true exactly when Retry would schedule
-// another attempt; the caller should return nil in that case.
-//
-// Typical usage:
-//
-//	result, err := svc.doWork(ctx)
-//	if err != nil {
-//	    if flow.RetryOnTimeout(err, 5, 2*time.Second, 2.0, time.Minute) {
-//	        return result, nil // retry scheduled, suppress the timeout
-//	    }
-//	    return result, errors.Trace(err) // non-timeout, or attempts exhausted
-//	}
-func (f *Flow) RetryOnTimeout(err error, maxAttempts int, initialDelay time.Duration, multiplier float64, maxDelay time.Duration) bool {
-	if errors.StatusCode(err) != http.StatusRequestTimeout {
-		return false
-	}
-	return f.Retry(maxAttempts, initialDelay, multiplier, maxDelay)
-}
-
-// RetryNowOnTimeout retries the task immediately on HTTP 408 with no attempt limit and no delay,
-// and returns false for any other error so the caller can surface it.
-// Equivalent to RetryOnTimeout(err, math.MaxInt32, 0, 0, 0).
-func (f *Flow) RetryNowOnTimeout(err error) bool {
-	return f.RetryOnTimeout(err, math.MaxInt32, 0, 0, 0)
 }
 
 // Sleep tells the orchestrator to wait for the given duration before the next execution.
@@ -545,6 +572,11 @@ type flowJSON struct {
 	InterruptPayload       map[string]any `json:"interruptPayload,omitzero"`
 	SubgraphWorkflow       string         `json:"subgraphWorkflow,omitzero"`
 	SubgraphInput          map[string]any `json:"subgraphInput,omitzero"`
+	InterruptDone          bool           `json:"interruptDone,omitzero"`
+	ResumeData             map[string]any `json:"resumeData,omitzero"`
+	SubgraphDone           bool           `json:"subgraphDone,omitzero"`
+	SubgraphResult         map[string]any `json:"subgraphResult,omitzero"`
+	SubgraphError          string         `json:"subgraphError,omitzero"`
 	Attempt                int            `json:"attempt,omitzero"`
 	BackoffMaxAttempts     int            `json:"backoffMaxAttempts,omitzero"`
 	BackoffInitialDelay    time.Duration  `json:"backoffInitialDelay,omitzero"`
@@ -566,6 +598,11 @@ func (f *Flow) MarshalJSON() ([]byte, error) {
 		InterruptPayload:       f.interruptPayload,
 		SubgraphWorkflow:       f.subgraphWorkflow,
 		SubgraphInput:          f.subgraphInput,
+		InterruptDone:          f.interruptDone,
+		ResumeData:             f.resumeData,
+		SubgraphDone:           f.subgraphDone,
+		SubgraphResult:         f.subgraphResult,
+		SubgraphError:          f.subgraphError,
 		Attempt:                f.attempt,
 		BackoffMaxAttempts:     f.backoffMaxAttempts,
 		BackoffInitialDelay:    f.backoffInitialDelay,
@@ -591,6 +628,11 @@ func (f *Flow) UnmarshalJSON(data []byte) error {
 	f.interruptPayload = wire.InterruptPayload
 	f.subgraphWorkflow = wire.SubgraphWorkflow
 	f.subgraphInput = wire.SubgraphInput
+	f.interruptDone = wire.InterruptDone
+	f.resumeData = wire.ResumeData
+	f.subgraphDone = wire.SubgraphDone
+	f.subgraphResult = wire.SubgraphResult
+	f.subgraphError = wire.SubgraphError
 	f.attempt = wire.Attempt
 	f.backoffMaxAttempts = wire.BackoffMaxAttempts
 	f.backoffInitialDelay = wire.BackoffInitialDelay

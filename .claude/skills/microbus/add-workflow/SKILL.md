@@ -1,6 +1,6 @@
 ---
 name: add-workflow
-description: TRIGGER when user asks to define a workflow graph, orchestrate tasks, or create a multi-step agentic workflow. Defines task transitions and conditions. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
+description: TRIGGER when user asks to define a workflow graph, create an agent, create an agentic workflow, orchestrate tasks, or build a multi-step process. "Agent", "agentic workflow", and "workflow" are interchangeable in this codebase - an LLM is not required for a workflow to be an agent (rule-based, deterministic, and LLM-driven workflows are all agents). Defines task transitions and conditions. Affects intermediate.go, *api/client.go, mock.go, manifest.yaml.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -67,6 +67,8 @@ The route of the workflow graph endpoint is resolved relative to the hostname of
 #### Step 4: Determine a Description
 
 Describe the workflow starting with its name, in Go doc style: `MyWorkflow does X`. Embed this description in followup steps wherever you see `MyWorkflow does X`.
+
+Describe **what the workflow does and the outcome it produces**, not who is expected to run it. The same workflow may be started by a user request, a scheduled job, a subgraph, a test, or an LLM tool call - the description should read the same in every case. `"Underwrites a credit application: gathers identity, employment and credit history, then approves or declines"` is good; `"called by the customer portal"` or `"used by the LLM as a tool"` is not. Naming the caller leaks deployment context into the workflow contract and goes stale as soon as another caller starts it.
 
 #### Step 5: Define the Endpoint and Payload Structs
 
@@ -138,7 +140,7 @@ type ToDo interface {
 
 Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
 
-Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("name", taskURL)` and `graph.AddSubgraph("name", workflowURL)`, then write transitions in terms of names. Use camelCase names that match the task endpoint (e.g. `"taskA"` for `TaskA`).
+Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("name", taskURL)`, then write transitions in terms of names. Use camelCase names that match the task endpoint (e.g. `"taskA"` for `TaskA`). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
 
 ```go
 /*
@@ -149,7 +151,6 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 	graph.AddTask("taskA", myserviceapi.TaskA.URL())
 	graph.AddTask("taskB", myserviceapi.TaskB.URL())
 	graph.AddTask("taskC", myserviceapi.TaskC.URL())
-	// graph.AddSubgraph("childWorkflow", otherapi.ChildWorkflow.URL())  // register a child workflow as a subgraph node
 	// graph.AddTransition("taskA", "taskB")
 	// graph.AddTransitionWhen("taskB", workflow.END, "done == true")
 	// graph.AddTransitionGoto("taskB", "taskC")
@@ -157,23 +158,29 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 }
 ```
 
-State flows through the entire workflow unfiltered - the `MyWorkflowIn`/`MyWorkflowOut` structs from Step 5 are documentation (OpenAPI, the runner UI, the Executor signature), not runtime contracts. If a subgraph call needs its input or output adapted across a contract boundary, bracket the subgraph node with `Before<NodeName>` / `After<NodeName>` adapter tasks that use `flow.Transform`/`Keep`/`Delete`/`Clear` - see the "State Transformation Around a Subgraph" section in `.claude/rules/workflows.txt`. If the workflow's terminal state needs scrubbing before it lands in `final_state`, the last task calls `flow.Keep`/`Delete`.
+State flows through the entire workflow unfiltered - the `MyWorkflowIn`/`MyWorkflowOut` structs from Step 5 are documentation (OpenAPI, the runner UI, the Executor signature), not runtime contracts. If a subgraph call needs its input or output adapted across a contract boundary, do it in any ordinary task immediately upstream or downstream of the subgraph using `flow.Transform`/`Delete`/`Clear` - see the "State Transformation Around a Subgraph" section in `.claude/rules/workflows.txt`. If the workflow's terminal state needs scrubbing before it lands in `final_state`, the last task calls `flow.Delete`/`Transform`.
 
 Naming the same task URL twice with different names is the supported way to reuse a task at multiple positions in the graph (each position keeps its own node identity for fan-in tracking).
 
 **Every fan-out requires a matching fan-in.** Any node with two or more normal outgoing transitions, or an `AddTransitionForEach` transition, is a fan-out: its branches run in parallel. Every fan-out must converge on a single node that you mark with `graph.SetFanIn("name")`. Add the `SetFanIn` call in the same edit as the fan-out transitions, and route every parallel branch into the marked node before the graph reaches `workflow.END`. A graph that fans out without a `SetFanIn` node still compiles and passes `go vet`, but `graph.Validate()` (Step 9) rejects it at run time, so the test in Step 12 fails. This is the single most common workflow-graph mistake. The fan-out/fan-in section in `.claude/rules/workflows.txt` has the full rule and a worked example.
 
-**Reducers for fan-in fields.** When parallel branches converge, state fields whose names start with a recognized prefix get a reducer automatically:
+**Reducers for fan-in fields.** When parallel branches converge, each field that needs anything other than last-write-wins must be explicitly wired with `graph.SetReducer(field, reducer)` at graph-build time. Fields without a registered reducer use `Replace` (last write wins). No name-driven inference - a field named `messages` and a field named `total` are treated identically until `SetReducer` says otherwise.
 
-- `sum*` - numeric add
-- `list*` - array append (duplicates kept)
-- `set*` - polymorphic: array union (dedupe) or object merge (new key wins)
+```go
+graph.SetReducer("messages", workflow.ReducerAppend) // accumulate per-branch deltas
+graph.SetReducer("total",    workflow.ReducerAdd)    // sum numeric contributions
+graph.SetReducer("seen",     workflow.ReducerUnion)  // dedupe across branches
+graph.SetReducer("attrs",    workflow.ReducerMerge)  // merge per-branch objects
+graph.SetReducer("approved", workflow.ReducerAnd)    // all branches must approve
+graph.SetReducer("flagged",  workflow.ReducerOr)     // any branch flags
+graph.SetReducer("notes",    workflow.ReducerConcat) // join string deltas
+```
 
-The character right after the prefix must be uppercase (e.g. `sumScore`, `listMessages`, `setUsers`). For new graphs, prefer naming fan-in state fields with these prefixes - no explicit reducer configuration is needed. Conversely, these prefixes are reserved: do not name a state field `sum*`, `list*`, or `set*` unless it is a genuine fan-in accumulator, or it will be silently summed/appended/unioned instead of replaced once written on parallel branches.
-
-`graph.SetReducer(field, reducer)` is the escape hatch for fields whose names are dictated by an external schema or pre-existing API surface and cannot follow the convention.
+Pick the reducer by what the merge means, not by what the field is named. The default `Replace` is correct when only one branch ever writes the field.
 
 **Prefer `AddTransitionWhen` for routing the graph knows about; reserve `AddTransitionGoto` for runtime loops the task body decides.** A `When` transition is part of the static graph - the validator sees it, the Mermaid diagram renders it as a labeled branch, and lineage scoping handles it like any other fan-out. A `Goto` is an out-of-band edge that's only taken when the task calls `flow.Goto`. The canonical use for `Goto` is a fan-in node looping back ("ask for more info, retry the review"); for any branch a `When` expression can evaluate, prefer `When`.
+
+**Optionally annotate nodes with their business meaning.** `graph.Annotate("taskName", "short note")` adds a teal note beneath the node in the rendered Mermaid diagram, explaining what the step *does in business terms* (not how it's implemented). See the "Annotating Tasks" section of `.claude/rules/workflows.txt` for what makes a good annotation and what to skip.
 
 #### Step 9: Define the Marshaler Function
 

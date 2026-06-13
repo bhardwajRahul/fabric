@@ -40,6 +40,7 @@ type Mock struct {
 	mockTaskX       func(ctx context.Context, flow *workflow.Flow, seed string) (innerStage string, err error)         // MARKER: TaskX
 	mockTaskY       func(ctx context.Context, flow *workflow.Flow, innerStage string) (innerResult string, err error)  // MARKER: TaskY
 	mockTaskZ       func(ctx context.Context, flow *workflow.Flow, innerResult string) (finalResult string, err error) // MARKER: TaskZ
+	mockRunInner    func(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error)        // MARKER: RunInner
 	mockInnerGraph  func(ctx context.Context) (graph *workflow.Graph, err error)                                       // MARKER: Inner
 	unsubMockInner  func() error                                                                                       // MARKER: Inner
 	mockParentGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                       // MARKER: Parent
@@ -121,6 +122,20 @@ func (svc *Mock) TaskZ(ctx context.Context, flow *workflow.Flow, innerResult str
 		finalResult, err = svc.mockTaskZ(ctx, flow, innerResult)
 	}
 	return finalResult, errors.Trace(err)
+}
+
+// MockRunInner sets up a mock handler for RunInner.
+func (svc *Mock) MockRunInner(handler func(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error)) *Mock { // MARKER: RunInner
+	svc.mockRunInner = handler
+	return svc
+}
+
+// RunInner executes the mock handler.
+func (svc *Mock) RunInner(ctx context.Context, flow *workflow.Flow, seed string) (innerResult string, err error) { // MARKER: RunInner
+	if svc.mockRunInner != nil {
+		innerResult, err = svc.mockRunInner(ctx, flow, seed)
+	}
+	return innerResult, errors.Trace(err)
 }
 
 // MockInner sets up a mock handler for the Inner workflow.

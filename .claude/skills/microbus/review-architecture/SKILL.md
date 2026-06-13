@@ -1,6 +1,6 @@
 ---
 name: review-architecture
-description: Performs an architectural review of a microservice-based system built on the Microbus framework. Examines service boundaries, dependencies, coupling, API design, resilience, data ownership, observability, security, and operational concerns. Produces a structured report with findings and recommendations.
+description: Performs an architectural review of a microservice-based system built on the Microbus framework. Examines service boundaries, dependencies, coupling, API design, resilience, data ownership, agentic workflow composition, observability, security, and operational concerns. Produces a structured report with findings and recommendations.
 ---
 
 ## Workflow
@@ -15,11 +15,12 @@ Architectural review:
 - [ ] Step 4: API design
 - [ ] Step 5: Resilience and reliability
 - [ ] Step 6: Data and consistency
-- [ ] Step 7: Observability
-- [ ] Step 8: Security
-- [ ] Step 9: Operational concerns
-- [ ] Step 10: Documentation
-- [ ] Step 11: Produce the report
+- [ ] Step 7: Agentic workflows
+- [ ] Step 8: Observability
+- [ ] Step 9: Security
+- [ ] Step 10: Operational concerns
+- [ ] Step 11: Documentation
+- [ ] Step 12: Produce the report
 ```
 
 #### Step 1: Build the System Map
@@ -92,7 +93,22 @@ Evaluate data ownership and consistency strategies:
 - **Event ordering** - do event sinks assume events arrive in a particular order? In a distributed system, events can arrive out of order or be delivered more than once. Flag handlers that depend on sequencing (e.g., "created" before "updated") without explicit ordering logic or idempotency guards.
 - **Schema migration safety** - for SQL CRUD services, are migration scripts additive and non-destructive (e.g., `ADD COLUMN`, not `DROP COLUMN` without a data migration step)? Are migrations compatible across all three supported database drivers (`mysql`, `pgx`, `mssql`)? Check for driver-specific statements prefixed with `-- DRIVER:`.
 
-#### Step 7: Observability
+#### Step 7: Agentic Workflows
+
+Skip this step if no microservice has `tasks` or `workflows` in its `manifest.yaml`. Otherwise, for each microservice that defines a workflow graph or task endpoint:
+
+- **No foreman pass-through endpoints** - the workflow microservice must not expose `Run<Workflow>`, `Start<Workflow>`, `Cancel<Workflow>`, `<Workflow>Status`, or any other wrapper around `foremanapi.Create/Start/Cancel/Snapshot/Await/Resume/Continue`. Grep `service.go` for `foremanapi.NewClient` inside the microservice that owns the workflow - if it appears, the microservice is mediating its own launch and the upstream caller should be talking to the foreman directly instead. The only legitimate `foremanapi` callers are the actual *launchers* of a flow (a UI, a webhook handler, a ticker on a different microservice), not the workflow's own host.
+- **Sub-workflow invocation uses subgraphs, not `foremanapi.Run`** - grep task bodies for `foremanapi.NewClient(svc).Run` or `.Create`. A task that runs another workflow this way spawns an independent flow and forfeits re-entry, cascading cancel, single-flow audit trail, and interrupt propagation. The correct shape is a task that calls `flow.Subgraph(otherflowapi.OtherFlow.URL(), input)`, returns nil while `yield=true`, and adopts the result from `out` once it resolves.
+- **State hygiene at subgraph boundaries** - if a parent and a subgraph use different field names or one curates state at the boundary, look for a small upstream task that reshapes state with `flow.Delete` / `flow.Clear` / `flow.Transform`, or a small downstream task that drops internal scratch the parent doesn't want. A subgraph node with neither and a parent that obviously needs to reshape state (e.g., the parent stores `userQuestion` but the subgraph reads `prompt`) is a smell. The fix is one task at the boundary, not in-task state mutation scattered through the graph.
+- **Reducer correctness at fan-in** - for every `graph.SetFanIn(node)`, check that every state field a branch writes is either replace-safe (last write wins is intended) or has an explicit `graph.SetReducer(field, reducer)` declared. The default is Replace; a branch that writes to a `messages` field expecting accumulation will silently lose siblings' contributions if no reducer is registered. Match the reducer to the semantic: `Append` for ordered arrays of deltas, `Add` for numeric sums, `Union` for sets, `Merge` for objects, `And`/`Or` for booleans, `Concat` for strings.
+- **Task idempotency** - tasks may execute more than once for the same logical step: `flow.Retry`, foreman lease recovery, subgraph re-entry after the child completes, manual `Retry` via the foreman API. Tasks that fire external side effects (charging a card, sending an email, mutating a non-transactional store) must carry their own dedupe key or check first whether the effect has already happened. Pure-state tasks need no special treatment. Flag any task body that performs an external side effect without an obvious idempotency guard.
+- **Long-running tasks free the worker** - any task that intrinsically takes more than the foreman's `TimeBudget` ceiling (default 2m, max 15m) must use the Interrupt/Resume pattern or the Sleep/Retry polling pattern, never block inside `time.Sleep` or a synchronous external wait. Grep tasks for long blocking calls without checking the return of `svc.Sleep` or for absence of `flow.Retry` / `flow.Interrupt` in polling shapes.
+- **LLM tool exposure shape** - if the workflow uses `llmapi.ChatLoop` as a subgraph, the prepare task should produce `toolURLs []string` of canonical endpoint URLs (`calculatorapi.Arithmetic.URL()` style), not a pre-built `[]llmapi.Tool`. Pre-resolving `Tool` schemas in the caller duplicates what `InitChat` does internally and bypasses the actor-aware OpenAPI fetch that gates tools by `requiredClaims`. Flag any prepare task that constructs `llmapi.Tool` literals.
+- **Naming convention** - microservices whose sole purpose is to host one workflow are conventionally named `<role>.agent` (e.g. `planner.agent`, `coordinator.agent`). Not a framework requirement, but flag drift from the convention if a project has adopted it elsewhere.
+
+If the application includes a workflow that calls an LLM, also verify that `foreman.core`, `llm.core`, and an LLM provider (e.g. `claudellm.core`) are added to `main/main.go`. The workflow compiles fine without them, but execution fails at runtime with an `ack timeout` on whichever endpoint is missing.
+
+#### Step 8: Observability
 
 Check for adequate instrumentation by reviewing `manifest.yaml` metrics sections and `service.go`:
 
@@ -103,7 +119,7 @@ Check for adequate instrumentation by reviewing `manifest.yaml` metrics sections
 - **Context propagation** - is `ctx` passed through the entire call chain, from handler to downstream calls? Flag functions that create a new `context.Background()` or `context.TODO()` instead of propagating the received context, as this breaks distributed tracing.
 - **Error tracing** - are all returned errors wrapped with `errors.Trace`? Are new errors created with `errors.New` (not `fmt.Errorf`)? Grep for `return err` (without `errors.Trace`) and `fmt.Errorf` to find violations.
 
-#### Step 8: Security
+#### Step 9: Security
 
 Review authentication, authorization, and secrets management:
 
@@ -114,7 +130,7 @@ Review authentication, authorization, and secrets management:
 - **Input validation** - are user-provided inputs validated before processing? Flag endpoints that pass user input directly into SQL queries (injection risk), file paths (traversal risk), or HTML output (XSS risk) without sanitization.
 - **Secrets management** - are secret config properties marked `secret: true` in the manifest? Are secret values placed in `config.local.yaml` (git-ignored) and not in `config.yaml` or hardcoded in source? Grep for patterns that look like hardcoded credentials (API keys, passwords, connection strings).
 
-#### Step 9: Operational Concerns
+#### Step 10: Operational Concerns
 
 Evaluate deployment, configuration, and production readiness:
 
@@ -128,7 +144,7 @@ Evaluate deployment, configuration, and production readiness:
 - **No TODO leftovers** - grep for `TODO`, `FIXME`, `HACK`, and `XXX` comments across the codebase. Flag any that indicate unfinished work or known issues that should be resolved before production.
 - **Version tracking** - is the `Version` const in each microservice's `intermediate.go` being incremented when changes are made?
 
-#### Step 10: Documentation
+#### Step 11: Documentation
 
 Evaluate whether the system is sufficiently documented for a new developer or agent to understand and safely evolve it:
 
@@ -138,9 +154,9 @@ Evaluate whether the system is sufficiently documented for a new developer or ag
 - **Complex logic** - are non-obvious algorithms, business rules, or workarounds explained with inline comments? Flag complex code blocks (deeply nested logic, regex patterns, SQL queries with many joins/conditions) that lack explanatory comments.
 - **Config documentation** - are config properties documented with clear descriptions in the manifest? Would a system operator understand what each config does, what values are valid, and what the default means?
 
-#### Step 11: Produce the Report
+#### Step 12: Produce the Report
 
-Compile findings into a structured report. For each category (Steps 2-10), list:
+Compile findings into a structured report. For each category (Steps 2-11), list:
 
 - **Findings** - specific observations, both positive and negative, with file paths and line numbers where applicable
 - **Recommendations** - actionable suggestions for improvement, ordered by severity

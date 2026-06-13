@@ -60,13 +60,20 @@ func (svc *Service) TaskA(ctx context.Context, flow *workflow.Flow, prompt strin
 
 /*
 AwaitInput interrupts the flow until userInput is provided via Resume. On the
-re-execution after Resume, userInput is in state and the task falls through.
+re-execution after Resume, flow.Interrupt returns the resume data and the task
+surfaces userInput as its output.
 */
 func (svc *Service) AwaitInput(ctx context.Context, flow *workflow.Flow, userInput string) (userInputOut string, err error) { // MARKER: AwaitInput
-	if userInput == "" {
-		flow.Interrupt(map[string]any{"requestedInput": "userInput"})
+	resumeData, yield, err := flow.Interrupt(map[string]any{"requestedInput": "userInput"})
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if yield {
 		return "", nil
 	}
+	// Resume data now arrives via flow.Interrupt's return, not via state, so the userInput input
+	// argument is no longer populated; read the resumed value from resumeData instead.
+	userInput, _ = resumeData["userInput"].(string)
 	return userInput, nil
 }
 

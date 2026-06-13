@@ -135,14 +135,16 @@ func (svc *Service) valveRegulate(ctx context.Context, taskName string) int {
 }
 
 // countTasks sums rows in the given status grouped by task_name across every shard in parallel.
-// Feeds the TaskConcurrencyRunning observable gauge; off the admission hot path. Any shard's
-// failure fails the whole call - the foreman is not shard-fault-tolerant.
+// Feeds the TaskConcurrencyRunning observable gauge; off the admission hot path. Parked steps
+// (parked!=0) are excluded - the saturation index physically partitions them out, and they do
+// not consume an executing slot. Any shard's failure fails the whole call - the foreman is not
+// shard-fault-tolerant.
 func (svc *Service) countTasks(ctx context.Context, status string) (map[string]int, error) {
 	numShards := svc.numDBShards()
 	perShard := make([]map[string]int, numShards+1)
 	err := svc.eachShard(ctx, func(ctx context.Context, db *sequel.DB, shard int) error {
 		rows, err := db.QueryContext(ctx,
-			"SELECT task_name, COUNT(*) FROM microbus_steps WHERE status=? GROUP BY task_name",
+			"SELECT task_name, COUNT(*) FROM microbus_steps WHERE status=? AND parked=0 GROUP BY task_name",
 			status,
 		)
 		if err != nil {

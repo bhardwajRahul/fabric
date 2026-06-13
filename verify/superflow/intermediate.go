@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = superflowapi.Hostname
-	Version  = 1
+	Version  = 2
 )
 
 // ToDo is implemented by the service or mock.
@@ -68,6 +68,7 @@ type ToDo interface {
 	ErrorHandler(ctx context.Context, flow *workflow.Flow) (err error)  // MARKER: ErrorHandler
 	SubTaskA(ctx context.Context, flow *workflow.Flow) (err error)      // MARKER: SubTaskA
 	SubTaskB(ctx context.Context, flow *workflow.Flow) (err error)      // MARKER: SubTaskB
+	RunSuperSub(ctx context.Context, flow *workflow.Flow) (err error)   // MARKER: RunSuperSub
 	Super(ctx context.Context) (graph *workflow.Graph, err error)       // MARKER: Super
 	SuperSub(ctx context.Context) (graph *workflow.Graph, err error)    // MARKER: SuperSub
 }
@@ -161,6 +162,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(superflowapi.SubTaskB.Method, superflowapi.SubTaskB.Route),
 		sub.Description(`SubTaskB is the second step of the SuperSub subgraph.`),
 		sub.Task(superflowapi.SubTaskBIn{}, superflowapi.SubTaskBOut{}),
+	)
+
+	svc.Subscribe( // MARKER: RunSuperSub
+		"RunSuperSub", svc.doRunSuperSub,
+		sub.At(superflowapi.RunSuperSub.Method, superflowapi.RunSuperSub.Route),
+		sub.Description(`RunSuperSub invokes the SuperSub subgraph via flow.Subgraph.`),
+		sub.Task(superflowapi.RunSuperSubIn{}, superflowapi.RunSuperSubOut{}),
 	)
 
 	// HINT: Add graph endpoints here
@@ -263,6 +271,11 @@ func (svc *Intermediate) doTaskZ(w http.ResponseWriter, r *http.Request) (err er
 // doErrorHandler handles marshaling for ErrorHandler.
 func (svc *Intermediate) doErrorHandler(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ErrorHandler
 	return doTask(w, r, svc.ErrorHandler)
+}
+
+// doRunSuperSub handles marshaling for RunSuperSub.
+func (svc *Intermediate) doRunSuperSub(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RunSuperSub
+	return doTask(w, r, svc.RunSuperSub)
 }
 
 // doSubTaskA handles marshaling for SubTaskA.

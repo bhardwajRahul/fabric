@@ -29,7 +29,7 @@ TaskB -> forEach items as item -> TaskC         dynamic fan-out
 TaskC -> TaskD                                  fan-in cohort exit
 TaskC -> OnError -> ErrorHandler -> TaskD       sibling-cancel + handler rejoin
 SetFanIn(TaskD)                                 forEach cohort fan-in
-TaskD -> when useSubgraph == true: SuperSubCall (subgraph node)
+TaskD -> when useSubgraph == true: SuperSubCall (flow.Subgraph caller)
 TaskD -> when useSubgraph != true: TaskE        conditional alternate
 SuperSubCall -> TaskE
 SetFanIn(TaskE)                                 conditional fan-in
@@ -51,7 +51,7 @@ Every task body shares a common preamble (`svc.step`):
    - `ErrorStatus` — `return errors.New(..., status)` (drives 409, 429, 5xx paths)
    - `Interrupt` — `flow.Interrupt(payload)` then return nil
    - `Goto` — `flow.Goto(target)` then continue/return per the other knobs
-   - `Retry` — `flow.RetryNow()` and return nil
+   - `Retry` — `flow.Retry(math.MaxInt32, 0, 0, 0)` and return nil
 
 The behaviors map keys are the PascalCase task names (`TaskA`, `SubTaskB`, `ErrorHandler`, ...) so a test
 declares behavior per node without coordinating with the graph topology.

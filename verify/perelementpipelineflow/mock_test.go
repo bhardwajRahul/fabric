@@ -93,7 +93,7 @@ func TestPerelementpipelineflow_Mock(t *testing.T) {
 	t.Run("task_m", func(t *testing.T) { // MARKER: TaskM
 		assert := testarossa.For(t)
 
-		mock.MockTaskM(func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (setMerged []string, err error) {
+		mock.MockTaskM(func(ctx context.Context, flow *workflow.Flow, aProcessed string, bProcessed string) (mergedItems []string, err error) {
 			return
 		})
 		var aProcessed string
@@ -105,11 +105,11 @@ func TestPerelementpipelineflow_Mock(t *testing.T) {
 	t.Run("task_l", func(t *testing.T) { // MARKER: TaskL
 		assert := testarossa.For(t)
 
-		mock.MockTaskL(func(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error) {
+		mock.MockTaskL(func(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error) {
 			return
 		})
-		var setMerged []string
-		_, err := mock.TaskL(ctx, nil, setMerged)
+		var mergedItems []string
+		_, err := mock.TaskL(ctx, nil, mergedItems)
 		assert.NoError(err)
 	})
 

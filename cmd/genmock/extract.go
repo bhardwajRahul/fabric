@@ -66,9 +66,9 @@ type inOutPair struct {
 
 // structField describes one field of an In/Out struct.
 type structField struct {
-	goName string // Go field name, first letter lowercased (e.g. ListMessagesOut -> listMessagesOut)
+	goName string // Go field name, first letter lowercased (e.g. MessagesOut -> messagesOut)
 	typ    string // Go source rendering of the type
-	rawGo  string // raw Go field name as declared (e.g. ListMessagesOut)
+	rawGo  string // raw Go field name as declared (e.g. MessagesOut)
 }
 
 // generate produces the data needed to emit mock.go for the microservice at dir.

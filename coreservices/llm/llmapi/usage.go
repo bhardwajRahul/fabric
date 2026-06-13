@@ -18,9 +18,17 @@ package llmapi
 
 // Usage reports token consumption for an LLM invocation.
 // Providers populate per-turn usage with Turns=1; Chat aggregates across turns.
+//
+// Token accounting convention across providers: OutputTokens always covers every billed
+// completion token, including any tokens the model spent on internal reasoning. ThinkingTokens
+// reports the subset of OutputTokens that was reasoning, so visible-output tokens are
+// (OutputTokens - ThinkingTokens). Providers that don't expose a thinking breakdown leave
+// ThinkingTokens at zero, which lets ThinkingTokens be summed across mixed-provider runs
+// without double-counting.
 type Usage struct {
 	InputTokens      int    `json:"inputTokens,omitzero" jsonschema:"description=InputTokens is the number of prompt tokens charged"`
-	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema:"description=OutputTokens is the number of completion tokens generated"`
+	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema:"description=OutputTokens is the number of billed completion tokens (includes ThinkingTokens)"`
+	ThinkingTokens   int    `json:"thinkingTokens,omitzero" jsonschema:"description=ThinkingTokens is the subset of OutputTokens spent on internal reasoning (Gemini 2.5 thoughtsTokenCount; others 0)"`
 	CacheReadTokens  int    `json:"cacheReadTokens,omitzero" jsonschema:"description=CacheReadTokens is the number of tokens served from the provider's prompt cache"`
 	CacheWriteTokens int    `json:"cacheWriteTokens,omitzero" jsonschema:"description=CacheWriteTokens is the number of tokens written to the provider's prompt cache"`
 	Model            string `json:"model,omitzero" jsonschema:"description=Model is the provider's model identifier that produced this completion"`
@@ -31,6 +39,7 @@ type Usage struct {
 func (u *Usage) Add(other Usage) {
 	u.InputTokens += other.InputTokens
 	u.OutputTokens += other.OutputTokens
+	u.ThinkingTokens += other.ThinkingTokens
 	u.CacheReadTokens += other.CacheReadTokens
 	u.CacheWriteTokens += other.CacheWriteTokens
 	u.Turns += other.Turns

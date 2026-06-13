@@ -19,7 +19,10 @@ package llm
 import (
 	"testing"
 
+	"github.com/invopop/jsonschema"
 	"github.com/microbus-io/testarossa"
+
+	"github.com/microbus-io/fabric/openapi"
 )
 
 func TestCanonicalizeToolURL(t *testing.T) {
@@ -132,4 +135,122 @@ func TestCanonicalizeToolURL_Errors(t *testing.T) {
 			assert.Error(err)
 		})
 	}
+}
+
+func TestResolveSchemaRef(t *testing.T) {
+	t.Parallel()
+
+	// terminal is the fully-typed object schema every multi-hop chain should land on.
+	terminal := &jsonschema.Schema{Type: "object"}
+	props := jsonschema.NewProperties()
+	props.Set("x", &jsonschema.Schema{Type: "integer"})
+	terminal.Properties = props
+
+	// wrapper points at terminal (the two-hop case from the Promotron bug: reflected
+	// request bodies land as Components.Schemas["FetchURL_IN"] = {$ref to
+	// "FetchURL_IN_FetchURLIn"}, with the typed object only at the deeper key).
+	wrapper := &jsonschema.Schema{Ref: "#/components/schemas/terminal"}
+
+	// mid -> wrapper -> terminal: lets the "three hops" test enter via {Ref: ".../mid"}.
+	mid := &jsonschema.Schema{Ref: "#/components/schemas/wrapper"}
+
+	// cycleA <-> cycleB (the cycle-guard case).
+	cycleA := &jsonschema.Schema{Ref: "#/components/schemas/cycleB"}
+	cycleB := &jsonschema.Schema{Ref: "#/components/schemas/cycleA"}
+
+	doc := &openapi.Document{
+		Components: &openapi.Components{
+			Schemas: map[string]*jsonschema.Schema{
+				"terminal": terminal,
+				"wrapper":  wrapper,
+				"mid":      mid,
+				"cycleA":   cycleA,
+				"cycleB":   cycleB,
+			},
+		},
+	}
+
+	t.Run("nil schema returns nil", func(t *testing.T) {
+		assert := testarossa.For(t)
+		assert.Nil(resolveSchemaRef(nil, doc))
+	})
+
+	t.Run("nil doc returns input untouched", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/components/schemas/terminal"}
+		got := resolveSchemaRef(in, nil)
+		assert.Equal(in, got)
+	})
+
+	t.Run("schema without ref returns input untouched", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Type: "object"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(in, got)
+	})
+
+	t.Run("non-components prefix returns input untouched", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/$defs/Foo"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(in, got)
+	})
+
+	t.Run("missing component key returns input untouched", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/components/schemas/notpresent"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(in, got)
+	})
+
+	t.Run("single hop resolves to terminal", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/components/schemas/terminal"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(terminal, got)
+		assert.Equal("object", got.Type)
+	})
+
+	t.Run("two hops resolves through wrapper to terminal", func(t *testing.T) {
+		assert := testarossa.For(t)
+		// This is the Promotron regression: a wrapper schema whose only field is
+		// `$ref` would previously be returned as-is, and Claude rejected the tool
+		// payload with `input_schema.type: Field required`.
+		in := &jsonschema.Schema{Ref: "#/components/schemas/wrapper"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(terminal, got)
+		assert.Equal("object", got.Type)
+	})
+
+	t.Run("three hops resolves to terminal", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/components/schemas/mid"}
+		got := resolveSchemaRef(in, doc)
+		assert.Equal(terminal, got)
+		assert.Equal("object", got.Type)
+	})
+
+	t.Run("cycle guard stops without looping forever", func(t *testing.T) {
+		assert := testarossa.For(t)
+		in := &jsonschema.Schema{Ref: "#/components/schemas/cycleA"}
+		got := resolveSchemaRef(in, doc)
+		// The resolver visited cycleA -> cycleB and bailed before re-entering cycleA.
+		// The returned schema is the last node in the chain (cycleB), which still
+		// has Ref set - callers see this case as "unresolvable" rather than hanging.
+		assert.NotNil(got)
+		assert.NotEqual("", got.Ref)
+	})
+
+	t.Run("self-referential cycle stops at first revisit", func(t *testing.T) {
+		assert := testarossa.For(t)
+		self := &jsonschema.Schema{Ref: "#/components/schemas/self"}
+		selfDoc := &openapi.Document{
+			Components: &openapi.Components{
+				Schemas: map[string]*jsonschema.Schema{"self": self},
+			},
+		}
+		got := resolveSchemaRef(self, selfDoc)
+		assert.NotNil(got)
+		assert.NotEqual("", got.Ref)
+	})
 }

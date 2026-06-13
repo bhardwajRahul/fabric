@@ -52,7 +52,7 @@ var (
 
 const (
 	Hostname = foremanapi.Hostname
-	Version  = 44
+	Version  = 51
 )
 
 // ToDo is implemented by the service or mock.
@@ -60,36 +60,39 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                   // MARKER: Create
-	Start(ctx context.Context, flowKey string) (err error)                                                                                       // MARKER: Start
-	StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                          // MARKER: StartNotify
-	Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Snapshot
-	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                                      // MARKER: Resume
-	Fork(ctx context.Context, stepKey string, stateOverrides any, opts *workflow.FlowOptions) (newFlowKey string, err error)                    // MARKER: Fork
-	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                       // MARKER: Cancel
-	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                        // MARKER: History
-	Retry(ctx context.Context, flowKey string) (err error)                                                                                       // MARKER: Retry
-	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                             // MARKER: List
-	Delete(ctx context.Context, flowKey string) (err error)                                                                                      // MARKER: Delete
-	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                                  // MARKER: Purge
-	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                 // MARKER: ShardInfo
-	CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                                               // MARKER: CreateTask
-	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                                              // MARKER: Enqueue
-	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                      // MARKER: Await
-	NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error)                                                           // MARKER: NotifyStatusChange
-	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                                  // MARKER: BreakBefore
-	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)     // MARKER: Run
-	Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)             // MARKER: Continue
-	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                           // MARKER: HistoryMermaid
-	SyncValve(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error)                                                 // MARKER: SyncValve
-	TripBreaker(ctx context.Context, taskName string) (err error)                                                                                // MARKER: TripBreaker
-	OnChangedNumShards(ctx context.Context) (err error)                                                                                          // MARKER: NumShards
-	OnObserveStepsQueueDepth(ctx context.Context) (err error)                                                                                    // MARKER: StepsQueueDepth
-	OnObserveStepsPending(ctx context.Context) (err error)                                                                                       // MARKER: StepsPending
-	OnObserveStepsOldestPendingAgeSeconds(ctx context.Context) (err error)                                                                       // MARKER: StepsOldestPendingAgeSeconds
-	OnObserveTaskRateLimit(ctx context.Context) (err error)                                                                                      // MARKER: TaskRateLimit
-	OnObserveTaskConcurrencyRunning(ctx context.Context) (err error)                                                                             // MARKER: TaskConcurrencyRunning
-	OnObserveTaskBreakerState(ctx context.Context) (err error)                                                                                   // MARKER: TaskBreakerState
+	Create(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)             // MARKER: Create
+	Start(ctx context.Context, flowKey string) (err error)                                                                                 // MARKER: Start
+	StartNotify(ctx context.Context, flowKey string, notifyHostname string) (err error)                                                    // MARKER: StartNotify
+	Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                               // MARKER: Snapshot
+	Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                        // MARKER: Fingerprint
+	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                                // MARKER: Resume
+	ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                       // MARKER: ResumeBreak
+	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                 // MARKER: Cancel
+	Restart(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                           // MARKER: Restart
+	RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                       // MARKER: RestartFrom
+	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                  // MARKER: History
+	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
+	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
+	Delete(ctx context.Context, flowKey string) (err error)                                                                                // MARKER: Delete
+	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                            // MARKER: Purge
+	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                           // MARKER: ShardInfo
+	CreateTask(ctx context.Context, taskName string, initialState any) (flowKey string, err error)                                         // MARKER: CreateTask
+	Enqueue(ctx context.Context, shard int, stepID int) (err error)                                                                        // MARKER: Enqueue
+	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                  // MARKER: Await
+	NotifyStatusChange(ctx context.Context, flowKey string, status string) (err error)                                                     // MARKER: NotifyStatusChange
+	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                            // MARKER: BreakBefore
+	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
+	Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)        // MARKER: Continue
+	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                     // MARKER: HistoryMermaid
+	SyncValve(ctx context.Context, taskName string, wCong int, tCong time.Time) (err error)                                                // MARKER: SyncValve
+	TripBreaker(ctx context.Context, taskName string) (err error)                                                                          // MARKER: TripBreaker
+	OnChangedNumShards(ctx context.Context) (err error)                                                                                    // MARKER: NumShards
+	OnObserveStepsQueueDepth(ctx context.Context) (err error)                                                                              // MARKER: StepsQueueDepth
+	OnObserveStepsPending(ctx context.Context) (err error)                                                                                 // MARKER: StepsPending
+	OnObserveStepsOldestPendingAgeSeconds(ctx context.Context) (err error)                                                                 // MARKER: StepsOldestPendingAgeSeconds
+	OnObserveTaskRateLimit(ctx context.Context) (err error)                                                                                // MARKER: TaskRateLimit
+	OnObserveTaskConcurrencyRunning(ctx context.Context) (err error)                                                                       // MARKER: TaskConcurrencyRunning
+	OnObserveTaskBreakerState(ctx context.Context) (err error)                                                                             // MARKER: TaskBreakerState
 }
 
 // NewService creates a new instance of the microservice.
@@ -152,17 +155,23 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Snapshot returns the current status and state of a flow.`),
 		sub.Function(foremanapi.SnapshotIn{}, foremanapi.SnapshotOut{}),
 	)
+	svc.Subscribe( // MARKER: Fingerprint
+		"Fingerprint", svc.doFingerprint,
+		sub.At(foremanapi.Fingerprint.Method, foremanapi.Fingerprint.Route),
+		sub.Description(`Fingerprint returns a short opaque hash that changes when the flow's status, step count, or any step's updated_at changes — across the flow and any nested subgraph descendants. Cheap (one indexed query per descendant level); intended as the change-detection probe for long-polling watchers.`),
+		sub.Function(foremanapi.FingerprintIn{}, foremanapi.FingerprintOut{}),
+	)
 	svc.Subscribe( // MARKER: Resume
 		"Resume", svc.doResume,
 		sub.At(foremanapi.Resume.Method, foremanapi.Resume.Route),
-		sub.Description(`Resume resumes an interrupted flow by merging resumeData into the leaf step's state and re-enqueuing it for execution.`),
+		sub.Description(`Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt (recorded on the leaf step's resume_data column and returned by flow.Interrupt on re-entry). Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.`),
 		sub.Function(foremanapi.ResumeIn{}, foremanapi.ResumeOut{}),
 	)
-	svc.Subscribe( // MARKER: Fork
-		"Fork", svc.doFork,
-		sub.At(foremanapi.Fork.Method, foremanapi.Fork.Route),
-		sub.Description(`Fork creates a new flow from an existing step's checkpoint.`),
-		sub.Function(foremanapi.ForkIn{}, foremanapi.ForkOut{}),
+	svc.Subscribe( // MARKER: ResumeBreak
+		"ResumeBreak", svc.doResumeBreak,
+		sub.At(foremanapi.ResumeBreak.Method, foremanapi.ResumeBreak.Route),
+		sub.Description(`ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.`),
+		sub.Function(foremanapi.ResumeBreakIn{}, foremanapi.ResumeBreakOut{}),
 	)
 	svc.Subscribe( // MARKER: Cancel
 		"Cancel", svc.doCancel,
@@ -170,17 +179,29 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Cancel cancels a flow that is not yet in a terminal status.`),
 		sub.Function(foremanapi.CancelIn{}, foremanapi.CancelOut{}),
 	)
+	svc.Subscribe( // MARKER: Restart
+		"Restart", svc.doRestart,
+		sub.At(foremanapi.Restart.Method, foremanapi.Restart.Route),
+		sub.Description(`Restart wipes everything past a flow's entry step and resets the entry with overrides.`),
+		sub.Function(foremanapi.RestartIn{}, foremanapi.RestartOut{}),
+	)
+	svc.Subscribe( // MARKER: RestartFrom
+		"RestartFrom", svc.doRestartFrom,
+		sub.At(foremanapi.RestartFrom.Method, foremanapi.RestartFrom.Route),
+		sub.Description(`RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.`),
+		sub.Function(foremanapi.RestartFromIn{}, foremanapi.RestartFromOut{}),
+	)
 	svc.Subscribe( // MARKER: History
 		"History", svc.doHistory,
 		sub.At(foremanapi.History.Method, foremanapi.History.Route),
 		sub.Description(`History returns the step-by-step execution history of a flow.`),
 		sub.Function(foremanapi.HistoryIn{}, foremanapi.HistoryOut{}),
 	)
-	svc.Subscribe( // MARKER: Retry
-		"Retry", svc.doRetry,
-		sub.At(foremanapi.Retry.Method, foremanapi.Retry.Route),
-		sub.Description(`Retry re-executes the last failed step of a flow.`),
-		sub.Function(foremanapi.RetryIn{}, foremanapi.RetryOut{}),
+	svc.Subscribe( // MARKER: Step
+		"Step", svc.doStep,
+		sub.At(foremanapi.Step.Method, foremanapi.Step.Route),
+		sub.Description(`Step returns the full detail of one execution step, including the state, changes and interrupt payload that History omits.`),
+		sub.Function(foremanapi.StepIn{}, foremanapi.StepOut{}),
 	)
 	svc.Subscribe( // MARKER: List
 		"List", svc.doList,
@@ -273,21 +294,21 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 
 	// HINT: Add metrics here
-	svc.DescribeCounter("microbus_flows_started_total", "FlowsStarted counts the number of flows that have been started.")                                                                                            // MARKER: FlowsStarted
-	svc.DescribeCounter("microbus_flows_terminated_total", "FlowsTerminated counts the number of flows that have reached a terminal status.")                                                                         // MARKER: FlowsTerminated
-	svc.DescribeCounter("microbus_steps_executed_total", "StepsExecuted counts the number of steps that have been executed.")                                                                                         // MARKER: StepsExecuted
-	svc.DescribeGauge("microbus_steps_queue_depth", "StepsQueueDepth records the number of steps waiting in the local worker queue.")                                                                                 // MARKER: StepsQueueDepth
-	svc.DescribeCounter("microbus_steps_recovered_total", "StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.")                                                              // MARKER: StepsRecovered
-	svc.DescribeGauge("microbus_steps_pending", "StepsPending records the number of due pending steps in each priority band.")                                                                                        // MARKER: StepsPending
-	svc.DescribeGauge("microbus_steps_oldest_pending_age_seconds", "StepsOldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.")                                   // MARKER: StepsOldestPendingAgeSeconds
-	svc.DescribeGauge("microbus_steps_fairness_keys", "StepsFairnessKeys records the number of distinct fairness keys in the most recent refill selection at the given priority band.")                               // MARKER: StepsFairnessKeys
-	svc.DescribeCounter("microbus_steps_skipped_saturated_total", "StepsSkippedSaturated counts the number of step admissions skipped because the task was at its current rate-limit ceiling.")                       // MARKER: StepsSkippedSaturated
-	svc.DescribeGauge("microbus_task_rate_limit", "TaskRateLimit records the current adaptive per-task dispatch-rate ceiling (ops/sec) derived from the gossiped congestion point.")                                  // MARKER: TaskRateLimit
-	svc.DescribeGauge("microbus_task_concurrency_running", "TaskConcurrencyRunning records the cluster-wide number of running steps per task; pairs with TaskRateLimit on one panel.")                                // MARKER: TaskConcurrencyRunning
-	svc.DescribeCounter("microbus_task_rate_cuts_total", "TaskRateCuts counts the additive-decrease cuts to the per-task rate ceiling triggered by a 429 from a task dispatch.")                                      // MARKER: TaskRateCuts
-	svc.DescribeCounter("microbus_task_breaker_trips_total", "TaskBreakerTrips counts the number of times a per-task circuit breaker transitioned to tripped on consecutive 404 ack-timeouts.")                       // MARKER: TaskBreakerTrips
-	svc.DescribeCounter("microbus_task_breaker_probes_total", "TaskBreakerProbes counts probe attempts against a tripped per-task circuit breaker, labelled by outcome (success or failure).")                        // MARKER: TaskBreakerProbes
-	svc.DescribeGauge("microbus_task_breaker_state", "TaskBreakerState records the current state of each per-task circuit breaker: 0 = closed (admitting), 1 = tripped (blocked).")                                   // MARKER: TaskBreakerState
+	svc.DescribeCounter("microbus_flows_started_total", "FlowsStarted counts the number of flows that have been started.")                                                                                                                             // MARKER: FlowsStarted
+	svc.DescribeCounter("microbus_flows_terminated_total", "FlowsTerminated counts the number of flows that have reached a terminal status.")                                                                                                          // MARKER: FlowsTerminated
+	svc.DescribeCounter("microbus_steps_executed_total", "StepsExecuted counts the number of steps that have been executed.")                                                                                                                          // MARKER: StepsExecuted
+	svc.DescribeGauge("microbus_steps_queue_depth", "StepsQueueDepth records the number of steps waiting in the local worker queue.")                                                                                                                  // MARKER: StepsQueueDepth
+	svc.DescribeCounter("microbus_steps_recovered_total", "StepsRecovered counts the number of steps recovered by pollPendingSteps after lease expiry.")                                                                                               // MARKER: StepsRecovered
+	svc.DescribeGauge("microbus_steps_pending", "StepsPending records the number of due pending steps in each priority band.")                                                                                                                         // MARKER: StepsPending
+	svc.DescribeGauge("microbus_steps_oldest_pending_age_seconds", "StepsOldestPendingAgeSeconds records the age in seconds of the oldest due pending step in each priority band.")                                                                    // MARKER: StepsOldestPendingAgeSeconds
+	svc.DescribeGauge("microbus_steps_fairness_keys", "StepsFairnessKeys records the number of distinct fairness keys in the most recent refill selection at the given priority band.")                                                                // MARKER: StepsFairnessKeys
+	svc.DescribeCounter("microbus_steps_skipped_saturated_total", "StepsSkippedSaturated counts the number of step admissions skipped because the task was at its current rate-limit ceiling.")                                                        // MARKER: StepsSkippedSaturated
+	svc.DescribeGauge("microbus_task_rate_limit", "TaskRateLimit records the current adaptive per-task dispatch-rate ceiling (ops/sec) derived from the gossiped congestion point.")                                                                   // MARKER: TaskRateLimit
+	svc.DescribeGauge("microbus_task_concurrency_running", "TaskConcurrencyRunning records the cluster-wide number of running steps per task; pairs with TaskRateLimit on one panel.")                                                                 // MARKER: TaskConcurrencyRunning
+	svc.DescribeCounter("microbus_task_rate_cuts_total", "TaskRateCuts counts the additive-decrease cuts to the per-task rate ceiling triggered by a 429 from a task dispatch.")                                                                       // MARKER: TaskRateCuts
+	svc.DescribeCounter("microbus_task_breaker_trips_total", "TaskBreakerTrips counts the number of times a per-task circuit breaker transitioned to tripped, labelled by cause (ack_timeout for a 404 ack-timeout, overloaded for a 529).")           // MARKER: TaskBreakerTrips
+	svc.DescribeCounter("microbus_task_breaker_probes_total", "TaskBreakerProbes counts probe attempts against a tripped per-task circuit breaker, labelled by outcome (success or failure) and the original trip cause (ack_timeout or overloaded).") // MARKER: TaskBreakerProbes
+	svc.DescribeGauge("microbus_task_breaker_state", "TaskBreakerState records the current state of each per-task circuit breaker: 0 = closed (admitting), 1 = tripped (blocked).")                                                                    // MARKER: TaskBreakerState
 
 	// HINT: Add tickers here
 
@@ -422,6 +443,17 @@ func (svc *Intermediate) doSnapshot(w http.ResponseWriter, r *http.Request) (err
 	return err // No trace
 }
 
+// doFingerprint handles marshaling for the Fingerprint function.
+func (svc *Intermediate) doFingerprint(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Fingerprint
+	var in foremanapi.FingerprintIn
+	var out foremanapi.FingerprintOut
+	err = marshalFunction(w, r, foremanapi.Fingerprint.Route, &in, &out, func(_ any, _ any) error {
+		out.Fingerprint, out.Status, err = svc.Fingerprint(r.Context(), in.FlowKey)
+		return err
+	})
+	return err // No trace
+}
+
 // doResume handles marshaling for the Resume function.
 func (svc *Intermediate) doResume(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Resume
 	var in foremanapi.ResumeIn
@@ -433,12 +465,12 @@ func (svc *Intermediate) doResume(w http.ResponseWriter, r *http.Request) (err e
 	return err // No trace
 }
 
-// doFork handles marshaling for the Fork function.
-func (svc *Intermediate) doFork(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Fork
-	var in foremanapi.ForkIn
-	var out foremanapi.ForkOut
-	err = marshalFunction(w, r, foremanapi.Fork.Route, &in, &out, func(_ any, _ any) error {
-		out.NewFlowKey, err = svc.Fork(r.Context(), in.StepKey, in.StateOverrides, in.Opts)
+// doResumeBreak handles marshaling for the ResumeBreak function.
+func (svc *Intermediate) doResumeBreak(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ResumeBreak
+	var in foremanapi.ResumeBreakIn
+	var out foremanapi.ResumeBreakOut
+	err = marshalFunction(w, r, foremanapi.ResumeBreak.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.ResumeBreak(r.Context(), in.FlowKey, in.StateOverrides)
 		return err
 	})
 	return err // No trace
@@ -455,6 +487,28 @@ func (svc *Intermediate) doCancel(w http.ResponseWriter, r *http.Request) (err e
 	return err // No trace
 }
 
+// doRestart handles marshaling for the Restart function.
+func (svc *Intermediate) doRestart(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Restart
+	var in foremanapi.RestartIn
+	var out foremanapi.RestartOut
+	err = marshalFunction(w, r, foremanapi.Restart.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Restart(r.Context(), in.FlowKey, in.StateOverrides)
+		return err
+	})
+	return err // No trace
+}
+
+// doRestartFrom handles marshaling for the RestartFrom function.
+func (svc *Intermediate) doRestartFrom(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFrom
+	var in foremanapi.RestartFromIn
+	var out foremanapi.RestartFromOut
+	err = marshalFunction(w, r, foremanapi.RestartFrom.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.RestartFrom(r.Context(), in.StepKey, in.StateOverrides)
+		return err
+	})
+	return err // No trace
+}
+
 // doHistory handles marshaling for the History function.
 func (svc *Intermediate) doHistory(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: History
 	var in foremanapi.HistoryIn
@@ -466,12 +520,12 @@ func (svc *Intermediate) doHistory(w http.ResponseWriter, r *http.Request) (err 
 	return err // No trace
 }
 
-// doRetry handles marshaling for the Retry function.
-func (svc *Intermediate) doRetry(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Retry
-	var in foremanapi.RetryIn
-	var out foremanapi.RetryOut
-	err = marshalFunction(w, r, foremanapi.Retry.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Retry(r.Context(), in.FlowKey)
+// doStep handles marshaling for the Step function.
+func (svc *Intermediate) doStep(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Step
+	var in foremanapi.StepIn
+	var out foremanapi.StepOut
+	err = marshalFunction(w, r, foremanapi.Step.Route, &in, &out, func(_ any, _ any) error {
+		out.Step, err = svc.Step(r.Context(), in.StepKey)
 		return err
 	})
 	return err // No trace
@@ -821,21 +875,23 @@ func (svc *Intermediate) IncrementTaskRateCuts(ctx context.Context, value int, t
 }
 
 /*
-IncrementTaskBreakerTrips counts the number of times a per-task breaker transitioned to tripped.
+IncrementTaskBreakerTrips counts the number of times a per-task breaker transitioned to tripped, labelled by cause.
 */
-func (svc *Intermediate) IncrementTaskBreakerTrips(ctx context.Context, value int, task string) (err error) { // MARKER: TaskBreakerTrips
+func (svc *Intermediate) IncrementTaskBreakerTrips(ctx context.Context, value int, task string, cause string) (err error) { // MARKER: TaskBreakerTrips
 	return svc.IncrementCounter(ctx, "microbus_task_breaker_trips_total", float64(value),
 		"task", utils.AnyToString(task),
+		"cause", utils.AnyToString(cause),
 	)
 }
 
 /*
-IncrementTaskBreakerProbes counts probe attempts against a tripped breaker, labelled by outcome.
+IncrementTaskBreakerProbes counts probe attempts against a tripped breaker, labelled by outcome and the original trip cause.
 */
-func (svc *Intermediate) IncrementTaskBreakerProbes(ctx context.Context, value int, task string, outcome string) (err error) { // MARKER: TaskBreakerProbes
+func (svc *Intermediate) IncrementTaskBreakerProbes(ctx context.Context, value int, task string, outcome string, cause string) (err error) { // MARKER: TaskBreakerProbes
 	return svc.IncrementCounter(ctx, "microbus_task_breaker_probes_total", float64(value),
 		"task", utils.AnyToString(task),
 		"outcome", utils.AnyToString(outcome),
+		"cause", utils.AnyToString(cause),
 	)
 }
 

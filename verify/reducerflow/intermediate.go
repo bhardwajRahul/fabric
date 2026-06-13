@@ -60,10 +60,10 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	TaskA(ctx context.Context, flow *workflow.Flow) (started bool, err error)                                                                                  // MARKER: TaskA
-	TaskB(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error)                                            // MARKER: TaskB
-	TaskC(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error)                                            // MARKER: TaskC
-	TaskD(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut, setSeenOut []string, err error)                                            // MARKER: TaskD
-	TaskE(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags, setSeen []string) (finalSum int, finalList, finalSet []string, err error)         // MARKER: TaskE
+	TaskB(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error)                                            // MARKER: TaskB
+	TaskC(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error)                                            // MARKER: TaskC
+	TaskD(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut, seenOut []string, err error)                                            // MARKER: TaskD
+	TaskE(ctx context.Context, flow *workflow.Flow, total int, tags, seen []string) (finalSum int, finalList, finalSet []string, err error)        // MARKER: TaskE
 	Reducer(ctx context.Context) (graph *workflow.Graph, err error)                                                                                            // MARKER: Reducer
 }
 
@@ -111,13 +111,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: TaskB
 		"TaskB", svc.doTaskB,
 		sub.At(reducerflowapi.TaskB.Method, reducerflowapi.TaskB.Route),
-		sub.Description(`TaskB contributes deltas to sumTotal/listTags/setSeen.`),
+		sub.Description(`TaskB contributes deltas to total/tags/seen.`),
 		sub.Task(reducerflowapi.TaskBIn{}, reducerflowapi.TaskBOut{}),
 	)
 	svc.Subscribe( // MARKER: TaskC
 		"TaskC", svc.doTaskC,
 		sub.At(reducerflowapi.TaskC.Method, reducerflowapi.TaskC.Route),
-		sub.Description(`TaskC contributes deltas with one overlapping setSeen element.`),
+		sub.Description(`TaskC contributes deltas with one overlapping seen element.`),
 		sub.Task(reducerflowapi.TaskCIn{}, reducerflowapi.TaskCOut{}),
 	)
 	svc.Subscribe( // MARKER: TaskD
@@ -199,7 +199,7 @@ func (svc *Intermediate) doTaskB(w http.ResponseWriter, r *http.Request) (err er
 	var in reducerflowapi.TaskBIn
 	flow.ParseState(&in)
 	var out reducerflowapi.TaskBOut
-	out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err = svc.TaskB(r.Context(), &flow)
+	out.TotalOut, out.TagsOut, out.SeenOut, err = svc.TaskB(r.Context(), &flow)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (svc *Intermediate) doTaskC(w http.ResponseWriter, r *http.Request) (err er
 	var in reducerflowapi.TaskCIn
 	flow.ParseState(&in)
 	var out reducerflowapi.TaskCOut
-	out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err = svc.TaskC(r.Context(), &flow)
+	out.TotalOut, out.TagsOut, out.SeenOut, err = svc.TaskC(r.Context(), &flow)
 	if err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func (svc *Intermediate) doTaskD(w http.ResponseWriter, r *http.Request) (err er
 	var in reducerflowapi.TaskDIn
 	flow.ParseState(&in)
 	var out reducerflowapi.TaskDOut
-	out.SumTotalOut, out.ListTagsOut, out.SetSeenOut, err = svc.TaskD(r.Context(), &flow)
+	out.TotalOut, out.TagsOut, out.SeenOut, err = svc.TaskD(r.Context(), &flow)
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func (svc *Intermediate) doTaskE(w http.ResponseWriter, r *http.Request) (err er
 	var in reducerflowapi.TaskEIn
 	flow.ParseState(&in)
 	var out reducerflowapi.TaskEOut
-	out.FinalSum, out.FinalList, out.FinalSet, err = svc.TaskE(r.Context(), &flow, in.SumTotal, in.ListTags, in.SetSeen)
+	out.FinalSum, out.FinalList, out.FinalSet, err = svc.TaskE(r.Context(), &flow, in.Total, in.Tags, in.Seen)
 	if err != nil {
 		return err
 	}

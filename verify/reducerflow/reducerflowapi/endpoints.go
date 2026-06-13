@@ -59,9 +59,9 @@ type TaskBIn struct { // MARKER: TaskB
 
 // TaskBOut are the output arguments of TaskB. B contributes deltas to all three reducer fields.
 type TaskBOut struct { // MARKER: TaskB
-	SumTotalOut int      `json:"sumTotal,omitzero"`
-	ListTagsOut []string `json:"listTags,omitzero"`
-	SetSeenOut  []string `json:"setSeen,omitzero"`
+	TotalOut int      `json:"total,omitzero"`
+	TagsOut  []string `json:"tags,omitzero"`
+	SeenOut  []string `json:"seen,omitzero"`
 }
 
 // TaskCIn are the input arguments of TaskC.
@@ -70,9 +70,9 @@ type TaskCIn struct { // MARKER: TaskC
 
 // TaskCOut are the output arguments of TaskC.
 type TaskCOut struct { // MARKER: TaskC
-	SumTotalOut int      `json:"sumTotal,omitzero"`
-	ListTagsOut []string `json:"listTags,omitzero"`
-	SetSeenOut  []string `json:"setSeen,omitzero"`
+	TotalOut int      `json:"total,omitzero"`
+	TagsOut  []string `json:"tags,omitzero"`
+	SeenOut  []string `json:"seen,omitzero"`
 }
 
 // TaskDIn are the input arguments of TaskD.
@@ -81,16 +81,16 @@ type TaskDIn struct { // MARKER: TaskD
 
 // TaskDOut are the output arguments of TaskD.
 type TaskDOut struct { // MARKER: TaskD
-	SumTotalOut int      `json:"sumTotal,omitzero"`
-	ListTagsOut []string `json:"listTags,omitzero"`
-	SetSeenOut  []string `json:"setSeen,omitzero"`
+	TotalOut int      `json:"total,omitzero"`
+	TagsOut  []string `json:"tags,omitzero"`
+	SeenOut  []string `json:"seen,omitzero"`
 }
 
 // TaskEIn are the input arguments of TaskE.
 type TaskEIn struct { // MARKER: TaskE
-	SumTotal int      `json:"sumTotal,omitzero"`
-	ListTags []string `json:"listTags,omitzero"`
-	SetSeen  []string `json:"setSeen,omitzero"`
+	Total int      `json:"total,omitzero"`
+	Tags  []string `json:"tags,omitzero"`
+	Seen  []string `json:"seen,omitzero"`
 }
 
 // TaskEOut are the output arguments of TaskE.

@@ -42,9 +42,10 @@ var (
 	TaskY   = Def{Method: "POST", Route: ":428/task-y"}    // MARKER: TaskY
 	TaskZ   = Def{Method: "POST", Route: ":428/task-z"}    // MARKER: TaskZ
 	TaskW   = Def{Method: "POST", Route: ":428/task-w"}    // MARKER: TaskW
-	TaskJ   = Def{Method: "POST", Route: ":428/task-j"}    // MARKER: TaskJ
-	Inner   = Def{Method: "GET", Route: ":428/inner"}      // MARKER: Inner
-	Nested  = Def{Method: "GET", Route: ":428/nested"}     // MARKER: Nested
+	TaskJ    = Def{Method: "POST", Route: ":428/task-j"}     // MARKER: TaskJ
+	RunInner = Def{Method: "POST", Route: ":428/run-inner"}  // MARKER: RunInner
+	Inner    = Def{Method: "GET", Route: ":428/inner"}       // MARKER: Inner
+	Nested   = Def{Method: "GET", Route: ":428/nested"}      // MARKER: Nested
 )
 
 // TaskAIn are the input arguments of TaskA.
@@ -65,6 +66,15 @@ type NormalBOut struct { // MARKER: NormalB
 	NormalResult string `json:"normalResult,omitzero"`
 }
 
+// RunInnerIn are the input arguments of RunInner.
+type RunInnerIn struct { // MARKER: RunInner
+}
+
+// RunInnerOut are the output arguments of RunInner.
+type RunInnerOut struct { // MARKER: RunInner
+	InnerResult int `json:"innerResult,omitzero"`
+}
+
 // TaskXIn are the input arguments of TaskX.
 type TaskXIn struct { // MARKER: TaskX
 }
@@ -80,7 +90,7 @@ type TaskYIn struct { // MARKER: TaskY
 
 // TaskYOut are the output arguments of TaskY. Contributes a delta to the sum reducer.
 type TaskYOut struct { // MARKER: TaskY
-	SumInnerOut int `json:"sumInner,omitzero"`
+	InnerOut int `json:"inner,omitzero"`
 }
 
 // TaskZIn are the input arguments of TaskZ.
@@ -89,12 +99,12 @@ type TaskZIn struct { // MARKER: TaskZ
 
 // TaskZOut are the output arguments of TaskZ. Contributes a delta to the sum reducer.
 type TaskZOut struct { // MARKER: TaskZ
-	SumInnerOut int `json:"sumInner,omitzero"`
+	InnerOut int `json:"inner,omitzero"`
 }
 
-// TaskWIn are the input arguments of TaskW. Reads the merged sumInner.
+// TaskWIn are the input arguments of TaskW. Reads the merged `inner` field.
 type TaskWIn struct { // MARKER: TaskW
-	SumInner int `json:"sumInner,omitzero"`
+	Inner int `json:"inner,omitzero"`
 }
 
 // TaskWOut are the output arguments of TaskW.

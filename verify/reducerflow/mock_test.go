@@ -59,7 +59,7 @@ func TestReducerflow_Mock(t *testing.T) {
 	t.Run("task_b", func(t *testing.T) { // MARKER: TaskB
 		assert := testarossa.For(t)
 
-		mock.MockTaskB(func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) {
+		mock.MockTaskB(func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) {
 			return
 		})
 		_, _, _, err := mock.TaskB(ctx, nil)
@@ -69,7 +69,7 @@ func TestReducerflow_Mock(t *testing.T) {
 	t.Run("task_c", func(t *testing.T) { // MARKER: TaskC
 		assert := testarossa.For(t)
 
-		mock.MockTaskC(func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) {
+		mock.MockTaskC(func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) {
 			return
 		})
 		_, _, _, err := mock.TaskC(ctx, nil)
@@ -79,7 +79,7 @@ func TestReducerflow_Mock(t *testing.T) {
 	t.Run("task_d", func(t *testing.T) { // MARKER: TaskD
 		assert := testarossa.For(t)
 
-		mock.MockTaskD(func(ctx context.Context, flow *workflow.Flow) (sumTotalOut int, listTagsOut []string, setSeenOut []string, err error) {
+		mock.MockTaskD(func(ctx context.Context, flow *workflow.Flow) (totalOut int, tagsOut []string, seenOut []string, err error) {
 			return
 		})
 		_, _, _, err := mock.TaskD(ctx, nil)
@@ -89,13 +89,13 @@ func TestReducerflow_Mock(t *testing.T) {
 	t.Run("task_e", func(t *testing.T) { // MARKER: TaskE
 		assert := testarossa.For(t)
 
-		mock.MockTaskE(func(ctx context.Context, flow *workflow.Flow, sumTotal int, listTags []string, setSeen []string) (finalSum int, finalList []string, finalSet []string, err error) {
+		mock.MockTaskE(func(ctx context.Context, flow *workflow.Flow, total int, tags []string, seen []string) (finalSum int, finalList []string, finalSet []string, err error) {
 			return
 		})
-		var sumTotal int
-		var listTags []string
-		var setSeen []string
-		_, _, _, err := mock.TaskE(ctx, nil, sumTotal, listTags, setSeen)
+		var total int
+		var tags []string
+		var seen []string
+		_, _, _, err := mock.TaskE(ctx, nil, total, tags, seen)
 		assert.NoError(err)
 	})
 

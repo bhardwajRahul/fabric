@@ -30,6 +30,7 @@ type Mock struct {
 	mockBoomF      func(ctx context.Context, flow *workflow.Flow) (done bool, err error) // MARKER: BoomF
 	mockJoin       func(ctx context.Context, flow *workflow.Flow) (done bool, err error) // MARKER: Join
 	mockInnerEntry func(ctx context.Context, flow *workflow.Flow) (done bool, err error) // MARKER: InnerEntry
+	mockRunSub     func(ctx context.Context, flow *workflow.Flow) (done bool, err error) // MARKER: RunSub
 	mockSoakGraph  func(ctx context.Context) (graph *workflow.Graph, err error)          // MARKER: Soak
 	unsubMockSoak  func() error                                                          // MARKER: Soak
 	mockInnerGraph func(ctx context.Context) (graph *workflow.Graph, err error)          // MARKER: Inner
@@ -193,6 +194,20 @@ func (svc *Mock) MockInnerEntry(handler func(ctx context.Context, flow *workflow
 func (svc *Mock) InnerEntry(ctx context.Context, flow *workflow.Flow) (done bool, err error) { // MARKER: InnerEntry
 	if svc.mockInnerEntry != nil {
 		done, err = svc.mockInnerEntry(ctx, flow)
+	}
+	return done, errors.Trace(err)
+}
+
+// MockRunSub sets up a mock handler for RunSub.
+func (svc *Mock) MockRunSub(handler func(ctx context.Context, flow *workflow.Flow) (done bool, err error)) *Mock { // MARKER: RunSub
+	svc.mockRunSub = handler
+	return svc
+}
+
+// RunSub executes the mock handler.
+func (svc *Mock) RunSub(ctx context.Context, flow *workflow.Flow) (done bool, err error) { // MARKER: RunSub
+	if svc.mockRunSub != nil {
+		done, err = svc.mockRunSub(ctx, flow)
 	}
 	return done, errors.Trace(err)
 }

@@ -42,6 +42,7 @@ var (
 	TaskY       = Def{Method: "POST", Route: ":428/task-y"}        // MARKER: TaskY
 	NormalD     = Def{Method: "POST", Route: ":428/normal-d"}      // MARKER: NormalD
 	TaskE       = Def{Method: "POST", Route: ":428/task-e"}        // MARKER: TaskE
+	RunSub      = Def{Method: "POST", Route: ":428/run-sub"}       // MARKER: RunSub
 	Sub         = Def{Method: "GET", Route: ":428/sub"}            // MARKER: Sub
 	SubFanOut   = Def{Method: "GET", Route: ":428/sub-fan-out"}    // MARKER: SubFanOut
 )
@@ -80,6 +81,15 @@ type TaskYIn struct { // MARKER: TaskY
 
 // TaskYOut are the output arguments of TaskY.
 type TaskYOut struct { // MARKER: TaskY
+	SubResult string `json:"subResult,omitzero"`
+}
+
+// RunSubIn are the input arguments of RunSub.
+type RunSubIn struct { // MARKER: RunSub
+}
+
+// RunSubOut are the output arguments of RunSub.
+type RunSubOut struct { // MARKER: RunSub
 	SubResult string `json:"subResult,omitzero"`
 }
 

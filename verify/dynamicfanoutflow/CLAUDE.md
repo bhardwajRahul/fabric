@@ -11,9 +11,9 @@ Verification fixture for dynamic fan-out via `forEach`. The graph is `A -> forEa
 ## Patterns exercised
 
 - Dynamic fan-out (`graph.AddTransitionForEach`)
-- `sum*` reducer convention (fan-in numeric add)
-- `list*` reducer (per-branch `itemIndex` accumulated in spawn order via `listSeenIndices`)
-- `set*` reducer (per-branch `itemCount` deduped via `setSeenCounts` to assert all branches saw the same cohort size)
+- Explicit `SetReducer("processed", ReducerAdd)` (fan-in numeric add)
+- Explicit `SetReducer("seenIndices", ReducerAppend)` (per-branch `itemIndex` accumulated in spawn order)
+- Explicit `SetReducer("seenCounts", ReducerUnion)` (per-branch `itemCount` deduped to assert all branches saw the same cohort size)
 - forEach branch state stripping: the source array (`items`) is removed from each branch's local state at spawn, then resurfaces in the fan-in step from the spawn step's immutable snapshot
 - Explicit downstream suppression: a branch calling `flow.Set("items", nil)` writes null into its changes, and the replace reducer at fan-in folds it over the spawn-step base so `items` is absent past the fan-in
 - forEach over a 0-element array (flow completes at the forEach source without firing the fan-in target)

@@ -20,7 +20,7 @@ general:
   description: subgraphflow.verify exercises subgraph invocation, output merging, and the parent-child state boundary.
   package: github.com/microbus-io/fabric/verify/subgraphflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-31T00:52:18Z"
 
 tasks:
   TaskA:
@@ -39,6 +39,10 @@ tasks:
     signature: TaskZ(innerResult string) (finalResult string)
     description: TaskZ runs in the parent after the subgraph.
     route: :428/task-z
+  RunInner:
+    signature: RunInner(seed string) (innerResult string)
+    description: RunInner invokes the Inner subgraph via flow.Subgraph and adopts its innerResult output.
+    route: :428/run-inner
 
 workflows:
   Inner:

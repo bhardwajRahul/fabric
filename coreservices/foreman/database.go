@@ -172,9 +172,11 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 	var nearestDelay time.Duration = -1
 
 	err := svc.eachShard(ctx, func(ctx context.Context, db *sequel.DB, shard int) (err error) {
-		// Recover steps stuck in running whose lease has expired
+		// Recover steps stuck in running whose lease has expired. Parked steps are excluded
+		// (parked=1 is the surgraph park, which legitimately has no lease meaning) - the index
+		// physically excludes them so this UPDATE never scans them.
 		res, err := db.ExecContext(ctx,
-			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE status=? AND lease_expires<=NOW_UTC()",
+			"UPDATE microbus_steps SET status=?, updated_at=NOW_UTC() WHERE status=? AND parked=0 AND lease_expires<=NOW_UTC()",
 			workflow.StatusPending, workflow.StatusRunning,
 		)
 		if err != nil {
@@ -191,7 +193,7 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 		var nearestMs sql.NullFloat64
 		err = db.QueryRowContext(ctx,
 			"SELECT DATE_DIFF_MILLIS(MIN(not_before), NOW_UTC()) FROM microbus_steps"+
-				" WHERE status=? AND not_before>NOW_UTC() AND not_before<=DATE_ADD_MILLIS(NOW_UTC(), ?) AND lease_expires<=NOW_UTC()",
+				" WHERE status=? AND parked=0 AND not_before>NOW_UTC() AND not_before<=DATE_ADD_MILLIS(NOW_UTC(), ?) AND lease_expires<=NOW_UTC()",
 			workflow.StatusPending, maxPollInterval.Milliseconds(),
 		).Scan(&nearestMs)
 		if err != nil {
@@ -205,7 +207,7 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 		// tight so an idle replica re-scans soon even with no doorbell.
 		var dueExists sql.NullInt64
 		err = db.QueryRowContext(ctx,
-			"SELECT 1 FROM microbus_steps WHERE status=? AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() LIMIT_OFFSET(1, 0)",
+			"SELECT 1 FROM microbus_steps WHERE status=? AND parked=0 AND not_before<=NOW_UTC() AND lease_expires<=NOW_UTC() LIMIT_OFFSET(1, 0)",
 			workflow.StatusPending,
 		).Scan(&dueExists)
 		if err != nil && err != sql.ErrNoRows {
@@ -215,6 +217,25 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 			shardNearestDelay = backlogPollInterval
 		}
 		err = nil
+
+		// Wake at the soonest future lease expiry of a running step so crash-recovery
+		// of a worker that died holding the lease happens promptly, rather than waiting
+		// for the next maxPollInterval sweep.
+		var leaseMs sql.NullFloat64
+		err = db.QueryRowContext(ctx,
+			"SELECT DATE_DIFF_MILLIS(MIN(lease_expires), NOW_UTC()) FROM microbus_steps"+
+				" WHERE status=? AND parked=0 AND lease_expires>NOW_UTC() AND lease_expires<=DATE_ADD_MILLIS(NOW_UTC(), ?)",
+			workflow.StatusRunning, maxPollInterval.Milliseconds(),
+		).Scan(&leaseMs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if leaseMs.Valid && leaseMs.Float64 > 0 {
+			leaseDelay := time.Duration(leaseMs.Float64 * float64(time.Millisecond))
+			if shardNearestDelay < 0 || leaseDelay < shardNearestDelay {
+				shardNearestDelay = leaseDelay
+			}
+		}
 
 		// Detect orphaned flows: status=running but no non-terminal steps exist anywhere
 		// in the flow. This should never happen in steady state - it indicates a bug
@@ -269,9 +290,11 @@ func (svc *Service) pollPendingSteps(ctx context.Context) error {
 	}
 
 	// Wake up next to process the nearest future-due step. Take min(current,
-	// proposed) to preserve a shorter wakeup set by shortenNextPoll (e.g. the
-	// breaker's next probe time), but always advance past "now" so we don't
-	// busy-loop on an already-expired deadline.
+	// proposed) to preserve a shorter wakeup set by shortenNextPoll (e.g. a
+	// valve-window boundary), but always advance past "now" so we don't
+	// busy-loop on an already-expired deadline. The breaker's probe schedule
+	// rides on the independent nextProbe deadline (see timerLoop), so it is
+	// unaffected by this reset.
 	now := time.Now()
 	var proposed time.Time
 	if nearestDelay >= 0 {
@@ -298,8 +321,15 @@ func (svc *Service) shortenNextPoll(tm time.Time) {
 		svc.nextPoll = tm
 	}
 	svc.nextPollLock.Unlock()
+	svc.signalTimer()
+}
 
-	// Non-blocking signal to wake the timer
+// signalTimer non-blockingly nudges the timer goroutine to re-evaluate its deadline against the
+// current nextPoll/nextProbe. The buffered(1) channel coalesces redundant nudges; the default
+// guards a full buffer. A send on a closed wakeTimer (shutdown) still panics, so callers are the
+// workers and the refiller, whose late nudges are caught by refillerLoop's CatchPanic - see
+// OnShutdown's drain ordering.
+func (svc *Service) signalTimer() {
 	select {
 	case svc.wakeTimer <- struct{}{}:
 	default:

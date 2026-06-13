@@ -1,26 +1,22 @@
-%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
     classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
+    classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em
+    linkStyle default stroke:#32a7c1
 
-    _title{{"doc-extraction"}}:::term --> _start
-    _start(( )):::term --> t0
+    _title{{"doc-extraction"}}:::term -.-> _start
     t0["scanPDF"]:::task
+    t1["identifyChunks"]:::task
+    t2["transcribeChunk"]:::task
+    t3["joinPageTranscriptions"]:::task
+    t3_reduce(("reduce")):::term
+    t3_reduce --> t3
     t4["joinDocTranscriptions"]:::task
-    subgraph fo_t0 ["for each in pageImages"]
-        direction LR
-        t1["identifyChunks"]:::task
-        t3["joinPageTranscriptions"]:::task
-        subgraph fo_t1 ["for each in chunks"]
-            direction LR
-            t2["transcribeChunk"]:::task
-        end
-    end
-    t0 -->|"fan out"| t1
-    t1 -->|"fan out"| t2
-    t2 -->|"fan in"| t3
-    t3 -->|"fan in"| t4
+    t4_reduce(("reduce")):::term
+    t4_reduce --> t4
+    t0 -->|"for each"| t1
+    t1 -->|"for each"| t2
+    t2 --> t3_reduce
+    t3 --> t4_reduce
+    _start(( )):::term --> t0
     t4 --> _end(( )):::term
-    style fo_t0 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2
-    style fo_t1 fill:#32a7c1,fill-opacity:0.15,stroke:#434343,stroke-dasharray:4 2

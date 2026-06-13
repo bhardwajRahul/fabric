@@ -20,7 +20,7 @@ general:
   description: failedfanoutflow.verify exercises a fan-out branch that hard-fails with no OnError transition, cascading the whole flow to failed.
   package: github.com/microbus-io/fabric/verify/failedfanoutflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-26T14:45:59Z"
 
 tasks:
   Src:
@@ -28,24 +28,24 @@ tasks:
     description: Src is the static fan-out source.
     route: :428/src
   A:
-    signature: A() (sumExecutedOut int)
+    signature: A() (executedOut int)
     description: A is a normal fan-out branch.
     route: :428/a
   B:
-    signature: B() (sumExecutedOut int)
+    signature: B() (executedOut int)
     description: B is the failing fan-out branch.
     route: :428/b
   C:
-    signature: C() (sumExecutedOut int)
+    signature: C() (executedOut int)
     description: C is a normal fan-out branch.
     route: :428/c
   J:
-    signature: J(sumExecuted int) (totalExecuted int)
+    signature: J(executed int) (totalExecuted int)
     description: J is the fan-in target.
     route: :428/j
 
 workflows:
   FailedFanOut:
-    signature: FailedFanOut() (sumExecuted int, totalExecuted int)
+    signature: FailedFanOut() (executed int, totalExecuted int)
     description: "FailedFanOut defines the graph: Src -> {A, B, C} -> J."
     route: :428/failed-fan-out

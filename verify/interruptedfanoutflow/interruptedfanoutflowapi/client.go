@@ -362,47 +362,47 @@ func (_c Executor) Src(ctx context.Context) (started bool, err error) { // MARKE
 /*
 A creates and runs the A task.
 */
-func (_c Executor) A(ctx context.Context) (sumExecutedOut int, err error) { // MARKER: A
+func (_c Executor) A(ctx context.Context) (executedOut int, err error) { // MARKER: A
 	var out AOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, A.Method, A.Route, AIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumExecutedOut, err // No trace
+	return out.ExecutedOut, err // No trace
 }
 
 /*
 B creates and runs the B task.
 */
-func (_c Executor) B(ctx context.Context, resumed bool) (sumExecutedOut int, err error) { // MARKER: B
+func (_c Executor) B(ctx context.Context, resumed bool) (executedOut int, err error) { // MARKER: B
 	var out BOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, B.Method, B.Route, BIn{Resumed: resumed}, &out, _c.inFlow, _c.outFlow)
-	return out.SumExecutedOut, err // No trace
+	return out.ExecutedOut, err // No trace
 }
 
 /*
 C creates and runs the C task.
 */
-func (_c Executor) C(ctx context.Context) (sumExecutedOut int, err error) { // MARKER: C
+func (_c Executor) C(ctx context.Context) (executedOut int, err error) { // MARKER: C
 	var out COut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, C.Method, C.Route, CIn{}, &out, _c.inFlow, _c.outFlow)
-	return out.SumExecutedOut, err // No trace
+	return out.ExecutedOut, err // No trace
 }
 
 /*
 J creates and runs the J task.
 */
-func (_c Executor) J(ctx context.Context, sumExecuted int) (totalExecuted int, err error) { // MARKER: J
+func (_c Executor) J(ctx context.Context, executed int) (totalExecuted int, err error) { // MARKER: J
 	var out JOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, J.Method, J.Route, JIn{SumExecuted: sumExecuted}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, J.Method, J.Route, JIn{Executed: executed}, &out, _c.inFlow, _c.outFlow)
 	return out.TotalExecuted, err // No trace
 }
 
 /*
 InterruptedFanOut creates and runs the InterruptedFanOut workflow, blocking until termination.
 */
-func (_c Executor) InterruptedFanOut(ctx context.Context) (sumExecuted int, totalExecuted int, status string, err error) { // MARKER: InterruptedFanOut
+func (_c Executor) InterruptedFanOut(ctx context.Context) (executed int, totalExecuted int, status string, err error) { // MARKER: InterruptedFanOut
 	if _c.runner == nil {
-		return sumExecuted, totalExecuted, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return executed, totalExecuted, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out InterruptedFanOutOut
 	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, InterruptedFanOut.URL(), InterruptedFanOutIn{}, &out)
-	return out.SumExecuted, out.TotalExecuted, status, err
+	return out.Executed, out.TotalExecuted, status, err
 }

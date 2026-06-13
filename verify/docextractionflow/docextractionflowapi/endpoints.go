@@ -71,25 +71,25 @@ type TranscribeChunkIn struct { // MARKER: TranscribeChunk
 	Chunk Rectangle `json:"chunk,omitzero"`
 }
 
-// TranscribeChunkOut are the output arguments of TranscribeChunk. The list* prefix
-// selects the append reducer; each chunk contributes a single-element delta.
+// TranscribeChunkOut are the output arguments of TranscribeChunk. The `transcriptions`
+// field is Append-reduced; each chunk contributes a single-element delta.
 type TranscribeChunkOut struct { // MARKER: TranscribeChunk
-	ListTranscriptions []string `json:"listTranscriptions,omitzero"`
+	Transcriptions []string `json:"transcriptions,omitzero"`
 }
 
 // JoinPageTranscriptionsIn are the input arguments of JoinPageTranscriptions.
 type JoinPageTranscriptionsIn struct { // MARKER: JoinPageTranscriptions
-	ListTranscriptions []string `json:"listTranscriptions,omitzero"`
+	Transcriptions []string `json:"transcriptions,omitzero"`
 }
 
 // JoinPageTranscriptionsOut are the output arguments of JoinPageTranscriptions.
 type JoinPageTranscriptionsOut struct { // MARKER: JoinPageTranscriptions
-	ListPageTexts []string `json:"listPageTexts,omitzero"`
+	PageTexts []string `json:"pageTexts,omitzero"`
 }
 
 // JoinDocTranscriptionsIn are the input arguments of JoinDocTranscriptions.
 type JoinDocTranscriptionsIn struct { // MARKER: JoinDocTranscriptions
-	ListPageTexts []string `json:"listPageTexts,omitzero"`
+	PageTexts []string `json:"pageTexts,omitzero"`
 }
 
 // JoinDocTranscriptionsOut are the output arguments of JoinDocTranscriptions.

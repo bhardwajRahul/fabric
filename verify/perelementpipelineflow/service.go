@@ -81,17 +81,17 @@ func (svc *Service) TaskB(ctx context.Context, flow *workflow.Flow, itemUpper st
 }
 
 /*
-TaskM is the per-element fan-in. Emits one merged entry into the outer set* reducer field.
+TaskM is the per-element fan-in. Emits one merged entry into the Union-reduced `mergedItems` field.
 */
-func (svc *Service) TaskM(ctx context.Context, flow *workflow.Flow, aProcessed, bProcessed string) (setMerged []string, err error) { // MARKER: TaskM
+func (svc *Service) TaskM(ctx context.Context, flow *workflow.Flow, aProcessed, bProcessed string) (mergedItems []string, err error) { // MARKER: TaskM
 	return []string{aProcessed + "+" + bProcessed}, nil
 }
 
 /*
 TaskL is the outer fan-in. Counts the merged entries.
 */
-func (svc *Service) TaskL(ctx context.Context, flow *workflow.Flow, setMerged []string) (finalCount int, err error) { // MARKER: TaskL
-	return len(setMerged), nil
+func (svc *Service) TaskL(ctx context.Context, flow *workflow.Flow, mergedItems []string) (finalCount int, err error) { // MARKER: TaskL
+	return len(mergedItems), nil
 }
 
 /*
@@ -107,6 +107,7 @@ func (svc *Service) PerElementPipeline(ctx context.Context) (graph *workflow.Gra
 	graph.AddTask("taskL", perelementpipelineflowapi.TaskL.URL())
 	graph.SetFanIn("taskM") // inner per-element {A, B} converge here
 	graph.SetFanIn("taskL") // outer fan-in across forEach elements
+	graph.SetReducer("mergedItems", workflow.ReducerUnion)
 	// forEach from S to H, one H per element.
 	graph.AddTransitionForEach("taskS", "taskH", "items", "item")
 	// Inner fan-out per element from H.

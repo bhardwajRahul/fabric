@@ -369,27 +369,27 @@ func (_c Executor) IdentifyChunks(ctx context.Context, page []byte) (chunks []Re
 /*
 TranscribeChunk creates and runs the TranscribeChunk task.
 */
-func (_c Executor) TranscribeChunk(ctx context.Context, page []byte, chunk Rectangle) (listTranscriptions []string, err error) { // MARKER: TranscribeChunk
+func (_c Executor) TranscribeChunk(ctx context.Context, page []byte, chunk Rectangle) (transcriptions []string, err error) { // MARKER: TranscribeChunk
 	var out TranscribeChunkOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, TranscribeChunk.Method, TranscribeChunk.Route, TranscribeChunkIn{Page: page, Chunk: chunk}, &out, _c.inFlow, _c.outFlow)
-	return out.ListTranscriptions, err // No trace
+	return out.Transcriptions, err // No trace
 }
 
 /*
 JoinPageTranscriptions creates and runs the JoinPageTranscriptions task.
 */
-func (_c Executor) JoinPageTranscriptions(ctx context.Context, listTranscriptions []string) (listPageTexts []string, err error) { // MARKER: JoinPageTranscriptions
+func (_c Executor) JoinPageTranscriptions(ctx context.Context, transcriptions []string) (pageTexts []string, err error) { // MARKER: JoinPageTranscriptions
 	var out JoinPageTranscriptionsOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, JoinPageTranscriptions.Method, JoinPageTranscriptions.Route, JoinPageTranscriptionsIn{ListTranscriptions: listTranscriptions}, &out, _c.inFlow, _c.outFlow)
-	return out.ListPageTexts, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, JoinPageTranscriptions.Method, JoinPageTranscriptions.Route, JoinPageTranscriptionsIn{Transcriptions: transcriptions}, &out, _c.inFlow, _c.outFlow)
+	return out.PageTexts, err // No trace
 }
 
 /*
 JoinDocTranscriptions creates and runs the JoinDocTranscriptions task.
 */
-func (_c Executor) JoinDocTranscriptions(ctx context.Context, listPageTexts []string) (docTranscription string, err error) { // MARKER: JoinDocTranscriptions
+func (_c Executor) JoinDocTranscriptions(ctx context.Context, pageTexts []string) (docTranscription string, err error) { // MARKER: JoinDocTranscriptions
 	var out JoinDocTranscriptionsOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, JoinDocTranscriptions.Method, JoinDocTranscriptions.Route, JoinDocTranscriptionsIn{ListPageTexts: listPageTexts}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, JoinDocTranscriptions.Method, JoinDocTranscriptions.Route, JoinDocTranscriptionsIn{PageTexts: pageTexts}, &out, _c.inFlow, _c.outFlow)
 	return out.DocTranscription, err // No trace
 }
 

@@ -6,23 +6,25 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 
 ## Purpose
 
-Verification fixture for subgraph invocation. The parent workflow is `A -> [Inner subgraph] -> Z`. The inner subgraph is `X -> Y` and produces a result that is merged back into the parent's state. The parent then surfaces the merged result.
+Verification fixture for subgraph invocation via `flow.Subgraph`. The parent workflow is `A -> RunInner -> Z`. The
+`RunInner` task calls `flow.Subgraph(Inner.URL())` to run the inner subgraph `X -> Y`, then adopts the child's
+`innerResult` output and returns it; `Z` reads `innerResult` and surfaces the final result.
 
-This is how the depth-based foreman expresses nested workflows: an inner fan-out (or any multi-step internal pipeline) is wrapped in its own subgraph, isolating its internal depth from the parent's.
+This is how the foreman expresses nested workflows: an inner pipeline is run as a child flow via `flow.Subgraph`, the
+caller task scoping exactly which of the child's outputs cross back into the parent.
 
 ## Patterns exercised
 
-- `graph.AddSubgraph` registration
-- `graph.AddTransition(parent, subgraph)` for subgraph as a step
-- `DeclareInputs` and `DeclareOutputs` on the inner subgraph to scope which state crosses the boundary
-- Subgraph child flow's `final_state` filtered through `DeclareOutputs` and merged into the parent step's `changes`
-- Parent flow's lifecycle waits for the subgraph to complete
+- `flow.Subgraph(url, input)` invoked from a regular caller task (`RunInner`)
+- The caller adopting a specific child output (`innerResult`) from the returned `out` rather than an auto-merge
+- Park-on-first-call, re-run-with-result re-entry (the `if yield { return }` guard)
+- The child output flowing into a downstream task (`Z`) via the caller's typed output
 
 ## Two workflows
 
 This service hosts two workflows that reference each other:
 
-- `Parent` (the outer workflow): `A -> Inner subgraph -> Z`
+- `Parent` (the outer workflow): `A -> RunInner -> Z`, where `RunInner` calls `flow.Subgraph(Inner.URL())`
 - `Inner` (the inner workflow, used as a subgraph): `X -> Y`
 
 The same service hosts both so the cross-workflow reference stays inside one process for testing.

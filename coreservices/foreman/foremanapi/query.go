@@ -42,5 +42,8 @@ type Query struct {
 	Shard int `json:"shard,omitzero"`
 	// Cursor is the opaque pagination cursor returned as NextCursor by the previous List call.
 	Cursor string `json:"cursor,omitzero"`
+	// Search is a case-insensitive substring matched against workflow_name, current task_name,
+	// error, and cancel_reason. SQL LIKE wildcards (%, _) in the value are honored.
+	Search string `json:"search,omitzero"`
 	Limit  int    `json:"limit,omitzero"`
 }

@@ -57,7 +57,8 @@ type openaiCallFunc struct {
 
 type openaiResponse struct {
 	Choices []struct {
-		Message openaiMessage `json:"message"`
+		Message      openaiMessage `json:"message"`
+		FinishReason string        `json:"finish_reason"`
 	} `json:"choices"`
 	Model string      `json:"model"`
 	Usage openaiUsage `json:"usage"`

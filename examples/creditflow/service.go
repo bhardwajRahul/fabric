@@ -119,7 +119,7 @@ func (svc *Service) HandleCreditError(ctx context.Context, flow *workflow.Flow, 
 /*
 VerifyEmployment checks the applicant's employment status.
 */
-func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (sumEmploymentFailuresOut int, err error) { // MARKER: VerifyEmployment
+func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error) { // MARKER: VerifyEmployment
 	if applicantName == "" || employerName == "" {
 		return 1, nil
 	}
@@ -166,6 +166,29 @@ IdentityDecision determines whether the applicant's identity is verified based o
 func (svc *Service) IdentityDecision(ctx context.Context, flow *workflow.Flow, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, err error) { // MARKER: IdentityDecision
 	identityVerified = ssnVerified && addressVerified && phoneVerified
 	return identityVerified, nil
+}
+
+/*
+RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgraph and adopts its
+identityVerified output. It is one branch of the credit-application fan-out, converging at the review join.
+*/
+func (svc *Service) RunIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) { // MARKER: RunIdentityVerification
+	out, yield, err := flow.Subgraph(creditflowapi.IdentityVerification.URL(), map[string]any{
+		"applicantName": applicantName,
+		"ssn":           ssn,
+		"address":       address,
+		"phone":         phone,
+	})
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if yield {
+		return false, nil
+	}
+	if v, ok := out["identityVerified"].(bool); ok {
+		return v, nil
+	}
+	return false, nil
 }
 
 /*
@@ -229,8 +252,8 @@ func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, credi
 /*
 Decision determines whether to approve the credit application based on verification results.
 */
-func (svc *Service) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, sumEmploymentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
-	approved = creditVerified && sumEmploymentFailures == 0 && identityVerified
+func (svc *Service) Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
+	approved = creditVerified && employmentFailures == 0 && identityVerified
 	return approved, nil
 }
 
@@ -338,9 +361,9 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 		Approved           bool
 		CreditVerified     bool
 		IdentityVerified   bool
-		SumEmploymentFailures int
-		Steps                 []demoStep
-		MermaidDiagram        string
+		EmploymentFailures int
+		Steps              []demoStep
+		MermaidDiagram     string
 	}{
 		Name:      r.FormValue("name"),
 		SSN:       r.FormValue("ssn"),
@@ -394,7 +417,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 			data.Approved = result.out.Approved
 			data.CreditVerified = result.out.CreditVerified
 			data.IdentityVerified = result.out.IdentityVerified
-			data.SumEmploymentFailures = result.out.SumEmploymentFailures
+			data.EmploymentFailures = result.out.EmploymentFailures
 			data.Steps = result.steps
 			data.MermaidDiagram = result.mermaid
 		}
@@ -416,7 +439,7 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 	graph.AddTask("submitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
 	graph.AddTask("verifyCredit", creditflowapi.VerifyCredit.URL())
 	graph.AddTask("verifyEmployment", creditflowapi.VerifyEmployment.URL())
-	graph.AddSubgraph("identityVerification", creditflowapi.IdentityVerification.URL())
+	graph.AddTask("identityVerification", creditflowapi.RunIdentityVerification.URL())
 	graph.AddTask("handleCreditError", creditflowapi.HandleCreditError.URL())
 	// reviewJoin and reviewCredit are two graph positions sharing the same task URL.
 	// reviewJoin is the fan-in nexus for the submit cohort; reviewCredit is reached
@@ -428,6 +451,7 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 	graph.AddTask("requestMoreInfo", creditflowapi.RequestMoreInfo.URL())
 	graph.AddTask("decision", creditflowapi.Decision.URL())
 	graph.SetFanIn("reviewJoin")
+	graph.SetReducer("employmentFailures", workflow.ReducerAdd)
 	// Submit fans out to credit verification, identity verification (subgraph), and forEach employer verification
 	graph.AddTransition("submitCreditApplication", "verifyCredit")
 	// If credit verification fails with an error, route to the error handler instead of failing the flow
@@ -435,8 +459,8 @@ func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, 
 	graph.AddTransition("handleCreditError", "reviewJoin")
 	graph.AddTransitionForEach("submitCreditApplication", "verifyEmployment", "employers", "employerName")
 	graph.AddTransition("submitCreditApplication", "identityVerification")
-	// Employment failure counts are summed across all employer verifications via the
-	// sum* prefix convention; no explicit reducer is needed.
+	// Employment failure counts are summed across all employer verifications by the Add
+	// reducer attached to `employmentFailures` above.
 	// All verifications fan in to reviewJoin (the fan-in nexus).
 	graph.AddTransition("verifyCredit", "reviewJoin")
 	graph.AddTransition("verifyEmployment", "reviewJoin")

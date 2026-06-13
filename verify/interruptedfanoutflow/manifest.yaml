@@ -20,7 +20,7 @@ general:
   description: interruptedfanoutflow.verify exercises one fan-out branch interrupting and being resumed before the fan-in completes.
   package: github.com/microbus-io/fabric/verify/interruptedfanoutflow
   frameworkVersion: 1.28.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-26T14:11:18Z"
 
 tasks:
   Src:
@@ -28,24 +28,24 @@ tasks:
     description: Src is the static fan-out source.
     route: :428/src
   A:
-    signature: A() (sumExecutedOut int)
+    signature: A() (executedOut int)
     description: A is a normal fan-out branch.
     route: :428/a
   B:
-    signature: B(resumed bool) (sumExecutedOut int)
+    signature: B(resumed bool) (executedOut int)
     description: B is the interrupting fan-out branch.
     route: :428/b
   C:
-    signature: C() (sumExecutedOut int)
+    signature: C() (executedOut int)
     description: C is a normal fan-out branch.
     route: :428/c
   J:
-    signature: J(sumExecuted int) (totalExecuted int)
+    signature: J(executed int) (totalExecuted int)
     description: J is the fan-in target.
     route: :428/j
 
 workflows:
   InterruptedFanOut:
-    signature: InterruptedFanOut() (sumExecuted int, totalExecuted int)
+    signature: InterruptedFanOut() (executed int, totalExecuted int)
     description: "InterruptedFanOut defines the graph: Src -> {A, B, C} -> J."
     route: :428/interrupted-fan-out

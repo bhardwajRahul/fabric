@@ -20,7 +20,7 @@ general:
   description: subgraphfanoutflow.verify exercises a subgraph as one sibling of an outer fan-out.
   package: github.com/microbus-io/fabric/verify/subgraphfanoutflow
   frameworkVersion: 1.31.0
-  modifiedAt: "2026-05-17T06:27:40Z"
+  modifiedAt: "2026-05-31T00:58:43Z"
 
 tasks:
   TaskA:
@@ -43,6 +43,10 @@ tasks:
     signature: NormalD() (resultD string)
     description: NormalD produces resultD.
     route: :428/normal-d
+  RunSub:
+    signature: RunSub() (subResult string)
+    description: RunSub invokes the Sub subgraph via flow.Subgraph and adopts its subResult.
+    route: :428/run-sub
   TaskE:
     signature: TaskE(resultB string, subResult string, resultD string) (finalResult string)
     description: TaskE is the outer fan-in.

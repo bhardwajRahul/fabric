@@ -35,4 +35,8 @@ type ToolCall struct {
 	ID        string          `json:"id,omitzero" jsonschema:"description=ID is a unique identifier for this tool call"`
 	Name      string          `json:"name,omitzero" jsonschema:"description=Name is the tool name the LLM wants to invoke"`
 	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema:"description=Arguments is the JSON-encoded arguments for the tool call"`
+	// ThoughtSignature is an opaque, provider-issued token attached to this call that must be echoed
+	// back on subsequent turns to preserve the model's internal reasoning continuity. Currently used
+	// only by Gemini 2.5 thinking models; other providers leave it empty.
+	ThoughtSignature string `json:"thoughtSignature,omitzero" jsonschema:"description=ThoughtSignature is an opaque provider token (Gemini 2.5 thinking models) that must be round-tripped to preserve reasoning continuity"`
 }

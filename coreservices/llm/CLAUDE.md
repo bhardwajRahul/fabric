@@ -47,12 +47,21 @@ If/when external GenAI dashboard compatibility is needed, the OTel metric can be
 
 The chat loop is `initChat → initLLM → processResponse → forEach pendingToolCalls → executeTool → loopLLM → processResponse`. Each round, processResponse decides:
 
-- If no tool calls are pending or the round limit is exhausted, it calls `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped.
-- Otherwise the forEach fans out one executeTool per pending tool call. All branches converge at `loopLLM` via `graph.SetFanIn("loopLLM")`. The fan-in merges per-tool messages (auto-appended via the `list*` prefix reducer on `listMessages`) so the LLM sees the full conversation history on the next round.
+- If no tool calls are pending (the prior turn's `stopReason` was a completion: `end_turn`,
+  `stop_sequence`, or `refusal`) or the round limit is exhausted, it calls
+  `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped. A
+  truncation / pause_turn / unknown `stopReason` never reaches `ProcessResponse` — `CallLLM`
+  fails the step before that, so the workflow's `OnError` route (if any) handles it.
+- Otherwise the forEach fans out one executeTool per pending tool call. All branches converge at `loopLLM` via `graph.SetFanIn("loopLLM")`. The fan-in merges per-tool messages into the `messages` field, which is wired with `graph.SetReducer("messages", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
 
 `initLLM` and `loopLLM` are two graph positions sharing one task URL (`CallLLM`). `initLLM` is the initial sequential call after `initChat`; `loopLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `examples/creditflow` for the same pattern (the `reviewJoin` / `reviewCredit` split).
 
-`ExecuteTool` uses `toolExecuted`/`toolExecutedOut` (Out suffix pattern) for subgraph re-entry detection. On first run (`toolExecuted=false`), it executes the tool. On re-run after a dynamic subgraph completes (`toolExecuted=true`), it collects the child's result.
+`ExecuteTool` dispatches a workflow tool via `flow.Subgraph(def.URL, input)`, which returns `(out, yield, err)`. On
+the first call it yields (the foreman parks the step and runs the child); on re-entry it returns the child's
+`final_state` as `out`, which `ExecuteTool` serializes into the tool-result message. The child's output is no longer
+merged into the parent's state, so the old `preSubgraphKeys` snapshot-diff is gone. The `toolExecuted`/`toolExecutedOut`
+argument is now vestigial - re-entry is detected by `flow.Subgraph`'s `yield`, not a state field - and is retained only
+to avoid regenerating boilerplate.
 
 **The live `Chat` entry point does not use this workflow.** `Chat` implements the loop entirely in Go for the synchronous request/response case. `ChatLoop` is exposed as a workflow so it can be invoked via `foremanapi.Run` (or composed as a subgraph) when the caller wants the foreman's persistence, fork/resume, and observability for an LLM conversation. The graph is part of the API contract whether or not it's exercised by every test.
 
@@ -61,3 +70,30 @@ The chat loop is `initChat → initLLM → processResponse → forEach pendingTo
 `ChatOptions` (caller-facing) and `TurnOptions` (provider-facing) are deliberately separate types so each layer controls what it exposes. `ChatOptions` adds `MaxToolRounds` (loop-level) and forwards `MaxTokens`/`Temperature` to a `TurnOptions` built per turn. The duplication is intentional: it lets future fields be added to one layer without auto-leaking to the other.
 
 `MaxToolRounds` remains as a service config (operational guardrail), with `ChatOptions.MaxToolRounds` as an optional override.
+
+### Stop-Reason Branching
+
+`Turn` returns a normalized `stopReason` (constants in `llmapi/stopreason.go`: `StopReasonEndTurn`,
+`StopReasonToolUse`, `StopReasonMaxTokens`, `StopReasonStopSequence`, `StopReasonRefusal`,
+`StopReasonPauseTurn`, `StopReasonUnknown`). Each provider maps its native value (Anthropic's
+`stop_reason`, OpenAI's `finish_reason`, Gemini's `finishReason`) into this set; anything that
+doesn't map cleanly becomes `StopReasonUnknown`. The `Chat` loop and `CallLLM` workflow task
+branch on it through `stopReasonError`:
+
+- `tool_use` → continue the loop and execute the tool calls.
+- `end_turn` / `stop_sequence` / `refusal` → emit the final assistant message and return.
+- `max_tokens` → return `errors.New("LLM response truncated at max_tokens", 507)`. Truncation is
+  treated as a budget violation: if the caller set `MaxTokens` (or accepted the provider default)
+  and the response hit the cap, the orchestrator's job is to surface that, not to ship a partial
+  response downstream. There is no `TruncationPolicy` knob; partial content is dropped because
+  attaching it to the error would inflate every truncation failure with a potentially large
+  payload, and the caller can re-architect (workflow loop with explicit continuation) if they
+  need long-form generation.
+- `pause_turn` → `502`. Anthropic's long-running-tools extension isn't wired through today; if it
+  becomes load-bearing, replace the error with a `Sleep`+retry path.
+- `""` / unknown → `502`, on the same principle as truncation: fail loud rather than silently
+  treat an unrecognized state as completion.
+
+The branching lives in `stopReasonError(stopReason, provider, model)` in `service.go` and is called
+from both the live `Chat` loop and `CallLLM`. The post-loop "exhausted tool rounds, one final
+call without tools" path also runs through the same gate.

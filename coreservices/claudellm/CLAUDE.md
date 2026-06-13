@@ -8,6 +8,26 @@ The `model` argument is required per call (no `Model` config); use the typed con
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
 
+## Stop-Reason Mapping
+
+`Turn` returns a normalized `stopReason` (constants in `llmapi/stopreason.go`). `mapStopReason` in
+`service.go` translates Anthropic's `stop_reason` field one-to-one:
+
+| Anthropic            | Normalized                  |
+|----------------------|-----------------------------|
+| `end_turn`           | `StopReasonEndTurn`         |
+| `tool_use`           | `StopReasonToolUse`         |
+| `max_tokens`         | `StopReasonMaxTokens`       |
+| `stop_sequence`      | `StopReasonStopSequence`    |
+| `refusal`            | `StopReasonRefusal`         |
+| `pause_turn`         | `StopReasonPauseTurn`       |
+| `""` / anything else | `StopReasonUnknown`         |
+
+`llm.core` interprets these — see `coreservices/llm/CLAUDE.md` "Stop-Reason Branching". An empty or
+unrecognized value reaches `llm.core` as `StopReasonUnknown` and surfaces as a `502` rather than as
+a silent completion, so a future Anthropic stop reason that we haven't taught the map about fails
+loudly until someone adds the case.
+
 ## Prompt Caching
 
 Anthropic's prompt cache is opt-in via `cache_control: {"type": "ephemeral"}` markers placed on specific request blocks. The cache is **prefix-based and byte-exact**: a marker tells Anthropic to remember everything from the start of the request up to and including that block, and a future request hits the cache only if the cached prefix matches byte-for-byte.

@@ -160,15 +160,13 @@ func (c *Connector) logConfigs(ctx context.Context) {
 }
 
 // refreshConfig contacts the configurator microservices to fetch values for the config properties.
-func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
+func (c *Connector) refreshConfig(ctx context.Context, callback bool) (err error) {
 	if !c.isPhase(startedUp, startingUp) {
 		return errors.New("not started")
 	}
-	fetchedValues, err := c.readConfigFile(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	var fetchedValues map[string]string
 	if c.deployment == TESTING {
+		fetchedValues = map[string]string{} // Do not read configs from files
 		c.LogDebug(ctx, "Configurator disabled while testing")
 		c.configLock.Lock()
 		for _, config := range c.configs {
@@ -185,6 +183,10 @@ func (c *Connector) refreshConfig(ctx context.Context, callback bool) error {
 			return nil
 		}
 	} else {
+		fetchedValues, err = c.readConfigFile(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		c.configLock.Lock()
 		var req struct {
 			Names []string `json:"names"`

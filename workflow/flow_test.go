@@ -18,11 +18,9 @@ package workflow
 
 import (
 	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
-	"github.com/microbus-io/errors"
 	"github.com/microbus-io/testarossa"
 )
 
@@ -224,31 +222,6 @@ func TestFlow_Clear(t *testing.T) {
 	}
 }
 
-func TestFlow_Keep(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	f.SetString("a", "1")
-	f.SetString("b", "2")
-	f.SetString("c", "3")
-	f.changes = make(map[string]any)
-
-	f.Keep("a", "c", "missing")
-	assert.True(f.Has("a"))
-	assert.False(f.Has("b"))
-	assert.True(f.Has("c"))
-	// b is the only field dropped.
-	raw, ok := f.changes["b"].(json.RawMessage)
-	assert.True(ok)
-	assert.Equal("null", string(raw))
-	// Keepers don't produce spurious change entries.
-	_, hasA := f.changes["a"]
-	_, hasC := f.changes["c"]
-	assert.False(hasA)
-	assert.False(hasC)
-}
-
 func TestFlow_Transform(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
@@ -348,13 +321,65 @@ func TestFlow_Interrupt(t *testing.T) {
 	assert.Equal("ssn", f.interruptPayload["request"])
 }
 
-func TestFlow_RetryNow(t *testing.T) {
+func TestFlow_SingleParkGuard(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
+
+	// Subgraph armed this dispatch blocks a subsequent interrupt.
 	f := NewFlow()
-	ok := f.RetryNow()
-	assert.True(ok)
-	assert.True(f.retry)
+	_, yield, err := f.Subgraph("https://x/wf", nil)
+	assert.True(yield)
+	assert.NoError(err)
+	_, yield, err = f.Interrupt(map[string]any{"request": "ssn"})
+	assert.False(yield)
+	assert.Error(err)
+	assert.False(f.interrupt)
+
+	// Interrupt armed this dispatch blocks a subsequent subgraph.
+	f = NewFlow()
+	_, yield, err = f.Interrupt(map[string]any{"request": "ssn"})
+	assert.True(yield)
+	assert.NoError(err)
+	_, yield, err = f.Subgraph("https://x/wf", nil)
+	assert.False(yield)
+	assert.Error(err)
+	assert.Equal("", f.subgraphWorkflow)
+
+	// A resolved interrupt slot blocks arming a subgraph on re-entry.
+	f = NewFlow()
+	f.interruptDone = true
+	_, yield, err = f.Subgraph("https://x/wf", nil)
+	assert.False(yield)
+	assert.Error(err)
+	assert.Equal("", f.subgraphWorkflow)
+
+	// A resolved subgraph slot blocks arming an interrupt on re-entry.
+	f = NewFlow()
+	f.subgraphDone = true
+	_, yield, err = f.Interrupt(map[string]any{"request": "ssn"})
+	assert.False(yield)
+	assert.Error(err)
+	assert.False(f.interrupt)
+
+	// A second interrupt this dispatch is rejected and does not overwrite the first payload.
+	f = NewFlow()
+	_, yield, err = f.Interrupt(map[string]any{"request": "first"})
+	assert.True(yield)
+	assert.NoError(err)
+	_, yield, err = f.Interrupt(map[string]any{"request": "second"})
+	assert.False(yield)
+	assert.Error(err)
+	assert.Equal("first", f.interruptPayload["request"])
+
+	// A second subgraph this dispatch is rejected and does not overwrite the first workflow URL.
+	f = NewFlow()
+	_, yield, err = f.Subgraph("https://x/first", nil)
+	assert.True(yield)
+	assert.NoError(err)
+	_, yield, err = f.Subgraph("https://x/second", nil)
+	assert.False(yield)
+	assert.Error(err)
+	assert.Equal("https://x/first", f.subgraphWorkflow)
 }
 
 func TestFlow_Retry(t *testing.T) {
@@ -428,74 +453,3 @@ func TestFlow_MarshalUnmarshal(t *testing.T) {
 	assert.Equal(30*time.Second, restored.backoffMaxDelay)
 }
 
-func TestFlow_RetryOnTimeout_TimeoutError(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	timeoutErr := errors.New("upstream slow", http.StatusRequestTimeout)
-
-	scheduled := f.RetryOnTimeout(timeoutErr, 3, 100*time.Millisecond, 2.0, time.Second)
-	assert.True(scheduled)
-	assert.True(f.retry)
-}
-
-func TestFlow_RetryOnTimeout_NonTimeoutError(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	internalErr := errors.New("boom", http.StatusInternalServerError)
-
-	scheduled := f.RetryOnTimeout(internalErr, 3, 100*time.Millisecond, 2.0, time.Second)
-	assert.False(scheduled)
-	assert.False(f.retry)
-}
-
-func TestFlow_RetryOnTimeout_AttemptsExhausted(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	f.attempt = 3
-	timeoutErr := errors.New("still slow", http.StatusRequestTimeout)
-
-	scheduled := f.RetryOnTimeout(timeoutErr, 3, 100*time.Millisecond, 2.0, time.Second)
-	assert.False(scheduled)
-	assert.False(f.retry)
-}
-
-func TestFlow_RetryOnTimeout_NilError(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	scheduled := f.RetryOnTimeout(nil, 3, 100*time.Millisecond, 2.0, time.Second)
-	assert.False(scheduled)
-	assert.False(f.retry)
-}
-
-func TestFlow_RetryNowOnTimeout_TimeoutError(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	timeoutErr := errors.New("upstream slow", http.StatusRequestTimeout)
-
-	scheduled := f.RetryNowOnTimeout(timeoutErr)
-	assert.True(scheduled)
-	assert.True(f.retry)
-	assert.Equal(time.Duration(0), f.backoffInitialDelay)
-}
-
-func TestFlow_RetryNowOnTimeout_NonTimeoutError(t *testing.T) {
-	t.Parallel()
-	assert := testarossa.For(t)
-
-	f := NewFlow()
-	internalErr := errors.New("boom", http.StatusInternalServerError)
-
-	scheduled := f.RetryNowOnTimeout(internalErr)
-	assert.False(scheduled)
-	assert.False(f.retry)
-}

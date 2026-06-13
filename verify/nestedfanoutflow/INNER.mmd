@@ -1,17 +1,19 @@
-%%{init: {'themeVariables': {'lineColor': '#32a7c1', 'edgeLabelBackground': '#e5f4f3', 'textColor': '#434343', 'titleColor': '#32a7c1', 'clusterTextColor': '#32a7c1'}}}%%
 graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
-    classDef sub fill:#ed2e92,color:#f4f2ef,stroke:#ed2e92
     classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
+    classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em
+    linkStyle default stroke:#32a7c1
 
-    _title{{"inner"}}:::term --> _start
-    _start(( )):::term --> t0
+    _title{{"inner"}}:::term -.-> _start
     t0["taskX"]:::task
     t1["taskY"]:::task
     t2["taskZ"]:::task
     t3["taskW"]:::task
+    t3_reduce(("reduce")):::term
+    t3_reduce --> t3
     t0 --> t1
     t0 --> t2
-    t1 --> t3
-    t2 --> t3
+    t1 --> t3_reduce
+    t2 --> t3_reduce
+    _start(( )):::term --> t0
     t3 --> _end(( )):::term

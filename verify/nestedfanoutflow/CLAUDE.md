@@ -6,14 +6,14 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 
 ## Purpose
 
-Verification fixture for **two-level nested fan-out** via the subgraph escape hatch. The outer graph is `A -> {NormalB, Inner-subgraph} -> J`. The inner subgraph itself has an internal fan-out: `X -> {Y, Z} -> W`. So the workflow exhibits fan-out at the outer level and fan-out inside one of the siblings.
+Verification fixture for **two-level nested fan-out** via a subgraph call. The outer graph is `A -> {NormalB, RunInner} -> J`, where `RunInner` is a task that calls `flow.Subgraph(Inner.URL())`. The inner subgraph itself has an internal fan-out: `X -> {Y, Z} -> W`. So the workflow exhibits fan-out at the outer level and fan-out inside one of the siblings.
 
-The reason this fixture nests via a subgraph instead of pure graph nesting: the foreman's fan-out sibling constraint requires all siblings at a fan-out depth to share the same downstream targets. A pure-graph "inner fan-out per outer sibling" would violate that. Subgraphs sidestep the constraint by isolating each inner pipeline behind its own graph.
+The reason this fixture nests via a subgraph instead of pure graph nesting: the foreman's fan-out sibling constraint requires all siblings at a fan-out depth to share the same downstream targets. A pure-graph "inner fan-out per outer sibling" would violate that. A subgraph call sidesteps the constraint by isolating the inner pipeline behind its own graph.
 
 ## Patterns exercised
 
-- Outer fan-out (2 siblings: NormalB + Inner subgraph)
+- Outer fan-out (2 heterogeneous siblings: NormalB + the RunInner subgraph caller)
 - Inner fan-out inside the subgraph (X -> {Y, Z} -> W)
-- `sum*` reducer applied at the inner fan-in (Y and Z each contribute deltas)
-- Subgraph output (innerResult) merged back into the outer step's changes
-- Outer fan-in at J combining NormalB's output with the subgraph's output
+- Explicit `SetReducer("inner", ReducerAdd)` applied at the inner fan-in (Y and Z each contribute deltas)
+- RunInner adopting the subgraph's `innerResult` output and returning it as its own output
+- Outer fan-in at J combining NormalB's output with the subgraph caller's output

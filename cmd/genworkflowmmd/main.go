@@ -22,8 +22,9 @@ limitations under the License.
 //
 // generates a throwaway main program under <microservice>/tmp/ that imports
 // the microservice package, instantiates the service, invokes each graph
-// builder, and writes graph.Mermaid() to <microservice>/<METHOD>.mmd, runs
-// it with `go run`, and deletes the tmp directory.
+// builder, and writes workflow.NewGraphRenderer(g).Render() to
+// <microservice>/<METHOD>.mmd, runs it with `go run`, and deletes the tmp
+// directory.
 //
 // Mechanizes the housekeeping skill's "Visualize Workflows" step so it can be
 // invoked unattended from a script or CI.

@@ -64,9 +64,9 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 /*
 Turn executes a single LLM turn using the Claude provider.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
-		return "", nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+		return "", nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
 	}
 	maxTokens := 4096
 	if options != nil && options.MaxTokens > 0 {
@@ -108,14 +108,23 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 			}
 			claudeMsgs = append(claudeMsgs, claudeMessage{Role: "assistant", Content: blocks})
 		case "tool":
-			claudeMsgs = append(claudeMsgs, claudeMessage{
-				Role: "user",
-				Content: []claudeContentBlock{{
-					Type:      "tool_result",
-					ToolUseID: msg.ToolCallID,
-					Content:   msg.Content,
-				}},
-			})
+			// Anthropic requires ALL tool_result blocks paired with a single assistant turn's
+			// tool_use blocks to live in ONE user message. Coalesce consecutive `tool` role
+			// llmapi.Messages into the trailing user message we just emitted (if any), instead
+			// of emitting a separate user message per tool_result.
+			block := claudeContentBlock{
+				Type:      "tool_result",
+				ToolUseID: msg.ToolCallID,
+				Content:   msg.Content,
+			}
+			if n := len(claudeMsgs); n > 0 && claudeMsgs[n-1].Role == "user" {
+				claudeMsgs[n-1].Content = append(claudeMsgs[n-1].Content, block)
+			} else {
+				claudeMsgs = append(claudeMsgs, claudeMessage{
+					Role:    "user",
+					Content: []claudeContentBlock{block},
+				})
+			}
 		default:
 			claudeMsgs = append(claudeMsgs, claudeMessage{
 				Role:    msg.Role,
@@ -185,14 +194,14 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, llmapi.Usage{}, errors.Trace(err)
+		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	// Build the HTTP request to the Claude API
 	apiURL := svc.CompletionURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return "", nil, llmapi.Usage{}, errors.Trace(err)
+		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", svc.APIKey())
@@ -201,7 +210,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	// Send via HTTP egress proxy
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return "", nil, llmapi.Usage{}, errors.Trace(err)
+		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
@@ -215,21 +224,21 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		}
 		respBody, _ := io.ReadAll(httpResp.Body)
 		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error.Message != "" {
-			return "", nil, llmapi.Usage{}, errors.New(
+			return "", nil, "", llmapi.Usage{}, errors.New(
 				apiErr.Error.Message,
 				httpResp.StatusCode,
 				"type", apiErr.Error.Type,
 				"requestId", apiErr.RequestID,
 			)
 		}
-		return "", nil, llmapi.Usage{}, errors.New("Claude API error %d: %s", httpResp.StatusCode, string(respBody))
+		return "", nil, "", llmapi.Usage{}, errors.New("Claude API error %d: %s", httpResp.StatusCode, string(respBody))
 	}
 
 	// Parse the response
 	var claudeResp claudeResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&claudeResp)
 	if err != nil {
-		return "", nil, llmapi.Usage{}, errors.Trace(err)
+		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	for _, block := range claudeResp.Content {
@@ -254,5 +263,29 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		Turns:            1,
 	}
 
-	return content, toolCalls, usage, nil
+	stopReason = mapStopReason(claudeResp.StopReason)
+	return content, toolCalls, stopReason, usage, nil
+}
+
+// mapStopReason translates Anthropic's stop_reason field to the normalized llmapi value.
+// The Anthropic Messages API documents end_turn, tool_use, max_tokens, stop_sequence,
+// refusal, and pause_turn. An empty or unrecognized value is reported as Unknown so callers
+// surface it instead of treating it as a completion.
+func mapStopReason(s string) string {
+	switch s {
+	case "end_turn":
+		return llmapi.StopReasonEndTurn
+	case "tool_use":
+		return llmapi.StopReasonToolUse
+	case "max_tokens":
+		return llmapi.StopReasonMaxTokens
+	case "stop_sequence":
+		return llmapi.StopReasonStopSequence
+	case "refusal":
+		return llmapi.StopReasonRefusal
+	case "pause_turn":
+		return llmapi.StopReasonPauseTurn
+	default:
+		return llmapi.StopReasonUnknown
+	}
 }

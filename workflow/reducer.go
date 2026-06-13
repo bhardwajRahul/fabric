@@ -19,9 +19,6 @@ package workflow
 import (
 	"encoding/json"
 	"maps"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/microbus-io/errors"
 )
@@ -33,8 +30,13 @@ const (
 	ReducerReplace Reducer = "replace" // Last write wins (default)
 	ReducerAppend  Reducer = "append"  // Concatenate arrays
 	ReducerAdd     Reducer = "add"     // Sum numeric values
+	ReducerMin     Reducer = "min"     // Smaller of two numeric values
+	ReducerMax     Reducer = "max"     // Larger of two numeric values
 	ReducerUnion   Reducer = "union"   // Merge arrays, deduplicate
 	ReducerMerge   Reducer = "merge"   // Merge objects, new key wins
+	ReducerAnd     Reducer = "and"     // Logical AND of booleans
+	ReducerOr      Reducer = "or"      // Logical OR of booleans
+	ReducerConcat  Reducer = "concat"  // Concatenate strings
 )
 
 // Reduce applies the reducer to merge an incoming value into an existing value.
@@ -48,55 +50,29 @@ func (r Reducer) Reduce(existing, incoming any) (any, error) {
 		return reduceAppend(existing, incoming)
 	case ReducerAdd:
 		return reduceAdd(existing, incoming)
+	case ReducerMin:
+		return reduceMin(existing, incoming)
+	case ReducerMax:
+		return reduceMax(existing, incoming)
 	case ReducerUnion:
 		return reduceUnion(existing, incoming)
 	case ReducerMerge:
 		return reduceMerge(existing, incoming)
+	case ReducerAnd:
+		return reduceAnd(existing, incoming)
+	case ReducerOr:
+		return reduceOr(existing, incoming)
+	case ReducerConcat:
+		return reduceConcat(existing, incoming)
 	default:
 		return nil, errors.New("unknown reducer: %s", string(r))
 	}
 }
 
-// ReducerForFieldName returns the reducer inferred from a state field name.
-// Returns empty (replace) if no convention prefix matches.
-//
-// Conventions:
-//
-//	sum*  - numeric add
-//	list* - array append
-//	set*  - polymorphic: array union, object merge
-//
-// The character right after the prefix must be uppercase to avoid matching
-// English words like "summary", "listening", or "setup".
-func ReducerForFieldName(name string) Reducer {
-	switch {
-	case hasUpperBoundary(name, "sum"):
-		return ReducerAdd
-	case hasUpperBoundary(name, "list"):
-		return ReducerAppend
-	case hasUpperBoundary(name, "set"):
-		return ReducerUnion
-	}
-	return ""
-}
-
-// hasUpperBoundary reports whether name starts with prefix followed by an uppercase letter.
-func hasUpperBoundary(name, prefix string) bool {
-	if !strings.HasPrefix(name, prefix) || len(name) == len(prefix) {
-		return false
-	}
-	r, _ := utf8.DecodeRuneInString(name[len(prefix):])
-	return unicode.IsUpper(r)
-}
-
 // MergeState applies changes on top of state, using the provided reducers for
-// fields that have one. For fields without an explicit reducer, the reducer is
-// inferred from the field name's prefix (sum*, list*, set*); fields not
-// matching a convention prefix use replace semantics.
-//
-// The set* prefix is polymorphic: it dispatches to union when the value is a
-// JSON array and to merge when the value is a JSON object. Explicit reducer
-// configuration via SetReducer is strict and does not polymorph.
+// fields that have one. Fields without a registered reducer use replace
+// semantics (last write wins). Reducers must be attached at graph-build time
+// via Graph.SetReducer.
 //
 // State, changes and the result are map[string]any or nil.
 func MergeState(state any, changes any, reducers map[string]Reducer) (map[string]any, error) {
@@ -112,14 +88,7 @@ func MergeState(state any, changes any, reducers map[string]Reducer) (map[string
 	maps.Copy(merged, stateMap)
 	for k, v := range changesMap {
 		existing, exists := merged[k]
-		reducer, explicit := reducers[k]
-		if !explicit || reducer == "" {
-			reducer = ReducerForFieldName(k)
-			// set* polymorphism: object value -> merge, array value -> union
-			if reducer == ReducerUnion && (isJSONObject(existing) || isJSONObject(v)) {
-				reducer = ReducerMerge
-			}
-		}
+		reducer := reducers[k]
 		if !exists || reducer == "" || reducer == ReducerReplace {
 			merged[k] = v
 			continue
@@ -195,11 +164,6 @@ func jsonKind(v any) string {
 	return ""
 }
 
-// isJSONObject reports whether v's JSON form is an object (or null, which merges harmlessly).
-func isJSONObject(v any) bool {
-	return jsonKind(v) == "object"
-}
-
 // reduceAppend concatenates two JSON arrays.
 func reduceAppend(existing, incoming any) (any, error) {
 	a, err := unmarshalArray(existing, "append")
@@ -228,6 +192,56 @@ func reduceAdd(existing, incoming any) (any, error) {
 	return json.RawMessage(result), errors.Trace(err)
 }
 
+// reduceMin returns the smaller of two JSON numbers. A cleared slot defers to the other side
+// rather than collapsing to 0, since 0 is a legitimate value, not an identity for min.
+func reduceMin(existing, incoming any) (any, error) {
+	if isCleared(existing) {
+		return incoming, nil
+	}
+	if isCleared(incoming) {
+		return existing, nil
+	}
+	a, err := unmarshalNumber(existing, "min")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalNumber(incoming, "min")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	m := a
+	if b < a {
+		m = b
+	}
+	result, err := json.Marshal(m)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
+// reduceMax returns the larger of two JSON numbers. A cleared slot defers to the other side
+// rather than collapsing to 0, since 0 is a legitimate value, not an identity for max.
+func reduceMax(existing, incoming any) (any, error) {
+	if isCleared(existing) {
+		return incoming, nil
+	}
+	if isCleared(incoming) {
+		return existing, nil
+	}
+	a, err := unmarshalNumber(existing, "max")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalNumber(incoming, "max")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	m := a
+	if b > a {
+		m = b
+	}
+	result, err := json.Marshal(m)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
 // reduceUnion merges two JSON arrays, deduplicating elements by their JSON representation.
 func reduceUnion(existing, incoming any) (any, error) {
 	a, err := unmarshalArray(existing, "union")
@@ -252,6 +266,64 @@ func reduceUnion(existing, incoming any) (any, error) {
 	return json.RawMessage(result), errors.Trace(err)
 }
 
+// reduceAnd computes the logical AND of two JSON booleans.
+func reduceAnd(existing, incoming any) (any, error) {
+	// A cleared slot is the reducer's identity (true for AND), so it must leave the running result
+	// unchanged rather than fold in as false - same short-circuit as the numeric reducers.
+	if isCleared(existing) {
+		return incoming, nil
+	}
+	if isCleared(incoming) {
+		return existing, nil
+	}
+	a, err := unmarshalBool(existing, "and")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalBool(incoming, "and")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	result, err := json.Marshal(a && b)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
+// reduceOr computes the logical OR of two JSON booleans.
+func reduceOr(existing, incoming any) (any, error) {
+	// A cleared slot is the reducer's identity (false for OR); deferring keeps OR consistent with AND
+	// and the numeric reducers (harmless either way since false is OR's identity, but explicit).
+	if isCleared(existing) {
+		return incoming, nil
+	}
+	if isCleared(incoming) {
+		return existing, nil
+	}
+	a, err := unmarshalBool(existing, "or")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalBool(incoming, "or")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	result, err := json.Marshal(a || b)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
+// reduceConcat concatenates two JSON strings.
+func reduceConcat(existing, incoming any) (any, error) {
+	a, err := unmarshalString(existing, "concat")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	b, err := unmarshalString(incoming, "concat")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	result, err := json.Marshal(a + b)
+	return json.RawMessage(result), errors.Trace(err)
+}
+
 // reduceMerge merges two JSON objects key-by-key. New keys win on collision.
 func reduceMerge(existing, incoming any) (any, error) {
 	a, err := unmarshalObject(existing, "merge")
@@ -272,9 +344,10 @@ func reduceMerge(existing, incoming any) (any, error) {
 	return json.RawMessage(result), errors.Trace(err)
 }
 
-// A cleared slot (Go nil or JSON null) short-circuits to the reducer's identity
-// (nil array, nil object, zero number) so flow.Clear contributions are ignored
-// at fan-in rather than failing the type check.
+// A cleared slot (Go nil or JSON null) short-circuits to the reducer's identity:
+// the Go zero value for the underlying type (nil array, nil object, 0, false,
+// empty string). flow.Clear contributions are ignored at fan-in rather than
+// failing the type check.
 
 func unmarshalArray(v any, reducerName string) ([]json.RawMessage, error) {
 	if isCleared(v) {
@@ -319,4 +392,34 @@ func unmarshalNumber(v any, reducerName string) (float64, error) {
 		return 0, errors.New("%s reducer requires number, got %s", reducerName, jsonKind(v))
 	}
 	return n, nil
+}
+
+func unmarshalBool(v any, reducerName string) (bool, error) {
+	if isCleared(v) {
+		return false, nil
+	}
+	raw, err := marshalAny(v)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return false, errors.New("%s reducer requires bool, got %s", reducerName, jsonKind(v))
+	}
+	return b, nil
+}
+
+func unmarshalString(v any, reducerName string) (string, error) {
+	if isCleared(v) {
+		return "", nil
+	}
+	raw, err := marshalAny(v)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", errors.New("%s reducer requires string, got %s", reducerName, jsonKind(v))
+	}
+	return s, nil
 }

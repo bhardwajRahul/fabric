@@ -41,6 +41,7 @@ type Mock struct {
 	mockTaskX          func(ctx context.Context, flow *workflow.Flow) (xPassed bool, err error)                                                         // MARKER: TaskX
 	mockTaskY          func(ctx context.Context, flow *workflow.Flow, xPassed bool) (subResult string, err error)                                       // MARKER: TaskY
 	mockNormalD        func(ctx context.Context, flow *workflow.Flow) (resultD string, err error)                                                       // MARKER: NormalD
+	mockRunSub         func(ctx context.Context, flow *workflow.Flow) (subResult string, err error)                                                     // MARKER: RunSub
 	mockTaskE          func(ctx context.Context, flow *workflow.Flow, resultB string, subResult string, resultD string) (finalResult string, err error) // MARKER: TaskE
 	mockSubGraph       func(ctx context.Context) (graph *workflow.Graph, err error)                                                                     // MARKER: Sub
 	unsubMockSub       func() error                                                                                                                     // MARKER: Sub
@@ -137,6 +138,20 @@ func (svc *Mock) NormalD(ctx context.Context, flow *workflow.Flow) (resultD stri
 		resultD, err = svc.mockNormalD(ctx, flow)
 	}
 	return resultD, errors.Trace(err)
+}
+
+// MockRunSub sets up a mock handler for RunSub.
+func (svc *Mock) MockRunSub(handler func(ctx context.Context, flow *workflow.Flow) (subResult string, err error)) *Mock { // MARKER: RunSub
+	svc.mockRunSub = handler
+	return svc
+}
+
+// RunSub executes the mock handler.
+func (svc *Mock) RunSub(ctx context.Context, flow *workflow.Flow) (subResult string, err error) { // MARKER: RunSub
+	if svc.mockRunSub != nil {
+		subResult, err = svc.mockRunSub(ctx, flow)
+	}
+	return subResult, errors.Trace(err)
 }
 
 // MockTaskE sets up a mock handler for TaskE.

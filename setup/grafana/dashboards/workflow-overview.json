@@ -1095,14 +1095,14 @@
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
           "editorMode": "code",
-          "expr": "round(sum by (task) (increase(microbus_task_breaker_trips_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task, cause) (increase(microbus_task_breaker_trips_total{deployment=~\"$deployment\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}}",
+          "legendFormat": "{{task}} ({{cause}})",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Per-Task Breaker Trips (404 ack-timeouts)",
+      "title": "Per-Task Breaker Trips by Cause",
       "type": "timeseries"
     },
     {
@@ -1153,14 +1153,14 @@
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
           "editorMode": "code",
-          "expr": "round(sum by (task, outcome) (increase(microbus_task_breaker_probes_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task, outcome, cause) (increase(microbus_task_breaker_probes_total{deployment=~\"$deployment\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}} {{outcome}}",
+          "legendFormat": "{{task}} {{outcome}} ({{cause}})",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Per-Task Breaker Probes by Outcome",
+      "title": "Per-Task Breaker Probes by Outcome and Cause",
       "type": "timeseries"
     }
   ],
