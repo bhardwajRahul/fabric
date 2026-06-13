@@ -9,7 +9,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invopop/jsonschema v0.14.0
-	github.com/microbus-io/bespa v0.1.2
+	github.com/microbus-io/bespa v0.1.3
 	github.com/microbus-io/boolexp v1.1.1
 	github.com/microbus-io/errors v1.0.1
 	github.com/microbus-io/pyvenv v1.0.3
@@ -95,5 +95,3 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.50.1 // indirect
 )
-
-replace github.com/microbus-io/bespa => ../bespa
