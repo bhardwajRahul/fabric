@@ -36,9 +36,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 // metricInstrument holds the defined metric instruments.
@@ -65,27 +65,23 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
 	// https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
 	// https://opentelemetry.io/docs/specs/otel/protocol/exporter/
-	endpoint := env.Get("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
-	if endpoint == "" {
-		endpoint = env.Get("OTEL_EXPORTER_OTLP_ENDPOINT")
-	}
+	endpoint := resolveOTLPEndpoint("METRICS")
 	var exp sdkmetric.Exporter
 	if endpoint != "" {
-		protocol := env.Get("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL")
-		if protocol == "" {
-			protocol = env.Get("OTEL_EXPORTER_OTLP_PROTOCOL")
+		var conn *otlpConn
+		conn, c.meterOTLPKey, err = acquireOTLPConn("METRICS", endpoint)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		if protocol == "" && strings.Contains(endpoint, ":4317") {
-			protocol = "grpc"
-		}
-		if protocol == "grpc" {
+		if conn.protocol() == "grpc" {
 			exp, err = otlpmetricgrpc.New(ctx,
-				otlpmetricgrpc.WithEndpointURL(endpoint),
+				otlpmetricgrpc.WithGRPCConn(conn.grpc),
 				otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{Enabled: false}),
 			)
 		} else {
 			exp, err = otlpmetrichttp.New(ctx,
 				otlpmetrichttp.WithEndpointURL(endpoint),
+				otlpmetrichttp.WithHTTPClient(conn.http),
 				otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{Enabled: false}),
 			)
 		}
@@ -115,19 +111,8 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 		}
 	}
 
-	namespace := c.Plane()
-	if c.deployment == TESTING {
-		namespace = "testing"
-	}
 	options := []sdkmetric.Option{
-		sdkmetric.WithResource(resource.NewSchemaless(
-			// https://opentelemetry.io/docs/specs/semconv/attributes-registry/service/
-			attribute.String("service.namespace", namespace),
-			attribute.String("service.name", c.Hostname()),
-			attribute.Int("service.version", c.Version()),
-			attribute.String("service.instance.id", c.ID()),
-			attribute.String("deployment.environment", c.Deployment()),
-		)),
+		sdkmetric.WithResource(c.otelResource()),
 	}
 	if exp != nil {
 		options = append(options, sdkmetric.WithReader(
@@ -199,17 +184,31 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 // termMeter flushes and shuts down the meter collector.
 func (c *Connector) termMeter(ctx context.Context) (err error) {
 	c.metricLock.Lock()
-	defer c.metricLock.Unlock()
-	if c.meterProvider == nil {
-		return nil
+	if c.meterProvider != nil {
+		// Flush pending metrics through the exporter before releasing the shared connection
+		err = c.meterProvider.Shutdown(ctx)
+		c.meterProvider = nil
+		c.meter = nil
 	}
-	err = c.meterProvider.Shutdown(ctx)
+	key := c.meterOTLPKey
+	c.meterOTLPKey = ""
+	c.metricLock.Unlock()
+	releaseOTLPConn(key)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.meterProvider = nil
-	c.meter = nil
 	return nil
+}
+
+// MeterProvider returns the OpenTelemetry meter provider of the microservice, or a no-op provider when metrics are
+// not configured. Use it to instrument third-party libraries against the same pipeline and resource as the framework.
+func (c *Connector) MeterProvider() metric.MeterProvider {
+	c.metricLock.RLock()
+	defer c.metricLock.RUnlock()
+	if c.meterProvider == nil {
+		return metricnoop.NewMeterProvider()
+	}
+	return c.meterProvider
 }
 
 // SetOnObserveMetrics adds a function to be called just before metrics are produced to allow observing them just in time.

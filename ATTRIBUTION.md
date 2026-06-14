@@ -7,6 +7,7 @@ The following open source software (OSS) is used or referenced by the Microbus f
 | [NATS](https://nats.io) | Apache License 2.0 | Copyright 2012-2022 The NATS Authors |
 | [Prometheus](https://prometheus.io) | Apache License 2.0 | Copyright 2022 The Prometheus Authors |
 | [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-go) | Apache License 2.0 | Copyright The OpenTelemetry Authors |
+| [gRPC](https://github.com/grpc/grpc-go) | Apache License 2.0 | Copyright 2014 gRPC authors |
 | [Logrus](https://github.com/sirupsen/logrus) | MIT License | Copyright (c) 2014 Simon Eskildsen |
 | [Go YAML](https://github.com/yaml/go-yaml) | MIT License<br>Apache License 2.0 | Copyright (c) 2006-2010 Kirill Simonov<br>Copyright (c) 2011-2019 Canonical Ltd |
 | [JSON Schema](https://github.com/invopop/jsonschema) | MIT License | Copyright (C) 2014 Alec Thomas |
@@ -57,6 +58,24 @@ limitations under the License.
 
 ```
 Copyright The OpenTelemetry Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+### gRPC
+
+```
+Copyright 2014 gRPC authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

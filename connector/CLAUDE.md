@@ -186,7 +186,7 @@ The selected-trace-IDs map uses a two-generation rotation (`selected1`, `selecte
 
 ### OTLP exporter resilience
 
-Telemetry export is best-effort sideband - its failure must never affect service health. Two specific configuration choices in `tracer.go` and `metrics.go` enforce this:
+Telemetry export is best-effort sideband - its failure must never affect service health. The three signals - traces (`tracer.go`), metrics (`metrics.go`) and logs (`logger.go`, when a logs endpoint is configured) - share two configuration choices that enforce this:
 
 1. **`WithRetry(RetryConfig{Enabled: false})`.** With retries on, the OTLP gRPC client retries failed exports with internal timeouts that can exceed 75 seconds per call. A flaky or down collector therefore stalls the connector's batch span/metric processor flushes, which in turn stalls `Shutdown` (the SDK contract is to drain before returning). Disabling retries means each export attempt is single-shot - succeed or drop on the floor with a log line.
 
@@ -194,7 +194,36 @@ Telemetry export is best-effort sideband - its failure must never affect service
 
 The combined effect: a service with a configured-but-unreachable collector starts up immediately, makes one bounded export attempt per flush (giving up after the configured timeout), and shuts down within `timeout × N` worst case (one final flush per exporter type). Without these settings, the same misconfiguration would hang both startup and shutdown indefinitely - observed pre-fix as orchestrator-killed pods on rolling deploys.
 
-The regression tests live in `metrics_test.go` (`TestConnector_OTLPMetricsUnreachable` for the fast connection-refused path, `TestConnector_OTLPSlowEndpoint` for the slow timeout path that actually exercises the spec-defined timeout).
+The regression tests live in `metrics_test.go` (`TestConnector_OTLPMetricsUnreachable` for the fast connection-refused path, `TestConnector_OTLPSlowEndpoint` for the slow timeout path that actually exercises the spec-defined timeout) and `logger_test.go` (`TestConnector_OTLPLogsUnreachable` for the logs signal).
+
+### Shared OTLP connection
+
+All OTLP exporters in one executable that target the same endpoint over the same protocol share a single connection, created lazily and reference-counted in `otel.go` (`acquireOTLPConn` / `releaseOTLPConn`). A bundle of N microservices exporting three signals would otherwise open up to 3N TCP/TLS connections to the collector; sharing collapses that to one per distinct target.
+
+The registry key is `protocol|endpoint|caFile|clientCert|clientKey|insecure` - the TLS material and the insecure override are part of the key so two signals pointed at the same endpoint but secured differently never alias onto one connection. Each signal of each connector holds one reference; the connection (a gRPC `*grpc.ClientConn` or a pooled `*http.Client`) is dialed on first acquire and closed on last release. Per-signal teardown (`termLogger` / `termTracer` / `termMeter`) flushes its provider *then* releases the connection, so the final batch still exports before a possible close.
+
+Two invariants make sharing safe:
+
+- **The connector owns the connection, not the SDK.** Exporters are constructed with `WithGRPCConn` / `WithHTTPClient`, and the SDK never closes a caller-provided connection on its own `Shutdown` (it only closes connections it dialed itself). So one connector's shutdown cannot pull the connection out from under another that still holds a reference.
+- **Dialing is lazy.** `grpc.NewClient` and the cloned default `http.Transport` connect on first export, not at construction, preserving the non-blocking-`Startup` guarantee above.
+
+Transport security follows the endpoint URL scheme (https is secured) unless `OTEL_EXPORTER_OTLP[_signal]_INSECURE` overrides it. Because the connector builds the connection itself, the SDK's env-driven dial setup is bypassed once `WithGRPCConn`/`WithHTTPClient` is supplied - and the SDK exposes no public factory to build a connection or dial options from env (`otlpconfig` is `internal/`). So `otel.go` reads the OTLP certificate env vars directly to honor a custom CA (`..._CERTIFICATE`) and a client certificate for mTLS (`..._CLIENT_CERTIFICATE`/`_KEY`). Per-signal exporter options that aren't connection-level - headers, timeout, retry - still flow through the SDK, which applies them at the client layer regardless of the injected connection.
+
+### Log enrichment and fan-out live in the handler
+
+`LogDebug/LogInfo/LogWarn/LogError` are thin delegations to the `*slog.Logger` returned by `Logger()`; all enrichment lives in `logHandler`, the connector's root slog handler. This is deliberate: a record logged through `Logger()` (e.g. `svc.Logger().InfoContext(ctx, ...)`) is enriched identically to one logged through `LogInfo`, because both flow through the same handler. The `*Context` slog methods carry the span and actor in the context; the non-context methods carry a background context, so they pass through un-enriched - the intended behavior.
+
+`logHandler.Handle` does the context-derived work once - mirror the record onto the active span as an event (non-PROD), increment `microbus_log_messages`, dump errors to stderr in developer deployments - then fans out to the deployment terminal handler (`colorfulLogHandler` in LOCAL, text in TESTING, JSON in LAB/PROD) and, when a logs endpoint is configured, an `otelslog` bridge over the shared connection. The `MICROBUS_LOG_DEBUG` gate lives in `Enabled`; a gated debug record never reaches `Handle`, so it is neither counted nor exported. In PROD the terminal handler's `Info` level also drops debug regardless of the flag.
+
+The two legs diverge on one point: the trace id is added as a `trace` string attribute only on the console leg, where it is the sole correlation handle. The OTLP leg omits it because the otelslog bridge stamps native `TraceId`/`SpanId` from the context, which backends use to correlate logs with traces. Span-event mirroring is retained alongside OTLP logs because it is a different view - inline in the span timeline, and it survives the PROD tail sampler even when no logs pipeline is configured.
+
+`microbus_log_messages` counts every record emitted through the logger, including bare `Logger().Info(...)` that bypasses the `LogXXX` methods - the metric reflects all logging, not just the convenience entry points.
+
+On shutdown the final "Shutdown" log is recorded while the meter and tracer are still live (it feeds both - a log counter and a span event), then the providers are torn down in reverse of initialization order: logs, then traces, then metrics. Tearing the meter or tracer down first would silently drop that last log's counter increment and span event.
+
+### Telemetry provider accessors are concrete, not interface
+
+`Logger() *slog.Logger`, `MeterProvider()` and `TracerProvider()` expose the underlying handles so application code can instrument third-party libraries against the same pipelines and resource as the framework. `MeterProvider`/`TracerProvider` return a no-op provider (never nil) when the signal is disabled. They are concrete methods on the connector and deliberately *not* part of any `service` interface: `MeterProvider`/`TracerProvider` return raw OTEL types, and the `service` package is kept insulated from OTEL behind the `trc` wrapper (e.g. `service.Tracer` returns `trc.Span`, not `trace.Span`). A provider cannot be wrapped without defeating its purpose - handing the real provider to OTEL-instrumented libraries - so the accessors stay off the interfaces and remain reachable via the embedded connector on the concrete `*Service`.
 
 ### `alg=none` JWTs in TESTING
 

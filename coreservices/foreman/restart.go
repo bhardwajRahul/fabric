@@ -18,12 +18,12 @@ package foreman
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/sequel"
 )
 
 // undoCohortBumps applies (arrivalsDelta, failuresDelta) as a SUBTRACT at the given spawn step,
@@ -32,10 +32,7 @@ import (
 // state; if (arrivals == size && failures > 0) BEFORE this decrement, the cohort had propagated up
 // — so the ancestor needs the same (-1, -1) we'd have applied via propagateCohortFailure, in
 // reverse. The walk stops at the first level whose prior state was NOT propagated, or at the root.
-func (svc *Service) undoCohortBumps(ctx context.Context, tx interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}, spawnID int, arrivalsDelta int, failuresDelta int) error {
+func (svc *Service) undoCohortBumps(ctx context.Context, tx sequel.Executor, spawnID int, arrivalsDelta int, failuresDelta int) error {
 	if spawnID == 0 || (arrivalsDelta == 0 && failuresDelta == 0) {
 		return nil
 	}
@@ -131,9 +128,7 @@ func mergeWithOverrides(originalJSON string, overrides any) (string, error) {
 
 // allDescendantSubgraphFlows returns every descendant subgraph flow_id reachable from this flow
 // via surgraph_flow_id, regardless of status.
-func (svc *Service) allDescendantSubgraphFlows(ctx context.Context, db interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}, flowID int) ([]int, error) {
+func (svc *Service) allDescendantSubgraphFlows(ctx context.Context, db sequel.Executor, flowID int) ([]int, error) {
 	var collected []int
 	current := []any{flowID}
 	for len(current) > 0 {
@@ -163,10 +158,7 @@ func (svc *Service) allDescendantSubgraphFlows(ctx context.Context, db interface
 
 // deleteSubgraphFlowsRootedAt removes any subgraph flows (and their steps and any nested
 // descendants) launched from the given surgraph step.
-func (svc *Service) deleteSubgraphFlowsRootedAt(ctx context.Context, tx interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}, surgraphStepID int) error {
+func (svc *Service) deleteSubgraphFlowsRootedAt(ctx context.Context, tx sequel.Executor, surgraphStepID int) error {
 	var rootChildren []int
 	rows, err := tx.QueryContext(ctx,
 		"SELECT flow_id FROM microbus_flows WHERE surgraph_step_id=?",
@@ -245,9 +237,7 @@ type sweptMember struct {
 // collectDAGSubtree walks forward from a starting step via successor_id and returns every
 // reachable step (excluding the starting step itself). Each entry carries enough metadata to
 // drive the cohort-counter decrement and cascade-delete passes.
-func (svc *Service) collectDAGSubtree(ctx context.Context, db interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}, flowID, startStepID int) ([]sweptMember, error) {
+func (svc *Service) collectDAGSubtree(ctx context.Context, db sequel.Executor, flowID, startStepID int) ([]sweptMember, error) {
 	visited := map[int]bool{startStepID: true}
 	var collected []sweptMember
 	frontier := []any{startStepID}

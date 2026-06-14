@@ -41,6 +41,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -80,10 +81,12 @@ type Connector struct {
 	metricInstruments map[string]*metricInstrument
 	onObserveMetrics  service.ObserveMetricsHandler
 	metricCommonAttrs []attribute.KeyValue
+	meterOTLPKey      string
 
 	traceProvider  *sdktrace.TracerProvider
 	tracer         trace.Tracer
 	traceProcessor *selectiveProcessor
+	traceOTLPKey   string
 
 	transportConn transport.Conn
 	responseSub   *transport.Subscription
@@ -112,8 +115,10 @@ type Connector struct {
 	configLock      sync.Mutex
 	onConfigChanged service.ConfigChangedHandler
 
-	logger   *slog.Logger
-	logDebug bool
+	logger      *slog.Logger
+	logDebug    bool
+	logProvider *sdklog.LoggerProvider
+	logOTLPKey  string
 
 	tickers     map[string]*tickerCallback
 	tickersLock sync.Mutex

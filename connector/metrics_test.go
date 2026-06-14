@@ -240,6 +240,9 @@ func TestConnector_MetricExporters(t *testing.T) {
 	go httpServer.ListenAndServe()
 	defer httpServer.Close()
 
+	// The generic OTLP endpoint drives all three signals - traces, metrics, and logs - so each connector lifecycle
+	// flushes three exports to the collector on shutdown.
+
 	// Both Prometheus and OTel exporters
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
 	env.Push("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:5555")
@@ -251,7 +254,7 @@ func TestConnector_MetricExporters(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	assert.Equal(2, int(counter.Load()))
+	assert.Equal(3, int(counter.Load()))
 
 	// Only Prometheus exporter
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "1")
@@ -264,7 +267,7 @@ func TestConnector_MetricExporters(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	assert.Equal(2, int(counter.Load()))
+	assert.Equal(3, int(counter.Load()))
 
 	// Only OTel exporter
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
@@ -277,7 +280,7 @@ func TestConnector_MetricExporters(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	assert.Equal(4, int(counter.Load()))
+	assert.Equal(6, int(counter.Load()))
 
 	// No exporters
 	env.Push("MICROBUS_PROMETHEUS_EXPORTER", "0")
@@ -290,7 +293,7 @@ func TestConnector_MetricExporters(t *testing.T) {
 	err = con.Shutdown(ctx)
 	assert.NoError(err)
 	time.Sleep(delay)
-	assert.Equal(4, int(counter.Load()))
+	assert.Equal(6, int(counter.Load()))
 
 	for range 4 {
 		env.Pop("MICROBUS_PROMETHEUS_EXPORTER")

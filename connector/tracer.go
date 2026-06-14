@@ -19,20 +19,17 @@ package connector
 import (
 	"context"
 	"net/url"
-	"strings"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/trc"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	prototrace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
@@ -50,10 +47,7 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 	// https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
 	// https://opentelemetry.io/docs/specs/otel/protocol/exporter/
 	var exp *otlptrace.Exporter
-	endpoint := env.Get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-	if endpoint == "" {
-		endpoint = env.Get("OTEL_EXPORTER_OTLP_ENDPOINT")
-	}
+	endpoint := resolveOTLPEndpoint("TRACES")
 	if endpoint == "nil" {
 		// The nil client is used for testing of span creation
 		exp, err = otlptrace.New(ctx, &nilTraceClient{})
@@ -61,21 +55,20 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 			return errors.Trace(err)
 		}
 	} else if endpoint != "" {
-		protocol := env.Get("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
-		if protocol == "" {
-			protocol = env.Get("OTEL_EXPORTER_OTLP_PROTOCOL")
+		var conn *otlpConn
+		conn, c.traceOTLPKey, err = acquireOTLPConn("TRACES", endpoint)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		if protocol == "" && strings.Contains(endpoint, ":4317") {
-			protocol = "grpc"
-		}
-		if protocol == "grpc" {
+		if conn.protocol() == "grpc" {
 			exp, err = otlptracegrpc.New(ctx,
-				otlptracegrpc.WithEndpointURL(endpoint),
+				otlptracegrpc.WithGRPCConn(conn.grpc),
 				otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{Enabled: false}),
 			)
 		} else {
 			exp, err = otlptracehttp.New(ctx,
 				otlptracehttp.WithEndpointURL(endpoint),
+				otlptracehttp.WithHTTPClient(conn.http),
 				otlptracehttp.WithRetry(otlptracehttp.RetryConfig{Enabled: false}),
 			)
 		}
@@ -96,20 +89,10 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 		c.traceProcessor = newSelectiveProcessor(exp, 8192) // Approx 10MB per microservice
 		sp = c.traceProcessor
 	}
-	namespace := c.Plane()
-	if c.deployment == TESTING {
-		namespace = "testing"
-	}
 	c.traceProvider = sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.ParentBased(newMuffler())),
 		sdktrace.WithSpanProcessor(sp),
-		sdktrace.WithResource(resource.NewSchemaless(
-			attribute.String("service.namespace", namespace),
-			attribute.String("service.name", c.Hostname()),
-			attribute.Int("service.version", c.Version()),
-			attribute.String("service.instance.id", c.ID()),
-			attribute.String("deployment.environment", c.Deployment()),
-		)),
+		sdktrace.WithResource(c.otelResource()),
 	)
 	c.tracer = c.traceProvider.Tracer("")
 	return nil
@@ -117,16 +100,17 @@ func (c *Connector) initTracer(ctx context.Context) (err error) {
 
 // termTracer shuts down the OpenTelemetry tracer
 func (c *Connector) termTracer(ctx context.Context) (err error) {
-	if c.traceProvider == nil {
-		// Not initialized
-		return nil
+	if c.traceProvider != nil {
+		// Flush pending spans through the exporter before releasing the shared connection
+		err = c.traceProvider.Shutdown(ctx)
+		c.traceProvider = nil
+		c.tracer = nil
 	}
-	err = c.traceProvider.Shutdown(ctx)
+	releaseOTLPConn(c.traceOTLPKey)
+	c.traceOTLPKey = ""
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.traceProvider = nil
-	c.tracer = nil
 	return nil
 }
 
@@ -153,6 +137,15 @@ func (c *Connector) StartSpan(ctx context.Context, spanName string, opts ...trc.
 func (c *Connector) Span(ctx context.Context) trc.Span {
 	span := trace.SpanFromContext(ctx)
 	return trc.NewSpan(span)
+}
+
+// TracerProvider returns the OpenTelemetry tracer provider of the microservice, or a no-op provider when tracing is
+// not configured. Use it to instrument third-party libraries against the same pipeline and resource as the framework.
+func (c *Connector) TracerProvider() trace.TracerProvider {
+	if c.traceProvider == nil {
+		return tracenoop.NewTracerProvider()
+	}
+	return c.traceProvider
 }
 
 // ForceTrace forces the trace containing the span to be exported

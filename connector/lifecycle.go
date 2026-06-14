@@ -185,7 +185,7 @@ func (c *Connector) Startup(ctx context.Context) (err error) {
 	ctx, span = c.StartSpan(ctx, "startup", trc.Internal())
 
 	// Initialize logger
-	err = c.initLogger()
+	err = c.initLogger(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -381,12 +381,16 @@ func (c *Connector) Shutdown(ctx context.Context) (err error) {
 		}(),
 	)
 
-	// OpenTelemetry: terminate
+	// Final log entry, recorded while the meter and tracer are still live so its log counter and span event are
+	// captured before their providers are flushed.
+	c.LogInfo(mctx, "Shutdown")
 	span.End()
+
+	// OpenTelemetry: terminate in reverse order of initialization - logs, then traces, then metrics. The final log
+	// above feeds all three, so they are torn down only after it is recorded.
+	_ = c.termLogger(mctx)
 	_ = c.termTracer(mctx)
 	_ = c.termMeter(mctx)
-
-	c.LogInfo(mctx, "Shutdown")
 	c.phase.Store(shutDown)
 
 	return lastErr
