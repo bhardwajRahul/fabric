@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 )
@@ -455,7 +455,8 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow) (err e
 		if currentTool.Arguments != nil {
 			json.Unmarshal(currentTool.Arguments, &inputState)
 		}
-		out, yield, err := flow.Subgraph(def.URL, inputState)
+		var out map[string]any
+		yield, err := flow.Subgraph(def.URL, inputState, &out)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -496,31 +497,31 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow) (err e
 ChatLoop defines the workflow graph for the LLM chat loop.
 */
 func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: ChatLoop
-	graph = workflow.NewGraph(llmapi.ChatLoop.URL())
-	graph.AddTask("initChat", llmapi.InitChat.URL())
-	// firstLLM and nextLLM are two graph positions sharing one task URL. firstLLM is the
-	// initial sequential call after initChat; nextLLM is the fan-in nexus for the per-round
+	graph = workflow.NewGraph("ChatLoop", llmapi.ChatLoop.URL())
+	graph.AddTask("InitChat", llmapi.InitChat.URL())
+	// FirstLLM and NextLLM are two graph positions sharing one task URL. FirstLLM is the
+	// initial sequential call after InitChat; NextLLM is the fan-in nexus for the per-round
 	// tool cohort. Both dispatch to the same CallLLM task. Splitting them lets the lineage
-	// validator pop the cohort frame at nextLLM without conflicting with the initial entry,
+	// validator pop the cohort frame at NextLLM without conflicting with the initial entry,
 	// which has no frame to pop.
-	graph.AddTask("firstLLM", llmapi.CallLLM.URL())
-	graph.AddTask("nextLLM", llmapi.CallLLM.URL())
-	graph.AddTask("processResponse", llmapi.ProcessResponse.URL())
-	graph.AddTask("executeTool", llmapi.ExecuteTool.URL())
-	graph.SetFanIn("nextLLM")
+	graph.AddTask("FirstLLM", llmapi.CallLLM.URL())
+	graph.AddTask("NextLLM", llmapi.CallLLM.URL())
+	graph.AddTask("ProcessResponse", llmapi.ProcessResponse.URL())
+	graph.AddTask("ExecuteTool", llmapi.ExecuteTool.URL())
+	graph.SetFanIn("NextLLM")
 	// messages is the conversation history shared with the LLM each turn. forEach branches each
 	// contribute their tool result message; Append reducer concatenates them at the fan-in so the
 	// next CallLLM sees the full history.
 	graph.SetReducer("messages", workflow.ReducerAppend)
-	graph.AddTransition("initChat", "firstLLM")
-	graph.AddTransition("firstLLM", "processResponse")
+	graph.AddTransition("InitChat", "FirstLLM")
+	graph.AddTransition("FirstLLM", "ProcessResponse")
 	// When ProcessResponse decides the conversation is done (no tools requested or round
 	// limit exceeded), it calls flow.Goto(workflow.END) to exit the loop.
-	graph.AddTransitionGoto("processResponse", workflow.END)
+	graph.AddTransitionGoto("ProcessResponse", workflow.END)
 	// Otherwise the forEach fans out one ExecuteTool per pending tool call; all branches
-	// converge at nextLLM via the fan-in.
-	graph.AddTransitionForEach("processResponse", "executeTool", "pendingToolCalls", "currentTool")
-	graph.AddTransition("executeTool", "nextLLM")
-	graph.AddTransition("nextLLM", "processResponse")
+	// converge at NextLLM via the fan-in.
+	graph.AddTransitionForEach("ProcessResponse", "ExecuteTool", "pendingToolCalls", "currentTool")
+	graph.AddTransition("ExecuteTool", "NextLLM")
+	graph.AddTransition("NextLLM", "ProcessResponse")
 	return graph, nil
 }

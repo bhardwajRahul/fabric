@@ -57,9 +57,9 @@ type SimilarityOut struct { // MARKER: Similarity
 
 var (
 	// HINT: Insert endpoint definitions here
-	Embed      = Def{Method: "GET", Route: ":443/embed"}        // MARKER: Embed
-	Similarity = Def{Method: "GET", Route: ":443/similarity"}   // MARKER: Similarity
-	Demo       = Def{Method: "ANY", Route: ":443/demo"}         // MARKER: Demo
-	DemoInit   = Def{Method: "POST", Route: ":443/demo/init"}   // MARKER: DemoInit
-	DemoStatus = Def{Method: "GET", Route: ":443/demo/status"}  // MARKER: DemoStatus
+	Embed      = Def{Method: "GET", Route: ":443/embed"}       // MARKER: Embed
+	Similarity = Def{Method: "GET", Route: ":443/similarity"}  // MARKER: Similarity
+	Demo       = Def{Method: "ANY", Route: ":443/demo"}        // MARKER: Demo
+	DemoInit   = Def{Method: "POST", Route: ":443/demo/init"}  // MARKER: DemoInit
+	DemoStatus = Def{Method: "GET", Route: ":443/demo/status"} // MARKER: DemoStatus
 )

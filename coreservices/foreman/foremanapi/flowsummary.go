@@ -1,52 +1,8 @@
-/*
-Copyright (c) 2023-2026 Microbus LLC and various contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package foremanapi
 
-import "time"
+import (
+	"github.com/microbus-io/dwarf/workflow"
+)
 
-// FlowSummary is a summary of a flow for listing purposes. The heavy side-channel fields
-// (State, InterruptPayload) are omitted; callers needing them follow up with Snapshot.
-type FlowSummary struct {
-	FlowKey      string    `json:"flowKey,omitzero"`
-	ThreadKey    string    `json:"threadKey,omitzero"`
-	WorkflowName string    `json:"workflowName,omitzero"`
-	Status       string    `json:"status,omitzero"`
-	TaskName     string    `json:"taskName,omitzero"`
-	Error        string    `json:"error,omitzero"`
-	CancelReason string    `json:"cancelReason,omitzero"`
-	CreatedAt    time.Time `json:"createdAt,omitzero"`
-	// StartedAt is when this attempt began dispatching (Start, or a Restart/RestartFrom
-	// rewind). Distinct from CreatedAt, which is the row's INSERT moment and is only
-	// reset on full Restart. Use StartedAt for duration metrics; CreatedAt for "when did
-	// this flow first appear."
-	StartedAt    time.Time `json:"startedAt,omitzero"`
-	UpdatedAt    time.Time `json:"updatedAt,omitzero"`
-}
-
-// Duration is the wall-clock time from StartedAt to UpdatedAt - the time the current attempt
-// has spent dispatching, excluding any pre-Start queue wait or breaker-park hold. Returns zero
-// when either timestamp is missing or the delta is negative.
-func (f FlowSummary) Duration() time.Duration {
-	if f.StartedAt.IsZero() || f.UpdatedAt.IsZero() {
-		return 0
-	}
-	d := f.UpdatedAt.Sub(f.StartedAt)
-	if d < 0 {
-		return 0
-	}
-	return d
-}
+// FlowSummary is a compact summary of a flow, returned by List.
+type FlowSummary = workflow.FlowSummary

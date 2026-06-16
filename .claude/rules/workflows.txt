@@ -15,7 +15,7 @@ Naming convention for agent microservices: a microservice whose sole reason for 
 A task endpoint is a functional endpoint that performs a single step of a workflow. Its signature always includes `ctx context.Context` and `flow *workflow.Flow` as the first two parameters, followed by input arguments sourced from the flow's state, and returns output arguments written back to the state plus `err error`.
 
 ```go
-import "github.com/microbus-io/fabric/workflow"
+import "github.com/microbus-io/dwarf/workflow"
 
 func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error) {
 	if creditScore >= 700 {
@@ -43,34 +43,36 @@ Tasks are registered on port `:428` by default.
 
 A workflow graph endpoint returns a `*workflow.Graph` that defines the structure of a workflow - its tasks, transitions, and merge strategies. The graph is fetched once when a flow is created and stored with it.
 
+**Naming convention: graph names and task (node) names are PascalCase** (`CreditApproval`, `VerifyCredit`) - they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs the nodes resolve to (`myserviceapi.VerifyCredit.URL()`) and the camelCase state field names (`creditVerified`). `AddTask(name, url)` registers a node under a PascalCase name that resolves to the task's URL; every transition, `SetFanIn`, `flow.Goto`, and `BreakBefore` then refers to that PascalCase node name, never the URL.
+
 ```go
-import "github.com/microbus-io/fabric/workflow"
+import "github.com/microbus-io/dwarf/workflow"
 
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) {
-	submitApp := myserviceapi.SubmitApplication.URL()
-	verifyCredit := myserviceapi.VerifyCredit.URL()
-	verifyEmployment := myserviceapi.VerifyEmployment.URL()
-	finalDecision := myserviceapi.FinalDecision.URL()
+	graph = workflow.NewGraph("CreditApproval", myserviceapi.CreditApproval.URL())
+	// AddTask(PascalCaseNodeName, dispatchURL): the node name is the graph identifier; the URL is where it runs.
+	graph.AddTask("SubmitApplication", myserviceapi.SubmitApplication.URL())
+	graph.AddTask("VerifyCredit", myserviceapi.VerifyCredit.URL())
+	graph.AddTask("VerifyEmployment", myserviceapi.VerifyEmployment.URL())
+	graph.AddTask("FinalDecision", myserviceapi.FinalDecision.URL())
 
-	graph = workflow.NewGraph(myserviceapi.CreditApproval.URL())
-
-	// Fan-out: submitApp has two normal outgoing transitions, so verifyCredit and verifyEmployment run as parallel branches
-	graph.AddTransition(submitApp, verifyCredit)
-	graph.AddTransition(submitApp, verifyEmployment)
+	// Fan-out: SubmitApplication has two normal outgoing transitions, so VerifyCredit and VerifyEmployment run as parallel branches
+	graph.AddTransition("SubmitApplication", "VerifyCredit")
+	graph.AddTransition("SubmitApplication", "VerifyEmployment")
 	// Fan-in: every parallel branch must converge on a node marked with SetFanIn, or graph.Validate rejects the graph
-	graph.SetFanIn(finalDecision)
-	graph.AddTransition(verifyCredit, finalDecision)
-	graph.AddTransition(verifyEmployment, finalDecision)
-	// Conditional transition
-	graph.AddTransitionWhen(finalDecision, workflow.END, "creditVerified")
-	// Goto transition (taken only when task calls flow.Goto)
-	graph.AddTransitionGoto(finalDecision, submitApp)
+	graph.SetFanIn("FinalDecision")
+	graph.AddTransition("VerifyCredit", "FinalDecision")
+	graph.AddTransition("VerifyEmployment", "FinalDecision")
+	// Conditional transition: the when expression references a state field, which stays camelCase
+	graph.AddTransitionWhen("FinalDecision", workflow.END, "creditVerified")
+	// Goto transition (taken only when the task calls flow.Goto), targeting a PascalCase node name
+	graph.AddTransitionGoto("FinalDecision", "SubmitApplication")
 
 	return graph, nil
 }
 ```
 
-Task URLs in the graph are obtained from the generated API package constants (e.g. `myserviceapi.TaskName.URL()`).
+Task URLs in the graph are obtained from the generated API package constants (e.g. `myserviceapi.TaskName.URL()`); the node names you pass alongside them are PascalCase labels you choose (conventionally matching the task's name).
 
 ## The `workflow` Package
 
@@ -82,7 +84,7 @@ Task URLs in the graph are obtained from the generated API package constants (e.
 
 Control signals on `Flow`:
 
-- `flow.Goto(taskURL)` - override transition routing to jump to a specific task
+- `flow.Goto(taskName)` - override transition routing to jump to a specific task node (its PascalCase node name, not its URL)
 - `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true while attempts remain, false once `maxAttempts` is reached. The single retry primitive: it carries no condition of its own, so the task writes the retryable predicate explicitly in the surrounding `if`. Immediate retry is zero delays; unlimited is `math.MaxInt32`. Timeout-only retry is `if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(...)` - both foreman-side `pub.Timeout` and subscriber-side handler timeouts surface as 408
 - `flow.Sleep(duration)` - delay the next step by a duration
 - `flow.Interrupt(payload) (resumeData, yield, err)` - park the step for external input (human-in-the-loop). On the first call returns `yield=true` and the task must `return nil` immediately. On re-entry after `Resume(flowKey, data)`, returns `(data, false, nil)` so the task proceeds (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
@@ -90,17 +92,16 @@ Control signals on `Flow`:
 
 **`workflow.Graph`** defines workflow structure:
 
-- `NewGraph(name)` - create a new graph
-- `AddTask(taskURL)` - register a task node (first added becomes default entry point)
-- `SetEntryPoint(taskURL)` - override the default entry point
+- `NewGraph(name, url)` - create a new graph (name is a human-friendly PascalCase display label, defaulting to url when empty; url is the resolve key passed to the foreman)
+- `AddTask(name, taskURL)` - register a task node under a PascalCase name that resolves to taskURL (first added becomes the default entry point)
+- `SetEntryPoint(name)` - override the default entry point by node name
 - `AddTransition(from, to)` - unconditional transition; sibling unconditional/`When` transitions from the same node all fire in parallel (fan-out)
 - `AddTransitionWhen(from, to, when)` - conditional transition based on state expression; sibling `When` transitions are evaluated independently and *all* matching ones fire (fan-out, not first-match)
 - `AddTransitionSwitch(from, to, when)` - first-match-wins routing; siblings are evaluated in registration order and only the first whose expression matches fires. Use `when="true"` as the last branch for a default. Only one branch ever runs, so no `SetFanIn` is needed. See [Switch Transitions](#switch-transitions) below
 - `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called from the task body
-- `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field
-- `SetFanIn(taskURL)` - mark a node as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in)). `Switch` transitions do **not** count as fan-out and need no `SetFanIn`
+- `AddTransitionForEach(from, to, forEach, as)` - dynamic fan-out over a state array field (`from`/`to` are PascalCase node names; `forEach`/`as` are camelCase state fields)
+- `SetFanIn(name)` - mark a node (by PascalCase name) as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in)). `Switch` transitions do **not** count as fan-out and need no `SetFanIn`
 - `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
-- `AddTransitionOnTimeout(from, to)` - error transition taken only when the source task's error carries HTTP status 408 (both foreman-side and task-side timeouts). Wins over a plain OnError when the status matches
 - `SetReducer(field, reducer)` - attach a fan-in merge strategy to a state field (mandatory whenever a fan-in field needs anything other than last-write-wins; see Reducers below)
 - `Annotate(taskName, note)` - attach a short note that renders beneath the node in the Mermaid diagram (see [Annotating Tasks](#annotating-tasks) below)
 - `workflow.END` - pseudo-node indicating workflow termination
@@ -154,20 +155,20 @@ foreman fetches and validates the graph. Adding the fan-out without the matching
 to produce an invalid graph, so add the `SetFanIn` call in the same edit as the fan-out transitions.
 
 ```go
-graph.AddTask("split", myserviceapi.Split.URL())
-graph.AddTask("branchA", myserviceapi.BranchA.URL())
-graph.AddTask("branchB", myserviceapi.BranchB.URL())
-graph.AddTask("join", myserviceapi.Join.URL())
-graph.SetFanIn("join")                  // mark the convergence node
-graph.AddTransition("split", "branchA") // fan-out: two normal edges
-graph.AddTransition("split", "branchB")
-graph.AddTransition("branchA", "join")  // every branch converges on the fan-in node
-graph.AddTransition("branchB", "join")
-graph.AddTransition("join", workflow.END)
+graph.AddTask("Split", myserviceapi.Split.URL())
+graph.AddTask("BranchA", myserviceapi.BranchA.URL())
+graph.AddTask("BranchB", myserviceapi.BranchB.URL())
+graph.AddTask("Join", myserviceapi.Join.URL())
+graph.SetFanIn("Join")                  // mark the convergence node
+graph.AddTransition("Split", "BranchA") // fan-out: two normal edges
+graph.AddTransition("Split", "BranchB")
+graph.AddTransition("BranchA", "Join")  // every branch converges on the fan-in node
+graph.AddTransition("BranchB", "Join")
+graph.AddTransition("Join", workflow.END)
 ```
 
-The same rule applies to a `forEach` fan-out: `graph.AddTransitionForEach("split", "worker", "items", "item")` followed
-by `graph.AddTransition("worker", "join")` and `graph.SetFanIn("join")`. An empty `items` array spawns zero branches;
+The same rule applies to a `forEach` fan-out: `graph.AddTransitionForEach("Split", "Worker", "items", "item")` followed
+by `graph.AddTransition("Worker", "Join")` and `graph.SetFanIn("Join")` (node names PascalCase; `items`/`item` are state fields). An empty `items` array spawns zero branches;
 the foreman then creates the fan-in step directly, so the flow still continues past the join.
 
 State fields produced by the parallel branches are merged at the fan-in node by reducers (see Reducers above). Attach
@@ -189,7 +190,7 @@ Alongside the strip, the foreman injects two read-only fields on each branch's s
 - `<as>Index` (`int`) - this element's 0-based position in the `forEach` array.
 - `<as>Count` (`int`) - the cohort size (total elements in the `forEach` array).
 
-For `AddTransitionForEach("split", "worker", "items", "item")` the branch sees `item`, `itemIndex`, `itemCount`.
+For `AddTransitionForEach("Split", "Worker", "items", "item")` the branch sees `item`, `itemIndex`, `itemCount`.
 A task argument by that name (e.g. `func Worker(... item string, itemIndex int, itemCount int)`) is auto-populated
 from state like any other. These fields are present only for `forEach` fan-out, not static fan-out.
 
@@ -214,22 +215,22 @@ error transitions.
 `AddTransitionSwitch(from, to, when)` declares a first-match-wins outgoing transition. When the source task finishes, the foreman walks the source's `Switch` transitions in declaration order, evaluates each `when` expression against the post-task state, and follows the **first** one that matches. The remaining `Switch` transitions are skipped on that step. Because exactly one branch ever fires, the downstream branches do **not** need to converge on a `SetFanIn` node.
 
 ```go
-graph.AddTask("router", myserviceapi.Router.URL())
-graph.AddTask("highValue", myserviceapi.HighValue.URL())
-graph.AddTask("midValue", myserviceapi.MidValue.URL())
-graph.AddTask("lowValue", myserviceapi.LowValue.URL())
-graph.AddTransitionSwitch("router", "highValue", "amount >= 10000")
-graph.AddTransitionSwitch("router", "midValue",  "amount >= 1000")
-graph.AddTransitionSwitch("router", "lowValue",  "true") // default branch
-graph.AddTransition("highValue", workflow.END)
-graph.AddTransition("midValue", workflow.END)
-graph.AddTransition("lowValue", workflow.END)
+graph.AddTask("Router", myserviceapi.Router.URL())
+graph.AddTask("HighValue", myserviceapi.HighValue.URL())
+graph.AddTask("MidValue", myserviceapi.MidValue.URL())
+graph.AddTask("LowValue", myserviceapi.LowValue.URL())
+graph.AddTransitionSwitch("Router", "HighValue", "amount >= 10000")
+graph.AddTransitionSwitch("Router", "MidValue", "amount >= 1000")
+graph.AddTransitionSwitch("Router", "LowValue", "true") // default branch
+graph.AddTransition("HighValue", workflow.END)
+graph.AddTransition("MidValue", workflow.END)
+graph.AddTransition("LowValue", workflow.END)
 ```
 
 Rules the validator enforces:
 
 - `when` is required on every `Switch` transition. Use `"true"` for the default catch-all.
-- A node that uses `Switch` must declare **every** success-path outgoing transition as `Switch`. Mixing `Switch` with `When`, plain `AddTransition`, `AddTransitionForEach`, or `AddTransitionGoto` from the same source is rejected. `AddTransitionOnError` / `AddTransitionOnTimeout` stay allowed because they live on a different axis (error vs. success).
+- A node that uses `Switch` must declare **every** success-path outgoing transition as `Switch`. Mixing `Switch` with `When`, plain `AddTransition`, `AddTransitionForEach`, or `AddTransitionGoto` from the same source is rejected. `AddTransitionOnError` stays allowed because they live on a different axis (error vs. success).
 - `Switch` cannot combine with `ForEach`, `WithGoto`, or `OnError` on the same transition.
 
 If no `Switch` matches at runtime, the flow ends at the source node (no successor is created, the source step completes, and the flow transitions to `completed` via the normal "no next steps" path). To make termination explicit, target `workflow.END` from a final `Switch` with a tail predicate.
@@ -341,11 +342,11 @@ not a graph node.
 
 ```go
 func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) {
-    graph = workflow.NewGraph(myapi.MyWorkflow.URL())
-    graph.AddTask("runChat", myapi.RunChat.URL())               // calls flow.Subgraph(llmapi.ChatLoop, ...)
-    graph.AddTask("handleResponse", myapi.HandleResponse.URL()) // reads the final assistant message
-    graph.AddTransition("runChat", "handleResponse")
-    graph.AddTransition("handleResponse", workflow.END)
+    graph = workflow.NewGraph("MyWorkflow", myapi.MyWorkflow.URL())
+    graph.AddTask("RunChat", myapi.RunChat.URL())               // calls flow.Subgraph(llmapi.ChatLoop, ...)
+    graph.AddTask("HandleResponse", myapi.HandleResponse.URL()) // reads the final assistant message
+    graph.AddTransition("RunChat", "HandleResponse")
+    graph.AddTransition("HandleResponse", workflow.END)
     return graph, nil
 }
 ```
@@ -638,9 +639,9 @@ status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflo
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 ```
 
-`Priority`, `FairnessKey`, and `FairnessWeight` are immutable for the life of the flow and are inherited unchanged by `Continue`, `Fork`, and subgraphs. The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
+`Priority`, `FairnessKey`, and `FairnessWeight` are immutable for the life of the flow and are inherited unchanged by `Continue` and subgraphs (and preserved in place by `Restart`/`RestartFrom`). The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
 
-`StartAt` sets the entry step's `not_before` and is honored by `Create`, `Run`, `Continue`, and `Fork`; subgraphs do not inherit it. The flow can still be created and started immediately, but no worker will pick up its entry step before `StartAt`. A `Run` call blocks across the delay, so callers wanting fire-and-forget delayed execution should use `Create` + `Start` and walk away.
+`StartAt` sets the entry step's `not_before` and is honored by `Create`, `Run`, and `Continue`; subgraphs do not inherit it. The flow can still be created and started immediately, but no worker will pick up its entry step before `StartAt`. A `Run` call blocks across the delay, so callers wanting fire-and-forget delayed execution should use `Create` + `Start` and walk away.
 
 The generated per-workflow `Executor` methods keep their minimal signatures. To run a *typed* workflow with options in a test, attach them once with the `WithFlowOptions` builder:
 
@@ -690,7 +691,8 @@ foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(
 
 - `foremanapi.NewClient(svc).BreakBefore(ctx, flowID, taskName, true)` - pause before a task executes
 - `foremanapi.NewClient(svc).History(ctx, flowID)` - step-by-step execution trace with state snapshots and nested subgraph history
-- `foremanapi.NewClient(svc).Fork(ctx, stepKey, stateOverrides)` - create a new flow from any step checkpoint with modified state
+- `foremanapi.NewClient(svc).Restart(ctx, flowKey, stateOverrides)` - re-run a terminated flow from its entry step with modified state
+- `foremanapi.NewClient(svc).RestartFrom(ctx, stepKey, stateOverrides)` - rewind the DAG subtree below a chosen step and re-run from there with modified state
 
 ## Mocking Workflows
 

@@ -140,20 +140,20 @@ type ToDo interface {
 
 Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
 
-Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("name", taskURL)`, then write transitions in terms of names. Use camelCase names that match the task endpoint (e.g. `"taskA"` for `TaskA`). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
+Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("Name", taskURL)`, then write transitions in terms of names. Use **PascalCase** node names matching the task endpoint (e.g. `"TaskA"` for `TaskA`) — they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs and the camelCase state field names. The graph display name passed to `NewGraph` is PascalCase too (conventionally the workflow's own name). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
 
 ```go
 /*
 MyWorkflow does X.
 */
 func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MyWorkflow
-	graph = workflow.NewGraph(myserviceapi.MyWorkflow.URL())
-	graph.AddTask("taskA", myserviceapi.TaskA.URL())
-	graph.AddTask("taskB", myserviceapi.TaskB.URL())
-	graph.AddTask("taskC", myserviceapi.TaskC.URL())
-	// graph.AddTransition("taskA", "taskB")
-	// graph.AddTransitionWhen("taskB", workflow.END, "done == true")
-	// graph.AddTransitionGoto("taskB", "taskC")
+	graph = workflow.NewGraph("MyWorkflow", myserviceapi.MyWorkflow.URL())
+	graph.AddTask("TaskA", myserviceapi.TaskA.URL())
+	graph.AddTask("TaskB", myserviceapi.TaskB.URL())
+	graph.AddTask("TaskC", myserviceapi.TaskC.URL())
+	// graph.AddTransition("TaskA", "TaskB")
+	// graph.AddTransitionWhen("TaskB", workflow.END, "done == true")
+	// graph.AddTransitionGoto("TaskB", "TaskC")
 	return graph, nil
 }
 ```
@@ -240,7 +240,7 @@ Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microse
 
 Append the integration test to `service_test.go`. The test includes the foreman service in the app to enable end-to-end workflow execution.
 
-Ensure that `"github.com/microbus-io/fabric/coreservices/foreman"`, `"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"`, and `"github.com/microbus-io/fabric/workflow"` are imported in `service_test.go`. Add them if not already present. (foreman is needed to add the foreman microservice to the test bundle, foremanapi for `NewClient`, and workflow for the status constants like `workflow.StatusCompleted`.)
+Ensure that `"github.com/microbus-io/fabric/coreservices/foreman"`, `"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"`, and `"github.com/microbus-io/dwarf/workflow"` are imported in `service_test.go`. Add them if not already present. (foreman is needed to add the foreman microservice to the test bundle, foremanapi for `NewClient`, and workflow for the status constants like `workflow.StatusCompleted`.)
 
 ```go
 func TestMyService_MyWorkflow(t *testing.T) { // MARKER: MyWorkflow

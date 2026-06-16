@@ -20,7 +20,7 @@ package main
 // topology only needs to know:
 //   - which other services are dependencies (any *api import)
 //   - which services we hook events from (any NewHook call)
-//   - whether the service touches SQL (database/sql or sequel imports)
+//   - whether the service touches SQL (database/sql, sequel, or dwarf engine imports)
 //   - whether the service runs a Python venv (pyvenv import)
 //   - whether the service uses HTTP egress + which external host(s)
 //
@@ -47,7 +47,7 @@ type scanned struct {
 	service
 	Deps   []string // hostnames of services this one depends on (via *api client)
 	Events []string // hostnames of services this one hooks events from
-	DB     string   // "SQL" if database/sql or sequel is imported, else ""
+	DB     string   // "SQL" if database/sql, sequel, or the dwarf engine is imported, else ""
 	Py     string   // "Py" if pyvenv is imported, else ""
 	Cloud  string   // external host (if exactly one), "various" (if >1 or none extractable), or "" if no egress
 }
@@ -86,9 +86,12 @@ func scanService(s service, bundleDir string, bundleHosts map[string]bool, resol
 		return out, err
 	}
 
-	// SQL: detected by import only.
+	// SQL: detected by import only. The dwarf engine is a SQL-backed
+	// orchestrator (it requires a DSN), so any service embedding it is
+	// SQL-backed even though it imports sequel only transitively.
 	for _, imp := range imports {
-		if imp == "database/sql" || imp == "github.com/microbus-io/sequel" || strings.HasPrefix(imp, "github.com/microbus-io/sequel/") {
+		if imp == "database/sql" || imp == "github.com/microbus-io/sequel" || strings.HasPrefix(imp, "github.com/microbus-io/sequel/") ||
+			imp == "github.com/microbus-io/dwarf/engine" {
 			out.DB = "SQL"
 			break
 		}

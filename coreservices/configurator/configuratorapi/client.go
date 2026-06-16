@@ -24,12 +24,12 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
 )
 
 var (

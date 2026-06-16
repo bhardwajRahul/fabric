@@ -15,7 +15,7 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/sequel"
 
 	"github.com/microbus-io/fabric/busstop/busstopapi"
@@ -176,6 +176,10 @@ func (svc *Service) openDatabase(ctx context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// Route sequel's spans, sequel_* metrics, and migration logs through the connector's telemetry pipeline.
+	svc.db.SetTracerProvider(svc.TracerProvider())
+	svc.db.SetMeterProvider(svc.MeterProvider())
+	svc.db.SetLogger(svc.Logger())
 	dirFS, err := fs.Sub(svc.ResFS(), "sql")
 	if err != nil {
 		return errors.Trace(err)

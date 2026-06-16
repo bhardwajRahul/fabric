@@ -11,11 +11,11 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/microbus-io/bespa v0.1.3
 	github.com/microbus-io/boolexp v1.1.1
+	github.com/microbus-io/dwarf v0.4.1
 	github.com/microbus-io/errors v1.0.1
 	github.com/microbus-io/pyvenv v1.0.3
-	github.com/microbus-io/sequel v1.10.1
+	github.com/microbus-io/sequel v1.10.2
 	github.com/microbus-io/testarossa v0.7.3
-	github.com/microbus-io/throttle v0.3.1
 	github.com/mnako/letters v0.2.8
 	github.com/nats-io/jwt/v2 v2.8.2
 	github.com/nats-io/nats-server/v2 v2.14.0
@@ -62,7 +62,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
-	github.com/gomarkdown/markdown v0.0.0-20260417124207-7d523f7318df // indirect
+	github.com/gomarkdown/markdown v0.0.0-20260614204949-e08cff860f76 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
@@ -73,6 +73,7 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/microbus-io/copyrighter v1.4.0 // indirect
+	github.com/microbus-io/throttle v0.3.1 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
@@ -85,17 +86,16 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/log v0.20.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.5 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260610212136-7ab31c22f7ad // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260615183401-62b3387ff324 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260615183401-62b3387ff324 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	modernc.org/libc v1.73.3 // indirect
+	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.52.0 // indirect

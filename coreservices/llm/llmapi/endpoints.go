@@ -80,8 +80,8 @@ type InitChatOut struct { // MARKER: InitChat
 
 // CallLLMIn are the input arguments of CallLLM.
 type CallLLMIn struct { // MARKER: CallLLM
-	Provider     string    `json:"provider,omitzero"`
-	Model        string    `json:"model,omitzero"`
+	Provider string    `json:"provider,omitzero"`
+	Model    string    `json:"model,omitzero"`
 	Messages []Message `json:"messages,omitzero"`
 }
 
@@ -131,7 +131,7 @@ type ChatLoopIn struct { // MARKER: ChatLoop
 // ChatLoopOut are the output arguments of ChatLoop.
 type ChatLoopOut struct { // MARKER: ChatLoop
 	MessagesOut []Message `json:"messages,omitzero"`
-	Usage           Usage     `json:"usage,omitzero"`
+	Usage       Usage     `json:"usage,omitzero"`
 }
 
 var (

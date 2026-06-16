@@ -22,8 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/fabric/connector"
-	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"

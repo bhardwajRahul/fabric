@@ -29,24 +29,46 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "panels": [],
       "title": "Flows",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -54,7 +76,13 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showPercentChange": false,
         "text": {},
         "textMode": "auto",
@@ -63,9 +91,12 @@
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum(increase(microbus_flows_started_total{deployment=~\"$deployment\"}[$__range])))",
+          "expr": "round(sum(increase(dwarf_flows_started_total{deployment=~\"$deployment\", service=~\"$service\"}[$__range])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -76,17 +107,34 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
       "id": 3,
       "options": {
         "colorMode": "value",
@@ -94,7 +142,13 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showPercentChange": false,
         "text": {},
         "textMode": "auto",
@@ -103,9 +157,12 @@
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum(increase(microbus_flows_terminated_total{deployment=~\"$deployment\", status=\"completed\"}[$__range])))",
+          "expr": "round(sum(increase(dwarf_flows_terminated_total{deployment=~\"$deployment\", service=~\"$service\", status=\"completed\"}[$__range])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -116,17 +173,34 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "id": 4,
       "options": {
         "colorMode": "value",
@@ -134,7 +208,13 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showPercentChange": false,
         "text": {},
         "textMode": "auto",
@@ -143,9 +223,12 @@
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum(increase(microbus_flows_terminated_total{deployment=~\"$deployment\", status=\"failed\"}[$__range])))",
+          "expr": "round(sum(increase(dwarf_flows_terminated_total{deployment=~\"$deployment\", service=~\"$service\", status=\"failed\"}[$__range])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -156,17 +239,34 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "orange"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "id": 5,
       "options": {
         "colorMode": "value",
@@ -174,7 +274,13 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showPercentChange": false,
         "text": {},
         "textMode": "auto",
@@ -183,9 +289,12 @@
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum(increase(microbus_flows_terminated_total{deployment=~\"$deployment\", status=\"cancelled\"}[$__range])))",
+          "expr": "round(sum(increase(dwarf_flows_terminated_total{deployment=~\"$deployment\", service=~\"$service\", status=\"cancelled\"}[$__range])))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -196,10 +305,15 @@
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -211,35 +325,72 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
       "id": 6,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (workflow) (increase(microbus_flows_started_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (workflow) (increase(dwarf_flows_started_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
           "legendFormat": "{{workflow}}",
           "range": true,
@@ -250,10 +401,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -265,44 +421,103 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": [
           {
-            "matcher": {"id": "byRegexp", "options": ".*failed.*"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*failed.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byRegexp", "options": ".*cancelled.*"},
-            "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*cancelled.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
       "id": 7,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (workflow, status) (increase(microbus_flows_terminated_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (workflow, status) (increase(dwarf_flows_terminated_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
           "legendFormat": "{{workflow}} ({{status}})",
           "range": true,
@@ -314,17 +529,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
       "id": 8,
       "panels": [],
       "title": "Steps",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -336,37 +561,74 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
       "id": 9,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (task) (increase(microbus_steps_executed_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task_name) (increase(dwarf_steps_executed_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}}",
+          "legendFormat": "{{task_name}}",
           "range": true,
           "refId": "A"
         }
@@ -375,10 +637,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -390,40 +657,133 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "normal"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": [
-          {"matcher": {"id": "byName", "options": "completed"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
-          {"matcher": {"id": "byName", "options": "failed"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]},
-          {"matcher": {"id": "byName", "options": "interrupted"}, "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]},
-          {"matcher": {"id": "byName", "options": "retried"}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]}
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "completed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "interrupted"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retried"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
         ]
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
       "id": 10,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (status) (increase(microbus_steps_executed_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (status) (increase(dwarf_steps_executed_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
           "legendFormat": "{{status}}",
           "range": true,
@@ -435,17 +795,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 22},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "id": 11,
       "panels": [],
       "title": "Operational Health",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -457,36 +827,74 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 23},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
       "id": 12,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "sum by (instance) (microbus_steps_queue_depth{deployment=~\"$deployment\"})",
+          "expr": "sum by (instance) (dwarf_steps_queue_depth{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "{{instance}}",
           "range": true,
@@ -497,10 +905,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -512,36 +925,77 @@
             "drawStyle": "bars",
             "fillOpacity": 50,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "area"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 23},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      },
       "id": 13,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum(increase(microbus_steps_recovered_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum(increase(dwarf_steps_recovered_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
           "legendFormat": "recovered",
           "range": true,
@@ -552,18 +1006,130 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Parked steps the defense-in-depth wedge sweep had to recover, by park type (subgraph/breaker). Should always be zero in steady state - a nonzero value means a park release was lost and a latent bug let a step wedge.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "round(sum by (park_type) (increase(dwarf_steps_unwedged_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
+          "instant": false,
+          "legendFormat": "{{park_type}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Steps Unwedged",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 31},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
       "id": 14,
       "panels": [],
       "title": "Prioritization & Fairness",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -575,36 +1141,74 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "normal"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
       "id": 15,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "sum by (priority) (microbus_steps_pending{deployment=~\"$deployment\"})",
+          "expr": "sum by (priority) (dwarf_steps_pending{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "p{{priority}}",
           "range": true,
@@ -615,10 +1219,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -630,36 +1239,74 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
       "id": 16,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "max by (priority) (microbus_steps_oldest_pending_age_seconds{deployment=~\"$deployment\"})",
+          "expr": "max by (priority) (dwarf_steps_oldest_pending_age_seconds{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "p{{priority}}",
           "range": true,
@@ -670,10 +1317,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -685,54 +1337,117 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "pending backlog"},
-            "properties": [{"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "pending backlog"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "local cache"},
-            "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "local cache"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
       "id": 17,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "sum(microbus_steps_pending{deployment=~\"$deployment\"})",
+          "expr": "sum(dwarf_steps_pending{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "pending backlog",
           "range": true,
           "refId": "A"
         },
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "sum(microbus_steps_queue_depth{deployment=~\"$deployment\"})",
+          "expr": "sum(dwarf_steps_queue_depth{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "local cache",
           "range": true,
@@ -743,10 +1458,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -758,36 +1478,74 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
       "id": 19,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "none"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "max by (priority) (microbus_steps_fairness_keys{deployment=~\"$deployment\"})",
+          "expr": "max by (priority) (dwarf_steps_fairness_keys{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
           "legendFormat": "p{{priority}}",
           "range": true,
@@ -799,17 +1557,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 48},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
       "id": 20,
       "panels": [],
       "title": "Backpressure",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -821,52 +1589,108 @@
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"log": 10, "type": "log"},
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 1,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": [
           {
-            "matcher": {"id": "byRegexp", "options": ".* running$"},
-            "properties": [{"id": "custom.lineStyle", "value": {"dash": [6, 4], "fill": "dash"}}]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* running$"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    6,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
           }
         ]
       },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 49},
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
       "id": 21,
       "options": {
-        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "max by (task) (microbus_task_rate_limit{deployment=~\"$deployment\"})",
+          "expr": "max by (task_url) (dwarf_task_rate_limit{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
-          "legendFormat": "{{task}} rate ceiling (ops/sec)",
+          "legendFormat": "{{task_url}} rate ceiling (ops/sec)",
           "range": true,
           "refId": "A"
         },
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "max by (task) (microbus_task_concurrency_running{deployment=~\"$deployment\"})",
+          "expr": "max by (task_url) (dwarf_task_concurrency_running{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
-          "legendFormat": "{{task}} running",
+          "legendFormat": "{{task_url}} running",
           "range": true,
           "refId": "B"
         }
@@ -875,10 +1699,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -890,38 +1719,75 @@
             "drawStyle": "bars",
             "fillOpacity": 50,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 57},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 57
+      },
       "id": 22,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (task) (increase(microbus_task_rate_cuts_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task_url) (increase(dwarf_task_rate_cuts_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}}",
+          "legendFormat": "{{task_url}}",
           "range": true,
           "refId": "A"
         }
@@ -930,10 +1796,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -945,38 +1816,75 @@
             "drawStyle": "bars",
             "fillOpacity": 50,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 57},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 57
+      },
       "id": 23,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (task) (increase(microbus_steps_skipped_saturated_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task_url) (increase(dwarf_steps_skipped_saturated_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}}",
+          "legendFormat": "{{task_url}}",
           "range": true,
           "refId": "A"
         }
@@ -986,17 +1894,27 @@
     },
     {
       "collapsed": false,
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 65},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      },
       "id": 24,
       "panels": [],
       "title": "Circuit Breaker",
       "type": "row"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
+          "color": {
+            "mode": "thresholds"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -1008,41 +1926,92 @@
             "drawStyle": "line",
             "fillOpacity": 30,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "area"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
           },
           "mappings": [
-            {"options": {"0": {"text": "closed"}, "1": {"text": "tripped"}}, "type": "value"}
+            {
+              "options": {
+                "0": {
+                  "text": "closed"
+                },
+                "1": {
+                  "text": "tripped"
+                }
+              },
+              "type": "value"
+            }
           ],
           "max": 1,
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 66},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 66
+      },
       "id": 25,
       "options": {
-        "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": false, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "max by (task) (microbus_task_breaker_state{deployment=~\"$deployment\"})",
+          "expr": "max by (task_url) (dwarf_task_breaker_state{deployment=~\"$deployment\", service=~\"$service\"})",
           "instant": false,
-          "legendFormat": "{{task}}",
+          "legendFormat": "{{task_url}}",
           "range": true,
           "refId": "A"
         }
@@ -1051,10 +2020,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -1066,38 +2040,75 @@
             "drawStyle": "bars",
             "fillOpacity": 50,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "none"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 66},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 66
+      },
       "id": 26,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (task, cause) (increase(microbus_task_breaker_trips_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task_url, cause) (increase(dwarf_task_breaker_trips_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}} ({{cause}})",
+          "legendFormat": "{{task_url}} ({{cause}})",
           "range": true,
           "refId": "A"
         }
@@ -1106,10 +2117,15 @@
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -1121,58 +2137,841 @@
             "drawStyle": "bars",
             "fillOpacity": 50,
             "gradientMode": "none",
-            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {"type": "linear"},
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": {"group": "A", "mode": "normal"},
-            "thresholdsStyle": {"mode": "off"}
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
           "unit": "short"
         },
         "overrides": [
-          {"matcher": {"id": "byRegexp", "options": ".* success$"}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]},
-          {"matcher": {"id": "byRegexp", "options": ".* failure$"}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]}
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* success$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* failure$"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
         ]
       },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 74},
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 74
+      },
       "id": 27,
       "options": {
-        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true},
-        "tooltip": {"hideZeros": true, "mode": "multi", "sort": "desc"}
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "pluginVersion": "12.0.1",
       "targets": [
         {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
           "editorMode": "code",
-          "expr": "round(sum by (task, outcome, cause) (increase(microbus_task_breaker_probes_total{deployment=~\"$deployment\"}[$interval])))",
+          "expr": "round(sum by (task_url, outcome, cause) (increase(dwarf_task_breaker_probes_total{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
           "instant": false,
-          "legendFormat": "{{task}} {{outcome}} ({{cause}})",
+          "legendFormat": "{{task_url}} {{outcome}} ({{cause}})",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Per-Task Breaker Probes by Outcome and Cause",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 82
+      },
+      "id": 29,
+      "panels": [],
+      "title": "Engine Persistence (sequel)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 83
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(sequel_transaction_duration_seconds_count{deployment=~\"$deployment\", service=~\"$service\", outcome=\"rolledback\"}[$__range])) / clamp_min(sum(rate(sequel_transaction_duration_seconds_count{deployment=~\"$deployment\", service=~\"$service\"}[$__range])), 1)",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Transaction Rollback Ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 83
+      },
+      "id": 31,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "round(sum(increase(sequel_lock_contention_total{deployment=~\"$deployment\", service=~\"$service\"}[$__range])))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Lock Contention",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 83
+      },
+      "id": 32,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sequel_query_duration_seconds_bucket{deployment=~\"$deployment\", service=~\"$service\"}[$__range])))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Query Latency 99%ile",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 83
+      },
+      "id": 33,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(sequel_pool_in_use_connections{deployment=~\"$deployment\", service=~\"$service\"})",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Connections In Use",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 87
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (outcome) (rate(sequel_transaction_duration_seconds_count{deployment=~\"$deployment\", service=~\"$service\"}[$interval]))",
+          "instant": false,
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Database Transactions by Outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 87
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(sequel_query_duration_seconds_bucket{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
+          "instant": false,
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sequel_query_duration_seconds_bucket{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
+          "instant": false,
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sequel_query_duration_seconds_bucket{deployment=~\"$deployment\", service=~\"$service\"}[$interval])))",
+          "instant": false,
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Database Query Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 95
+      },
+      "id": 36,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (database) (sequel_pool_open_connections{deployment=~\"$deployment\", service=~\"$service\"})",
+          "instant": false,
+          "legendFormat": "{{database}} open",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (database) (sequel_pool_in_use_connections{deployment=~\"$deployment\", service=~\"$service\"})",
+          "instant": false,
+          "legendFormat": "{{database}} in-use",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (database) (sequel_pool_idle_connections{deployment=~\"$deployment\", service=~\"$service\"})",
+          "instant": false,
+          "legendFormat": "{{database}} idle",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Connection Pool by Shard",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "cps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 95
+      },
+      "id": 37,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": true,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.0.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (database) (rate(sequel_pool_wait_count{deployment=~\"$deployment\", service=~\"$service\"}[$interval]))",
+          "instant": false,
+          "legendFormat": "{{database}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Connection Wait Rate by Shard",
+      "type": "timeseries"
     }
   ],
   "preload": false,
   "refresh": "",
   "schemaVersion": 41,
-  "tags": ["microbus"],
+  "tags": [
+    "microbus"
+  ],
   "templating": {
     "list": [
       {
         "allowCustomValue": false,
-        "current": {"text": "Prometheus", "value": "prometheus"},
+        "current": {
+          "text": "Prometheus",
+          "value": "prometheus"
+        },
         "description": "",
         "includeAll": false,
         "label": "Data source",
@@ -1185,8 +2984,14 @@
       },
       {
         "allowCustomValue": false,
-        "current": {"text": "LOCAL", "value": "LOCAL"},
-        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "current": {
+          "text": "LOCAL",
+          "value": "LOCAL"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "definition": "label_values(microbus_uptime_duration_seconds,deployment)",
         "label": "Deployment",
         "name": "deployment",
@@ -1202,33 +3007,112 @@
         "type": "query"
       },
       {
-        "current": {"text": "1h", "value": "1h"},
+        "allowCustomValue": false,
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(dwarf_steps_queue_depth{deployment=~\"$deployment\"},service)",
+        "includeAll": false,
+        "label": "Service",
+        "name": "service",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(dwarf_steps_queue_depth{deployment=~\"$deployment\"},service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "1h",
+          "value": "1h"
+        },
         "description": "",
         "label": "Interval",
         "name": "interval",
         "options": [
-          {"selected": false, "text": "1m", "value": "1m"},
-          {"selected": false, "text": "4m", "value": "4m"},
-          {"selected": false, "text": "5m", "value": "5m"},
-          {"selected": false, "text": "10m", "value": "10m"},
-          {"selected": false, "text": "15m", "value": "15m"},
-          {"selected": false, "text": "30m", "value": "30m"},
-          {"selected": true, "text": "1h", "value": "1h"},
-          {"selected": false, "text": "3h", "value": "3h"},
-          {"selected": false, "text": "4h", "value": "4h"},
-          {"selected": false, "text": "6h", "value": "6h"},
-          {"selected": false, "text": "12h", "value": "12h"},
-          {"selected": false, "text": "24h", "value": "24h"}
+          {
+            "selected": false,
+            "text": "1m",
+            "value": "1m"
+          },
+          {
+            "selected": false,
+            "text": "4m",
+            "value": "4m"
+          },
+          {
+            "selected": false,
+            "text": "5m",
+            "value": "5m"
+          },
+          {
+            "selected": false,
+            "text": "10m",
+            "value": "10m"
+          },
+          {
+            "selected": false,
+            "text": "15m",
+            "value": "15m"
+          },
+          {
+            "selected": false,
+            "text": "30m",
+            "value": "30m"
+          },
+          {
+            "selected": true,
+            "text": "1h",
+            "value": "1h"
+          },
+          {
+            "selected": false,
+            "text": "3h",
+            "value": "3h"
+          },
+          {
+            "selected": false,
+            "text": "4h",
+            "value": "4h"
+          },
+          {
+            "selected": false,
+            "text": "6h",
+            "value": "6h"
+          },
+          {
+            "selected": false,
+            "text": "12h",
+            "value": "12h"
+          },
+          {
+            "selected": false,
+            "text": "24h",
+            "value": "24h"
+          }
         ],
         "query": "1m,4m,5m,10m,15m,30m,1h,3h,4h,6h,12h,24h",
         "type": "custom"
       }
     ]
   },
-  "time": {"from": "now-24h", "to": "now"},
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
   "title": "Workflow Overview",
-  "uid": "microbus_workflow",
+  "uid": "microbus_r6F4wH",
   "version": 3
 }

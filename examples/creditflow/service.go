@@ -26,9 +26,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 	"github.com/microbus-io/fabric/examples/creditflow/creditflowapi"
@@ -173,45 +173,43 @@ RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgr
 identityVerified output. It is one branch of the credit-application fan-out, converging at the review join.
 */
 func (svc *Service) RunIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) { // MARKER: RunIdentityVerification
-	out, yield, err := flow.Subgraph(creditflowapi.IdentityVerification.URL(), map[string]any{
-		"applicantName": applicantName,
-		"ssn":           ssn,
-		"address":       address,
-		"phone":         phone,
-	})
+	var out creditflowapi.IdentityVerificationOut
+	yield, err := flow.Subgraph(creditflowapi.IdentityVerification.URL(), creditflowapi.IdentityVerificationIn{
+		ApplicantName: applicantName,
+		SSN:           ssn,
+		Address:       address,
+		Phone:         phone,
+	}, &out)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 	if yield {
 		return false, nil
 	}
-	if v, ok := out["identityVerified"].(bool); ok {
-		return v, nil
-	}
-	return false, nil
+	return out.IdentityVerified, nil
 }
 
 /*
 IdentityVerification defines the workflow graph for the identity verification process.
 */
 func (svc *Service) IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: IdentityVerification
-	graph = workflow.NewGraph(creditflowapi.IdentityVerification.URL())
-	graph.AddTask("initIdentityVerification", creditflowapi.InitIdentityVerification.URL())
-	graph.AddTask("verifySSN", creditflowapi.VerifySSN.URL())
-	graph.AddTask("verifyAddress", creditflowapi.VerifyAddress.URL())
-	graph.AddTask("verifyPhoneNumber", creditflowapi.VerifyPhoneNumber.URL())
-	graph.AddTask("identityDecision", creditflowapi.IdentityDecision.URL())
-	graph.SetFanIn("identityDecision")
+	graph = workflow.NewGraph("IdentityVerification", creditflowapi.IdentityVerification.URL())
+	graph.AddTask("InitIdentityVerification", creditflowapi.InitIdentityVerification.URL())
+	graph.AddTask("VerifySSN", creditflowapi.VerifySSN.URL())
+	graph.AddTask("VerifyAddress", creditflowapi.VerifyAddress.URL())
+	graph.AddTask("VerifyPhoneNumber", creditflowapi.VerifyPhoneNumber.URL())
+	graph.AddTask("IdentityDecision", creditflowapi.IdentityDecision.URL())
+	graph.SetFanIn("IdentityDecision")
 	// Init fans out to SSN, address, and phone verification
-	graph.AddTransition("initIdentityVerification", "verifySSN")
-	graph.AddTransition("initIdentityVerification", "verifyAddress")
-	graph.AddTransition("initIdentityVerification", "verifyPhoneNumber")
+	graph.AddTransition("InitIdentityVerification", "VerifySSN")
+	graph.AddTransition("InitIdentityVerification", "VerifyAddress")
+	graph.AddTransition("InitIdentityVerification", "VerifyPhoneNumber")
 	// All verifications fan in to the identity decision
-	graph.AddTransition("verifySSN", "identityDecision")
-	graph.AddTransition("verifyAddress", "identityDecision")
-	graph.AddTransition("verifyPhoneNumber", "identityDecision")
+	graph.AddTransition("VerifySSN", "IdentityDecision")
+	graph.AddTransition("VerifyAddress", "IdentityDecision")
+	graph.AddTransition("VerifyPhoneNumber", "IdentityDecision")
 	// Decision terminates the subgraph
-	graph.AddTransition("identityDecision", workflow.END)
+	graph.AddTransition("IdentityDecision", workflow.END)
 	return graph, nil
 }
 
@@ -238,7 +236,7 @@ func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, credi
 	}
 	// Very borderline scores (550-579): request more info up to 2 times
 	if creditScore >= 550 && reviewAttempts < 2 {
-		flow.Goto(creditflowapi.RequestMoreInfo.URL())
+		flow.Goto("RequestMoreInfo")
 		return creditVerified, nil
 	}
 	// After 2 attempts with more info, approve borderline scores
@@ -435,47 +433,47 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 CreditApproval defines the workflow graph for the credit approval process.
 */
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CreditApproval
-	graph = workflow.NewGraph(creditflowapi.CreditApproval.URL())
-	graph.AddTask("submitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
-	graph.AddTask("verifyCredit", creditflowapi.VerifyCredit.URL())
-	graph.AddTask("verifyEmployment", creditflowapi.VerifyEmployment.URL())
-	graph.AddTask("identityVerification", creditflowapi.RunIdentityVerification.URL())
-	graph.AddTask("handleCreditError", creditflowapi.HandleCreditError.URL())
-	// reviewJoin and reviewCredit are two graph positions sharing the same task URL.
-	// reviewJoin is the fan-in nexus for the submit cohort; reviewCredit is reached
-	// sequentially from reviewJoin and hosts the goto loop with requestMoreInfo.
-	// Splitting them lets the lineage validator close the cohort frame at reviewJoin
-	// without conflicting with the goto re-entry into reviewCredit.
-	graph.AddTask("reviewJoin", creditflowapi.ReviewCredit.URL())
-	graph.AddTask("reviewCredit", creditflowapi.ReviewCredit.URL())
-	graph.AddTask("requestMoreInfo", creditflowapi.RequestMoreInfo.URL())
-	graph.AddTask("decision", creditflowapi.Decision.URL())
-	graph.SetFanIn("reviewJoin")
+	graph = workflow.NewGraph("CreditApproval", creditflowapi.CreditApproval.URL())
+	graph.AddTask("SubmitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
+	graph.AddTask("VerifyCredit", creditflowapi.VerifyCredit.URL())
+	graph.AddTask("VerifyEmployment", creditflowapi.VerifyEmployment.URL())
+	graph.AddTask("IdentityVerification", creditflowapi.RunIdentityVerification.URL())
+	graph.AddTask("HandleCreditError", creditflowapi.HandleCreditError.URL())
+	// ReviewJoin and ReviewCredit are two graph positions sharing the same task URL.
+	// ReviewJoin is the fan-in nexus for the submit cohort; ReviewCredit is reached
+	// sequentially from ReviewJoin and hosts the goto loop with RequestMoreInfo.
+	// Splitting them lets the lineage validator close the cohort frame at ReviewJoin
+	// without conflicting with the goto re-entry into ReviewCredit.
+	graph.AddTask("ReviewJoin", creditflowapi.ReviewCredit.URL())
+	graph.AddTask("ReviewCredit", creditflowapi.ReviewCredit.URL())
+	graph.AddTask("RequestMoreInfo", creditflowapi.RequestMoreInfo.URL())
+	graph.AddTask("Decision", creditflowapi.Decision.URL())
+	graph.SetFanIn("ReviewJoin")
 	graph.SetReducer("employmentFailures", workflow.ReducerAdd)
 	// Submit fans out to credit verification, identity verification (subgraph), and forEach employer verification
-	graph.AddTransition("submitCreditApplication", "verifyCredit")
+	graph.AddTransition("SubmitCreditApplication", "VerifyCredit")
 	// If credit verification fails with an error, route to the error handler instead of failing the flow
-	graph.AddTransitionOnError("verifyCredit", "handleCreditError")
-	graph.AddTransition("handleCreditError", "reviewJoin")
-	graph.AddTransitionForEach("submitCreditApplication", "verifyEmployment", "employers", "employerName")
-	graph.AddTransition("submitCreditApplication", "identityVerification")
+	graph.AddTransitionOnError("VerifyCredit", "HandleCreditError")
+	graph.AddTransition("HandleCreditError", "ReviewJoin")
+	graph.AddTransitionForEach("SubmitCreditApplication", "VerifyEmployment", "employers", "employerName")
+	graph.AddTransition("SubmitCreditApplication", "IdentityVerification")
 	// Employment failure counts are summed across all employer verifications by the Add
 	// reducer attached to `employmentFailures` above.
-	// All verifications fan in to reviewJoin (the fan-in nexus).
-	graph.AddTransition("verifyCredit", "reviewJoin")
-	graph.AddTransition("verifyEmployment", "reviewJoin")
-	graph.AddTransition("identityVerification", "reviewJoin")
-	// reviewJoin runs ReviewCredit's logic once on the merged state; if it gotos, the loop
-	// runs through requestMoreInfo and reviewCredit.
-	graph.AddTransitionGoto("reviewJoin", "requestMoreInfo")
-	graph.AddTransition("reviewJoin", "reviewCredit")
-	// reviewCredit may itself goto requestMoreInfo for borderline scores; requestMoreInfo
-	// loops back to reviewCredit (not reviewJoin — the cohort frame has already been closed).
-	graph.AddTransitionGoto("reviewCredit", "requestMoreInfo")
-	graph.AddTransition("requestMoreInfo", "reviewCredit")
+	// All verifications fan in to ReviewJoin (the fan-in nexus).
+	graph.AddTransition("VerifyCredit", "ReviewJoin")
+	graph.AddTransition("VerifyEmployment", "ReviewJoin")
+	graph.AddTransition("IdentityVerification", "ReviewJoin")
+	// ReviewJoin runs ReviewCredit's logic once on the merged state; if it gotos, the loop
+	// runs through RequestMoreInfo and ReviewCredit.
+	graph.AddTransitionGoto("ReviewJoin", "RequestMoreInfo")
+	graph.AddTransition("ReviewJoin", "ReviewCredit")
+	// ReviewCredit may itself goto RequestMoreInfo for borderline scores; RequestMoreInfo
+	// loops back to ReviewCredit (not ReviewJoin — the cohort frame has already been closed).
+	graph.AddTransitionGoto("ReviewCredit", "RequestMoreInfo")
+	graph.AddTransition("RequestMoreInfo", "ReviewCredit")
 	// Review feeds into decision
-	graph.AddTransition("reviewCredit", "decision")
+	graph.AddTransition("ReviewCredit", "Decision")
 	// Decision terminates the workflow
-	graph.AddTransition("decision", workflow.END)
+	graph.AddTransition("Decision", workflow.END)
 	return graph, nil
 }

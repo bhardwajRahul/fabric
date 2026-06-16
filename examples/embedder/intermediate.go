@@ -23,13 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/embedder/embedderapi"
 	"github.com/microbus-io/fabric/examples/embedder/resources"

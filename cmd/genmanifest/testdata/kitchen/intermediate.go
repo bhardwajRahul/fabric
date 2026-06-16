@@ -29,7 +29,7 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 
 	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen/kitchenapi"
 	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen/resources"

@@ -25,11 +25,10 @@ SubmitCreditApplication → (fan-out)
 ```
 
 Construction details:
-- `graph.AddSubgraph(identityVerification)` - marks IdentityVerification as a subgraph node
-- `graph.AddTransitionOnError(verifyCredit, handleCreditError)` - routes errors from VerifyCredit to HandleCreditError
-- `graph.AddTransitionForEach(submitCreditApplication, verifyEmployment, "employers", "employerName")` - creates one VerifyEmployment invocation per element of the `employers` array, binding each element to `employerName`
+- `graph.AddTransitionOnError("VerifyCredit", "HandleCreditError")` - routes errors from VerifyCredit to HandleCreditError
+- `graph.AddTransitionForEach("SubmitCreditApplication", "VerifyEmployment", "employers", "employerName")` - creates one VerifyEmployment invocation per element of the `employers` array, binding each element to `employerName`
 - The state field `employmentFailures` is attached to `workflow.ReducerAdd` via `graph.SetReducer("employmentFailures", workflow.ReducerAdd)` so its values from each forEach branch are summed at fan-in
-- `graph.AddTransitionGoto(reviewCredit, requestMoreInfo)` - declares that ReviewCredit may dynamically goto RequestMoreInfo
+- `graph.AddTransitionGoto("ReviewCredit", "RequestMoreInfo")` - declares that ReviewCredit may dynamically goto RequestMoreInfo (node names are PascalCase; `employers`/`employerName` are camelCase state fields)
 
 ## IdentityVerification Workflow Graph (Subgraph)
 
@@ -73,7 +72,7 @@ All task endpoints are on port `:428`. Each receives and returns typed state fie
 - **ReviewCredit** `:428/review-credit` - inputs `creditScore int`, `creditVerified bool`, `reviewAttempts int`, `faultInjection string`; returns `creditVerifiedOut bool`. Logic:
   - Score >= 650: pass through unchanged
   - Score 580-649: approve (`return true`)
-  - Score 550-579 and `reviewAttempts < 2`: call `flow.Goto(requestMoreInfo.URL())`, return current value
+  - Score 550-579 and `reviewAttempts < 2`: call `flow.Goto("RequestMoreInfo")`, return current value
   - Score 550-579 and `reviewAttempts >= 2`: approve
   - Score < 550: return unchanged (reject)
   Also handles `BadGoto` and `Sleep` faults.

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/microbus-io/bespa/widget"
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
-	"github.com/microbus-io/fabric/workflow"
 
 	yaml "go.yaml.in/yaml/v3"
 )
@@ -41,7 +41,6 @@ func isLiveStatus(status string) bool {
 	}
 	return false
 }
-
 
 // isRestartableStatus reports whether a flow's outcome status accepts
 // foreman.Restart.

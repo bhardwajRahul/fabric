@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 )
@@ -167,7 +167,7 @@ func (svc *Mock) MockChatLoop(handler func(ctx context.Context, flow *workflow.F
 	mockRoute := ":428/mock-chat-loop-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockChatLoopGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph(llmapi.ChatLoop.URL())
+		g := workflow.NewGraph("ChatLoop", llmapi.ChatLoop.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}

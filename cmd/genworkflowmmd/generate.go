@@ -76,7 +76,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 
 	{{.PkgAlias}} "{{.ImportPath}}"
 )

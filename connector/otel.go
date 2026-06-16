@@ -75,7 +75,7 @@ func (c *Connector) otelResource() *resource.Resource {
 		attribute.String("service.name", c.Hostname()),
 		attribute.Int("service.version", c.Version()),
 		attribute.String("service.instance.id", c.ID()),
-		attribute.String("deployment.environment", c.Deployment()),
+		attribute.String("deployment.environment.name", c.Deployment()),
 	)
 }
 

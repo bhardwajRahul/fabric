@@ -163,4 +163,3 @@ func spanStatus(s trc.Span) int {
 	status := reflect.ValueOf(s).FieldByName("internal").Elem().Elem().FieldByName("status")
 	return int(status.FieldByName("Code").Uint())
 }
-

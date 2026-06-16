@@ -46,16 +46,16 @@ func TestHttpx_ValidateHostname(t *testing.T) {
 		".hello",
 		"~hello",
 		"$",
-		"hello_world",   // underscore is reserved for NATS subject flat-form
-		"Hello",         // uppercase rejected; caller must lowercase
-		"hello.WORLD",   // uppercase rejected
-		"id-foo",        // reserved prefix
-		"id-foo.bar",    // reserved prefix
-		"loc-us",        // reserved prefix
-		"loc-us-west.b", // reserved prefix
-		"all",           // reserved broadcast hostname
-		"foo.all",       // reserved broadcast suffix
-		"foo.bar.all",   // reserved broadcast suffix
+		"hello_world",            // underscore is reserved for NATS subject flat-form
+		"Hello",                  // uppercase rejected; caller must lowercase
+		"hello.WORLD",            // uppercase rejected
+		"id-foo",                 // reserved prefix
+		"id-foo.bar",             // reserved prefix
+		"loc-us",                 // reserved prefix
+		"loc-us-west.b",          // reserved prefix
+		"all",                    // reserved broadcast hostname
+		"foo.all",                // reserved broadcast suffix
+		"foo.bar.all",            // reserved broadcast suffix
 		strings.Repeat("x", 253), // length cap
 	}
 

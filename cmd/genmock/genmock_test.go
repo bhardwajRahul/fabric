@@ -30,7 +30,6 @@ func TestRoundtrip_RealServices(t *testing.T) {
 	roots := []string{
 		"../../coreservices",
 		"../../examples",
-		"../../verify",
 	}
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)

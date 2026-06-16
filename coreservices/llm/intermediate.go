@@ -23,13 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/coreservices/llm/resources"
@@ -60,13 +60,13 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error)         // MARKER: Chat
+	Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error)                    // MARKER: Chat
 	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
-	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                               // MARKER: InitChat
-	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                   // MARKER: CallLLM
-	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
-	ExecuteTool(ctx context.Context, flow *workflow.Flow) (err error)                                                                                                                                          // MARKER: ExecuteTool
-	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                           // MARKER: ChatLoop
+	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                                         // MARKER: InitChat
+	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                             // MARKER: CallLLM
+	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error)   // MARKER: ProcessResponse
+	ExecuteTool(ctx context.Context, flow *workflow.Flow) (err error)                                                                                                                                                    // MARKER: ExecuteTool
+	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                     // MARKER: ChatLoop
 }
 
 // NewService creates a new instance of the microservice.

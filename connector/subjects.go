@@ -316,4 +316,3 @@ func appendHostnameEscaped(b *strings.Builder, s string) {
 		}
 	}
 }
-

@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/creditflow/creditflowapi"
 )
@@ -219,7 +219,7 @@ func (svc *Mock) MockIdentityVerification(handler func(ctx context.Context, flow
 	mockRoute := ":428/mock-identity-verification-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockIdentityVerificationGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph(creditflowapi.IdentityVerification.URL())
+		g := workflow.NewGraph("IdentityVerification", creditflowapi.IdentityVerification.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}
@@ -329,7 +329,7 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 	mockRoute := ":428/mock-credit-approval-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockCreditApprovalGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph(creditflowapi.CreditApproval.URL())
+		g := workflow.NewGraph("CreditApproval", creditflowapi.CreditApproval.URL())
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}

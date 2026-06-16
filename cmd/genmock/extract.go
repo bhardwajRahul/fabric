@@ -289,7 +289,7 @@ func collectImports(g *generated, intMap map[string]string) {
 		g.imports["github.com/microbus-io/fabric/httpx"] = ""
 		g.imports["github.com/microbus-io/fabric/sub"] = ""
 		g.imports["github.com/microbus-io/fabric/utils"] = ""
-		g.imports["github.com/microbus-io/fabric/workflow"] = ""
+		g.imports["github.com/microbus-io/dwarf/workflow"] = ""
 	}
 
 	// Walk each method's signature and add the api package + any other

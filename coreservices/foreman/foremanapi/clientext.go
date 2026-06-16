@@ -20,15 +20,15 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/workflow"
 )
 
 // RunAndParse creates a flow, starts it, blocks until it stops, then unmarshals the outcome's State into result.
 // Returns the full workflow.FlowOutcome alongside any unmarshal error; inspect outcome.Status / outcome.Error to learn
 // whether the workflow succeeded.
-func (_c Client) RunAndParse(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions, result any) (outcome *workflow.FlowOutcome, err error) {
-	outcome, err = _c.Run(ctx, workflowName, initialState, opts)
+func (_c Client) RunAndParse(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions, result any) (outcome *workflow.FlowOutcome, err error) {
+	outcome, err = _c.Run(ctx, workflowURL, initialState, opts)
 	if err != nil {
 		return outcome, errors.Trace(err)
 	}

@@ -9,8 +9,8 @@ import (
 
 	"github.com/microbus-io/bespa/chart"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
-	"github.com/microbus-io/fabric/workflow"
 )
 
 // Dashboard tuning.
@@ -433,4 +433,3 @@ func sliceSum(xs []int) int {
 	}
 	return s
 }
-

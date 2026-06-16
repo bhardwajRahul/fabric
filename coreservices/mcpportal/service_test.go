@@ -27,6 +27,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/invopop/jsonschema"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
@@ -35,7 +36,6 @@ import (
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/mcpportal/mcpportalapi"

@@ -25,12 +25,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
 	"github.com/microbus-io/testarossa"
 
 	"github.com/microbus-io/fabric/coreservices/foreman"
@@ -784,7 +784,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		assert.NoError(err)
 
 		// Set a breakpoint on the ReviewCredit task (runs after fan-in, before Decision)
-		err = foremanClient.BreakBefore(ctx, flowKey, "reviewCredit", true)
+		err = foremanClient.BreakBefore(ctx, flowKey, "ReviewCredit", true)
 		assert.NoError(err)
 
 		// Start the flow
@@ -836,7 +836,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		}, nil)
 
 		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowKey, creditflowapi.IdentityDecision.URL(), true)
+		err = foremanClient.BreakBefore(ctx, flowKey, "IdentityDecision", true)
 		assert.NoError(err)
 
 		// Start the parent flow
@@ -875,7 +875,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 
 // TestCreditFlow_DynamicSubgraph: covered by verify/dynamicsubgraphflow.
 
-func TestCreditFlow_StartNotify(t *testing.T) {
+func TestCreditFlow_NotifyOnStop(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -939,10 +939,10 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
-		}, nil)
+		}, &workflow.FlowOptions{NotifyOnStop: true})
 
 		assert.NoError(err)
-		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
+		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		n := waitForNotification(assert, flowKey, workflow.StatusCompleted)
@@ -958,13 +958,13 @@ func TestCreditFlow_StartNotify(t *testing.T) {
 		// Use a breakpoint to pause the flow, then cancel it
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
-		}, nil)
+		}, &workflow.FlowOptions{NotifyOnStop: true})
 
 		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowKey, "reviewCredit", true)
+		err = foremanClient.BreakBefore(ctx, flowKey, "ReviewCredit", true)
 		assert.NoError(err)
 
-		err = foremanClient.StartNotify(ctx, flowKey, tester.Hostname())
+		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		// Wait for breakpoint interrupt notification
@@ -1045,7 +1045,7 @@ func TestCreditFlow_Demo(t *testing.T) { // MARKER: Demo
 			body, err := io.ReadAll(res.Body)
 			if assert.NoError(err) {
 				assert.Contains(body, "completed")
-				assert.Contains(body, "submitCreditApplication")
+				assert.Contains(body, "SubmitCreditApplication")
 			}
 		}
 	})

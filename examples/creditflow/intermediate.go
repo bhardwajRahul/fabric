@@ -23,13 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/examples/creditflow/creditflowapi"
 	"github.com/microbus-io/fabric/examples/creditflow/resources"
@@ -62,7 +62,7 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) // MARKER: SubmitCreditApplication
 	VerifyCredit(ctx context.Context, flow *workflow.Flow, creditScore int) (creditVerified bool, err error)                                                                                                              // MARKER: VerifyCredit
-	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error)                                                                       // MARKER: VerifyEmployment
+	VerifyEmployment(ctx context.Context, flow *workflow.Flow, applicantName string, employerName string) (employmentFailuresOut int, err error)                                                                          // MARKER: VerifyEmployment
 	InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error)                                                                        // MARKER: InitIdentityVerification
 	VerifySSN(ctx context.Context, flow *workflow.Flow, ssn string) (ssnVerified bool, err error)                                                                                                                         // MARKER: VerifySSN
 	VerifyAddress(ctx context.Context, flow *workflow.Flow, address string) (addressVerified bool, err error)                                                                                                             // MARKER: VerifyAddress
@@ -73,7 +73,7 @@ type ToDo interface {
 	RequestMoreInfo(ctx context.Context, flow *workflow.Flow, reviewAttempts int) (reviewAttemptsOut int, err error)                                                                                                      // MARKER: RequestMoreInfo
 	ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error)                                                                  // MARKER: ReviewCredit
 	HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error)                                                                                               // MARKER: HandleCreditError
-	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                                  // MARKER: Decision
+	Decision(ctx context.Context, flow *workflow.Flow, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error)                                                                     // MARKER: Decision
 	CreditApproval(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                // MARKER: CreditApproval
 	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                                              // MARKER: Demo
 }

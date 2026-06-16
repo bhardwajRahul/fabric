@@ -39,7 +39,6 @@ import (
 	"github.com/microbus-io/fabric/transport"
 	"github.com/microbus-io/fabric/utils"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -80,7 +79,6 @@ type Connector struct {
 	meter             metric.Meter
 	metricInstruments map[string]*metricInstrument
 	onObserveMetrics  service.ObserveMetricsHandler
-	metricCommonAttrs []attribute.KeyValue
 	meterOTLPKey      string
 
 	traceProvider  *sdktrace.TracerProvider

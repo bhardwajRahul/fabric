@@ -90,10 +90,10 @@ func TestDir_InModule_MatchesGoList(t *testing.T) {
 
 	start := repoPath(t, "cmd/internal/pkgresolver")
 	pkgs := []string{
-		"github.com/microbus-io/fabric",          // module root itself
-		"github.com/microbus-io/fabric/sub",      // top-level package
-		"github.com/microbus-io/fabric/connector", // top-level package
-		"github.com/microbus-io/fabric/dlru",     // top-level package
+		"github.com/microbus-io/fabric",                                           // module root itself
+		"github.com/microbus-io/fabric/sub",                                       // top-level package
+		"github.com/microbus-io/fabric/connector",                                 // top-level package
+		"github.com/microbus-io/fabric/dlru",                                      // top-level package
 		"github.com/microbus-io/fabric/coreservices/configurator/configuratorapi", // deeply nested
 	}
 	for _, pkg := range pkgs {

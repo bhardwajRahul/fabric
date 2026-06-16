@@ -137,4 +137,3 @@ func firstSentence(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
-

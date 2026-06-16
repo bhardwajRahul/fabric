@@ -13,7 +13,7 @@ import (
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 )
 
 var (

@@ -23,13 +23,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 
@@ -64,7 +64,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
-	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                          // MARKER: Demo
+	Demo(w http.ResponseWriter, r *http.Request) (err error)                                                                                                                                                             // MARKER: Demo
 }
 
 // NewService creates a new instance of the microservice.

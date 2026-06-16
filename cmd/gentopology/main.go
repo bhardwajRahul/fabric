@@ -17,7 +17,7 @@ limitations under the License.
 // gentopology renders the application's topology diagram (a Mermaid graph)
 // from source. For each service in the bundle, it detects: the *api
 // dependencies on other services, event-source subscriptions, SQL usage
-// (database/sql or sequel), and HTTP egress + the external host(s) targeted.
+// (database/sql, sequel, or dwarf engine), and HTTP egress + the external host(s) targeted.
 // The resulting graph captures the runtime relationships an operator needs
 // to see - what depends on what, what touches a database, what calls out
 // to external clouds.

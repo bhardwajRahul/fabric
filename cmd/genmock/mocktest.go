@@ -71,7 +71,7 @@ func emitMockTest(g *generated, existing []byte) ([]byte, error) {
 // mock_test.go have largely disjoint dependency sets.
 func collectTestImports(g *generated, methods []method) map[string]bool {
 	imports := map[string]bool{
-		"testing":                                 true,
+		"testing": true,
 		"github.com/microbus-io/fabric/connector": true,
 		"github.com/microbus-io/testarossa":       true,
 	}
@@ -95,7 +95,7 @@ func collectTestImports(g *generated, methods []method) map[string]bool {
 		}
 	}
 	if needsWorkflow {
-		imports["github.com/microbus-io/fabric/workflow"] = true
+		imports["github.com/microbus-io/dwarf/workflow"] = true
 	}
 
 	// A workflow-graph mock's typed handler signature qualifies its In/Out

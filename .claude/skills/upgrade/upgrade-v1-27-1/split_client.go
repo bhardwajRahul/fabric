@@ -115,7 +115,7 @@ endHostname:
 	}
 	extraMicrobus = append(extraMicrobus, "\t\"github.com/microbus-io/fabric/httpx\"")
 	if needsWorkflow {
-		extraMicrobus = append(extraMicrobus, "\t\"github.com/microbus-io/fabric/workflow\"")
+		extraMicrobus = append(extraMicrobus, "\t\"github.com/microbus-io/dwarf/workflow\"")
 	}
 	var importLines []string
 	if len(extraStd) > 0 {

@@ -7,7 +7,7 @@ graph LR
 
     configurator.core[Configurator<br>configurator.core]
     http.egress.core[HTTPEgress<br>http.egress.core] --- http.egress.core.cloud@{shape: cloud, label: "various"}
-    foreman.core[Foreman<br>foreman.core] --->|danger| access.token.core[accesstoken<br>access.token.core]
+    foreman.core[foreman<br>foreman.core] --->|danger| access.token.core[accesstoken<br>access.token.core]
     foreman.core --- foreman.core.db[(SQL)]
     http.ingress.core[HTTPIngress<br>http.ingress.core] --->|danger| access.token.core
     http.ingress.core --->|danger| bearer.token.core[bearertoken<br>bearer.token.core]
@@ -36,7 +36,7 @@ graph LR
     messaging.example[Messaging<br>messaging.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
+    class agentstudio.dev,browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
     class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,lite.llm.core,mcp.core,metrics.core,openapi.core core
     class access.token.core,bearer.token.core danger
     class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,lite.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext

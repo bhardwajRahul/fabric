@@ -68,12 +68,12 @@ func TestHttpx_ParseURLInvalid(t *testing.T) {
 	// Hostname identity rules (charset, reserved prefixes, length) are enforced by callers via
 	// httpx.ValidateHostname or the route-validation helpers in connector/sub.
 	invalid := []string{
-		"https://example.com:BAD/path",   // unparseable port (url.Parse rejects)
+		"https://example.com:BAD/path",     // unparseable port (url.Parse rejects)
 		"https://example.com:123:456/path", // multiple colons (url.Parse rejects)
-		"/example.com/path",              // missing hostname
-		"/path",                          // missing hostname
-		"",                               // empty
-		"https://example.com/`/path",     // backtick rejected
+		"/example.com/path",                // missing hostname
+		"/path",                            // missing hostname
+		"",                                 // empty
+		"https://example.com/`/path",       // backtick rejected
 	}
 	for _, x := range invalid {
 		u, err := ParseURL(x)

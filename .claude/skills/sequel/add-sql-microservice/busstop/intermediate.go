@@ -13,7 +13,7 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 
 	"github.com/microbus-io/fabric/busstop/busstopapi"
 	"github.com/microbus-io/fabric/busstop/resources"

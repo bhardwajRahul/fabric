@@ -45,16 +45,16 @@ If/when external GenAI dashboard compatibility is needed, the OTel metric can be
 
 ### ChatLoop Workflow
 
-The chat loop is `initChat → initLLM → processResponse → forEach pendingToolCalls → executeTool → loopLLM → processResponse`. Each round, processResponse decides:
+The chat loop is `InitChat → FirstLLM → ProcessResponse → forEach pendingToolCalls → ExecuteTool → NextLLM → ProcessResponse`. Each round, ProcessResponse decides:
 
 - If no tool calls are pending (the prior turn's `stopReason` was a completion: `end_turn`,
   `stop_sequence`, or `refusal`) or the round limit is exhausted, it calls
   `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped. A
   truncation / pause_turn / unknown `stopReason` never reaches `ProcessResponse` — `CallLLM`
   fails the step before that, so the workflow's `OnError` route (if any) handles it.
-- Otherwise the forEach fans out one executeTool per pending tool call. All branches converge at `loopLLM` via `graph.SetFanIn("loopLLM")`. The fan-in merges per-tool messages into the `messages` field, which is wired with `graph.SetReducer("messages", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
+- Otherwise the forEach fans out one ExecuteTool per pending tool call. All branches converge at `NextLLM` via `graph.SetFanIn("NextLLM")`. The fan-in merges per-tool messages into the `messages` field, which is wired with `graph.SetReducer("messages", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
 
-`initLLM` and `loopLLM` are two graph positions sharing one task URL (`CallLLM`). `initLLM` is the initial sequential call after `initChat`; `loopLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `examples/creditflow` for the same pattern (the `reviewJoin` / `reviewCredit` split).
+`FirstLLM` and `NextLLM` are two graph positions sharing one task URL (`CallLLM`). `FirstLLM` is the initial sequential call after `InitChat`; `NextLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `examples/creditflow` for the same pattern (the `ReviewJoin` / `ReviewCredit` split).
 
 `ExecuteTool` dispatches a workflow tool via `flow.Subgraph(def.URL, input)`, which returns `(out, yield, err)`. On
 the first call it yields (the foreman parks the step and runs the child); on re-entry it returns the child's

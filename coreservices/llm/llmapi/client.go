@@ -23,12 +23,12 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
 )
 
 var (
@@ -528,8 +528,8 @@ CallLLM sends the current messages and tools to the LLM provider.
 func (_c Executor) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{
-		Provider:     provider,
-		Model:        model,
+		Provider: provider,
+		Model:    model,
 		Messages: messages,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, err // No trace

@@ -23,12 +23,12 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
-	"github.com/microbus-io/fabric/workflow"
 )
 
 var (
@@ -335,9 +335,9 @@ Decision determines whether to approve the credit application based on verificat
 func (_c Executor) Decision(ctx context.Context, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, err error) { // MARKER: Decision
 	var out DecisionOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, Decision.Method, Decision.Route, DecisionIn{
-		CreditVerified:        creditVerified,
+		CreditVerified:     creditVerified,
 		EmploymentFailures: employmentFailures,
-		IdentityVerified:      identityVerified,
+		IdentityVerified:   identityVerified,
 	}, &out, _c.inFlow, _c.outFlow)
 	return out.Approved, err // No trace
 }

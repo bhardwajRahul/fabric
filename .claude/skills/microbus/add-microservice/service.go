@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/microbus-io/errors"
-	"github.com/microbus-io/fabric/workflow"
+	"github.com/microbus-io/dwarf/workflow"
 
 	"github.com/mycompany/myproject/myservice/myserviceapi"
 )

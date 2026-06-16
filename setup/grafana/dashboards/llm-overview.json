@@ -359,7 +359,7 @@
   "refresh": "",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["microbus", "llm"],
+  "tags": ["microbus"],
   "templating": {
     "list": [
       {
@@ -417,6 +417,6 @@
   "timepicker": {},
   "timezone": "",
   "title": "LLM Overview",
-  "uid": "microbus_llm",
+  "uid": "microbus_X17iyU",
   "version": 1
 }

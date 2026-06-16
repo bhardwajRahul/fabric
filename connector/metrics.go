@@ -124,14 +124,9 @@ func (c *Connector) initMeter(ctx context.Context) (err error) {
 	}
 	c.metricLock.Lock()
 	c.meterProvider = sdkmetric.NewMeterProvider(options...)
-	c.meter = c.meterProvider.Meter("microbus")
-	c.metricCommonAttrs = []attribute.KeyValue{
-		attribute.String("plane", c.Plane()),
-		attribute.String("service", c.Hostname()),
-		attribute.Int("ver", c.Version()),
-		attribute.String("id", c.ID()),
-		attribute.String("deployment", c.Deployment()),
-	}
+	// Build the meter from the identity-injecting decorator so the connector's own microbus_* metrics pick up
+	// the common attributes through the same single mechanism as third-party (sequel/dwarf) metrics.
+	c.meter = c.decoratedMeterProvider().Meter("microbus")
 	c.metricLock.Unlock()
 
 	c.DescribeHistogram(
@@ -202,13 +197,34 @@ func (c *Connector) termMeter(ctx context.Context) (err error) {
 
 // MeterProvider returns the OpenTelemetry meter provider of the microservice, or a no-op provider when metrics are
 // not configured. Use it to instrument third-party libraries against the same pipeline and resource as the framework.
+// Every instrument it vends stamps the microservice's identity attributes (service, deployment, plane, ver, id) onto
+// each measurement, so a library's metrics carry the same labels as the framework's own microbus_* metrics and are
+// filterable by service and deployment without a target_info join.
 func (c *Connector) MeterProvider() metric.MeterProvider {
 	c.metricLock.RLock()
 	defer c.metricLock.RUnlock()
 	if c.meterProvider == nil {
 		return metricnoop.NewMeterProvider()
 	}
-	return c.meterProvider
+	return c.decoratedMeterProvider()
+}
+
+// decoratedMeterProvider wraps the live SDK meter provider so every instrument it vends injects the
+// microservice's identity attributes (service, deployment, plane, ver, id) into each measurement. It is the
+// single mechanism that stamps those onto both the connector's own microbus_* metrics and third-party
+// (sequel/dwarf) metrics. The identity is immutable once the connector starts, so it is derived from the
+// accessors on each call rather than cached. The caller must hold metricLock and have a non-nil meterProvider.
+func (c *Connector) decoratedMeterProvider() metric.MeterProvider {
+	return attributedMeterProvider{
+		inner: c.meterProvider,
+		opt: metric.WithAttributes(
+			attribute.String("plane", c.Plane()),
+			attribute.String("service", c.Hostname()),
+			attribute.Int("ver", c.Version()),
+			attribute.String("id", c.ID()),
+			attribute.String("deployment", c.Deployment()),
+		),
+	}
 }
 
 // SetOnObserveMetrics adds a function to be called just before metrics are produced to allow observing them just in time.
@@ -518,7 +534,9 @@ var kvPool = sync.Pool{
 func (c *Connector) makeAttributeSetOption(attributes []any) (metric.MeasurementOption, error) {
 	ptrSlice := kvPool.Get().(*[]attribute.KeyValue)
 	defer kvPool.Put(ptrSlice)
-	kvAttributes := append(*ptrSlice, c.metricCommonAttrs...)
+	// The common identity attributes are injected by the decorated meter (decoratedMeterProvider), so only the
+	// per-call attributes are assembled here.
+	kvAttributes := (*ptrSlice)[:0]
 
 	for i := 0; i < len(attributes); i++ {
 		var v any

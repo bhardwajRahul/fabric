@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/coreservices/control/controlapi"
 	"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 	"github.com/microbus-io/fabric/openapi"
 	"github.com/microbus-io/fabric/pub"
-	"github.com/microbus-io/fabric/workflow"
 
 	"github.com/microbus-io/fabric/connector"
 
@@ -440,10 +440,10 @@ func (svc *Service) ListFlows(w http.ResponseWriter, r *http.Request) (err error
 		AddOption(workflow.StatusCancelled, workflow.StatusCancelled)
 
 	flows, _, err := svc.foreman.List(r.Context(), foremanapi.Query{
-		WorkflowName: strings.TrimSpace(r.URL.Query().Get("workflow")),
-		Status:       statusFilter,
-		Search:       strings.TrimSpace(tbl.Query(r)),
-		Limit:        listLimit,
+		WorkflowURL: strings.TrimSpace(r.URL.Query().Get("workflow")),
+		Status:      statusFilter,
+		Search:      strings.TrimSpace(tbl.Query(r)),
+		Limit:       listLimit,
 	})
 	if err != nil {
 		return errors.Trace(err)
@@ -544,7 +544,7 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		wf.Field().AddLeft("Duration").AddRight(wf.Duration(updatedAt.Sub(startedAt))),
 	)
 
-	mmd, mmdErr := foremanapi.NewFlowRenderer(steps).
+	mmd, mmdErr := workflow.NewFlowRenderer(steps).
 		WithPrimaryColors(mermaid.PrimaryContainer, mermaid.OnPrimaryContainer).
 		WithSecondaryColors(mermaid.SecondaryContainer, mermaid.OnSecondaryContainer).
 		WithErrorColors(mermaid.ErrorContainer, mermaid.OnErrorContainer).

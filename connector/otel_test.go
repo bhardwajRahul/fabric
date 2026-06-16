@@ -172,7 +172,10 @@ func TestConnector_OTELProviders(t *testing.T) {
 	assert.NotNil(con.TracerProvider())
 	assert.NotNil(con.MeterProvider())
 	assert.True(con.TracerProvider() == con.traceProvider, "should return the live tracer provider")
-	assert.True(con.MeterProvider() == con.meterProvider, "should return the live meter provider")
+	// MeterProvider returns the identity-injecting decorator wrapping the live SDK provider.
+	mp, ok := con.MeterProvider().(attributedMeterProvider)
+	assert.True(ok, "meter provider should be the attribute-injecting decorator")
+	assert.True(mp.inner == con.meterProvider, "decorator should wrap the live meter provider")
 }
 
 // TestConnector_OTLPTLSConfig verifies that the OTLP TLS configuration is nil when no certificate environment is

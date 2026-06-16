@@ -42,9 +42,11 @@ var updateGoldens = flag.Bool("update", false, "rewrite committed manifest.yaml 
 
 // TestExtract_Foreman runs the extractor against the real foreman package and
 // asserts the salient fields it pulls out. The test is intentionally narrow:
-// it exercises the extraction logic against a service that has the full
+// it exercises the extraction logic against a service that has a broad
 // cross-section of features (description, functions, web, outbound event,
-// configs, metrics with observable, downstream).
+// configs, downstream). The foreman no longer defines manifest metrics - the
+// dwarf engine emits its observability through OTEL, not microbus metric
+// endpoints.
 func TestExtract_Foreman(t *testing.T) {
 	assert := testarossa.For(t)
 	dir := repoPath(t, "coreservices/foreman")
@@ -71,14 +73,6 @@ func TestExtract_Foreman(t *testing.T) {
 	}
 	assert.True(foundSecret, "expected SQLDataSourceName secret=true")
 	assert.True(foundCallback, "expected NumShards callback=true")
-	// StepsQueueDepth metric is observable.
-	var foundObs bool
-	for _, m := range x.metrics {
-		if m.Name == "StepsQueueDepth" && m.Observable {
-			foundObs = true
-		}
-	}
-	assert.True(foundObs, "expected StepsQueueDepth observable=true")
 }
 
 // TestExtract_CreditFlow exercises the task and workflow extraction paths,
