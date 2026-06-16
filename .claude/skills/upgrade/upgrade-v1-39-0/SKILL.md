@@ -1,7 +1,7 @@
 ---
 name: upgrade-v1-39-0
 user-invocable: false
-description: Called by upgrade-microbus. Upgrades the project from v1.38.x to v1.39.0. Two groups of changes. (A) Non-breaking sequel telemetry - the sequel library (v1.10.1) now emits OpenTelemetry spans, sequel_* metrics, and slog migration logs once the connector's TracerProvider/MeterProvider/Logger are attached to the *sequel.DB, so every SQL CRUD microservice's openDatabase gains three setter calls. (B) Breaking workflow changes - the workflow package moved out of the fabric module into the dwarf module (github.com/microbus-io/fabric/workflow becomes github.com/microbus-io/dwarf/workflow, adding a dwarf dependency), workflow.NewGraph gained a leading name argument (NewGraph(url) becomes NewGraph("Name", url)), flow.Goto now takes a graph node name instead of an endpoint URL (a silent break, since both are strings), and flow.Subgraph/flow.Interrupt dropped their returned result map in favor of an out-pointer argument (Subgraph(url, in) (out, yield, err) becomes Subgraph(url, in, &out) (yield, err); Interrupt(payload) (resume, yield, err) becomes Interrupt(payload, &resume) (yield, err)) - a loud compile break. Existing graphs keep their node names; PascalCase naming is only the convention for newly scaffolded graphs.
+description: Called by upgrade-microbus. Upgrades the project from v1.38.x to v1.39.0. Two groups of changes. (A) Non-breaking sequel telemetry - the sequel library (v1.10.2) now emits OpenTelemetry spans, sequel_* metrics, and slog migration logs once the connector's TracerProvider/MeterProvider/Logger are attached to the *sequel.DB, so every SQL CRUD microservice's openDatabase gains three setter calls. (B) Breaking workflow changes - the workflow package moved out of the fabric module into the dwarf module (github.com/microbus-io/fabric/workflow becomes github.com/microbus-io/dwarf/workflow, adding a dwarf dependency), workflow.NewGraph gained a leading name argument (NewGraph(url) becomes NewGraph("Name", url)), flow.Goto now takes a graph node name instead of an endpoint URL (a silent break, since both are strings), and flow.Subgraph/flow.Interrupt dropped their returned result map in favor of an out-pointer argument (Subgraph(url, in) (out, yield, err) becomes Subgraph(url, in, &out) (yield, err); Interrupt(payload) (resume, yield, err) becomes Interrupt(payload, &resume) (yield, err)) - a loud compile break. The foreman's StartNotify endpoint was removed in favor of FlowOptions.NotifyOnStop set at Create (a loud break - the endpoint no longer exists). Existing graphs keep their node names; PascalCase naming is only the convention for newly scaffolded graphs.
 ---
 
 ## What changed
@@ -12,7 +12,7 @@ neither - the steps are individually guarded.
 
 ### Group A: sequel telemetry (non-breaking)
 
-sequel v1.10.1 added an opt-in observability layer. A `*sequel.DB` emits OpenTelemetry client spans (per
+sequel v1.10.2 added an opt-in observability layer. A `*sequel.DB` emits OpenTelemetry client spans (per
 query, `Transact`, and `Migrate`), `sequel_*` metrics (query/transaction duration histograms, lock
 contention and migration counters, connection-pool gauges), and `slog` migration logs - but **only after the
 caller attaches the providers** with `SetTracerProvider` / `SetMeterProvider` / `SetLogger`. Without them
@@ -47,6 +47,11 @@ with it. Three things change for any project that defines tasks or workflow grap
   `map[string]any` works on the way in; the out pointer may be a `*struct` (read fields with type safety) or a
   `*map[string]any` (preserve the old map access), or `nil` to ignore the result. The arity change is a compile
   error, so every call site is caught by the build.
+- **`foremanapi.StartNotify` removed for `FlowOptions.NotifyOnStop` (loud).** The `StartNotify(flowKey, host)`
+  endpoint no longer exists. To receive the `OnFlowStopped` event when a flow terminates, set
+  `NotifyOnStop: true` in the `*workflow.FlowOptions` passed to `Create` (or `Run`), then `Start` the flow
+  normally. The foreman records the caller's host from the request frame at `Create`, so no hostname argument
+  is passed and no separate call is made.
 
 The framework also adopted **PascalCase for graph and task (node) names** (`AddTask("VerifySSN", ...)` rather
 than `"verifySSN"`) going forward, and the refreshed agent rules scaffold new graphs that way. Node names are
@@ -58,25 +63,26 @@ uses each graph's *existing* registered names, whatever their case.
 
 ```
 Upgrade a Microbus project to v1.39.0:
-- [ ] Step 1: Bump the sequel dependency to v1.10.1 (if present)
+- [ ] Step 1: Bump the sequel dependency to v1.10.2 (if present)
 - [ ] Step 2: Wire sequel telemetry into each SQL CRUD microservice's openDatabase
 - [ ] Step 3: Relocate the workflow import project-wide (fabric/workflow -> dwarf/workflow)
 - [ ] Step 4: Add the leading name argument to every workflow.NewGraph call
 - [ ] Step 5: Change flow.Goto arguments from endpoint URLs to node names
 - [ ] Step 6: Convert flow.Subgraph / flow.Interrupt call sites to the out-pointer signature
-- [ ] Step 7: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
+- [ ] Step 7: Replace foremanapi.StartNotify with FlowOptions.NotifyOnStop
+- [ ] Step 8: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
 ```
 
 #### Step 1: Bump the sequel Dependency
 
-If the project imports sequel directly, pin it to v1.10.1:
+If the project imports sequel directly, pin it to v1.10.2:
 
 ```bash
-grep -q 'github.com/microbus-io/sequel' go.mod && go get github.com/microbus-io/sequel@v1.10.1
+grep -q 'github.com/microbus-io/sequel' go.mod && go get github.com/microbus-io/sequel@v1.10.2
 ```
 
 A project with no `github.com/microbus-io/sequel` line in `go.mod` has no SQL CRUD microservices; skip
-Steps 1-2. (`go mod tidy` is deferred to Step 7.)
+Steps 1-2. (`go mod tidy` is deferred to Step 8.)
 
 #### Step 2: Wire sequel Telemetry Into Each `openDatabase`
 
@@ -112,13 +118,13 @@ not add `SetVerbose(true)` - per-query Debug logs are off by design; an operator
 
 #### Step 3: Relocate the workflow Import Project-Wide
 
-If the project defines no tasks or workflows it never imports the workflow package; skip Steps 3-6. Detect:
+If the project defines no tasks or workflows it never imports the workflow package; skip Steps 3-7. Detect:
 
 ```bash
 grep -rl 'github.com/microbus-io/fabric/workflow' --include='*.go' .
 ```
 
-If there are no matches, skip to Step 7. Otherwise rewrite the import path across **every** `.go` file in one
+If there are no matches, skip to Step 8. Otherwise rewrite the import path across **every** `.go` file in one
 pass - hand-written and generated alike. A single project-wide `sed` does it (the `-i.bak` form is portable
 across GNU and BSD/macOS sed; the second command removes the backups):
 
@@ -129,7 +135,7 @@ find . -name '*.go.bak' -delete
 ```
 
 This is a pure path move - identifiers like `workflow.Flow`, `workflow.FlowOptions`, `workflow.FlowOutcome`,
-`workflow.END`, and the `workflow.Reducer*` values are unchanged. `go mod tidy` (Step 7) adds the
+`workflow.END`, and the `workflow.Reducer*` values are unchanged. `go mod tidy` (Step 8) adds the
 `github.com/microbus-io/dwarf` dependency at the version the upgraded fabric requires.
 
 #### Step 4: Add the Name Argument to `workflow.NewGraph`
@@ -152,7 +158,7 @@ grep -rl 'workflow\.NewGraph(' --include='*.go' . \
 
 The regex only matches the single-URL-argument form, so it is idempotent (a call already carrying a string
 name is left alone). It rewrites the hand-written graph builder in `service.go`; the matching `NewGraph` in
-the generated `mock.go` is regenerated in Step 7.
+the generated `mock.go` is regenerated in Step 8.
 
 #### Step 5: Change `flow.Goto` Arguments From URLs to Node Names
 
@@ -224,7 +230,34 @@ fooapi.ChildIn{Field: v}, &out)` then read `out.Field` - which is the new ergono
 The generic dynamic-tool dispatcher that calls `flow.Subgraph(def.URL, …)` over an arbitrary tool URL has no
 single arg type and stays on `map[string]any`.
 
-#### Step 7: Regenerate, Tidy, and Verify
+#### Step 7: Replace `StartNotify` with `FlowOptions.NotifyOnStop`
+
+The foreman's `StartNotify` endpoint is removed. A flow now opts into the `OnFlowStopped` event by setting
+`NotifyOnStop` at `Create`. Find the calls:
+
+```bash
+grep -rn 'StartNotify' --include='*.go' .
+```
+
+For each, set `NotifyOnStop: true` in the `*workflow.FlowOptions` passed to `Create` (or `Run`) and delete the
+separate `StartNotify` call; the foreman records the caller's host from the request frame, so the explicit
+hostname argument goes away:
+
+```go
+// before
+flowID, err := client.Create(ctx, url, initialState, nil)
+...
+err = client.StartNotify(ctx, flowID, svc.Hostname())
+
+// after - opt in at Create, then Start normally
+flowID, err := client.Create(ctx, url, initialState, &workflow.FlowOptions{NotifyOnStop: true})
+...
+err = client.Start(ctx, flowID)
+```
+
+The inbound `OnFlowStopped` event sink is unchanged. A project that never called `StartNotify` needs no change.
+
+#### Step 8: Regenerate, Tidy, and Verify
 
 The import move and `NewGraph` change touch generated artifacts (`mock.go`, `mock_test.go`, `manifest.yaml`),
 so regenerate them from the now-fixed source for every microservice you touched:
