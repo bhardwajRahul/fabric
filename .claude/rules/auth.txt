@@ -2,7 +2,7 @@
 
 ## Enabling Authentication
 
-The `microbus/init-project` skill sets up the token issuers, authorization middleware, and `act` package automatically. The remaining piece each solution must provide is an **authenticator** - a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
+The `microbus/init-project` skill sets up the token issuers and authorization middleware automatically. The remaining piece each solution must provide is an **authenticator** - a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
 
 ```go
 bearertokenapi.NewClient(svc).Mint(ctx, map[string]any{
@@ -49,35 +49,42 @@ accesstoken.NewService().Init(func(svc *accesstoken.Service) (err error) {
 })
 ```
 
-## The Actor Pattern
+## Reading Actor Claims
 
-The `Actor` struct in the `act` package is a convenience pattern for representing the claims associated with a request. It is created during project setup and can be extended to fit the needs of the solution. Its properties are organized into four groups: standard claims (`iss`, `sub`, `exp`, `idp`), identifiers (e.g. tenant ID, user ID), security claims (roles, groups, scopes), and user preferences (name, locale, time zone). JSON tag names should follow the [IANA JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml#claims) where a registered claim name exists.
+Most authorization needs no code at all - declare `requiredClaims` on the endpoint and the framework denies unqualified callers before the handler runs. Reach into the claims from code only for conditional logic that `requiredClaims` cannot express, such as branching a query by role. The frame exposes the request's claims directly:
 
-Use `act.Of(ctx)` to extract the actor from the request context:
+- `frame.Of(ctx).IfActor(boolExp)` evaluates a boolean expression over the claims (same syntax as `requiredClaims`) and returns `(ok bool, err error)`. This is the simplest path and needs no struct.
+- `frame.Of(ctx).ParseActor(&obj)` unmarshals the claims into a struct or `map[string]any`. The returned `ok` flag reports whether an actor is attached to the request.
 
 ```go
 func (svc *Service) MyEndpoint(ctx context.Context) error {
-	actor, err := act.Of(ctx)
+	admin, err := frame.Of(ctx).IfActor("roles.admin")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// ...
+	if admin {
+		// ...
+	}
 	return nil
 }
 ```
 
+When a microservice needs typed access to many claims, define a struct of your own and `ParseActor` into it. A convenient shape organizes properties into four groups - standard claims (`iss`, `sub`, `exp`, `idp`), identifiers (tenant ID, user ID), security claims (roles, groups, scopes), and user preferences (name, locale, time zone) - with JSON tag names following the [IANA JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml#claims) where a registered claim name exists. This struct is solution-specific and belongs in the solution's own code, not in the framework scaffold.
+
 ## Actor Impersonation
 
-To call a downstream microservice with modified claims, mint a new access token with the adjusted claims and attach it via `pub.Token`:
+To call a downstream microservice with modified claims, mint a new access token with the adjusted claims and attach it via `pub.Token`. Parse into a `map[string]any` so the full claim set carries through the mint - dropping claims would strip the actor's identity:
 
 ```go
 func (svc *Service) ElevatedAction(ctx context.Context) error {
-	actor, err := act.Of(ctx)
+	claims := map[string]any{}
+	_, err := frame.Of(ctx).ParseActor(&claims)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	actor.Roles = append(actor.Roles, "admin")
-	elevatedToken, err := accesstokenapi.NewClient(svc).Mint(ctx, actor)
+	roles, _ := claims["roles"].([]any)
+	claims["roles"] = append(roles, "admin")
+	elevatedToken, err := accesstokenapi.NewClient(svc).Mint(ctx, claims)
 	if err != nil {
 		return errors.Trace(err)
 	}

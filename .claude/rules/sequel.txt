@@ -194,11 +194,11 @@ if !query.UpdatedAtLT.IsZero() {
 Column mapping and query conditions can be made to be dependent on the claims associated with the actor of the request. For example, an admin may be allowed to read additional columns from the `user` table, or a guest user may apply a `WHERE` condition in order to restrict their view of the results.
 
 ```go
-actor, err := act.Of(ctx)
+admin, err := frame.Of(ctx).IfActor("roles.admin")
 if err != nil {
 	return errors.Trace(err)
 }
-if actor.IsAdmin() {
+if admin {
 	// ...
 } else {
 	// ...

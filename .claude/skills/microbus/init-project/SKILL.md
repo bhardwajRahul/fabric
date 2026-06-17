@@ -148,14 +148,6 @@ This auto-approves the Bash commands invoked by the `housekeeping` and `regenera
 
 **IMPORTANT**: Read `.claude/rules/auth.txt` for authentication conventions before proceeding with this step.
 
-Create the `act` directory in the root of the project if one does not exist.
-
-```shell
-mkdir -p act
-```
-
-Create `act/actor.go` with the content of the template `actor.go` located in the directory of this skill. If the file already exists, do not overwrite it.
-
 Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKey` config of the `bearer.token.core` microservice.
 
 ```shell

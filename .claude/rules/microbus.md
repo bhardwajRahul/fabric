@@ -91,7 +91,7 @@ Microbus uses JWT-based authentication. Endpoints can require specific claims us
 
 Default to closed. An empty `requiredClaims` means anyone who can reach the endpoint may invoke it, which on `:443` (or any port the operator added to `AllowedInternalPorts`) means the entire internet under a standard ingress configuration (see Ports). Leave `requiredClaims` empty only for an endpoint that is intentionally public; otherwise express the actors permitted to call it. An endpoint that wields a stored secret or performs a privileged side effect must never be both ungated and on an externally reachable port.
 
-**IMPORTANT**: If the microservice uses `act.Of(ctx)`, imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
+**IMPORTANT**: If the microservice reads actor claims (`frame.Of(ctx).IfActor` or `ParseActor`), imports auth-related packages (`bearertokenapi`, `accesstokenapi`), or the task involves setting up authentication infrastructure, read `.claude/rules/auth.txt` before proceeding.
 
 ### Required JWT Claims
 

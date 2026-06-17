@@ -9,7 +9,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invopop/jsonschema v0.14.0
-	github.com/microbus-io/bespa v0.1.3
+	github.com/microbus-io/bespa v0.1.4
 	github.com/microbus-io/boolexp v1.1.1
 	github.com/microbus-io/dwarf v0.4.1
 	github.com/microbus-io/errors v1.0.1
