@@ -193,12 +193,12 @@ func (svc *Service) RunIdentityVerification(ctx context.Context, flow *workflow.
 IdentityVerification defines the workflow graph for the identity verification process.
 */
 func (svc *Service) IdentityVerification(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: IdentityVerification
-	graph = workflow.NewGraph("IdentityVerification", creditflowapi.IdentityVerification.URL())
-	graph.AddTask("InitIdentityVerification", creditflowapi.InitIdentityVerification.URL())
-	graph.AddTask("VerifySSN", creditflowapi.VerifySSN.URL())
-	graph.AddTask("VerifyAddress", creditflowapi.VerifyAddress.URL())
-	graph.AddTask("VerifyPhoneNumber", creditflowapi.VerifyPhoneNumber.URL())
-	graph.AddTask("IdentityDecision", creditflowapi.IdentityDecision.URL())
+	graph = workflow.NewGraph("IdentityVerification")
+	graph.SetEndpoint("InitIdentityVerification", creditflowapi.InitIdentityVerification.URL())
+	graph.SetEndpoint("VerifySSN", creditflowapi.VerifySSN.URL())
+	graph.SetEndpoint("VerifyAddress", creditflowapi.VerifyAddress.URL())
+	graph.SetEndpoint("VerifyPhoneNumber", creditflowapi.VerifyPhoneNumber.URL())
+	graph.SetEndpoint("IdentityDecision", creditflowapi.IdentityDecision.URL())
 	graph.SetFanIn("IdentityDecision")
 	// Init fans out to SSN, address, and phone verification
 	graph.AddTransition("InitIdentityVerification", "VerifySSN")
@@ -433,21 +433,21 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 CreditApproval defines the workflow graph for the credit approval process.
 */
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CreditApproval
-	graph = workflow.NewGraph("CreditApproval", creditflowapi.CreditApproval.URL())
-	graph.AddTask("SubmitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
-	graph.AddTask("VerifyCredit", creditflowapi.VerifyCredit.URL())
-	graph.AddTask("VerifyEmployment", creditflowapi.VerifyEmployment.URL())
-	graph.AddTask("IdentityVerification", creditflowapi.RunIdentityVerification.URL())
-	graph.AddTask("HandleCreditError", creditflowapi.HandleCreditError.URL())
+	graph = workflow.NewGraph("CreditApproval")
+	graph.SetEndpoint("SubmitCreditApplication", creditflowapi.SubmitCreditApplication.URL())
+	graph.SetEndpoint("VerifyCredit", creditflowapi.VerifyCredit.URL())
+	graph.SetEndpoint("VerifyEmployment", creditflowapi.VerifyEmployment.URL())
+	graph.SetEndpoint("IdentityVerification", creditflowapi.RunIdentityVerification.URL())
+	graph.SetEndpoint("HandleCreditError", creditflowapi.HandleCreditError.URL())
 	// ReviewJoin and ReviewCredit are two graph positions sharing the same task URL.
 	// ReviewJoin is the fan-in nexus for the submit cohort; ReviewCredit is reached
 	// sequentially from ReviewJoin and hosts the goto loop with RequestMoreInfo.
 	// Splitting them lets the lineage validator close the cohort frame at ReviewJoin
 	// without conflicting with the goto re-entry into ReviewCredit.
-	graph.AddTask("ReviewJoin", creditflowapi.ReviewCredit.URL())
-	graph.AddTask("ReviewCredit", creditflowapi.ReviewCredit.URL())
-	graph.AddTask("RequestMoreInfo", creditflowapi.RequestMoreInfo.URL())
-	graph.AddTask("Decision", creditflowapi.Decision.URL())
+	graph.SetEndpoint("ReviewJoin", creditflowapi.ReviewCredit.URL())
+	graph.SetEndpoint("ReviewCredit", creditflowapi.ReviewCredit.URL())
+	graph.SetEndpoint("RequestMoreInfo", creditflowapi.RequestMoreInfo.URL())
+	graph.SetEndpoint("Decision", creditflowapi.Decision.URL())
 	graph.SetFanIn("ReviewJoin")
 	graph.SetReducer("employmentFailures", workflow.ReducerAdd)
 	// Submit fans out to credit verification, identity verification (subgraph), and forEach employer verification

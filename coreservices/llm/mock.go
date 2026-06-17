@@ -167,7 +167,7 @@ func (svc *Mock) MockChatLoop(handler func(ctx context.Context, flow *workflow.F
 	mockRoute := ":428/mock-chat-loop-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockChatLoopGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph("ChatLoop", llmapi.ChatLoop.URL())
+		g := workflow.NewGraph("ChatLoop")
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}

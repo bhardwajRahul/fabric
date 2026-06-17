@@ -161,13 +161,13 @@ func (svc *Service) mintActorToken(ctx context.Context) (string, error) {
 // The engine traffics in no delivery address: when the caller set FlowOptions.NotifyOnStop, resolveOptions
 // stamped the caller's host into baggage under baggageNotifyHost at Create, and it rides back here on the
 // ctx. Absent (caller did not opt in) means nothing to deliver. Implements engine.Host.
-func (svc *Service) FlowStopped(ctx context.Context, outcome *workflow.FlowOutcome) {
+func (svc *Service) FlowStopped(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) {
 	baggage, _ := workflow.BaggageFrom(ctx).(map[string]any)
 	host, _ := baggage[baggageNotifyHost].(string)
 	if host == "" {
 		return
 	}
-	for range foremanapi.NewMulticastTrigger(svc).ForHost(host).OnFlowStopped(ctx, outcome) {
+	for range foremanapi.NewMulticastTrigger(svc).ForHost(host).OnFlowStopped(ctx, flowKey, outcome) {
 	}
 }
 

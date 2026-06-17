@@ -100,3 +100,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.52.0 // indirect
 )
+
+replace github.com/microbus-io/dwarf => ../dwarf

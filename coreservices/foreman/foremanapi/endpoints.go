@@ -233,6 +233,7 @@ type SignalOut struct { // MARKER: Signal
 
 // OnFlowStoppedIn are the input arguments of OnFlowStopped.
 type OnFlowStoppedIn struct { // MARKER: OnFlowStopped
+	FlowKey string                `json:"flowKey,omitzero"`
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 

@@ -900,11 +900,11 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 	notifyCh := make(chan notification, 10)
 	assert := testarossa.For(t)
 	unsub, err := foremanapi.NewHook(tester).ForHost(tester.Hostname()).OnFlowStopped(
-		func(ctx context.Context, outcome *workflow.FlowOutcome) (err error) {
+		func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) (err error) {
 			if outcome == nil {
 				return nil
 			}
-			notifyCh <- notification{flowKey: outcome.FlowKey, status: outcome.Status, snapshot: outcome.State}
+			notifyCh <- notification{flowKey: flowKey, status: outcome.Status, snapshot: outcome.State}
 			return nil
 		},
 	)

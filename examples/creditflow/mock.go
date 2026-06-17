@@ -219,7 +219,7 @@ func (svc *Mock) MockIdentityVerification(handler func(ctx context.Context, flow
 	mockRoute := ":428/mock-identity-verification-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockIdentityVerificationGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph("IdentityVerification", creditflowapi.IdentityVerification.URL())
+		g := workflow.NewGraph("IdentityVerification")
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}
@@ -329,7 +329,7 @@ func (svc *Mock) MockCreditApproval(handler func(ctx context.Context, flow *work
 	mockRoute := ":428/mock-credit-approval-" + utils.RandomIdentifier(8)
 	mockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)
 	svc.mockCreditApprovalGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {
-		g := workflow.NewGraph("CreditApproval", creditflowapi.CreditApproval.URL())
+		g := workflow.NewGraph("CreditApproval")
 		g.AddTransition(mockTaskURL, workflow.END)
 		return g, nil
 	}

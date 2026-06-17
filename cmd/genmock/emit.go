@@ -267,7 +267,7 @@ func writeGraphMock(sb *strings.Builder, g *generated, m method) {
 	fmt.Fprintf(sb, "\tmockRoute := \":428/mock-%s-\" + utils.RandomIdentifier(8)\n", routeKebab)
 	sb.WriteString("\tmockTaskURL := httpx.JoinHostAndPath(svc.Hostname(), mockRoute)\n")
 	fmt.Fprintf(sb, "\tsvc.mock%sGraph = func(ctx context.Context) (graph *workflow.Graph, err error) {\n", m.name)
-	fmt.Fprintf(sb, "\t\tg := workflow.NewGraph(%q, %s.%s.URL())\n", m.name, apiPkg, m.name)
+	fmt.Fprintf(sb, "\t\tg := workflow.NewGraph(%q)\n", m.name)
 	sb.WriteString("\t\tg.AddTransition(mockTaskURL, workflow.END)\n")
 	sb.WriteString("\t\treturn g, nil\n")
 	sb.WriteString("\t}\n")

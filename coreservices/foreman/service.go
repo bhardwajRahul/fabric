@@ -254,7 +254,10 @@ func (svc *Service) BreakBefore(ctx context.Context, flowKey string, taskName st
 Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 */
 func (svc *Service) Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
-	return svc.engine.Run(ctx, workflowURL, initialState, svc.resolveOptions(ctx, opts))
+	// engine.Run now returns the new flow's key first; the foreman's Run endpoint does not expose it
+	// (callers needing the key use Create+Start+Await), so discard it here.
+	_, outcome, err = svc.engine.Run(ctx, workflowURL, initialState, svc.resolveOptions(ctx, opts))
+	return outcome, err
 }
 
 /*

@@ -1018,8 +1018,8 @@ func (_res *OnFlowStoppedResponse) Get() (err error) { // MARKER: OnFlowStopped
 /*
 OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
 */
-func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, outcome *workflow.FlowOutcome) iter.Seq[*OnFlowStoppedResponse] { // MARKER: OnFlowStopped
-	_in := OnFlowStoppedIn{Outcome: outcome}
+func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) iter.Seq[*OnFlowStoppedResponse] { // MARKER: OnFlowStopped
+	_in := OnFlowStoppedIn{FlowKey: flowKey, Outcome: outcome}
 	_out := OnFlowStoppedOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnFlowStopped.Method, OnFlowStopped.Route, &_in, &_out)
 	return func(yield func(*OnFlowStoppedResponse) bool) {
@@ -1036,12 +1036,12 @@ func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, outcome *workflow.
 /*
 OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
 */
-func (c Hook) OnFlowStopped(handler func(ctx context.Context, outcome *workflow.FlowOutcome) (err error)) (unsub func() error, err error) { // MARKER: OnFlowStopped
+func (c Hook) OnFlowStopped(handler func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) (err error)) (unsub func() error, err error) { // MARKER: OnFlowStopped
 	doOnFlowStopped := func(w http.ResponseWriter, r *http.Request) error {
 		var in OnFlowStoppedIn
 		var out OnFlowStoppedOut
 		err = marshalFunction(w, r, OnFlowStopped.Route, &in, &out, func(_ any, _ any) error {
-			err = handler(r.Context(), in.Outcome)
+			err = handler(r.Context(), in.FlowKey, in.Outcome)
 			return err
 		})
 		return err // No trace

@@ -3,7 +3,7 @@
 general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
-  modifiedAt: "2026-06-15T05:40:26Z"
+  modifiedAt: "2026-06-17T16:24:34Z"
 
 configs:
   SQLDataSourceName:
@@ -39,7 +39,7 @@ configs:
 
 outboundEvents:
   OnFlowStopped:
-    signature: OnFlowStopped(outcome *workflow.FlowOutcome)
+    signature: OnFlowStopped(flowKey string, outcome *workflow.FlowOutcome)
     description: OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
     method: POST
     route: :417/on-flow-terminated

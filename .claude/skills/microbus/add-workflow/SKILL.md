@@ -140,17 +140,17 @@ type ToDo interface {
 
 Implement the workflow graph builder in `service.go`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
 
-Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.AddTask("Name", taskURL)`, then write transitions in terms of names. Use **PascalCase** node names matching the task endpoint (e.g. `"TaskA"` for `TaskA`) — they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs and the camelCase state field names. The graph display name passed to `NewGraph` is PascalCase too (conventionally the workflow's own name). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
+Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.SetEndpoint("Name", taskURL)`, then write transitions in terms of names. Use **PascalCase** node names matching the task endpoint (e.g. `"TaskA"` for `TaskA`) — they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs and the camelCase state field names. The graph display name passed to `NewGraph` is PascalCase too (conventionally the workflow's own name). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
 
 ```go
 /*
 MyWorkflow does X.
 */
 func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: MyWorkflow
-	graph = workflow.NewGraph("MyWorkflow", myserviceapi.MyWorkflow.URL())
-	graph.AddTask("TaskA", myserviceapi.TaskA.URL())
-	graph.AddTask("TaskB", myserviceapi.TaskB.URL())
-	graph.AddTask("TaskC", myserviceapi.TaskC.URL())
+	graph = workflow.NewGraph("MyWorkflow")
+	graph.SetEndpoint("TaskA", myserviceapi.TaskA.URL())
+	graph.SetEndpoint("TaskB", myserviceapi.TaskB.URL())
+	graph.SetEndpoint("TaskC", myserviceapi.TaskC.URL())
 	// graph.AddTransition("TaskA", "TaskB")
 	// graph.AddTransitionWhen("TaskB", workflow.END, "done == true")
 	// graph.AddTransitionGoto("TaskB", "TaskC")

@@ -85,10 +85,10 @@ func subscribeTask(c *connector.Connector, name, route string, body func(f *work
 
 // linearGraph is A -> B -> C -> END, used by several subtests as a trivial happy path.
 func linearGraph(host string) *workflow.Graph {
-	g := workflow.NewGraph("Linear", host+":428/linear")
-	g.AddTask("A", host+":428/a")
-	g.AddTask("B", host+":428/b")
-	g.AddTask("C", host+":428/c")
+	g := workflow.NewGraph("Linear")
+	g.SetEndpoint("A", host+":428/a")
+	g.SetEndpoint("B", host+":428/b")
+	g.SetEndpoint("C", host+":428/c")
 	g.AddTransition("A", "B")
 	g.AddTransition("B", "C")
 	g.AddTransition("C", workflow.END)
@@ -114,14 +114,14 @@ func TestForemanIntegration(t *testing.T) {
 
 		// Subgraph: Parent P -> END, where P calls flow.Subgraph(Child) and adopts its output. Child K -> END.
 		subscribeGraph(c, "ParentGraph", ":428/parent", func() *workflow.Graph {
-			g := workflow.NewGraph("Parent", host+":428/parent")
-			g.AddTask("P", host+":428/p")
+			g := workflow.NewGraph("Parent")
+			g.SetEndpoint("P", host+":428/p")
 			g.AddTransition("P", workflow.END)
 			return g
 		})
 		subscribeGraph(c, "ChildGraph", ":428/child", func() *workflow.Graph {
-			g := workflow.NewGraph("Child", host+":428/child")
-			g.AddTask("K", host+":428/k")
+			g := workflow.NewGraph("Child")
+			g.SetEndpoint("K", host+":428/k")
 			g.AddTransition("K", workflow.END)
 			return g
 		})
@@ -139,8 +139,8 @@ func TestForemanIntegration(t *testing.T) {
 
 		// Interrupt: I -> END. First pass parks via flow.Interrupt; on resume it records the answer.
 		subscribeGraph(c, "InterruptGraph", ":428/interrupt", func() *workflow.Graph {
-			g := workflow.NewGraph("Interrupt", host+":428/interrupt")
-			g.AddTask("I", host+":428/i")
+			g := workflow.NewGraph("Interrupt")
+			g.SetEndpoint("I", host+":428/i")
 			g.AddTransition("I", workflow.END)
 			return g
 		})
@@ -158,8 +158,8 @@ func TestForemanIntegration(t *testing.T) {
 		// Breaker: Bk -> END. The task returns 503 on its first dispatch and succeeds afterward, so the
 		// foreman classifies the failure as a breaker trip (ErrUnavailable), parks+probes, and recovers.
 		subscribeGraph(c, "BreakerGraph", ":428/breaker", func() *workflow.Graph {
-			g := workflow.NewGraph("Breaker", host+":428/breaker")
-			g.AddTask("Bk", host+":428/bk")
+			g := workflow.NewGraph("Breaker")
+			g.SetEndpoint("Bk", host+":428/bk")
 			g.AddTransition("Bk", workflow.END)
 			return g
 		})
@@ -205,18 +205,26 @@ func TestForemanIntegration(t *testing.T) {
 
 	t.Run("interrupt_then_resume", func(t *testing.T) {
 		assert := testarossa.For(t)
-		out, err := client.Run(ctx, host+":428/interrupt", nil, nil)
+		// foreman.Run does not return the flow key; use Create+Start+Await so we have the key to Resume.
+		flowKey, err := client.Create(ctx, host+":428/interrupt", nil, nil)
 		if !assert.NoError(err) {
 			return
 		}
-		// Run awaits, and an interrupt is a stop: it returns interrupted with the payload.
+		if !assert.NoError(client.Start(ctx, flowKey)) {
+			return
+		}
+		out, err := client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		// Await returns when the flow stops, and an interrupt is a stop: interrupted with the payload.
 		assert.Equal(workflow.StatusInterrupted, out.Status)
 		assert.Equal("info", out.InterruptPayload["need"])
 
-		if !assert.NoError(client.Resume(ctx, out.FlowKey, map[string]any{"answer": 42})) {
+		if !assert.NoError(client.Resume(ctx, flowKey, map[string]any{"answer": 42})) {
 			return
 		}
-		final, err := client.Await(ctx, out.FlowKey)
+		final, err := client.Await(ctx, flowKey)
 		if !assert.NoError(err) {
 			return
 		}
