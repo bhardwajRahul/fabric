@@ -97,6 +97,7 @@ Control signals on `Flow`:
 - `SetEndpoint(name, taskURL)` - bind a node (by PascalCase name) to its dispatch URL, create-or-update (first node bound becomes the default entry point; the same URL may be bound under multiple names)
 - `SetEntryPoint(name)` - override the default entry point by node name
 - `AddTransition(from, to)` - unconditional transition; sibling unconditional/`When` transitions from the same node all fire in parallel (fan-out)
+- `AddTransitionChain(names...)` - convenience for a linear path; adds an unconditional `AddTransition` between each consecutive pair (`AddTransitionChain("A", "B", "C")` == `AddTransition("A", "B")` + `AddTransition("B", "C")`). End a chain with `workflow.END`. For branching, conditions, and loops, mix with the other `AddTransition*` methods
 - `AddTransitionWhen(from, to, when)` - conditional transition based on state expression; sibling `When` transitions are evaluated independently and *all* matching ones fire (fan-out, not first-match)
 - `AddTransitionSwitch(from, to, when)` - first-match-wins routing; siblings are evaluated in registration order and only the first whose expression matches fires. Use `when="true"` as the last branch for a default. Only one branch ever runs, so no `SetFanIn` is needed. See [Switch Transitions](#switch-transitions) below
 - `AddTransitionGoto(from, to)` - transition taken only when `flow.Goto` is called from the task body
