@@ -16,10 +16,14 @@ limitations under the License.
 
 // Command genservice generates a microservice's boilerplate from its api package definition.go.
 // Given an api package directory it generates client.go; given a service directory (with an <x>api
-// subdirectory) it generates both the api package's client.go and the service's intermediate.go.
+// subdirectory) it generates client.go, intermediate.go, mock.go, mock_test.go, and manifest.yaml.
+//
+// Usage: genservice [-check] <dir> [<dir>...]. With -check, nothing is written; the command exits 2 if
+// any output is out of date (a CI guard), 1 on error, 0 when everything is current.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -29,78 +33,102 @@ import (
 	"time"
 )
 
+// output is one file the generator produces: its path and gofmt'd/serialized content.
+type output struct {
+	path    string
+	content []byte
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: genservice <dir> [<dir>...]")
+	check := false
+	var dirs []string
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-check", "--check":
+			check = true
+		default:
+			dirs = append(dirs, arg)
+		}
+	}
+	if len(dirs) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: genservice [-check] <dir> [<dir>...]")
 		os.Exit(2)
 	}
-	for _, dir := range os.Args[1:] {
-		err := generate(dir)
+
+	stale := false
+	for _, dir := range dirs {
+		outs, err := emitAll(dir, time.Now().UTC().Format(time.RFC3339))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genservice: %s: %v\n", dir, err)
 			os.Exit(1)
 		}
+		for _, o := range outs {
+			if check {
+				existing, _ := os.ReadFile(o.path)
+				if !bytes.Equal(existing, o.content) {
+					fmt.Fprintf(os.Stderr, "genservice: %s is out of date\n", o.path)
+					stale = true
+				}
+				continue
+			}
+			err = os.WriteFile(o.path, o.content, 0o644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "genservice: %s: %v\n", o.path, err)
+				os.Exit(1)
+			}
+			fmt.Printf("genservice: wrote %s\n", o.path)
+		}
+	}
+	if check && stale {
+		os.Exit(2)
 	}
 }
 
-// generate detects whether dir is an api package (has definition.go) or a service directory (has an
-// <x>api subdirectory with definition.go) and generates the corresponding files.
-func generate(dir string) error {
+// emitAll detects whether dir is an api package (has definition.go) or a service directory (has an
+// <x>api subdirectory with definition.go) and returns the files to generate, without writing them.
+// now is the RFC 3339 timestamp used for a fresh or content-changed manifest.
+func emitAll(dir, now string) ([]output, error) {
 	if fileExists(filepath.Join(dir, "definition.go")) {
-		return generateClient(dir)
+		return emitAllClient(dir)
 	}
 	apiDir, err := findAPISubdir(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return generateService(dir, apiDir)
+	return emitAllService(dir, apiDir, now)
 }
 
-// generateClient writes the api package's client.go.
-func generateClient(apiDir string) error {
+// emitAllClient produces the api package's client.go.
+func emitAllClient(apiDir string) ([]output, error) {
 	svc, err := parseService(apiDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	path := filepath.Join(apiDir, "client.go")
 	src, err := emitClient(svc, existingHeader(path))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = os.WriteFile(path, src, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", path)
-	return nil
+	return []output{{path, src}}, nil
 }
 
-// generateService writes the api package's client.go and the service's intermediate.go.
-func generateService(dir, apiDir string) error {
+// emitAllService produces the api package's client.go plus the service's intermediate.go, mock.go,
+// mock_test.go, and manifest.yaml.
+func emitAllService(dir, apiDir, now string) ([]output, error) {
 	svc, err := parseService(apiDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	clientPath := filepath.Join(apiDir, "client.go")
-	clientSrc, err := emitClient(svc, existingHeader(clientPath))
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(clientPath, clientSrc, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", clientPath)
-
 	modPath, modDir, err := findModule(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	apiPath := importPathOf(modPath, modDir, apiDir)
 	resourcesPath := importPathOf(modPath, modDir, dir) + "/resources"
+	pkgPath := importPathOf(modPath, modDir, dir)
 	pkg, err := packageName(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resolveSource := func(importPath string) (*service, error) {
 		srcDir, ok := inModuleDir(modPath, modDir, importPath)
@@ -109,53 +137,40 @@ func generateService(dir, apiDir string) error {
 		}
 		return parseService(srcDir)
 	}
+
+	clientPath := filepath.Join(apiDir, "client.go")
+	clientSrc, err := emitClient(svc, existingHeader(clientPath))
+	if err != nil {
+		return nil, err
+	}
 	interPath := filepath.Join(dir, "intermediate.go")
 	interSrc, err := emitIntermediate(svc, pkg, apiPath, resourcesPath, existingHeader(interPath), resolveSource)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = os.WriteFile(interPath, interSrc, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", interPath)
-
 	mockPath := filepath.Join(dir, "mock.go")
 	mockSrc, err := emitMock(svc, pkg, apiPath, existingHeader(mockPath), resolveSource)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = os.WriteFile(mockPath, mockSrc, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", mockPath)
-
 	mockTestPath := filepath.Join(dir, "mock_test.go")
 	mockTestSrc, err := emitMockTest(svc, pkg, apiPath, existingHeader(mockTestPath), resolveSource)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = os.WriteFile(mockTestPath, mockTestSrc, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", mockTestPath)
-
-	pkgPath := importPathOf(modPath, modDir, dir)
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	existingManifest, _ := os.ReadFile(manifestPath)
-	now := time.Now().UTC().Format(time.RFC3339)
 	manifestSrc, err := emitManifest(svc, pkgPath, now, existingManifest, resolveSource)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = os.WriteFile(manifestPath, manifestSrc, 0o644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("genservice: wrote %s\n", manifestPath)
-	return nil
+	return []output{
+		{clientPath, clientSrc},
+		{interPath, interSrc},
+		{mockPath, mockSrc},
+		{mockTestPath, mockTestSrc},
+		{manifestPath, manifestSrc},
+	}, nil
 }
 
 func fileExists(p string) bool {
