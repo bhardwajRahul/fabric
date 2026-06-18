@@ -21,30 +21,16 @@ package svcapi
 import (
 	"context"
 	"encoding/json"
+	"iter"
+	"net/http"
+	"reflect"
+
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
 	"github.com/microbus-io/fabric/sub"
-	"iter"
-	"net/http"
-	"reflect"
-)
-
-var (
-	_ context.Context
-	_ json.Encoder
-	_ *http.Request
-	_ *errors.TracedError
-	_ *httpx.BodyReader
-	_ = marshalRequest
-	_ = marshalPublish
-	_ = marshalFunction
-	_ = marshalTask
-	_ = marshalWorkflow
-	_ = marshalSubflow
-	_ workflow.Flow
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -155,6 +141,19 @@ func (_c Executor) WithFlowOptions(flowOptions *workflow.FlowOptions) Executor {
 	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: flowOptions}
 }
 
+// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
+// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
+// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
+// returning (..., yield bool, err error).
+type Subflow struct {
+	flow *workflow.Flow
+}
+
+// NewSubflow creates a subflow client bound to the calling task's flow carrier.
+func NewSubflow(flow *workflow.Flow) Subflow {
+	return Subflow{flow: flow}
+}
+
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
 type MulticastTrigger struct {
 	svc  service.Publisher
@@ -197,19 +196,6 @@ func (c Hook) ForHost(host string) Hook {
 // WithOptions returns a copy of the hook with options to be applied to subscriptions.
 func (c Hook) WithOptions(opts ...sub.Option) Hook {
 	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
-}
-
-// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
-// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
-// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
-// returning (..., yield bool, err error).
-type Subflow struct {
-	flow *workflow.Flow
-}
-
-// NewSubflow creates a subflow client bound to the calling task's flow carrier.
-func NewSubflow(flow *workflow.Flow) Subflow {
-	return Subflow{flow: flow}
 }
 
 // marshalRequest supports functional endpoints.

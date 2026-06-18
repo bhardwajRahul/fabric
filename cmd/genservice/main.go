@@ -35,12 +35,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "genservice: %s: %v\n", dir, err)
 			os.Exit(1)
 		}
-		src, err := emitClient(svc)
+		path := filepath.Join(dir, "client.go")
+		src, err := emitClient(svc, existingHeader(path))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genservice: %s: %v\n", dir, err)
 			os.Exit(1)
 		}
-		path := filepath.Join(dir, "client.go")
 		err = os.WriteFile(path, src, 0o644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genservice: %s: %v\n", dir, err)

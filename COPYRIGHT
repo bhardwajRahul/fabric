@@ -16,5 +16,5 @@ limitations under the License.
 
 !testdata/*
 !.*
-!/codegen/bundle/*
+!/cmd/genservice/templates/*
 !resources/*

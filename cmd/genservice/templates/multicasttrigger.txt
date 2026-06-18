@@ -1,0 +1,21 @@
+// MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
+type MulticastTrigger struct {
+	svc  service.Publisher
+	host string
+	opts []pub.Option
+}
+
+// NewMulticastTrigger creates a new multicast trigger of events of the microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
+}
+
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
