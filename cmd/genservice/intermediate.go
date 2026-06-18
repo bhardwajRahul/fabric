@@ -1,0 +1,366 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"go/format"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// intermediateModel is the tree handed to intermediate.txt. Unlike client.go, intermediate.go lives in
+// the service package and references the api package and resources by import path, so those paths and
+// the service package name are part of the model.
+type intermediateModel struct {
+	Header        string
+	Package       string // service package name, e.g. "svc"
+	Version       int
+	Description   string
+	APIPkg        string // api package name, e.g. "svcapi"
+	APIPath       string // import path of the api package
+	ResourcesPath string // import path of the resources package
+	Imports       importSet
+
+	Funcs         []*featureView
+	Webs          []*featureView
+	Tasks         []*featureView
+	Workflows     []*featureView
+	InboundEvents []*featureView
+	Configs       []*configView
+	Metrics       []*metricView
+	Tickers       []*tickerView
+}
+
+func (m *intermediateModel) HasTask() bool     { return len(m.Tasks) > 0 }
+func (m *intermediateModel) HasWorkflow() bool { return len(m.Workflows) > 0 }
+
+// ObservableMetrics returns the metrics measured just-in-time via an OnObserve<Name> callback.
+func (m *intermediateModel) ObservableMetrics() []*metricView {
+	var out []*metricView
+	for _, mt := range m.Metrics {
+		if mt.Observable {
+			out = append(out, mt)
+		}
+	}
+	return out
+}
+
+// CallbackConfigs returns the configs whose change fires an OnChanged<Name> callback.
+func (m *intermediateModel) CallbackConfigs() []*configView {
+	var out []*configView
+	for _, c := range m.Configs {
+		if c.Callback {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// configView is a configuration property's registration and typed accessors.
+type configView struct {
+	Name       string
+	Doc        string // raw description for cfg.Description
+	DocComment string
+	Type       string // getter Go type: string | int | float64 | bool | time.Duration
+	Scalar     bool   // whether Type is one of the supported scalar getter types
+	Default    string
+	Validation string
+	Secret     bool
+	Callback   bool
+}
+
+// metricView is a metric's registration and recorder method.
+type metricView struct {
+	Name         string
+	Doc          string // raw description for DescribeX
+	DocComment   string
+	Kind         string // counter | gauge | histogram
+	RecorderVerb string // Increment | Record
+	RecordFn     string // IncrementCounter | RecordGauge | RecordHistogram
+	OTelName     string
+	ValueType    string // recorder value parameter type
+	ValueArg     string // "value" or "float64(value)"
+	Labels       []string
+	Buckets      string // rendered []float64 (histogram), or ""
+	Observable   bool
+}
+
+// tickerView is a recurring operation on a schedule.
+type tickerView struct {
+	Name       string
+	DocComment string
+	Interval   string // rendered duration expression
+}
+
+// emitIntermediate renders the service package's intermediate.go. resolveSource parses the api package
+// at a given import path, used to recover an inbound event's handler signature from its source.
+func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, version int, description string, resolveSource func(string) (*service, error)) ([]byte, error) {
+	err := validateForClient(svc)
+	if err != nil {
+		return nil, err
+	}
+	m := &intermediateModel{
+		Header: header, Package: pkg, Version: version, Description: description,
+		APIPkg: svc.apiPkg, APIPath: apiPath, ResourcesPath: resourcesPath,
+	}
+	var srcPaths []string
+	for _, f := range svc.features {
+		switch f.kind {
+		case "Function":
+			m.Funcs = append(m.Funcs, endpointView(svc, f))
+		case "Web":
+			m.Webs = append(m.Webs, endpointView(svc, f))
+		case "Task":
+			m.Tasks = append(m.Tasks, endpointView(svc, f))
+		case "Workflow":
+			m.Workflows = append(m.Workflows, endpointView(svc, f))
+		case "InboundEvent":
+			iv, srcPath, err := inboundView(svc, f, resolveSource)
+			if err != nil {
+				return nil, err
+			}
+			m.InboundEvents = append(m.InboundEvents, iv)
+			srcPaths = append(srcPaths, srcPath)
+		case "Config":
+			m.Configs = append(m.Configs, buildConfig(f))
+		case "Metric":
+			m.Metrics = append(m.Metrics, buildMetric(svc, f))
+		case "Ticker":
+			m.Tickers = append(m.Tickers, buildTicker(svc, f))
+		}
+	}
+
+	imports := map[string]bool{
+		impContext: true, impHTTP: true, impErrors: true, impHTTPX: true,
+		impConnector: true, impSub: true,
+		apiPath: true, resourcesPath: true,
+	}
+	if m.HasTask() || m.HasWorkflow() {
+		imports[impJSON] = true
+		imports[impWorkflow] = true
+	}
+	for _, p := range srcPaths {
+		imports[p] = true
+	}
+	if len(m.Configs) > 0 {
+		imports[impCfg] = true
+	}
+	if intermediateNeedsStrconv(m) {
+		imports[impStrconv] = true
+	}
+	if intermediateNeedsTime(m) {
+		imports[impTime] = true
+	}
+	for p := range imports {
+		if isStdlib(p) {
+			m.Imports.Std = append(m.Imports.Std, p)
+		} else {
+			m.Imports.Ext = append(m.Imports.Ext, p)
+		}
+	}
+	sort.Strings(m.Imports.Std)
+	sort.Strings(m.Imports.Ext)
+
+	var buf bytes.Buffer
+	err = clientTemplate.ExecuteTemplate(&buf, "intermediate.txt", m)
+	if err != nil {
+		return nil, err
+	}
+	out, err := format.Source(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("gofmt: %w\n%s", err, numberLines(buf.Bytes()))
+	}
+	return out, nil
+}
+
+// endpointView builds a feature view augmented with the subscription options.
+func endpointView(svc *service, f feature) *featureView {
+	fv := newFeatureView(svc, f)
+	fv.ReqClaims = attrString(f.attrs, "RequiredClaims")
+	tb, ok := f.attrs["TimeBudget"]
+	if ok {
+		fv.TimeBudget = exprSource(svc.fset, tb)
+	}
+	fv.Queue = loadBalancingValue(f.attrs["LoadBalancing"])
+	return fv
+}
+
+// buildConfig builds the view for a config property.
+func buildConfig(f feature) *configView {
+	typ := carrierTypeName(f.attrs["Value"])
+	scalar := typ == "string" || typ == "int" || typ == "float64" || typ == "bool" || typ == "time.Duration"
+	return &configView{
+		Name:       f.name,
+		Doc:        f.doc,
+		DocComment: docComment(f.doc),
+		Type:       typ,
+		Scalar:     scalar,
+		Default:    attrString(f.attrs, "Default"),
+		Validation: attrString(f.attrs, "Validation"),
+		Secret:     attrBool(f.attrs, "Secret"),
+		Callback:   attrBool(f.attrs, "Callback"),
+	}
+}
+
+// buildMetric builds the view for a metric.
+func buildMetric(svc *service, f feature) *metricView {
+	kind := metricKind(f.attrs["Kind"])
+	vt := carrierTypeName(f.attrs["Value"])
+	if vt == "" {
+		vt = "int"
+	}
+	valueArg := "float64(value)"
+	if vt == "float64" {
+		valueArg = "value"
+	}
+	verb, fn := "Record", "RecordGauge"
+	switch kind {
+	case "counter":
+		verb, fn = "Increment", "IncrementCounter"
+	case "histogram":
+		verb, fn = "Record", "RecordHistogram"
+	}
+	buckets := ""
+	if kind == "histogram" {
+		buckets = exprSource(svc.fset, f.attrs["Buckets"])
+	}
+	return &metricView{
+		Name:         f.name,
+		Doc:          f.doc,
+		DocComment:   docComment(f.doc),
+		Kind:         kind,
+		RecorderVerb: verb,
+		RecordFn:     fn,
+		OTelName:     attrString(f.attrs, "OTelName"),
+		ValueType:    vt,
+		ValueArg:     valueArg,
+		Labels:       stringSlice(f.attrs["Labels"]),
+		Buckets:      buckets,
+		Observable:   attrBool(f.attrs, "Observable"),
+	}
+}
+
+// buildTicker builds the view for a ticker.
+func buildTicker(svc *service, f feature) *tickerView {
+	return &tickerView{
+		Name:       f.name,
+		DocComment: docComment(f.doc),
+		Interval:   exprSource(svc.fset, f.attrs["Interval"]),
+	}
+}
+
+// intermediateNeedsStrconv reports whether any config getter parses an int/bool/float64.
+func intermediateNeedsStrconv(m *intermediateModel) bool {
+	for _, c := range m.Configs {
+		if c.Type == "int" || c.Type == "bool" || c.Type == "float64" {
+			return true
+		}
+	}
+	return false
+}
+
+// intermediateNeedsTime reports whether time is referenced (tickers, duration configs, or time budgets).
+func intermediateNeedsTime(m *intermediateModel) bool {
+	if len(m.Tickers) > 0 {
+		return true
+	}
+	for _, c := range m.Configs {
+		if c.Type == "time.Duration" {
+			return true
+		}
+	}
+	for _, group := range [][]*featureView{m.Funcs, m.Webs, m.Tasks, m.Workflows} {
+		for _, fv := range group {
+			if fv.TimeBudget != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// inboundView resolves an inbound event's handler signature from its source api package and returns
+// the view plus the source's import path.
+func inboundView(svc *service, f feature, resolveSource func(string) (*service, error)) (*featureView, string, error) {
+	srcPath, ok := svc.imports[f.srcPkg]
+	if !ok {
+		return nil, "", fmt.Errorf("inbound event %q: unknown source package %q", f.name, f.srcPkg)
+	}
+	srcSvc, err := resolveSource(srcPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("inbound event %q: resolving source %s: %w", f.name, srcPath, err)
+	}
+	var ev *feature
+	for i := range srcSvc.features {
+		if srcSvc.features[i].kind == "OutboundEvent" && srcSvc.features[i].name == f.srcEvent {
+			ev = &srcSvc.features[i]
+			break
+		}
+	}
+	if ev == nil {
+		return nil, "", fmt.Errorf("inbound event %q: source outbound event %s.%s not found", f.name, f.srcPkg, f.srcEvent)
+	}
+	return &featureView{
+		Name:       f.name,
+		Doc:        f.doc,
+		DocComment: docComment(f.doc),
+		SrcPkg:     f.srcPkg,
+		SrcEvent:   f.srcEvent,
+		inFields:   srcSvc.fieldsOf(ev.in),
+		outFields:  srcSvc.fieldsOf(ev.out),
+	}, srcPath, nil
+}
+
+// readVersionAndDescription recovers the operator-curated Version and SetDescription text from an
+// existing intermediate.go so they survive regeneration. Defaults: Version 1, description "".
+func readVersionAndDescription(path string) (version int, description string) {
+	version = 1
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return version, description
+	}
+	s := string(data)
+	for _, line := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "Version") {
+			continue
+		}
+		_, after, found := strings.Cut(t, "=")
+		if !found {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(after))
+		if err == nil {
+			version = n
+		}
+	}
+	const marker = "svc.SetDescription(`"
+	start := strings.Index(s, marker)
+	if start < 0 {
+		return version, description
+	}
+	rest := s[start+len(marker):]
+	end := strings.Index(rest, "`")
+	if end >= 0 {
+		description = rest[:end]
+	}
+	return version, description
+}

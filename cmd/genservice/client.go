@@ -27,17 +27,21 @@ import (
 
 // Import paths the generated client may reference.
 const (
-	impContext  = "context"
-	impJSON     = "encoding/json"
-	impIter     = "iter"
-	impHTTP     = "net/http"
-	impReflect  = "reflect"
-	impWorkflow = "github.com/microbus-io/dwarf/workflow"
-	impErrors   = "github.com/microbus-io/errors"
-	impHTTPX    = "github.com/microbus-io/fabric/httpx"
-	impPub      = "github.com/microbus-io/fabric/pub"
-	impService  = "github.com/microbus-io/fabric/service"
-	impSub      = "github.com/microbus-io/fabric/sub"
+	impContext   = "context"
+	impJSON      = "encoding/json"
+	impIter      = "iter"
+	impHTTP      = "net/http"
+	impReflect   = "reflect"
+	impStrconv   = "strconv"
+	impTime      = "time"
+	impWorkflow  = "github.com/microbus-io/dwarf/workflow"
+	impErrors    = "github.com/microbus-io/errors"
+	impCfg       = "github.com/microbus-io/fabric/cfg"
+	impConnector = "github.com/microbus-io/fabric/connector"
+	impHTTPX     = "github.com/microbus-io/fabric/httpx"
+	impPub       = "github.com/microbus-io/fabric/pub"
+	impService   = "github.com/microbus-io/fabric/service"
+	impSub       = "github.com/microbus-io/fabric/sub"
 )
 
 // clientModel is the in-memory tree handed to client.txt: the package, computed imports, var guards,
@@ -48,11 +52,11 @@ type clientModel struct {
 	Package string
 	Imports importSet
 
-	Funcs     []*featureView
-	Webs      []*featureView
-	Tasks     []*featureView
-	Workflows []*featureView
-	Events    []*featureView
+	Funcs          []*featureView
+	Webs           []*featureView
+	Tasks          []*featureView
+	Workflows      []*featureView
+	OutboundEvents []*featureView
 }
 
 type importSet struct {
@@ -64,7 +68,7 @@ func (m *clientModel) HasFunc() bool     { return len(m.Funcs) > 0 }
 func (m *clientModel) HasWeb() bool      { return len(m.Webs) > 0 }
 func (m *clientModel) HasTask() bool     { return len(m.Tasks) > 0 }
 func (m *clientModel) HasWorkflow() bool { return len(m.Workflows) > 0 }
-func (m *clientModel) HasEvent() bool    { return len(m.Events) > 0 }
+func (m *clientModel) HasEvent() bool    { return len(m.OutboundEvents) > 0 }
 
 // NeedClient reports whether the Client/MulticastClient proxies are required (functions or web).
 func (m *clientModel) NeedClient() bool { return m.HasFunc() || m.HasWeb() }
@@ -75,15 +79,36 @@ func (m *clientModel) NeedExecutor() bool { return m.HasTask() || m.HasWorkflow(
 // NeedResponse reports whether multicastResponse and marshalPublish are required (functions or events).
 func (m *clientModel) NeedResponse() bool { return m.HasFunc() || m.HasEvent() }
 
-// featureView is one feature with the fragments client.txt interpolates into its method bodies.
+// featureView is one feature with the fragments the templates interpolate into method bodies.
 type featureView struct {
 	Name       string
+	Doc        string // raw godoc text, or "" when undocumented
 	DocComment string // "// ...\n" lines, or "" when undocumented
 	In         string // In struct type name
 	Out        string // Out struct type name
+	SrcPkg     string // InboundEvent only: source api package alias
+	SrcEvent   string // InboundEvent only: source outbound event name
+
+	// Endpoint subscription options (intermediate.go only).
+	ReqClaims  string // sub.RequiredClaims expression, or ""
+	TimeBudget string // rendered sub.TimeBudget duration expr, or ""
+	Queue      string // "none" | "default" | custom queue name | ""
 
 	inFields  []fieldDef
 	outFields []fieldDef
+}
+
+// newFeatureView builds the view for a feature, resolving its In/Out struct fields.
+func newFeatureView(svc *service, f feature) *featureView {
+	return &featureView{
+		Name:       f.name,
+		Doc:        f.doc,
+		DocComment: docComment(f.doc),
+		In:         f.in,
+		Out:        f.out,
+		inFields:   svc.fieldsOf(f.in),
+		outFields:  svc.fieldsOf(f.out),
+	}
 }
 
 // HasOut reports whether the feature has any output fields.
@@ -187,14 +212,7 @@ func validateForClient(svc *service) error {
 func buildClientModel(svc *service, header string) *clientModel {
 	m := &clientModel{Header: header, Package: svc.apiPkg}
 	for _, f := range svc.features {
-		fv := &featureView{
-			Name:       f.name,
-			DocComment: docComment(f.doc),
-			In:         f.in,
-			Out:        f.out,
-			inFields:   svc.fieldsOf(f.in),
-			outFields:  svc.fieldsOf(f.out),
-		}
+		fv := newFeatureView(svc, f)
 		switch f.kind {
 		case "Function":
 			m.Funcs = append(m.Funcs, fv)
@@ -205,7 +223,7 @@ func buildClientModel(svc *service, header string) *clientModel {
 		case "Workflow":
 			m.Workflows = append(m.Workflows, fv)
 		case "OutboundEvent":
-			m.Events = append(m.Events, fv)
+			m.OutboundEvents = append(m.OutboundEvents, fv)
 		}
 	}
 

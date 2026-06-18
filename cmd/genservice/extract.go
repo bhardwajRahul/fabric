@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"maps"
 	"os"
@@ -34,15 +35,20 @@ type service struct {
 	features []feature             // declared in source order
 	structs  map[string]*structDef // In/Out and domain structs, by type name
 	imports  map[string]string     // alias -> import path, from the api package files
+	fset     *token.FileSet        // for rendering value expressions back to source
 }
 
 // feature is one define.* declaration.
 type feature struct {
-	name string // the var name, e.g. "VerifyCredit"
-	kind string // Function | Web | Task | Workflow | OutboundEvent | InboundEvent | Config | Metric | Ticker
-	doc  string // godoc on the var, cleaned; may be ""
-	in   string // In struct type name; "" if the kind has none
-	out  string // Out struct type name; "" if the kind has none
+	name     string // the var name, e.g. "VerifyCredit"
+	kind     string // Function | Web | Task | Workflow | OutboundEvent | InboundEvent | Config | Metric | Ticker
+	doc      string // godoc on the var, cleaned; may be ""
+	in       string // In struct type name; "" if the kind has none
+	out      string // Out struct type name; "" if the kind has none
+	srcPkg   string // InboundEvent only: the Source's package alias, e.g. "eventsourceapi"
+	srcEvent string // InboundEvent only: the Source outbound event name, e.g. "OnRegistered"
+
+	attrs map[string]ast.Expr // the literal's keyed fields (Method, RequiredClaims, Default, Kind, ...)
 }
 
 // structDef is a struct type and its (flattened) fields.
@@ -69,11 +75,12 @@ func parseService(dir string) (*service, error) {
 	if err != nil {
 		return nil, err
 	}
+	fset := token.NewFileSet()
 	svc := &service{
 		structs: map[string]*structDef{},
 		imports: map[string]string{},
+		fset:    fset,
 	}
-	fset := token.NewFileSet()
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
@@ -173,12 +180,32 @@ func collectFeatures(svc *service, f *ast.File) {
 			if !ok || pkg.Name != "define" || !defineKinds[sel.Sel.Name] {
 				continue
 			}
-			ft := feature{name: vs.Names[0].Name, kind: sel.Sel.Name}
+			ft := feature{name: vs.Names[0].Name, kind: sel.Sel.Name, attrs: attrsOf(cl)}
 			ft.doc = cleanDoc(vs.Doc, gen.Doc)
 			ft.in, ft.out = inOutOf(cl)
+			if ft.kind == "InboundEvent" {
+				ft.srcPkg, ft.srcEvent = sourceOf(cl)
+			}
 			svc.features = append(svc.features, ft)
 		}
 	}
+}
+
+// attrsOf returns the keyed fields of a composite literal (Method, RequiredClaims, Default, Kind, ...).
+func attrsOf(cl *ast.CompositeLit) map[string]ast.Expr {
+	out := map[string]ast.Expr{}
+	for _, elt := range cl.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		out[key.Name] = kv.Value
+	}
+	return out
 }
 
 // inOutOf returns the In and Out struct type names from a define.* composite literal.
@@ -208,6 +235,31 @@ func inOutOf(cl *ast.CompositeLit) (in, out string) {
 	return in, out
 }
 
+// sourceOf returns the package alias and event name of an InboundEvent's Source (e.g. for
+// Source: eventsourceapi.OnRegistered it returns "eventsourceapi", "OnRegistered").
+func sourceOf(cl *ast.CompositeLit) (pkg, name string) {
+	for _, elt := range cl.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Source" {
+			continue
+		}
+		sel, ok := kv.Value.(*ast.SelectorExpr)
+		if !ok {
+			continue
+		}
+		x, ok := sel.X.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		return x.Name, sel.Sel.Name
+	}
+	return "", ""
+}
+
 // fieldsOf returns the fields of the named struct, or nil if the name is empty or the struct has none.
 func (svc *service) fieldsOf(name string) []fieldDef {
 	if name == "" {
@@ -217,6 +269,94 @@ func (svc *service) fieldsOf(name string) []fieldDef {
 		return sd.fields
 	}
 	return nil
+}
+
+// exprSource renders an expression node back to Go source (e.g. "10 * time.Second", "[]float64{1, 2}").
+func exprSource(fset *token.FileSet, e ast.Expr) string {
+	if e == nil {
+		return ""
+	}
+	var b strings.Builder
+	err := printer.Fprint(&b, fset, e)
+	if err != nil {
+		return ""
+	}
+	return b.String()
+}
+
+// attrString returns the unquoted value of a string-literal attribute, or "".
+func attrString(attrs map[string]ast.Expr, key string) string {
+	e, ok := attrs[key]
+	if !ok {
+		return ""
+	}
+	bl, ok := e.(*ast.BasicLit)
+	if !ok {
+		return ""
+	}
+	return strings.Trim(bl.Value, "`\"")
+}
+
+// attrBool reports whether the attribute is the identifier true.
+func attrBool(attrs map[string]ast.Expr, key string) bool {
+	id, ok := attrs[key].(*ast.Ident)
+	return ok && id.Name == "true"
+}
+
+// carrierTypeName returns the type carried by a value carrier: int(0) -> "int", MyStruct{} ->
+// "MyStruct", time.Duration(0) -> "time.Duration". Empty if the expression is not a carrier.
+func carrierTypeName(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.CallExpr:
+		return exprString(t.Fun)
+	case *ast.CompositeLit:
+		return exprString(t.Type)
+	}
+	return ""
+}
+
+// stringSlice returns the string literals of a []string composite literal, e.g. []string{"a","b"}.
+func stringSlice(e ast.Expr) []string {
+	cl, ok := e.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, elt := range cl.Elts {
+		bl, ok := elt.(*ast.BasicLit)
+		if ok {
+			out = append(out, strings.Trim(bl.Value, "`\""))
+		}
+	}
+	return out
+}
+
+// metricKind resolves a Metric's Kind: define.Counter -> "counter", or a bare string literal.
+func metricKind(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.SelectorExpr:
+		return strings.ToLower(t.Sel.Name)
+	case *ast.BasicLit:
+		return strings.Trim(t.Value, "`\"")
+	}
+	return ""
+}
+
+// loadBalancingValue resolves a LoadBalancing field: define.None -> "none", define.Default ->
+// "default", a bare string -> that string, absent/empty -> "".
+func loadBalancingValue(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.SelectorExpr:
+		switch t.Sel.Name {
+		case "None":
+			return "none"
+		case "Default":
+			return "default"
+		}
+	case *ast.BasicLit:
+		return strings.Trim(t.Value, "`\"")
+	}
+	return ""
 }
 
 // cleanDoc extracts the godoc text from the first non-nil comment group, trimmed.
