@@ -1,0 +1,47 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package srcapi is a minimal upstream fixture exposing one outbound event, so that the svcapi
+// fixture can reference it cross-package via define.InboundEvent.Source.
+package srcapi
+
+import (
+	"github.com/microbus-io/fabric/define"
+)
+
+// Hostname is the default hostname of the microservice.
+const Hostname = "src.pressuretest"
+
+// OnSrcEvent fires when the source observes something noteworthy.
+var OnSrcEvent = define.OutboundEvent{
+	Host: Hostname, Method: "POST", Route: ":417/on-src-event",
+	In: OnSrcEventIn{}, Out: OnSrcEventOut{},
+}
+
+// SrcThing is a domain type re-exported by downstream fixtures via a type alias.
+type SrcThing struct {
+	Label string `json:"label,omitzero"`
+}
+
+// OnSrcEventIn are the input arguments of OnSrcEvent.
+type OnSrcEventIn struct {
+	Detail string `json:"detail,omitzero"`
+}
+
+// OnSrcEventOut are the output arguments of OnSrcEvent.
+type OnSrcEventOut struct {
+	OK bool `json:"ok,omitzero"`
+}
