@@ -148,7 +148,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.Validation(`dur (0s,24h]`),
 	)
 
-	_ = marshalFunction
 	return svc
 }
 

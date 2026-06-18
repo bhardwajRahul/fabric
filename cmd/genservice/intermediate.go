@@ -152,9 +152,22 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	}
 
 	imports := map[string]bool{
-		impContext: true, impHTTP: true, impErrors: true, impHTTPX: true,
-		impConnector: true, impSub: true,
+		impContext: true, impConnector: true,
 		apiPath: true, resourcesPath: true,
+	}
+	// Endpoints drive the http/sub/httpx surface: every doXxx handler and the web ToDo signature take
+	// http types and are registered via sub; only functions carry the httpx-based marshalFunction. A
+	// config-only or metric-only microservice needs none of these.
+	hasEndpoints := len(m.Funcs) > 0 || len(m.Webs) > 0 || m.HasTask() || m.HasWorkflow()
+	if hasEndpoints {
+		imports[impHTTP] = true
+		imports[impSub] = true
+	}
+	if len(m.Funcs) > 0 {
+		imports[impHTTPX] = true
+	}
+	if len(m.Funcs) > 0 || m.HasTask() || m.HasWorkflow() || len(m.CallbackConfigs()) > 0 {
+		imports[impErrors] = true
 	}
 	if m.HasTask() || m.HasWorkflow() {
 		imports[impJSON] = true

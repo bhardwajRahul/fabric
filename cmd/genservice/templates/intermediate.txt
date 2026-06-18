@@ -101,7 +101,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 {{end}}{{if .Secret}}		cfg.Secret(),
 {{end}}	)
 {{end}}
-	_ = marshalFunction
 	return svc
 }
 
@@ -123,7 +122,7 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 {{end}}	return nil
 }
 
-// marshalFunction handles marshaling for functional endpoints.
+{{if .Funcs}}// marshalFunction handles marshaling for functional endpoints.
 func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
 	err := httpx.ReadInputPayload(r, route, in)
 	if err != nil {
@@ -139,6 +138,7 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	}
 	return nil
 }
+{{end}}
 
 {{range .Funcs}}// do{{.Name}} handles marshaling for {{.Name}}.
 func (svc *Intermediate) do{{.Name}}(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: {{.Name}}
