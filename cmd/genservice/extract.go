@@ -25,17 +25,22 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 // service is the model extracted from a microservice's api package definition.go (+ sibling files).
 type service struct {
-	apiPkg   string                // api package name, e.g. "svcapi"
-	hostname string                // value of the Hostname const
-	features []feature             // declared in source order
-	structs  map[string]*structDef // In/Out and domain structs, by type name
-	imports  map[string]string     // alias -> import path, from the api package files
-	fset     *token.FileSet        // for rendering value expressions back to source
+	apiPkg         string                // api package name, e.g. "svcapi"
+	hostname       string                // value of the Hostname const
+	version        int                   // value of the Version const
+	hasVersion     bool                  // whether definition.go declares a Version const
+	description    string                // value of the Description const
+	hasDescription bool                  // whether definition.go declares a Description const
+	features       []feature             // declared in source order
+	structs        map[string]*structDef // In/Out and domain structs, by type name
+	imports        map[string]string     // alias -> import path, from the api package files
+	fset           *token.FileSet        // for rendering value expressions back to source
 }
 
 // feature is one define.* declaration.
@@ -133,7 +138,7 @@ func collectStructs(svc *service, f *ast.File) {
 	}
 }
 
-// collectConsts records the Hostname const value.
+// collectConsts records the Hostname, Version, and Description const values that define the service.
 func collectConsts(svc *service, f *ast.File) {
 	for _, decl := range f.Decls {
 		gen, ok := decl.(*ast.GenDecl)
@@ -146,10 +151,25 @@ func collectConsts(svc *service, f *ast.File) {
 				continue
 			}
 			for i, n := range vs.Names {
-				if n.Name == "Hostname" && i < len(vs.Values) {
-					if bl, ok := vs.Values[i].(*ast.BasicLit); ok {
-						svc.hostname = strings.Trim(bl.Value, "`\"")
+				if i >= len(vs.Values) {
+					continue
+				}
+				bl, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok {
+					continue
+				}
+				switch n.Name {
+				case "Hostname":
+					svc.hostname = strings.Trim(bl.Value, "`\"")
+				case "Version":
+					v, err := strconv.Atoi(bl.Value)
+					if err == nil {
+						svc.version = v
+						svc.hasVersion = true
 					}
+				case "Description":
+					svc.description = strings.Trim(bl.Value, "`\"")
+					svc.hasDescription = true
 				}
 			}
 		}
@@ -411,6 +431,22 @@ func exprString(e ast.Expr) string {
 	}
 }
 
+// featureSelectorImports returns the import paths referenced by pkg.Type selectors in the In/Out
+// struct fields of every feature, resolved against the api package's own import aliases.
+func featureSelectorImports(svc *service) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range svc.features {
+		for _, fld := range append(svc.fieldsOf(f.in), svc.fieldsOf(f.out)...) {
+			for _, sel := range selectorsIn(fld.typ) {
+				if path, ok := svc.imports[sel]; ok {
+					out[path] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
 // selectorsIn returns the leading identifiers of any pkg.Type selectors in a rendered type string.
 func selectorsIn(typ string) []string {
 	var out []string
@@ -442,6 +478,99 @@ func isIdentStart(c byte) bool {
 
 func isIdentCont(c byte) bool {
 	return isIdentStart(c) || (c >= '0' && c <= '9')
+}
+
+// builtinTypes are the bare identifiers qualifyTypes must not prefix with a package alias.
+var builtinTypes = map[string]bool{
+	"bool": true, "byte": true, "complex64": true, "complex128": true,
+	"error": true, "float32": true, "float64": true,
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"rune": true, "string": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true, "uintptr": true,
+	"any": true, "true": true, "false": true, "nil": true,
+	"map": true, "chan": true, "func": true, "interface": true, "struct": true,
+}
+
+// qualifyTypes prefixes bare type identifiers in a Go type expression with the package alias, leaving
+// builtins, already-qualified selectors, and keywords alone. In/Out struct fields are declared inside
+// the api package; rendered into the service package (intermediate.go, mock.go) a bare domain type like
+// Applicant must become apiPkg.Applicant. An empty apiPkg returns typ unchanged.
+func qualifyTypes(typ, apiPkg string) string {
+	if apiPkg == "" {
+		return typ
+	}
+	var sb strings.Builder
+	i := 0
+	for i < len(typ) {
+		c := typ[i]
+		if !isIdentStart(c) {
+			sb.WriteByte(c)
+			i++
+			continue
+		}
+		j := i
+		for j < len(typ) && isIdentCont(typ[j]) {
+			j++
+		}
+		ident := typ[i:j]
+		precededByDot := i > 0 && typ[i-1] == '.'
+		followedByDot := j < len(typ) && typ[j] == '.'
+		if precededByDot || followedByDot || builtinTypes[ident] {
+			sb.WriteString(ident)
+		} else {
+			sb.WriteString(apiPkg)
+			sb.WriteByte('.')
+			sb.WriteString(ident)
+		}
+		i = j
+	}
+	return sb.String()
+}
+
+// kebabCase converts a PascalCase identifier to kebab-case.
+func kebabCase(s string) string {
+	var sb strings.Builder
+	for i, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				sb.WriteByte('-')
+			}
+			sb.WriteRune(r + ('a' - 'A'))
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+// snakeCase converts a PascalCase or camelCase identifier to snake_case.
+func snakeCase(s string) string {
+	var sb strings.Builder
+	for i, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				sb.WriteByte('_')
+			}
+			sb.WriteRune(r + ('a' - 'A'))
+		} else {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+// pascalCase capitalizes the first letter of s, the cheap "PascalCase of a lowercase package name" form
+// used to build the mock test function name. Vanity-cased package dirs come out naively (chatgptllm ->
+// Chatgptllm).
+func pascalCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	if r[0] >= 'a' && r[0] <= 'z' {
+		r[0] = r[0] - ('a' - 'A')
+	}
+	return string(r)
 }
 
 // lowerFirst lowercases the leading run of capitals, leaving the last capital of an acronym run that

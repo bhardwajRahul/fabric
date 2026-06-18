@@ -19,8 +19,11 @@ package svc
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
+
+	"github.com/microbus-io/fabric/cmd/genservice/testdata/svc/svcapi"
 )
 
 // Service is the hand-written half of the fixture; intermediate.go is generated alongside it.
@@ -37,6 +40,11 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) { return nil }
 // Greet returns a greeting for a name.
 func (svc *Service) Greet(ctx context.Context, name string) (greeting string, err error) {
 	return "", nil
+}
+
+// Adopt registers a pet and returns the adoption time.
+func (svc *Service) Adopt(ctx context.Context, pet svcapi.Pet) (since time.Time, err error) {
+	return time.Time{}, nil
 }
 
 // Ping checks liveness.

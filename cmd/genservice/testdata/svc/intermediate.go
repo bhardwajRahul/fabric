@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	Hostname = svcapi.Hostname
-	Version  = 1
+	Hostname    = svcapi.Hostname
+	Version     = svcapi.Version
+	Description = svcapi.Description
 )
 
 // ToDo is implemented by the service or mock.
@@ -31,6 +32,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Greet(ctx context.Context, name string) (greeting string, err error)                      // MARKER: Greet
+	Adopt(ctx context.Context, pet svcapi.Pet) (since time.Time, err error)                   // MARKER: Adopt
 	Ping(ctx context.Context) (err error)                                                     // MARKER: Ping
 	Dashboard(w http.ResponseWriter, r *http.Request) (err error)                             // MARKER: Dashboard
 	ProcessStep(ctx context.Context, flow *workflow.Flow, item string) (done bool, err error) // MARKER: ProcessStep
@@ -70,7 +72,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		ToDo:      impl,
 	}
 	svc.SetVersion(Version)
-	svc.SetDescription(``)
+	svc.SetDescription(Description)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
 	svc.SetResFS(resources.FS)
@@ -84,6 +86,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.RequiredClaims(`roles.user`),
 		sub.TimeBudget(5*time.Second),
 		sub.Function(svcapi.GreetIn{}, svcapi.GreetOut{}),
+	)
+	svc.Subscribe( // MARKER: Adopt
+		"Adopt", svc.doAdopt,
+		sub.At(svcapi.Adopt.Method, svcapi.Adopt.Route),
+		sub.Description(`Adopt registers a pet and returns the adoption time. It exercises qualification of a domain type
+(Pet -> svcapi.Pet) and an external type (time.Time) in the generated service-package files.`),
+		sub.Function(svcapi.AdoptIn{}, svcapi.AdoptOut{}),
 	)
 	svc.Subscribe( // MARKER: Ping
 		"Ping", svc.doPing,
@@ -184,6 +193,17 @@ func (svc *Intermediate) doGreet(w http.ResponseWriter, r *http.Request) (err er
 	var out svcapi.GreetOut
 	err = marshalFunction(w, r, svcapi.Greet.Route, &in, &out, func(_ any, _ any) error {
 		out.Greeting, err = svc.Greet(r.Context(), in.Name)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doAdopt handles marshaling for Adopt.
+func (svc *Intermediate) doAdopt(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Adopt
+	var in svcapi.AdoptIn
+	var out svcapi.AdoptOut
+	err = marshalFunction(w, r, svcapi.Adopt.Route, &in, &out, func(_ any, _ any) error {
+		out.Since, err = svc.Adopt(r.Context(), in.Pet)
 		return err // No trace
 	})
 	return err // No trace

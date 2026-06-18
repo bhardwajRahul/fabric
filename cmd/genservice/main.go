@@ -109,8 +109,7 @@ func generateService(dir, apiDir string) error {
 		return parseService(srcDir)
 	}
 	interPath := filepath.Join(dir, "intermediate.go")
-	version, description := readVersionAndDescription(interPath)
-	interSrc, err := emitIntermediate(svc, pkg, apiPath, resourcesPath, existingHeader(interPath), version, description, resolveSource)
+	interSrc, err := emitIntermediate(svc, pkg, apiPath, resourcesPath, existingHeader(interPath), resolveSource)
 	if err != nil {
 		return err
 	}
@@ -119,6 +118,28 @@ func generateService(dir, apiDir string) error {
 		return err
 	}
 	fmt.Printf("genservice: wrote %s\n", interPath)
+
+	mockPath := filepath.Join(dir, "mock.go")
+	mockSrc, err := emitMock(svc, pkg, apiPath, existingHeader(mockPath), resolveSource)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(mockPath, mockSrc, 0o644)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("genservice: wrote %s\n", mockPath)
+
+	mockTestPath := filepath.Join(dir, "mock_test.go")
+	mockTestSrc, err := emitMockTest(svc, pkg, apiPath, existingHeader(mockTestPath), resolveSource)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(mockTestPath, mockTestSrc, 0o644)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("genservice: wrote %s\n", mockTestPath)
 	return nil
 }
 

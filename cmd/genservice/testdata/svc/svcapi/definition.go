@@ -29,6 +29,12 @@ import (
 // Hostname is the default hostname of the microservice.
 const Hostname = "svc.example"
 
+// Version is the major version of the microservice's public API.
+const Version = 1
+
+// Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
+const Description = `The svc microservice is a fixture exercising every feature kind for code generation.`
+
 // Greet returns a greeting for a name.
 var Greet = define.Function{
 	Host: Hostname, Method: "POST", Route: ":443/greet",
@@ -45,6 +51,29 @@ type GreetIn struct {
 // GreetOut are the output arguments of Greet.
 type GreetOut struct {
 	Greeting string `json:"greeting,omitzero"`
+}
+
+// Adopt registers a pet and returns the adoption time. It exercises qualification of a domain type
+// (Pet -> svcapi.Pet) and an external type (time.Time) in the generated service-package files.
+var Adopt = define.Function{
+	Host: Hostname, Method: "POST", Route: ":443/adopt",
+	In: AdoptIn{}, Out: AdoptOut{},
+}
+
+// AdoptIn are the input arguments of Adopt.
+type AdoptIn struct {
+	Pet Pet `json:"pet,omitzero"`
+}
+
+// AdoptOut are the output arguments of Adopt.
+type AdoptOut struct {
+	Since time.Time `json:"since,omitzero"`
+}
+
+// Pet is a domain type adopted by the microservice.
+type Pet struct {
+	Name string `json:"name,omitzero"`
+	Age  int    `json:"age,omitzero"`
 }
 
 // Ping checks liveness; it takes and returns nothing.
@@ -106,11 +135,13 @@ var MainFlow = define.Workflow{
 // MainFlowIn are the input arguments of MainFlow.
 type MainFlowIn struct {
 	Item string `json:"item,omitzero"`
+	Pet  Pet    `json:"pet,omitzero"`
 }
 
 // MainFlowOut are the output arguments of MainFlow.
 type MainFlowOut struct {
-	Done bool `json:"done,omitzero"`
+	Done  bool      `json:"done,omitzero"`
+	Since time.Time `json:"since,omitzero"`
 }
 
 // OnSrcEvent handles the upstream srcapi.OnSrcEvent event.

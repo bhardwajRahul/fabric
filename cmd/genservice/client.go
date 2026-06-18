@@ -27,21 +27,24 @@ import (
 
 // Import paths the generated client may reference.
 const (
-	impContext   = "context"
-	impJSON      = "encoding/json"
-	impIter      = "iter"
-	impHTTP      = "net/http"
-	impReflect   = "reflect"
-	impStrconv   = "strconv"
-	impTime      = "time"
-	impWorkflow  = "github.com/microbus-io/dwarf/workflow"
-	impErrors    = "github.com/microbus-io/errors"
-	impCfg       = "github.com/microbus-io/fabric/cfg"
-	impConnector = "github.com/microbus-io/fabric/connector"
-	impHTTPX     = "github.com/microbus-io/fabric/httpx"
-	impPub       = "github.com/microbus-io/fabric/pub"
-	impService   = "github.com/microbus-io/fabric/service"
-	impSub       = "github.com/microbus-io/fabric/sub"
+	impContext    = "context"
+	impJSON       = "encoding/json"
+	impIter       = "iter"
+	impHTTP       = "net/http"
+	impReflect    = "reflect"
+	impStrconv    = "strconv"
+	impTesting    = "testing"
+	impTime       = "time"
+	impWorkflow   = "github.com/microbus-io/dwarf/workflow"
+	impErrors     = "github.com/microbus-io/errors"
+	impTestarossa = "github.com/microbus-io/testarossa"
+	impCfg        = "github.com/microbus-io/fabric/cfg"
+	impConnector  = "github.com/microbus-io/fabric/connector"
+	impHTTPX      = "github.com/microbus-io/fabric/httpx"
+	impPub        = "github.com/microbus-io/fabric/pub"
+	impService    = "github.com/microbus-io/fabric/service"
+	impSub        = "github.com/microbus-io/fabric/sub"
+	impUtils      = "github.com/microbus-io/fabric/utils"
 )
 
 // clientModel is the in-memory tree handed to client.txt: the package, computed imports, var guards,
@@ -94,6 +97,7 @@ type featureView struct {
 	TimeBudget string // rendered sub.TimeBudget duration expr, or ""
 	Queue      string // "none" | "default" | custom queue name | ""
 
+	apiPkg    string // when set, bare In/Out field types are qualified with this package alias
 	inFields  []fieldDef
 	outFields []fieldDef
 }
@@ -118,7 +122,7 @@ func (f *featureView) HasOut() bool { return len(f.outFields) > 0 }
 func (f *featureView) Params() string {
 	var b strings.Builder
 	for _, x := range f.inFields {
-		fmt.Fprintf(&b, ", %s %s", lowerFirst(x.goName), x.typ)
+		fmt.Fprintf(&b, ", %s %s", lowerFirst(x.goName), qualifyTypes(x.typ, f.apiPkg))
 	}
 	return b.String()
 }
@@ -127,7 +131,7 @@ func (f *featureView) Params() string {
 func (f *featureView) Returns() string {
 	var b strings.Builder
 	for _, x := range f.outFields {
-		fmt.Fprintf(&b, "%s %s, ", lowerFirst(x.goName), x.typ)
+		fmt.Fprintf(&b, "%s %s, ", lowerFirst(x.goName), qualifyTypes(x.typ, f.apiPkg))
 	}
 	return b.String()
 }
@@ -260,14 +264,8 @@ func buildClientModel(svc *service, header string) *clientModel {
 	if m.HasWeb() {
 		need(impContext, impIter, impHTTP, impPub, impHTTPX)
 	}
-	for _, f := range svc.features {
-		for _, fld := range append(svc.fieldsOf(f.in), svc.fieldsOf(f.out)...) {
-			for _, sel := range selectorsIn(fld.typ) {
-				if path, ok := svc.imports[sel]; ok {
-					need(path)
-				}
-			}
-		}
+	for p := range featureSelectorImports(svc) {
+		need(p)
 	}
 	for p := range imports {
 		if isStdlib(p) {

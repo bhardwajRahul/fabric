@@ -34,4 +34,5 @@ var templatesFS embed.FS
 // {{template "function.txt" .}}). root.txt is the entry point.
 var clientTemplate = template.Must(template.New("genservice").Funcs(template.FuncMap{
 	"quote": strconv.Quote,
+	"snake": snakeCase,
 }).ParseFS(templatesFS, "templates/*.txt"))

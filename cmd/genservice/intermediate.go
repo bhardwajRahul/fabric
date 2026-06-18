@@ -20,10 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
-	"os"
 	"sort"
-	"strconv"
-	"strings"
 )
 
 // intermediateModel is the tree handed to intermediate.txt. Unlike client.go, intermediate.go lives in
@@ -32,8 +29,6 @@ import (
 type intermediateModel struct {
 	Header        string
 	Package       string // service package name, e.g. "svc"
-	Version       int
-	Description   string
 	APIPkg        string // api package name, e.g. "svcapi"
 	APIPath       string // import path of the api package
 	ResourcesPath string // import path of the resources package
@@ -111,14 +106,22 @@ type tickerView struct {
 }
 
 // emitIntermediate renders the service package's intermediate.go. resolveSource parses the api package
-// at a given import path, used to recover an inbound event's handler signature from its source.
-func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, version int, description string, resolveSource func(string) (*service, error)) ([]byte, error) {
+// at a given import path, used to recover an inbound event's handler signature from its source. The
+// Hostname, Version, and Description consts are referenced from the api package, so definition.go must
+// declare all three.
+func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, resolveSource func(string) (*service, error)) ([]byte, error) {
 	err := validateForClient(svc)
 	if err != nil {
 		return nil, err
 	}
+	if !svc.hasVersion {
+		return nil, fmt.Errorf("definition.go must declare `const Version`")
+	}
+	if !svc.hasDescription {
+		return nil, fmt.Errorf("definition.go must declare `const Description`")
+	}
 	m := &intermediateModel{
-		Header: header, Package: pkg, Version: version, Description: description,
+		Header: header, Package: pkg,
 		APIPkg: svc.apiPkg, APIPath: apiPath, ResourcesPath: resourcesPath,
 	}
 	var srcPaths []string
@@ -169,6 +172,9 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	if intermediateNeedsTime(m) {
 		imports[impTime] = true
 	}
+	for p := range featureSelectorImports(svc) {
+		imports[p] = true
+	}
 	for p := range imports {
 		if isStdlib(p) {
 			m.Imports.Std = append(m.Imports.Std, p)
@@ -194,6 +200,7 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 // endpointView builds a feature view augmented with the subscription options.
 func endpointView(svc *service, f feature) *featureView {
 	fv := newFeatureView(svc, f)
+	fv.apiPkg = svc.apiPkg
 	fv.ReqClaims = attrString(f.attrs, "RequiredClaims")
 	tb, ok := f.attrs["TimeBudget"]
 	if ok {
@@ -324,43 +331,9 @@ func inboundView(svc *service, f feature, resolveSource func(string) (*service, 
 		DocComment: docComment(f.doc),
 		SrcPkg:     f.srcPkg,
 		SrcEvent:   f.srcEvent,
+		apiPkg:     f.srcPkg, // inbound handler params reference the source api package's types
 		inFields:   srcSvc.fieldsOf(ev.in),
 		outFields:  srcSvc.fieldsOf(ev.out),
 	}, srcPath, nil
 }
 
-// readVersionAndDescription recovers the operator-curated Version and SetDescription text from an
-// existing intermediate.go so they survive regeneration. Defaults: Version 1, description "".
-func readVersionAndDescription(path string) (version int, description string) {
-	version = 1
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return version, description
-	}
-	s := string(data)
-	for _, line := range strings.Split(s, "\n") {
-		t := strings.TrimSpace(line)
-		if !strings.HasPrefix(t, "Version") {
-			continue
-		}
-		_, after, found := strings.Cut(t, "=")
-		if !found {
-			continue
-		}
-		n, err := strconv.Atoi(strings.TrimSpace(after))
-		if err == nil {
-			version = n
-		}
-	}
-	const marker = "svc.SetDescription(`"
-	start := strings.Index(s, marker)
-	if start < 0 {
-		return version, description
-	}
-	rest := s[start+len(marker):]
-	end := strings.Index(rest, "`")
-	if end >= 0 {
-		description = rest[:end]
-	}
-	return version, description
-}

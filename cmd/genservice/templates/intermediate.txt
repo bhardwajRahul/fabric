@@ -11,8 +11,9 @@ import (
 {{end}})
 
 const (
-	Hostname = {{.APIPkg}}.Hostname
-	Version  = {{.Version}}
+	Hostname    = {{.APIPkg}}.Hostname
+	Version     = {{.APIPkg}}.Version
+	Description = {{.APIPkg}}.Description
 )
 
 // ToDo is implemented by the service or mock.
@@ -58,7 +59,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		ToDo:      impl,
 	}
 	svc.SetVersion(Version)
-	svc.SetDescription(`{{.Description}}`)
+	svc.SetDescription(Description)
 	svc.SetOnStartup(svc.OnStartup)
 	svc.SetOnShutdown(svc.OnShutdown)
 	svc.SetResFS(resources.FS)

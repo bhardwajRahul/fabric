@@ -8,6 +8,7 @@ import (
 	"iter"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -312,6 +313,41 @@ func (_c MulticastClient) Greet(ctx context.Context, name string) iter.Seq[*Gree
 	}
 }
 
+// Adopt registers a pet and returns the adoption time. It exercises qualification of a domain type
+// (Pet -> svcapi.Pet) and an external type (time.Time) in the generated service-package files.
+func (_c Client) Adopt(ctx context.Context, pet Pet) (since time.Time, err error) { // MARKER: Adopt
+	_in := AdoptIn{Pet: pet}
+	_out := AdoptOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Adopt.Method, Adopt.Route, &_in, &_out)
+	return _out.Since, err // No trace
+}
+
+// AdoptResponse packs the response of Adopt.
+type AdoptResponse multicastResponse // MARKER: Adopt
+
+// Get unpacks the return arguments of Adopt.
+func (_res *AdoptResponse) Get() (since time.Time, err error) { // MARKER: Adopt
+	_d := _res.data.(*AdoptOut)
+	return _d.Since, _res.err
+}
+
+// Adopt registers a pet and returns the adoption time. It exercises qualification of a domain type
+// (Pet -> svcapi.Pet) and an external type (time.Time) in the generated service-package files.
+func (_c MulticastClient) Adopt(ctx context.Context, pet Pet) iter.Seq[*AdoptResponse] { // MARKER: Adopt
+	_in := AdoptIn{Pet: pet}
+	_out := AdoptOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Adopt.Method, Adopt.Route, &_in, &_out)
+	return func(yield func(*AdoptResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*AdoptResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
 // Ping checks liveness; it takes and returns nothing.
 func (_c Client) Ping(ctx context.Context) (err error) { // MARKER: Ping
 	_in := PingIn{}
@@ -415,21 +451,21 @@ func (_sf Subflow) ReviewStep(ctx context.Context, count int) (countOut int, yie
 }
 
 // MainFlow is the top-level workflow graph.
-func (_c Executor) MainFlow(ctx context.Context, item string) (done bool, status string, err error) { // MARKER: MainFlow
+func (_c Executor) MainFlow(ctx context.Context, item string, pet Pet) (done bool, since time.Time, status string, err error) { // MARKER: MainFlow
 	if _c.runner == nil {
-		return done, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return done, since, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out MainFlowOut
-	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, MainFlow.URL(), MainFlowIn{Item: item}, &out)
-	return out.Done, status, err
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, MainFlow.URL(), MainFlowIn{Item: item, Pet: pet}, &out)
+	return out.Done, out.Since, status, err
 }
 
 // MainFlow is the top-level workflow graph.
-func (_sf Subflow) MainFlow(ctx context.Context, item string) (done bool, yield bool, err error) { // MARKER: MainFlow
+func (_sf Subflow) MainFlow(ctx context.Context, item string, pet Pet) (done bool, since time.Time, yield bool, err error) { // MARKER: MainFlow
 	var out MainFlowOut
-	yield, err = marshalSubflow(_sf.flow, "", MainFlow.URL(), MainFlowIn{Item: item}, &out)
+	yield, err = marshalSubflow(_sf.flow, "", MainFlow.URL(), MainFlowIn{Item: item, Pet: pet}, &out)
 	if yield || err != nil {
-		return done, yield, err
+		return done, since, yield, err
 	}
-	return out.Done, false, nil
+	return out.Done, out.Since, false, nil
 }
