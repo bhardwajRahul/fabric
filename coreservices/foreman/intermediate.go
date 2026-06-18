@@ -59,7 +59,7 @@ type ToDo interface {
 	Delete(ctx context.Context, flowKey string) (err error)                                                                               // MARKER: Delete
 	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                           // MARKER: Purge
 	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                          // MARKER: ShardInfo
-	CreateTask(ctx context.Context, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)             // MARKER: CreateTask
+	CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)       // MARKER: CreateTask
 	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                 // MARKER: Await
 	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                           // MARKER: BreakBefore
 	Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
@@ -590,7 +590,7 @@ func (svc *Intermediate) doCreateTask(w http.ResponseWriter, r *http.Request) (e
 	var in foremanapi.CreateTaskIn
 	var out foremanapi.CreateTaskOut
 	err = marshalFunction(w, r, foremanapi.CreateTask.Route, &in, &out, func(_ any, _ any) error {
-		out.FlowKey, err = svc.CreateTask(r.Context(), in.TaskURL, in.InitialState, in.Opts)
+		out.FlowKey, err = svc.CreateTask(r.Context(), in.Name, in.TaskURL, in.InitialState, in.Opts)
 		return err
 	})
 	return err // No trace

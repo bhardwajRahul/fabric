@@ -3,7 +3,7 @@
 general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
-  modifiedAt: "2026-06-17T16:24:34Z"
+  modifiedAt: "2026-06-17T22:44:53Z"
 
 configs:
   SQLDataSourceName:
@@ -121,7 +121,7 @@ functions:
     method: GET
     route: :444/shard-info
   CreateTask:
-    signature: CreateTask(taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string)
+    signature: CreateTask(name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string)
     description: CreateTask creates a flow that executes a single task and then terminates, without starting it.
     method: POST
     route: :444/create-task

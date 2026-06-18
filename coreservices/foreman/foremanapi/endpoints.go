@@ -166,6 +166,7 @@ type ListOut struct { // MARKER: List
 
 // CreateTaskIn are the input arguments of CreateTask.
 type CreateTaskIn struct { // MARKER: CreateTask
+	Name         string                `json:"name,omitzero"`
 	TaskURL      string                `json:"taskURL,omitzero"`
 	InitialState any                   `json:"initialState,omitzero"`
 	Opts         *workflow.FlowOptions `json:"opts,omitzero"`

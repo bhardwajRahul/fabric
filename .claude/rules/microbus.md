@@ -115,7 +115,7 @@ SQL CRUD microservices are Microbus microservices that expose a CRUD API to pers
 
 ### Agentic Workflows
 
-Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`. Tasks are registered on port `:428` by default.
+Agentic workflows allow microservices to collaborate on multi-step processes. A workflow is a directed graph of tasks orchestrated by the Foreman core service. Each task is a standalone endpoint that reads from and writes to a shared state carried by a `*workflow.Flow`. Tasks are registered on port `:428` by default. To invoke another microservice's task or workflow as an isolated child flow from inside a task body, use its generated `xapi.NewSubflow(flow)` client (the `Executor` is test-only); see `.claude/rules/workflows.txt`.
 
 In this codebase, **"workflow", "agent", and "agentic workflow" are interchangeable terms** for the same `workflow.Graph` construct. An LLM call is not a prerequisite - rule-based, deterministic, small-model, and LLM-driven workflows are all agents. When a user says "create an agent" or "create an agentic workflow", they mean "create a workflow"; use the `add-workflow` skill. When they say "agent step" or "agentic task", they mean a task endpoint; use the `add-task` skill. Microservices whose sole purpose is to host one workflow are conventionally named `<role>.agent` (e.g. `planner.agent`, `coordinator.agent`), but the naming is convention only - the microservice is scaffolded with `add-microservice` like any other.
 

@@ -795,8 +795,8 @@ func (_res *CreateTaskResponse) Get() (flowKey string, err error) { // MARKER: C
 /*
 CreateTask creates a flow that executes a single task and then terminates, without starting it.
 */
-func (_c MulticastClient) CreateTask(ctx context.Context, taskURL string, initialState any, opts *workflow.FlowOptions) iter.Seq[*CreateTaskResponse] { // MARKER: CreateTask
-	_in := CreateTaskIn{TaskURL: taskURL, InitialState: initialState, Opts: opts}
+func (_c MulticastClient) CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) iter.Seq[*CreateTaskResponse] { // MARKER: CreateTask
+	_in := CreateTaskIn{Name: name, TaskURL: taskURL, InitialState: initialState, Opts: opts}
 	_out := CreateTaskOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, CreateTask.Method, CreateTask.Route, &_in, &_out)
 	return func(yield func(*CreateTaskResponse) bool) {
@@ -813,8 +813,8 @@ func (_c MulticastClient) CreateTask(ctx context.Context, taskURL string, initia
 /*
 CreateTask creates a flow that executes a single task and then terminates, without starting it.
 */
-func (_c Client) CreateTask(ctx context.Context, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	_in := CreateTaskIn{TaskURL: taskURL, InitialState: initialState, Opts: opts}
+func (_c Client) CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
+	_in := CreateTaskIn{Name: name, TaskURL: taskURL, InitialState: initialState, Opts: opts}
 	_out := CreateTaskOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, CreateTask.Method, CreateTask.Route, &_in, &_out)
 	return _out.FlowKey, err // No trace

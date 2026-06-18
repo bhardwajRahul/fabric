@@ -125,6 +125,45 @@ func (_c Executor) MyWorkflow(ctx context.Context, inputField1 string, inputFiel
 }
 ```
 
+The `Executor` is **test-only** (its `WorkflowRunner` drives the foreman from a test). To invoke this workflow
+from inside another workflow's task body, use the `Subflow` client (next step) — never call the `Executor` or
+`foremanapi` from a task body.
+
+#### Step 6b: Extend the Subflow Client
+
+Append the parallel `Subflow` method, also at the end of `myserviceapi/client.go`. This is how a task body
+embeds `MyWorkflow` as a **subgraph** (a child flow): only the explicit inputs cross in, only the explicit
+outputs cross back. It mirrors the workflow's input/output arguments, with `yield bool` before `err` (and no
+`status` — a child failure surfaces as a non-nil `err`, success populates the outputs):
+
+```go
+/*
+MyWorkflow runs the MyWorkflow workflow as a subgraph (child flow) of the calling flow.
+*/
+func (_sf Subflow) MyWorkflow(ctx context.Context, inputField1 string, inputField2 float64) (outputField1 bool, outputField2 int, yield bool, err error) { // MARKER: MyWorkflow
+	var out MyWorkflowOut
+	yield, err = marshalSubflow(_sf.flow, "", MyWorkflow.URL(), MyWorkflowIn{
+		InputField1: inputField1,
+		InputField2: inputField2,
+	}, &out)
+	if yield || err != nil {
+		return outputField1, outputField2, yield, err
+	}
+	return out.OutputField1, out.OutputField2, false, nil
+}
+```
+
+The empty first `marshalSubflow` argument selects `flow.Subgraph` (the host loads the graph; a workflow graph
+self-names, so no name is passed). Call site, from inside a task body:
+
+```go
+of1, of2, yield, err := myserviceapi.NewSubflow(flow).MyWorkflow(ctx, in1, in2)
+if yield || err != nil {
+	return err
+}
+// use of1, of2
+```
+
 #### Step 7: Extend the `ToDo` Interface
 
 Extend the `ToDo` interface in `intermediate.go`. All workflow graph functions have the fixed signature `MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error)`.

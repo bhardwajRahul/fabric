@@ -87,8 +87,9 @@ Control signals on `Flow`:
 - `flow.Goto(taskName)` - override transition routing to jump to a specific task node (its PascalCase node name, not its URL)
 - `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true while attempts remain, false once `maxAttempts` is reached. The single retry primitive: it carries no condition of its own, so the task writes the retryable predicate explicitly in the surrounding `if`. Immediate retry is zero delays; unlimited is `math.MaxInt32`. Timeout-only retry is `if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(...)` - both foreman-side `pub.Timeout` and subscriber-side handler timeouts surface as 408
 - `flow.Sleep(duration)` - delay the next step by a duration
-- `flow.Interrupt(payload) (resumeData, yield, err)` - park the step for external input (human-in-the-loop). On the first call returns `yield=true` and the task must `return nil` immediately. On re-entry after `Resume(flowKey, data)`, returns `(data, false, nil)` so the task proceeds (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
-- `flow.Subgraph(workflowURL, input) (out, yield, err)` - park the step and launch a child workflow. On the first call returns `yield=true` and the task must `return nil` immediately. On re-entry after the child terminates, returns `(out, false, nil)` on success (child's `final_state`) or `(nil, false, childErr)` on failure - the task adopts what it wants from `out` or branches on `err` (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
+- `flow.Interrupt(payload, &resume) (yield, err)` - park the step for external input (human-in-the-loop). First call returns `yield=true` and the task must `return nil` immediately; on re-entry after `Resume(flowKey, data)` returns `(false, nil)` with `data` unmarshaled into `&resume` so the task proceeds (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
+- `flow.Subgraph(workflowURL, input, &out) (yield, err)` - park the step and launch a child *workflow*. First call returns `yield=true` (task must `return nil`); on re-entry returns `(false, nil)` with the child's `final_state` unmarshaled into `&out` on success, or `(false, childErr)` on failure - the task adopts fields from `out` or branches on `err` (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
+- `flow.Subtask(name, taskURL, input, &out) (yield, err)` - the single-task sibling of `Subgraph`: run one *task* as an isolated child flow (the engine synthesizes a one-node graph named `name` - no graph definition needed). Same park/re-entry/out-pointer shape as `Subgraph`. Prefer the typed `xapi.NewSubflow(flow)` client over the raw primitives (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
 
 **`workflow.Graph`** defines workflow structure:
 
@@ -263,18 +264,22 @@ If the error handler itself returns an error, the flow fails normally.
 
 ## Subgraphs and Interrupts
 
-A subgraph is a child workflow that executes inside a parent step. **This is the only correct way for one workflow to invoke another - do not call `foremanapi.NewClient(svc).Run` on a child workflow from a task body; doing so spawns an independent flow and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation.** Subgraphs are launched from a task body via `flow.Subgraph(workflowURL, input)`; the parent step parks while the child runs and re-enters the task once the child terminates.
+A **subflow** is a child flow launched from inside a task body - either a **subgraph** (a child *workflow*, via `flow.Subgraph(workflowURL, input, &out)`) or a **subtask** (a single *task* run in isolation, via `flow.Subtask(name, taskURL, input, &out)`). The parent step parks while the child runs and re-enters the task once the child terminates. **This is the only correct way for one task to invoke another unit of work with state isolation - do not call `foremanapi.NewClient(svc).Run`, nor the test-only `Executor`, from a task body; that spawns an independent flow (or a foreman-coupled call) and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation.**
 
-**Subgraph is a function call.** Only the explicit `input` map crosses the boundary into the child, and only the explicit `out` map crosses back. The parent's state is NOT inherited automatically in either direction. `nil` input means "no arguments" - the child starts with an empty state. A caller that wants the parent's full state to cross can pass `flow.Snapshot()` (or a derived map) as `input`.
+**Two ways to compose tasks, by state exposure.** Inside a flow you reach task B either by **graph composition** (B is a node in the same graph: it sees and writes the parent's *full* state - tightest coupling) or by a **subflow** (B runs as an isolated child: only the explicit `input` crosses in, only the explicit `out` crosses back). Use graph composition when B is a genuine step of this workflow sharing its state vocabulary; use a subflow - `Subgraph` for a whole workflow, `Subtask` for one task - when B is a reusable or foreign unit you invoke with explicit arguments and don't want to hand your whole state to.
+
+**A subflow is a function call.** Only the explicit `input` crosses into the child as its initial state, and only the explicit `out` (the child's `final_state`, unmarshaled into your pointer by JSON tag) crosses back. The parent's state is NOT inherited in either direction. `nil` input means "no arguments". A caller that wants the parent's full state to cross passes `flow.Snapshot()` (or a derived map) as `input`.
+
+**Prefer the typed client over the raw primitives.** The generated `xapi.NewSubflow(flow)` client wraps the primitives with typed In/Out and the right mechanism per endpoint: `out1, yield, err := otherapi.NewSubflow(flow).SomeTask(ctx, args...)` for a task endpoint (→ `Subtask`) or `.SomeWorkflow(ctx, args...)` for a workflow (→ `Subgraph`). It also makes the swapped-URL mistake (a task URL to `Subgraph`, or a graph URL to `Subtask`) impossible. Reach for the raw `flow.Subgraph`/`flow.Subtask` only for dynamic/untyped dispatch (a computed URL, or a service whose `*api` package you don't import).
 
 ### The park-and-resume pattern
 
-`flow.Subgraph` and `flow.Interrupt` share one shape: park-the-step now, return the resolved value on re-entry.
+`flow.Subgraph`, `flow.Subtask`, and `flow.Interrupt` share one shape: park-the-step now, return the resolved value on re-entry. The result is unmarshaled into a trailing `out` pointer (`*struct` for type safety, `*map[string]any` for dynamic access, or `nil` to ignore); the call returns only `(yield, err)`.
 
 ```go
-out, yield, err := flow.Subgraph(otherapi.SomeWorkflow.URL(), map[string]any{
-    "inputField": "value",
-})
+// Subgraph: embed a whole child workflow.
+var out SomeOut // or: var out map[string]any
+yield, err := flow.Subgraph(otherapi.SomeWorkflow.URL(), SomeIn{Field: "value"}, &out)
 if yield {
     return nil          // first pass: parked, child running
 }
@@ -285,20 +290,34 @@ if err != nil {
     }
     return errors.Trace(err)
 }
-// Resolved + succeeded: adopt the fields the parent wants from `out` into its own state.
-result, _ := out["resultField"].(string)
-flow.Set("parentResult", result)
+// Resolved + succeeded: adopt the fields the parent wants from out into its own state.
+flow.SetString("parentResult", out.Field)
 return nil
 ```
 
-`flow.Interrupt` is symmetric:
+`flow.Subtask` is the single-task sibling - same shape, but the child is one task with no graph (the engine synthesizes a one-node graph named by the first argument). The name is required and shows up in diagrams/history:
 
 ```go
-resumeData, yield, err := flow.Interrupt(map[string]any{"request": "userInput"})
+var dbl struct {
+    Doubled int `json:"doubled"`
+}
+yield, err := flow.Subtask("Double", otherapi.Double.URL(), map[string]any{"value": 21}, &dbl)
+if yield || err != nil {
+    return err
+}
+flow.SetInt("result", dbl.Doubled)
+return nil
+```
+
+`flow.Interrupt` is symmetric (its `out` carries the `Resume` payload):
+
+```go
+var resume map[string]any
+yield, err := flow.Interrupt(map[string]any{"request": "userInput"}, &resume)
 if yield {
     return nil          // first pass: parked, waiting for Resume
 }
-// resumeData carries the Resume payload; err is always nil for Interrupt
+// resume carries the Resume payload; err is always nil for Interrupt
 ```
 
 | | `flow.Interrupt()` | `flow.Subgraph()` |
@@ -308,6 +327,8 @@ if yield {
 | **On completion** | `Resume(flowKey, data)` writes `resume_data` and re-dispatches | Child terminal outcome writes `subgraph_result`/`subgraph_error` and re-dispatches |
 | **Re-entry signal** | `yield=false`, `resumeData` is the Resume payload | `yield=false`, `out` is the child's `final_state` (success) or `err` is the child's failure |
 | **Failure mode** | None (always succeeds on Resume) | Child failure delivered to parent as `err`; parent decides retry/route/propagate |
+
+`flow.Subtask` behaves **identically to `flow.Subgraph`** in this table - same park, re-entry, out-pointer, failure-as-`err`, and cancel/interrupt propagation. The only difference is at launch: it runs a single task (no graph definition needed), and the synthesized one-node child graph is named by `Subtask`'s first argument.
 
 **Re-entry is signaled by the parker's `yield` bool, not by a state field.** Do not invent a `*Out`-suffix flag or a "have I run before" arg - the framework already tracks it via `interrupt_done`/`subgraph_done` columns and surfaces it as `yield`. The `if yield { return nil }` line is the **before-resume region** and runs on every dispatch (first pass, re-entry, every retry attempt); everything after it is the **after-resume region** and runs once per resolution. Exactly-once side effects (firing an event, charging a card) belong after the guard.
 
@@ -378,7 +399,8 @@ from `out` on re-entry. The five input fields are the `ChatLoop` input contract:
 func (svc *Service) RunChat(ctx context.Context, flow *workflow.Flow, userQuestion string) (
     messages []llmapi.Message, usage llmapi.Usage, err error,
 ) { // MARKER: RunChat
-    out, yield, err := flow.Subgraph(llmapi.ChatLoop.URL(), map[string]any{
+    var resp llmapi.ChatLoopOut // the child's final_state unmarshals into resp by JSON tag
+    yield, err := flow.Subgraph(llmapi.ChatLoop.URL(), map[string]any{
         "provider": claudellmapi.Hostname,
         "model":    claudellmapi.ModelHaiku45,
         "messages": []llmapi.Message{
@@ -390,18 +412,10 @@ func (svc *Service) RunChat(ctx context.Context, flow *workflow.Flow, userQuesti
             // e.g. calculatorapi.Arithmetic.URL(),
         },
         "options": &llmapi.ChatOptions{MaxTokens: 1024},
-    })
+    }, &resp)
     if yield {
         return nil, llmapi.Usage{}, nil
     }
-    if err != nil {
-        return nil, llmapi.Usage{}, errors.Trace(err)
-    }
-    // Adopt the child's declared outputs from `out`. The keys match the JSON tags on
-    // llmapi.ChatLoopOut: "messages" and "usage".
-    raw, _ := json.Marshal(out)
-    var resp llmapi.ChatLoopOut
-    err = json.Unmarshal(raw, &resp)
     if err != nil {
         return nil, llmapi.Usage{}, errors.Trace(err)
     }
@@ -540,7 +554,7 @@ func (svc *Service) WaitForApproval(ctx context.Context, flow *workflow.Flow, re
     if err := svc.sendApprovalRequest(ctx, requestID); err != nil {
         return false, errors.Trace(err)
     }
-    flow.Interrupt(map[string]any{"requestID": requestID})
+    flow.Interrupt(map[string]any{"requestID": requestID}, nil)
     return false, nil
 }
 ```
@@ -579,7 +593,7 @@ A separate "kick off the job" task should run before the polling task in the gra
 **Boundary rule.** A workflow microservice exposes its graph(s) and tasks, nothing else. Do not wrap the foreman in pass-through endpoints like `RunMyWorkflow`, `StartMyWorkflow`, `CancelMyWorkflow`, `MyWorkflowStatus`, etc. - they add a hop, hide foreman options (`FlowOptions`, breakpoints, notify-hostname) behind a narrower surface, and pull the foreman into the microservice's call graph for no benefit. Two consequences follow:
 
 - **To launch a workflow, the upstream caller talks to the foreman directly** via `foremanapi.NewClient(svc).Run(...)` (or `Create + Start + Await`). The workflow's microservice is not in the launch path.
-- **To call another workflow from inside a workflow, embed it as a subgraph** by calling `flow.Subgraph(otherflowapi.OtherFlow.URL(), input)` from a task body. A task that invokes `foremanapi.NewClient(svc).Run` on another workflow is doing it wrong: the child runs as a separate flow rather than a subgraph, so the parent loses re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation.
+- **To call another unit of work from inside a task body, use a subflow** - `otherapi.NewSubflow(flow).OtherWorkflow(ctx, args...)` (embeds a whole workflow as a subgraph) or `otherapi.NewSubflow(flow).OtherTask(ctx, args...)` (runs a single task as an isolated subtask), or the raw `flow.Subgraph`/`flow.Subtask` for dynamic dispatch. Do **not** call `foremanapi.NewClient(svc).Run`, nor the **test-only** `Executor`, from a task body: that spawns a separate flow (or a foreman-coupled call) and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation. (The `Executor` carries a `service.Publisher` and exists only to drive endpoints from tests.)
 
 The Foreman core service orchestrates workflow execution. Use `foremanapi.NewClient(svc)` to interact with it:
 
@@ -635,7 +649,7 @@ opts := &workflow.FlowOptions{
     FairnessWeight: 2.0,      // relative dispatch share of the fairness key; 0 -> 1
     StartAt:        time.Now().Add(10 * time.Minute), // entry step's not_before; zero/past = run as soon as started
 }
-status, state, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
+outcome, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 ```
 
@@ -672,11 +686,15 @@ ceiling; a task may declare a shorter `sub.TimeBudget` of its own).
 
 ## Flow Stop Notifications
 
-Use `StartNotify` to receive an event when a flow stops (completed, failed, cancelled, or interrupted):
+To receive an event when a flow stops (completed, failed, cancelled, or interrupted), opt in with
+`FlowOptions.NotifyOnStop` at `Create` (the foreman records the caller's host from the request frame, so no
+hostname is passed), then subscribe to the `OnFlowStopped` event:
 
 ```go
-// Start with notification
-err = foremanapi.NewClient(svc).StartNotify(ctx, flowID, svc.Hostname())
+// Opt in at Create, then Start normally.
+flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState,
+	&workflow.FlowOptions{NotifyOnStop: true})
+err = foremanapi.NewClient(svc).Start(ctx, flowID)
 
 // Subscribe to notifications
 foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(

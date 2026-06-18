@@ -208,13 +208,13 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("create_task", func(t *testing.T) { // MARKER: CreateTask
 		assert := testarossa.For(t)
 
-		mock.MockCreateTask(func(ctx context.Context, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) {
+		mock.MockCreateTask(func(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) {
 			return
 		})
-		var taskURL string
+		var name, taskURL string
 		var initialState any
 		var opts *workflow.FlowOptions
-		_, err := mock.CreateTask(ctx, taskURL, initialState, opts)
+		_, err := mock.CreateTask(ctx, name, taskURL, initialState, opts)
 		assert.NoError(err)
 	})
 

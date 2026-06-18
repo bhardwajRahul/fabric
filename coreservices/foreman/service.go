@@ -232,8 +232,8 @@ func (svc *Service) ShardInfo(ctx context.Context) (shards []foremanapi.ShardSum
 /*
 CreateTask creates a flow that executes a single task and then terminates, without starting it.
 */
-func (svc *Service) CreateTask(ctx context.Context, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	return svc.engine.CreateTask(ctx, taskURL, initialState, svc.resolveOptions(ctx, opts))
+func (svc *Service) CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
+	return svc.engine.CreateTask(ctx, name, taskURL, initialState, svc.resolveOptions(ctx, opts))
 }
 
 /*

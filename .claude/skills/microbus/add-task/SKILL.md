@@ -182,6 +182,45 @@ func (_c Executor) MyTask(ctx context.Context, input1 string, input2 float64) (o
 }
 ```
 
+The `Executor` is **test-only** sugar (its carrier is a `service.Publisher`). Do **not** call it from a task
+body — that couples the task to the foreman. To invoke this task from inside another task, use the `Subflow`
+client (next step).
+
+#### Step 9b: Extend the Subflow Client
+
+Append the parallel `Subflow` method, also at the end of `myserviceapi/client.go`. This is the blessed,
+foreman-free way for another microservice's task body to invoke `MyTask` as an **isolated subtask** (only the
+explicit inputs cross in, only the explicit outputs cross back). It mirrors the task's input/output arguments,
+with `yield bool` inserted before `err`.
+
+```go
+/*
+MyTask runs the MyTask task as an isolated subtask of the calling flow.
+*/
+func (_sf Subflow) MyTask(ctx context.Context, input1 string, input2 float64) (output1 bool, yield bool, err error) { // MARKER: MyTask
+	var out MyTaskOut
+	yield, err = marshalSubflow(_sf.flow, "MyTask", MyTask.URL(), MyTaskIn{
+		Input1: input1,
+		Input2: input2,
+	}, &out)
+	if yield || err != nil {
+		return output1, yield, err
+	}
+	return out.Output1, false, nil
+}
+```
+
+The first `marshalSubflow` argument is the PascalCase task name (`"MyTask"`), which becomes the synthesized
+child graph's node name — readable in diagrams and history. The call site, from inside a task body:
+
+```go
+output1, yield, err := myserviceapi.NewSubflow(flow).MyTask(ctx, input1, input2)
+if yield || err != nil {
+	return err
+}
+// use output1
+```
+
 #### Step 10: Implement the Logic
 
 Implement the task in `service.go`. Complex types should always refer to their definition in `myserviceapi`, even if owned by a third-party.
