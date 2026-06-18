@@ -16,49 +16,22 @@ limitations under the License.
 
 package main
 
-import _ "embed"
+import (
+	"embed"
+	"strconv"
+	"text/template"
+)
 
-// Fixed client.go pieces, kept as Go source in templates/*.txt and embedded here. emitClient writes
-// each one selectively, based on the service's feature mix.
+// templatesFS holds the client.go text/templates as Go source. The static pieces (e.g. client.txt,
+// the marshal* helpers) carry no actions; the per-feature pieces (function.txt, task.txt, ...) and
+// the root (root.txt) use {{.Field}} placeholders, {{if}} on the feature flags, and {{range}} over
+// the feature views.
+//
+//go:embed templates/*.txt
+var templatesFS embed.FS
 
-//go:embed templates/multicastresponse.txt
-var pcMulticastResponse string
-
-//go:embed templates/client.txt
-var pcClient string
-
-//go:embed templates/multicastclient.txt
-var pcMulticastClient string
-
-//go:embed templates/workflowrunner.txt
-var pcWorkflowRunner string
-
-//go:embed templates/executor.txt
-var pcExecutor string
-
-//go:embed templates/subflow.txt
-var pcSubflow string
-
-//go:embed templates/multicasttrigger.txt
-var pcMulticastTrigger string
-
-//go:embed templates/hook.txt
-var pcHook string
-
-//go:embed templates/marshalrequest.txt
-var hMarshalRequest string
-
-//go:embed templates/marshalpublish.txt
-var hMarshalPublish string
-
-//go:embed templates/marshalfunction.txt
-var hMarshalFunction string
-
-//go:embed templates/marshaltask.txt
-var hMarshalTask string
-
-//go:embed templates/marshalworkflow.txt
-var hMarshalWorkflow string
-
-//go:embed templates/marshalsubflow.txt
-var hMarshalSubflow string
+// clientTemplate is the parsed template set; each file is referenced by its base name (e.g.
+// {{template "function.txt" .}}). root.txt is the entry point.
+var clientTemplate = template.Must(template.New("genservice").Funcs(template.FuncMap{
+	"quote": strconv.Quote,
+}).ParseFS(templatesFS, "templates/*.txt"))

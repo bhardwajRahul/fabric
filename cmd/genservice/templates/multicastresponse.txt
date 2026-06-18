@@ -1,6 +1,0 @@
-// multicastResponse packs the response of a functional multicast.
-type multicastResponse struct {
-	data         any
-	HTTPResponse *http.Response
-	err          error
-}

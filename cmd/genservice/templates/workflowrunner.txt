@@ -1,5 +1,0 @@
-// WorkflowRunner executes a workflow by name with initial state, blocking until termination.
-// foremanapi.Client satisfies this interface.
-type WorkflowRunner interface {
-	Run(ctx context.Context, workflowName string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)
-}

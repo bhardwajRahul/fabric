@@ -17,15 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/format"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 )
 
-// Import paths referenced by the generated client.
+// Import paths the generated client may reference.
 const (
 	impContext  = "context"
 	impJSON     = "encoding/json"
@@ -40,14 +40,174 @@ const (
 	impSub      = "github.com/microbus-io/fabric/sub"
 )
 
-// emitClient renders *api/client.go for the service, emitting only the client types, helpers, and
-// imports that the service's feature mix actually requires.
+// clientModel is the in-memory tree handed to client.txt: the package, computed imports, var guards,
+// and the feature views grouped by kind. The template decides, from the Has*/Need* predicates, which
+// client structs and helpers to emit, and ranges over the feature slices to emit the methods.
+type clientModel struct {
+	Header  string
+	Package string
+	Imports importSet
+
+	Funcs     []*featureView
+	Webs      []*featureView
+	Tasks     []*featureView
+	Workflows []*featureView
+	Events    []*featureView
+}
+
+type importSet struct {
+	Std []string
+	Ext []string
+}
+
+func (m *clientModel) HasFunc() bool     { return len(m.Funcs) > 0 }
+func (m *clientModel) HasWeb() bool      { return len(m.Webs) > 0 }
+func (m *clientModel) HasTask() bool     { return len(m.Tasks) > 0 }
+func (m *clientModel) HasWorkflow() bool { return len(m.Workflows) > 0 }
+func (m *clientModel) HasEvent() bool    { return len(m.Events) > 0 }
+
+// NeedClient reports whether the Client/MulticastClient proxies are required (functions or web).
+func (m *clientModel) NeedClient() bool { return m.HasFunc() || m.HasWeb() }
+
+// NeedExecutor reports whether the Executor/Subflow proxies are required (tasks or workflows).
+func (m *clientModel) NeedExecutor() bool { return m.HasTask() || m.HasWorkflow() }
+
+// NeedResponse reports whether multicastResponse and marshalPublish are required (functions or events).
+func (m *clientModel) NeedResponse() bool { return m.HasFunc() || m.HasEvent() }
+
+// featureView is one feature with the fragments client.txt interpolates into its method bodies.
+type featureView struct {
+	Name       string
+	DocComment string // "// ...\n" lines, or "" when undocumented
+	In         string // In struct type name
+	Out        string // Out struct type name
+
+	inFields  []fieldDef
+	outFields []fieldDef
+}
+
+// HasOut reports whether the feature has any output fields.
+func (f *featureView) HasOut() bool { return len(f.outFields) > 0 }
+
+// Params renders ", name type" for each input field (leading comma per param).
+func (f *featureView) Params() string {
+	var b strings.Builder
+	for _, x := range f.inFields {
+		fmt.Fprintf(&b, ", %s %s", lowerFirst(x.goName), x.typ)
+	}
+	return b.String()
+}
+
+// Returns renders "name type, " for each output field (named returns, trailing comma per return).
+func (f *featureView) Returns() string {
+	var b strings.Builder
+	for _, x := range f.outFields {
+		fmt.Fprintf(&b, "%s %s, ", lowerFirst(x.goName), x.typ)
+	}
+	return b.String()
+}
+
+// Zeros renders "name, " for each output field (the named returns at their zero values).
+func (f *featureView) Zeros() string {
+	var b strings.Builder
+	for _, x := range f.outFields {
+		fmt.Fprintf(&b, "%s, ", lowerFirst(x.goName))
+	}
+	return b.String()
+}
+
+// Dot renders "recv.GoName, " for each output field.
+func (f *featureView) Dot(recv string) string {
+	var b strings.Builder
+	for _, x := range f.outFields {
+		fmt.Fprintf(&b, "%s.%s, ", recv, x.goName)
+	}
+	return b.String()
+}
+
+// InArgs renders ", recv.GoName" for each input field, for passing into a handler call.
+func (f *featureView) InArgs(recv string) string {
+	var b strings.Builder
+	for _, x := range f.inFields {
+		fmt.Fprintf(&b, ", %s.%s", recv, x.goName)
+	}
+	return b.String()
+}
+
+// InLit renders the In struct literal, e.g. "VerifyCreditIn{CreditScore: creditScore}".
+func (f *featureView) InLit() string {
+	var b strings.Builder
+	b.WriteString(f.In)
+	b.WriteString("{")
+	for i, x := range f.inFields {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "%s: %s", x.goName, lowerFirst(x.goName))
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
+// emitClient builds the model from the parsed service and renders client.txt.
 func emitClient(svc *service, header string) ([]byte, error) {
-	hasFunc := len(svc.featuresByKind("Function")) > 0
-	hasWeb := len(svc.featuresByKind("Web")) > 0
-	hasTask := len(svc.featuresByKind("Task")) > 0
-	hasWorkflow := len(svc.featuresByKind("Workflow")) > 0
-	hasEvent := len(svc.featuresByKind("OutboundEvent")) > 0
+	err := validateForClient(svc)
+	if err != nil {
+		return nil, err
+	}
+	m := buildClientModel(svc, header)
+	var buf bytes.Buffer
+	err = clientTemplate.ExecuteTemplate(&buf, "client.txt", m)
+	if err != nil {
+		return nil, err
+	}
+	out, err := format.Source(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("gofmt: %w\n%s", err, numberLines(buf.Bytes()))
+	}
+	return out, nil
+}
+
+// validateForClient reports the first feature that lacks the In/Out type carriers its client methods
+// require. Web carries neither and is exempt.
+func validateForClient(svc *service) error {
+	for _, f := range svc.features {
+		switch f.kind {
+		case "Function", "Task", "Workflow", "OutboundEvent":
+			if f.in == "" || f.out == "" {
+				return fmt.Errorf("%s %q: both In and Out must be set in definition.go", f.kind, f.name)
+			}
+		}
+	}
+	return nil
+}
+
+// buildClientModel projects the parsed service into the client.txt model: the feature views grouped
+// by kind and the computed import set.
+func buildClientModel(svc *service, header string) *clientModel {
+	m := &clientModel{Header: header, Package: svc.apiPkg}
+	for _, f := range svc.features {
+		fv := &featureView{
+			Name:       f.name,
+			DocComment: docComment(f.doc),
+			In:         f.in,
+			Out:        f.out,
+			inFields:   svc.fieldsOf(f.in),
+			outFields:  svc.fieldsOf(f.out),
+		}
+		switch f.kind {
+		case "Function":
+			m.Funcs = append(m.Funcs, fv)
+		case "Web":
+			m.Webs = append(m.Webs, fv)
+		case "Task":
+			m.Tasks = append(m.Tasks, fv)
+		case "Workflow":
+			m.Workflows = append(m.Workflows, fv)
+		case "OutboundEvent":
+			m.Events = append(m.Events, fv)
+		}
+	}
 
 	imports := map[string]bool{}
 	need := func(paths ...string) {
@@ -55,79 +215,33 @@ func emitClient(svc *service, header string) ([]byte, error) {
 			imports[p] = true
 		}
 	}
-
-	var body strings.Builder
-
-	// Preamble types.
-	if hasFunc || hasEvent {
-		writePiece(&body, pcMulticastResponse)
+	if m.NeedResponse() {
 		need(impHTTP)
 	}
-	if hasFunc || hasWeb {
-		writePiece(&body, pcClient)
-		writePiece(&body, pcMulticastClient)
-		need(impService, impPub)
+	if m.NeedClient() {
+		need(impContext, impService, impPub)
 	}
-	if hasTask || hasWorkflow {
-		writePiece(&body, pcWorkflowRunner)
-		writePiece(&body, pcExecutor)
-		writePiece(&body, pcSubflow)
+	if m.NeedExecutor() {
 		need(impContext, impService, impPub, impWorkflow)
 	}
-	if hasEvent {
-		writePiece(&body, pcMulticastTrigger)
-		writePiece(&body, pcHook)
-		need(impService, impPub, impSub)
+	if m.HasEvent() {
+		need(impContext, impIter, impHTTP, impService, impPub, impSub, impHTTPX, impErrors)
 	}
-
-	// Helpers.
-	if hasFunc {
-		writePiece(&body, hMarshalRequest)
-		need(impContext, impService, impPub, impHTTPX, impErrors)
+	if m.HasFunc() {
+		need(impContext, impIter, impService, impPub, impHTTPX, impErrors)
 	}
-	if hasFunc || hasEvent {
-		writePiece(&body, hMarshalPublish)
+	if m.NeedResponse() {
 		need(impContext, impService, impPub, impHTTPX, impIter, impReflect)
 	}
-	if hasEvent {
-		writePiece(&body, hMarshalFunction)
-		need(impHTTP, impHTTPX, impErrors)
-	}
-	if hasTask {
-		writePiece(&body, hMarshalTask)
+	if m.HasTask() {
 		need(impContext, impService, impPub, impHTTPX, impErrors, impJSON, impWorkflow)
 	}
-	if hasWorkflow {
-		writePiece(&body, hMarshalWorkflow)
+	if m.HasWorkflow() {
 		need(impContext, impErrors, impJSON, impWorkflow)
 	}
-	if hasTask || hasWorkflow {
-		writePiece(&body, hMarshalSubflow)
-		need(impWorkflow, impErrors)
+	if m.HasWeb() {
+		need(impContext, impIter, impHTTP, impPub, impHTTPX)
 	}
-
-	// Per-feature methods, with the imports their signatures require.
-	for _, f := range svc.features {
-		switch f.kind {
-		case "Function":
-			emitFunction(&body, svc, f)
-			need(impContext, impIter)
-		case "Web":
-			emitWeb(&body, f)
-			need(impContext, impIter, impHTTP, impPub, impHTTPX)
-		case "Task":
-			emitTask(&body, svc, f)
-			need(impContext)
-		case "Workflow":
-			emitWorkflow(&body, svc, f)
-			need(impContext, impErrors)
-		case "OutboundEvent":
-			emitOutboundEvent(&body, svc, f)
-			need(impContext, impIter, impHTTP, impHTTPX, impSub, impErrors)
-		}
-	}
-
-	// External packages referenced by In/Out field types.
 	for _, f := range svc.features {
 		for _, fld := range append(svc.fieldsOf(f.in), svc.fieldsOf(f.out)...) {
 			for _, sel := range selectorsIn(fld.typ) {
@@ -137,30 +251,30 @@ func emitClient(svc *service, header string) ([]byte, error) {
 			}
 		}
 	}
-
-	var sb strings.Builder
-	if header != "" {
-		sb.WriteString(header)
-		sb.WriteString("\n\n")
+	for p := range imports {
+		if isStdlib(p) {
+			m.Imports.Std = append(m.Imports.Std, p)
+		} else {
+			m.Imports.Ext = append(m.Imports.Ext, p)
+		}
 	}
-	sb.WriteString("// Code generated by cmd/genservice. DO NOT EDIT.\n\n")
-	fmt.Fprintf(&sb, "package %s\n\n", svc.apiPkg)
-	writeImportBlock(&sb, imports)
-	sb.WriteString(body.String())
-
-	src := []byte(sb.String())
-	out, err := format.Source(src)
-	if err != nil {
-		return nil, fmt.Errorf("gofmt: %w\n%s", err, numberLines(src))
-	}
-	return out, nil
+	sort.Strings(m.Imports.Std)
+	sort.Strings(m.Imports.Ext)
+	return m
 }
 
-// writePiece appends a fixed template piece, normalizing it to end with one blank line so adjacent
-// top-level declarations stay separated.
-func writePiece(sb *strings.Builder, piece string) {
-	sb.WriteString(strings.TrimRight(piece, "\n"))
-	sb.WriteString("\n\n")
+// docComment renders a godoc block, one // line per source line; "" when the doc is empty.
+func docComment(doc string) string {
+	if doc == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, line := range strings.Split(doc, "\n") {
+		b.WriteString("// ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // existingHeader returns the leading comment block (license header) of an existing generated file,
@@ -175,288 +289,25 @@ func existingHeader(path string) string {
 	if strings.HasPrefix(s, "package ") {
 		return ""
 	}
-	i := strings.Index(s, "\npackage ")
-	if i < 0 {
+	head, _, found := strings.Cut(s, "\npackage ")
+	if !found {
 		return ""
 	}
-	head := s[:i]
 	head = strings.ReplaceAll(head, "// Code generated by cmd/genservice. DO NOT EDIT.\n", "")
 	return strings.TrimRight(head, "\n")
 }
 
-// writeImportBlock emits the import block, standard-library packages first, then external.
-func writeImportBlock(sb *strings.Builder, set map[string]bool) {
-	if len(set) == 0 {
-		return
-	}
-	var std, ext []string
-	for p := range set {
-		if isStdlib(p) {
-			std = append(std, p)
-		} else {
-			ext = append(ext, p)
-		}
-	}
-	sort.Strings(std)
-	sort.Strings(ext)
-	sb.WriteString("import (\n")
-	for _, p := range std {
-		fmt.Fprintf(sb, "\t%q\n", p)
-	}
-	if len(std) > 0 && len(ext) > 0 {
-		sb.WriteString("\n")
-	}
-	for _, p := range ext {
-		fmt.Fprintf(sb, "\t%q\n", p)
-	}
-	sb.WriteString(")\n\n")
-}
-
 // isStdlib reports whether an import path is in the standard library (its first segment has no dot).
 func isStdlib(path string) bool {
-	seg := path
-	if i := strings.Index(path, "/"); i >= 0 {
-		seg = path[:i]
-	}
+	seg, _, _ := strings.Cut(path, "/")
 	return !strings.Contains(seg, ".")
-}
-
-// emitFunction renders the Client and MulticastClient methods for a functional endpoint.
-func emitFunction(sb *strings.Builder, svc *service, f feature) {
-	in := svc.fieldsOf(f.in)
-	out := svc.fieldsOf(f.out)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_c Client) %s(ctx context.Context%s) (%serr error) { // MARKER: %s\n", f.name, paramList(in), retList(out), f.name)
-	fmt.Fprintf(sb, "\t_in := %s\n", inLit(f.in, in))
-	fmt.Fprintf(sb, "\t_out := %s{}\n", f.out)
-	fmt.Fprintf(sb, "\terr = marshalRequest(ctx, _c.svc, _c.opts, _c.host, %s.Method, %s.Route, &_in, &_out)\n", f.name, f.name)
-	fmt.Fprintf(sb, "\treturn %serr // No trace\n}\n\n", dotList(out, "_out"))
-
-	writeResponseType(sb, f.name, f.out, out)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_c MulticastClient) %s(ctx context.Context%s) iter.Seq[*%sResponse] { // MARKER: %s\n", f.name, paramList(in), f.name, f.name)
-	fmt.Fprintf(sb, "\t_in := %s\n\t_out := %s{}\n", inLit(f.in, in), f.out)
-	fmt.Fprintf(sb, "\t_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, %s.Method, %s.Route, &_in, &_out)\n", f.name, f.name)
-	writeFanout(sb, f.name, "_queue")
-}
-
-// emitWeb renders the Client and MulticastClient methods for a raw web handler.
-func emitWeb(sb *strings.Builder, f feature) {
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, `func (_c Client) %s(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: %s
-	if method == "" {
-		method = %s.Method
-	}
-	if method == "ANY" {
-		method = "POST"
-	}
-	return _c.svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, %s.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-`, f.name, f.name, f.name, f.name)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, `func (_c MulticastClient) %s(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: %s
-	if method == "" {
-		method = %s.Method
-	}
-	if method == "ANY" {
-		method = "POST"
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, %s.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-`, f.name, f.name, f.name, f.name)
-}
-
-// emitTask renders the Executor and Subflow methods for a task endpoint.
-func emitTask(sb *strings.Builder, svc *service, f feature) {
-	in := svc.fieldsOf(f.in)
-	out := svc.fieldsOf(f.out)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_c Executor) %s(ctx context.Context%s) (%serr error) { // MARKER: %s\n", f.name, paramList(in), retList(out), f.name)
-	outArg := "nil"
-	if len(out) > 0 {
-		fmt.Fprintf(sb, "\tvar out %s\n", f.out)
-		outArg = "&out"
-	}
-	fmt.Fprintf(sb, "\terr = marshalTask(ctx, _c.svc, _c.opts, _c.host, %s.Method, %s.Route, %s, %s, _c.inFlow, _c.outFlow)\n", f.name, f.name, inLit(f.in, in), outArg)
-	fmt.Fprintf(sb, "\treturn %serr // No trace\n}\n\n", dotList(out, "out"))
-	emitSubflow(sb, svc, f, true)
-}
-
-// emitWorkflow renders the Executor and Subflow methods for a workflow graph endpoint.
-func emitWorkflow(sb *strings.Builder, svc *service, f feature) {
-	in := svc.fieldsOf(f.in)
-	out := svc.fieldsOf(f.out)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_c Executor) %s(ctx context.Context%s) (%sstatus string, err error) { // MARKER: %s\n", f.name, paramList(in), retList(out), f.name)
-	fmt.Fprintf(sb, "\tif _c.runner == nil {\n\t\treturn %s\"\", errors.New(\"workflow runner not set, use WithWorkflowRunner\")\n\t}\n", zeroNames(out))
-	outArg := "nil"
-	if f.out != "" {
-		fmt.Fprintf(sb, "\tvar out %s\n", f.out)
-		outArg = "&out"
-	}
-	fmt.Fprintf(sb, "\tstatus, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, %s.URL(), %s, %s)\n", f.name, inLit(f.in, in), outArg)
-	fmt.Fprintf(sb, "\treturn %sstatus, err\n}\n\n", dotList(out, "out"))
-	emitSubflow(sb, svc, f, false)
-}
-
-// emitSubflow renders the Subflow method for a task (asSubtask) or workflow (subgraph).
-func emitSubflow(sb *strings.Builder, svc *service, f feature, asSubtask bool) {
-	in := svc.fieldsOf(f.in)
-	out := svc.fieldsOf(f.out)
-	taskName := `""`
-	if asSubtask {
-		taskName = strconv.Quote(f.name)
-	}
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_sf Subflow) %s(ctx context.Context%s) (%syield bool, err error) { // MARKER: %s\n", f.name, paramList(in), retList(out), f.name)
-	outArg := "nil"
-	if len(out) > 0 {
-		fmt.Fprintf(sb, "\tvar out %s\n", f.out)
-		outArg = "&out"
-	}
-	fmt.Fprintf(sb, "\tyield, err = marshalSubflow(_sf.flow, %s, %s.URL(), %s, %s)\n", taskName, f.name, inLit(f.in, in), outArg)
-	fmt.Fprintf(sb, "\tif yield || err != nil {\n\t\treturn %syield, err\n\t}\n", zeroNames(out))
-	fmt.Fprintf(sb, "\treturn %sfalse, nil\n}\n\n", dotList(out, "out"))
-}
-
-// emitOutboundEvent renders the MulticastTrigger and Hook methods for an outbound event.
-func emitOutboundEvent(sb *strings.Builder, svc *service, f feature) {
-	in := svc.fieldsOf(f.in)
-	out := svc.fieldsOf(f.out)
-	writeResponseType(sb, f.name, f.out, out)
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (_c MulticastTrigger) %s(ctx context.Context%s) iter.Seq[*%sResponse] { // MARKER: %s\n", f.name, paramList(in), f.name, f.name)
-	fmt.Fprintf(sb, "\t_in := %s\n\t_out := %s{}\n", inLit(f.in, in), f.out)
-	fmt.Fprintf(sb, "\t_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, %s.Method, %s.Route, &_in, &_out)\n", f.name, f.name)
-	writeFanout(sb, f.name, "_inner")
-
-	writeDoc(sb, f.doc)
-	fmt.Fprintf(sb, "func (c Hook) %s(handler func(ctx context.Context%s) (%serr error)) (unsub func() error, err error) { // MARKER: %s\n", f.name, paramList(in), retList(out), f.name)
-	fmt.Fprintf(sb, "\tdo%s := func(w http.ResponseWriter, r *http.Request) error {\n", f.name)
-	fmt.Fprintf(sb, "\t\tvar in %s\n\t\tvar out %s\n", f.in, f.out)
-	fmt.Fprintf(sb, "\t\terr = marshalFunction(w, r, %s.Route, &in, &out, func(_ any, _ any) error {\n", f.name)
-	fmt.Fprintf(sb, "\t\t\t%serr = handler(r.Context()%s)\n", dotList(out, "out"), inArgs(in, "in"))
-	sb.WriteString("\t\t\treturn err\n\t\t})\n\t\treturn err // No trace\n\t}\n")
-	fmt.Fprintf(sb, "\tconst name = %q\n", f.name)
-	fmt.Fprintf(sb, "\tpath := httpx.JoinHostAndPath(c.host, %s.Route)\n", f.name)
-	fmt.Fprintf(sb, "\tsubOpts := append([]sub.Option{\n\t\tsub.At(%s.Method, path),\n\t\tsub.InboundEvent(%s{}, %s{}),\n\t}, c.opts...)\n", f.name, f.in, f.out)
-	fmt.Fprintf(sb, "\tif err := c.svc.Subscribe(name, do%s, subOpts...); err != nil {\n\t\treturn nil, errors.Trace(err)\n\t}\n", f.name)
-	sb.WriteString("\treturn func() error { return c.svc.Unsubscribe(name) }, nil\n}\n\n")
-}
-
-// writeResponseType renders the XResponse wrapper type and its Get method for a multicast result.
-func writeResponseType(sb *strings.Builder, name, outType string, out []fieldDef) {
-	fmt.Fprintf(sb, "// %sResponse packs the response of %s.\ntype %sResponse multicastResponse // MARKER: %s\n\n", name, name, name, name)
-	fmt.Fprintf(sb, "// Get unpacks the return arguments of %s.\nfunc (_res *%sResponse) Get() (%serr error) { // MARKER: %s\n", name, name, retList(out), name)
-	if len(out) > 0 {
-		fmt.Fprintf(sb, "\t_d := _res.data.(*%s)\n", outType)
-		fmt.Fprintf(sb, "\treturn %s_res.err\n}\n\n", dotList(out, "_d"))
-	} else {
-		sb.WriteString("\treturn _res.err\n}\n\n")
-	}
-}
-
-// writeFanout renders the iterator that wraps a multicast queue into typed XResponse values.
-func writeFanout(sb *strings.Builder, name, queue string) {
-	fmt.Fprintf(sb, "\treturn func(yield func(*%sResponse) bool) {\n", name)
-	fmt.Fprintf(sb, "\t\tfor _r := range %s {\n", queue)
-	sb.WriteString("\t\t\t_clone := _out\n\t\t\t_r.data = &_clone\n")
-	fmt.Fprintf(sb, "\t\t\tif !yield((*%sResponse)(_r)) {\n\t\t\t\treturn\n\t\t\t}\n\t\t}\n\t}\n}\n\n", name)
-}
-
-// writeDoc renders a godoc comment, one // line per source line; nothing if doc is empty.
-func writeDoc(sb *strings.Builder, doc string) {
-	if doc == "" {
-		return
-	}
-	for _, line := range strings.Split(doc, "\n") {
-		sb.WriteString("// ")
-		sb.WriteString(line)
-		sb.WriteString("\n")
-	}
-}
-
-// paramList renders ", name type" for each field (leading comma), arg names via lowerFirst.
-func paramList(fields []fieldDef) string {
-	var sb strings.Builder
-	for _, f := range fields {
-		fmt.Fprintf(&sb, ", %s %s", lowerFirst(f.goName), f.typ)
-	}
-	return sb.String()
-}
-
-// retList renders "name type, " for each field (named returns, trailing comma each).
-func retList(fields []fieldDef) string {
-	var sb strings.Builder
-	for _, f := range fields {
-		fmt.Fprintf(&sb, "%s %s, ", lowerFirst(f.goName), f.typ)
-	}
-	return sb.String()
-}
-
-// zeroNames renders "name, " for each field.
-func zeroNames(fields []fieldDef) string {
-	var sb strings.Builder
-	for _, f := range fields {
-		fmt.Fprintf(&sb, "%s, ", lowerFirst(f.goName))
-	}
-	return sb.String()
-}
-
-// dotList renders "recv.GoName, " for each field.
-func dotList(fields []fieldDef, recv string) string {
-	var sb strings.Builder
-	for _, f := range fields {
-		fmt.Fprintf(&sb, "%s.%s, ", recv, f.goName)
-	}
-	return sb.String()
-}
-
-// inArgs renders ", recv.GoName" for each field (leading comma), for passing into a handler call.
-func inArgs(fields []fieldDef, recv string) string {
-	var sb strings.Builder
-	for _, f := range fields {
-		fmt.Fprintf(&sb, ", %s.%s", recv, f.goName)
-	}
-	return sb.String()
-}
-
-// inLit renders the In struct literal, e.g. "VerifyCreditIn{CreditScore: creditScore}".
-func inLit(typeName string, fields []fieldDef) string {
-	var sb strings.Builder
-	sb.WriteString(typeName)
-	sb.WriteString("{")
-	for i, f := range fields {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		fmt.Fprintf(&sb, "%s: %s", f.goName, lowerFirst(f.goName))
-	}
-	sb.WriteString("}")
-	return sb.String()
 }
 
 // numberLines prefixes each line with its number, for gofmt error diagnostics.
 func numberLines(src []byte) string {
-	var sb strings.Builder
+	var b strings.Builder
 	for i, line := range strings.Split(string(src), "\n") {
-		fmt.Fprintf(&sb, "%4d\t%s\n", i+1, line)
+		fmt.Fprintf(&b, "%4d\t%s\n", i+1, line)
 	}
-	return sb.String()
+	return b.String()
 }

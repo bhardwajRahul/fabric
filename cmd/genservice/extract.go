@@ -21,6 +21,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,9 +85,7 @@ func parseService(dir string) (*service, error) {
 		if svc.apiPkg == "" {
 			svc.apiPkg = f.Name.Name
 		}
-		for alias, path := range importMap(f) {
-			svc.imports[alias] = path
-		}
+		maps.Copy(svc.imports, importMap(f))
 		collectStructs(svc, f)
 		collectConsts(svc, f)
 		collectFeatures(svc, f)
@@ -218,17 +217,6 @@ func (svc *service) fieldsOf(name string) []fieldDef {
 		return sd.fields
 	}
 	return nil
-}
-
-// featuresByKind returns the features of the given kind, in source order.
-func (svc *service) featuresByKind(kind string) []feature {
-	var out []feature
-	for _, f := range svc.features {
-		if f.kind == kind {
-			out = append(out, f)
-		}
-	}
-	return out
 }
 
 // cleanDoc extracts the godoc text from the first non-nil comment group, trimmed.
