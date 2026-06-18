@@ -33,6 +33,8 @@ import (
 type service struct {
 	apiPkg         string                // api package name, e.g. "svcapi"
 	hostname       string                // value of the Hostname const
+	name           string                // value of the Name const, the decorative PascalCase service name
+	hasName        bool                  // whether definition.go declares a Name const
 	version        int                   // value of the Version const
 	hasVersion     bool                  // whether definition.go declares a Version const
 	description    string                // value of the Description const
@@ -161,6 +163,9 @@ func collectConsts(svc *service, f *ast.File) {
 				switch n.Name {
 				case "Hostname":
 					svc.hostname = strings.Trim(bl.Value, "`\"")
+				case "Name":
+					svc.name = strings.Trim(bl.Value, "`\"")
+					svc.hasName = true
 				case "Version":
 					v, err := strconv.Atoi(bl.Value)
 					if err == nil {

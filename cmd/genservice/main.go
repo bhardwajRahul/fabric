@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -140,6 +141,20 @@ func generateService(dir, apiDir string) error {
 		return err
 	}
 	fmt.Printf("genservice: wrote %s\n", mockTestPath)
+
+	pkgPath := importPathOf(modPath, modDir, dir)
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	existingManifest, _ := os.ReadFile(manifestPath)
+	now := time.Now().UTC().Format(time.RFC3339)
+	manifestSrc, err := emitManifest(svc, pkgPath, now, existingManifest, resolveSource)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(manifestPath, manifestSrc, 0o644)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("genservice: wrote %s\n", manifestPath)
 	return nil
 }
 

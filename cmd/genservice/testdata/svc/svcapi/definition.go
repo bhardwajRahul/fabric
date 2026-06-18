@@ -29,6 +29,9 @@ import (
 // Hostname is the default hostname of the microservice.
 const Hostname = "svc.example"
 
+// Name is the decorative PascalCase name of the microservice.
+const Name = "Svc"
+
 // Version is the major version of the microservice's public API.
 const Version = 1
 
