@@ -7,10 +7,10 @@ description: Called by upgrade-microbus. Upgrades the project from v1.39.x to v1
 ## What changed
 
 v1.40.0 is a single group of breaking changes to the workflow API in the [dwarf](https://github.com/microbus-io/dwarf)
-module ("dwarf operates on node names; URLs are opaque identifiers the host resolves"). It must be applied to
-any project that defines tasks or workflow graphs, or that subscribes to the foreman's `OnFlowStopped` event. A
-project with no workflows needs none of it. Every break below is a **loud compile error** - there are no silent
-behavioral changes this round.
+module. It must be applied to any project that defines tasks or workflow graphs, or that subscribes to the
+foreman's `OnFlowStopped` event. A project with no workflows needs none of the breaking changes (Steps 2-6); the
+additive `NewSubflow` client (Step 7) still goes onto every microservice. Every break below is a **loud compile
+error** - there are no silent behavioral changes this round.
 
 - **`workflow.NewGraph` dropped its url argument (loud).** It went from `NewGraph(name, url string)` to
   `NewGraph(name string)`. The graph no longer stores its own resolve URL; the resolve key is the separate URL
@@ -20,8 +20,8 @@ behavioral changes this round.
   bind a graph node (by name) to its dispatch URL - now with create-or-update semantics (re-binding a name
   updates its URL instead of being ignored). Pure rename; the method `AddTask` no longer exists, so every call
   is a compile error.
-- **`workflow.FlowOutcome.FlowKey` removed (loud).** The flow key is identity, not outcome, so it is no longer a
-  field on `FlowOutcome`. Code that read `outcome.FlowKey` (from a `Run`/`Await`/`Snapshot` result, or from an
+- **`workflow.FlowOutcome.FlowKey` removed (loud).** It is no longer a field on `FlowOutcome`. Code that read
+  `outcome.FlowKey` (from a `Run`/`Await`/`Snapshot` result, or from an
   `OnFlowStopped` payload) must get the key elsewhere: `Create` returns it, and the `OnFlowStopped` callback now
   receives it as an argument (below). `FlowSummary.FlowKey` (from `List`/`History`) is unchanged.
 - **The foreman `OnFlowStopped` event gained a leading `flowKey` (loud).** The hook callback went from
@@ -35,8 +35,8 @@ behavioral changes this round.
   call is a compile error until the name is supplied.
 - **New `NewSubflow(flow)` typed client (additive).** Each microservice's generated `*api` package now exposes a
   `Subflow` client for invoking that service's tasks and workflows as **isolated child flows from inside a task
-  body** - `otherapi.NewSubflow(flow).SomeTask(ctx, args...)` (a task → `flow.Subtask`) or `.SomeWorkflow(ctx,
-  args...)` (a workflow → `flow.Subgraph`). It is the blessed replacement for calling `foremanapi...Run` or the
+  body** - `otherapi.NewSubflow(flow).SomeTask(ctx, args...)` (a task -> `flow.Subtask`) or `.SomeWorkflow(ctx,
+  args...)` (a workflow -> `flow.Subgraph`). It replaces calling `foremanapi...Run` or the
   test-only `Executor` from a task body. Nothing breaks if you ignore it, but the migration adds the boilerplate
   to **every** `*api/client.go` (so it is present before a task/workflow is ever added) and a per-endpoint method
   for each existing task/workflow.
