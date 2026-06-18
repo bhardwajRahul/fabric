@@ -293,7 +293,7 @@ func (svc *Service) fetchAggregate(r *http.Request) (*openapi.Document, error) {
 	overrideURL := strings.Replace(openapiportalapi.Document.URL(), ":0", ":"+port, 1)
 	res, err := openapiportalapi.NewClient(svc).
 		WithOptions(pub.URL(overrideURL)).
-		Document(r.Context(), "", nil)
+		Document(r.Context(), "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

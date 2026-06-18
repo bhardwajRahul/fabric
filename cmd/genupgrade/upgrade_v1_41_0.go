@@ -583,7 +583,7 @@ func emitConfig(b *strings.Builder, name string, c mfConfig, imports *importSet)
 	fmt.Fprintf(b, "var %s = define.Config{\n", name)
 	fmt.Fprintf(b, "\tValue: %s,\n", valueCarrier(valType))
 	if c.Default != "" {
-		fmt.Fprintf(b, "\tDefault: %q,\n", c.Default)
+		fmt.Fprintf(b, "\tDefault: %s,\n", goStringLit(c.Default))
 	}
 	if c.Validation != "" {
 		fmt.Fprintf(b, "\tValidation: %q,\n", c.Validation)
@@ -674,6 +674,16 @@ func rawString(s string) string {
 		return strconv.Quote(s)
 	}
 	return "`" + s + "`"
+}
+
+// goStringLit renders s as a Go string literal, preferring a backtick raw string for multi-line values
+// (so a multi-line config default reads as real lines in definition.go rather than an escaped one-liner)
+// and a double-quoted literal otherwise or when s contains a backtick.
+func goStringLit(s string) string {
+	if strings.Contains(s, "\n") && !strings.Contains(s, "`") {
+		return "`" + s + "`"
+	}
+	return strconv.Quote(s)
 }
 
 // configValueType extracts the getter's return type from a config signature. The return is named for

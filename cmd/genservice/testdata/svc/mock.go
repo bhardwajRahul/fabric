@@ -24,6 +24,8 @@ type Mock struct {
 	mockAdopt               func(ctx context.Context, pet svcapi.Pet) (since time.Time, err error)              // MARKER: Adopt
 	mockPing                func(ctx context.Context) (err error)                                               // MARKER: Ping
 	mockDashboard           func(w http.ResponseWriter, r *http.Request) (err error)                            // MARKER: Dashboard
+	mockStatus              func(w http.ResponseWriter, r *http.Request) (err error)                            // MARKER: Status
+	mockUpload              func(w http.ResponseWriter, r *http.Request) (err error)                            // MARKER: Upload
 	mockProcessStep         func(ctx context.Context, flow *workflow.Flow, item string) (done bool, err error)  // MARKER: ProcessStep
 	mockReviewStep          func(ctx context.Context, flow *workflow.Flow, count int) (countOut int, err error) // MARKER: ReviewStep
 	mockMainFlowGraph       func(ctx context.Context) (graph *workflow.Graph, err error)                        // MARKER: MainFlow
@@ -107,6 +109,34 @@ func (svc *Mock) MockDashboard(handler func(w http.ResponseWriter, r *http.Reque
 func (svc *Mock) Dashboard(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Dashboard
 	if svc.mockDashboard != nil {
 		err = svc.mockDashboard(w, r)
+	}
+	return errors.Trace(err)
+}
+
+// MockStatus sets up a mock handler for Status.
+func (svc *Mock) MockStatus(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Status
+	svc.mockStatus = handler
+	return svc
+}
+
+// Status executes the mock handler.
+func (svc *Mock) Status(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Status
+	if svc.mockStatus != nil {
+		err = svc.mockStatus(w, r)
+	}
+	return errors.Trace(err)
+}
+
+// MockUpload sets up a mock handler for Upload.
+func (svc *Mock) MockUpload(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: Upload
+	svc.mockUpload = handler
+	return svc
+}
+
+// Upload executes the mock handler.
+func (svc *Mock) Upload(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Upload
+	if svc.mockUpload != nil {
+		err = svc.mockUpload(w, r)
 	}
 	return errors.Trace(err)
 }

@@ -92,9 +92,19 @@ type PingIn struct{}
 // PingOut are the output arguments of Ping.
 type PingOut struct{}
 
-// Dashboard serves an HTML dashboard on any method.
+// Dashboard serves an HTML dashboard on any method (ANY -> 4-arg web client).
 var Dashboard = define.Web{
 	Host: Hostname, Method: "ANY", Route: "/dashboard",
+}
+
+// Status serves a plain status page (GET -> 2-arg web client, no body).
+var Status = define.Web{
+	Host: Hostname, Method: "GET", Route: "/status",
+}
+
+// Upload accepts a file upload (POST -> 3-arg web client, with body).
+var Upload = define.Web{
+	Host: Hostname, Method: "POST", Route: "/upload",
 }
 
 // ProcessStep is a workflow task that processes an item.
@@ -183,6 +193,15 @@ var MaxItems = define.Config{
 	Default:    "100",
 	Validation: "int [1,1000]",
 	Callback:   true,
+}
+
+// DenyList is a newline-separated denylist; exercises a multi-line config default round-tripping
+// through a backtick raw string (real newlines, not a literal \n) into the manifest and getter.
+var DenyList = define.Config{
+	Value: string(""),
+	Default: `/admin
+/.git
+*.env`,
 }
 
 // RefreshInterval controls how often state is refreshed.

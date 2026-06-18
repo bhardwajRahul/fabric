@@ -380,7 +380,7 @@ func (_c MulticastClient) Ping(ctx context.Context) iter.Seq[*PingResponse] { //
 	}
 }
 
-// Dashboard serves an HTML dashboard on any method.
+// Dashboard serves an HTML dashboard on any method (ANY -> 4-arg web client).
 func (_c Client) Dashboard(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Dashboard
 	if method == "" {
 		method = Dashboard.Method
@@ -398,7 +398,7 @@ func (_c Client) Dashboard(ctx context.Context, method string, relativeURL strin
 	)
 }
 
-// Dashboard serves an HTML dashboard on any method.
+// Dashboard serves an HTML dashboard on any method (ANY -> 4-arg web client).
 func (_c MulticastClient) Dashboard(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Dashboard
 	if method == "" {
 		method = Dashboard.Method
@@ -410,6 +410,52 @@ func (_c MulticastClient) Dashboard(ctx context.Context, method string, relative
 		ctx,
 		pub.Method(method),
 		pub.URL(httpx.JoinHostAndPath(_c.host, Dashboard.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+// Status serves a plain status page (GET -> 2-arg web client, no body).
+func (_c Client) Status(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: Status
+	return _c.svc.Request(
+		ctx,
+		pub.Method(Status.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Status.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+// Status serves a plain status page (GET -> 2-arg web client, no body).
+func (_c MulticastClient) Status(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: Status
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(Status.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Status.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+// Upload accepts a file upload (POST -> 3-arg web client, with body).
+func (_c Client) Upload(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: Upload
+	return _c.svc.Request(
+		ctx,
+		pub.Method(Upload.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Upload.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+// Upload accepts a file upload (POST -> 3-arg web client, with body).
+func (_c MulticastClient) Upload(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: Upload
+	return _c.svc.Publish(
+		ctx,
+		pub.Method(Upload.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, Upload.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),

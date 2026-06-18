@@ -335,6 +335,12 @@ func mockTestImports(m *mockModel, aliases map[string]string) importSet {
 		if mv.usesFlow {
 			hasFlow = true
 		}
+		// Every non-web no-op handler signature spells out context.Context. Add the import explicitly
+		// rather than relying on it leaking in via the api package's client.go (which a config-only or
+		// web-only microservice does not import).
+		if mv.Kind != "web" {
+			imports[impContext] = true
+		}
 		addResolved(imports, aliases, mv.Sig, mv.Results, mv.HandlerSig)
 	}
 	if hasWeb {

@@ -53,6 +53,12 @@ func (svc *Service) Ping(ctx context.Context) (err error) { return nil }
 // Dashboard serves an HTML dashboard.
 func (svc *Service) Dashboard(w http.ResponseWriter, r *http.Request) (err error) { return nil }
 
+// Status serves a plain status page.
+func (svc *Service) Status(w http.ResponseWriter, r *http.Request) (err error) { return nil }
+
+// Upload accepts a file upload.
+func (svc *Service) Upload(w http.ResponseWriter, r *http.Request) (err error) { return nil }
+
 // ProcessStep processes an item.
 func (svc *Service) ProcessStep(ctx context.Context, flow *workflow.Flow, item string) (done bool, err error) {
 	return false, nil

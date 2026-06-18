@@ -43,6 +43,7 @@ var goldenFixtures = []string{
 	"testdata/pressuretest/srcapi",
 	"testdata/pressuretest/svcapi",
 	"testdata/svc",
+	"testdata/configonly",
 }
 
 // TestGoldens regenerates each fixture and asserts byte equality against its committed output. A

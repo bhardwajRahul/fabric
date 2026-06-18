@@ -366,7 +366,7 @@ func (_res *{{.Name}}Response) Get() ({{.Returns}}err error) { // MARKER: {{.Nam
 	}
 }
 
-{{end}}{{range .Webs}}{{.DocComment}}func (_c Client) {{.Name}}(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: {{.Name}}
+{{end}}{{range .Webs}}{{if eq .WebShape "any"}}{{.DocComment}}func (_c Client) {{.Name}}(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: {{.Name}}
 	if method == "" {
 		method = {{.Name}}.Method
 	}
@@ -400,7 +400,49 @@ func (_res *{{.Name}}Response) Get() ({{.Returns}}err error) { // MARKER: {{.Nam
 	)
 }
 
-{{end}}{{range .Tasks}}{{.DocComment}}func (_c Executor) {{.Name}}(ctx context.Context{{.Params}}) ({{.Returns}}err error) { // MARKER: {{.Name}}
+{{else if eq .WebShape "body"}}{{.DocComment}}func (_c Client) {{.Name}}(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: {{.Name}}
+	return _c.svc.Request(
+		ctx,
+		pub.Method({{.Name}}.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, {{.Name}}.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+{{.DocComment}}func (_c MulticastClient) {{.Name}}(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: {{.Name}}
+	return _c.svc.Publish(
+		ctx,
+		pub.Method({{.Name}}.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, {{.Name}}.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Body(body),
+		pub.Options(_c.opts...),
+	)
+}
+
+{{else}}{{.DocComment}}func (_c Client) {{.Name}}(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: {{.Name}}
+	return _c.svc.Request(
+		ctx,
+		pub.Method({{.Name}}.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, {{.Name}}.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+{{.DocComment}}func (_c MulticastClient) {{.Name}}(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: {{.Name}}
+	return _c.svc.Publish(
+		ctx,
+		pub.Method({{.Name}}.Method),
+		pub.URL(httpx.JoinHostAndPath(_c.host, {{.Name}}.Route)),
+		pub.RelativeURL(relativeURL),
+		pub.Options(_c.opts...),
+	)
+}
+
+{{end}}{{end}}{{range .Tasks}}{{.DocComment}}func (_c Executor) {{.Name}}(ctx context.Context{{.Params}}) ({{.Returns}}err error) { // MARKER: {{.Name}}
 {{if .HasOut}}	var out {{.Out}}
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, {{.Name}}.Method, {{.Name}}.Route, {{.InLit}}, &out, _c.inFlow, _c.outFlow)
 	return {{.Dot "out"}}err // No trace

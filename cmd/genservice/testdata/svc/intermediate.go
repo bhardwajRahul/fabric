@@ -35,6 +35,8 @@ type ToDo interface {
 	Adopt(ctx context.Context, pet svcapi.Pet) (since time.Time, err error)                   // MARKER: Adopt
 	Ping(ctx context.Context) (err error)                                                     // MARKER: Ping
 	Dashboard(w http.ResponseWriter, r *http.Request) (err error)                             // MARKER: Dashboard
+	Status(w http.ResponseWriter, r *http.Request) (err error)                                // MARKER: Status
+	Upload(w http.ResponseWriter, r *http.Request) (err error)                                // MARKER: Upload
 	ProcessStep(ctx context.Context, flow *workflow.Flow, item string) (done bool, err error) // MARKER: ProcessStep
 	ReviewStep(ctx context.Context, flow *workflow.Flow, count int) (countOut int, err error) // MARKER: ReviewStep
 	MainFlow(ctx context.Context) (graph *workflow.Graph, err error)                          // MARKER: MainFlow
@@ -104,7 +106,19 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Dashboard
 		"Dashboard", svc.Dashboard,
 		sub.At(svcapi.Dashboard.Method, svcapi.Dashboard.Route),
-		sub.Description(`Dashboard serves an HTML dashboard on any method.`),
+		sub.Description(`Dashboard serves an HTML dashboard on any method (ANY -> 4-arg web client).`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Status
+		"Status", svc.Status,
+		sub.At(svcapi.Status.Method, svcapi.Status.Route),
+		sub.Description(`Status serves a plain status page (GET -> 2-arg web client, no body).`),
+		sub.Web(),
+	)
+	svc.Subscribe( // MARKER: Upload
+		"Upload", svc.Upload,
+		sub.At(svcapi.Upload.Method, svcapi.Upload.Route),
+		sub.Description(`Upload accepts a file upload (POST -> 3-arg web client, with body).`),
 		sub.Web(),
 	)
 	svc.Subscribe( // MARKER: ProcessStep
@@ -140,6 +154,14 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.Description(`MaxItems caps the number of items processed per run; changes fire OnChangedMaxItems.`),
 		cfg.DefaultValue(`100`),
 		cfg.Validation(`int [1,1000]`),
+	)
+	svc.DefineConfig( // MARKER: DenyList
+		"DenyList",
+		cfg.Description(`DenyList is a newline-separated denylist; exercises a multi-line config default round-tripping
+through a backtick raw string (real newlines, not a literal \n) into the manifest and getter.`),
+		cfg.DefaultValue(`/admin
+/.git
+*.env`),
 	)
 	svc.DefineConfig( // MARKER: RefreshInterval
 		"RefreshInterval",
@@ -324,6 +346,17 @@ func (svc *Intermediate) MaxItems() (value int) { // MARKER: MaxItems
 // SetMaxItems sets the value of the configuration property.
 func (svc *Intermediate) SetMaxItems(value int) (err error) { // MARKER: MaxItems
 	return svc.SetConfig("MaxItems", strconv.Itoa(value))
+}
+
+// DenyList is a newline-separated denylist; exercises a multi-line config default round-tripping
+// through a backtick raw string (real newlines, not a literal \n) into the manifest and getter.
+func (svc *Intermediate) DenyList() (value string) { // MARKER: DenyList
+	return svc.Config("DenyList")
+}
+
+// SetDenyList sets the value of the configuration property.
+func (svc *Intermediate) SetDenyList(value string) (err error) { // MARKER: DenyList
+	return svc.SetConfig("DenyList", value)
 }
 
 // RefreshInterval controls how often state is refreshed.

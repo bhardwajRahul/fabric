@@ -97,6 +97,10 @@ type featureView struct {
 	TimeBudget string // rendered sub.TimeBudget duration expr, or ""
 	Queue      string // "none" | "default" | custom queue name | ""
 
+	// Web client shape (client.go webs only): "plain" (ctx, relativeURL), "body" (ctx, relativeURL, body),
+	// or "any" (ctx, method, relativeURL, body). Selected from the endpoint's HTTP method.
+	WebShape string
+
 	apiPkg    string // when set, bare In/Out field types are qualified with this package alias
 	inFields  []fieldDef
 	outFields []fieldDef
@@ -221,6 +225,7 @@ func buildClientModel(svc *service, header string) *clientModel {
 		case "Function":
 			m.Funcs = append(m.Funcs, fv)
 		case "Web":
+			fv.WebShape = webShape(attrString(f.attrs, "Method"))
 			m.Webs = append(m.Webs, fv)
 		case "Task":
 			m.Tasks = append(m.Tasks, fv)
@@ -277,6 +282,20 @@ func buildClientModel(svc *service, header string) *clientModel {
 	sort.Strings(m.Imports.Std)
 	sort.Strings(m.Imports.Ext)
 	return m
+}
+
+// webShape classifies a web endpoint's HTTP method into the client method shape it gets: "any" for the
+// ANY method (caller chooses method + body), "body" for methods that carry a request body (POST/PUT/
+// PATCH), and "plain" for the rest (GET/HEAD/DELETE/OPTIONS/TRACE/CONNECT), which take neither.
+func webShape(method string) string {
+	switch strings.ToUpper(method) {
+	case "ANY":
+		return "any"
+	case "POST", "PUT", "PATCH":
+		return "body"
+	default:
+		return "plain"
+	}
 }
 
 // docComment renders a godoc block, one // line per source line; "" when the doc is empty.

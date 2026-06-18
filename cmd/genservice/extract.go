@@ -309,7 +309,10 @@ func exprSource(fset *token.FileSet, e ast.Expr) string {
 	return b.String()
 }
 
-// attrString returns the unquoted value of a string-literal attribute, or "".
+// attrString returns the unquoted value of a string-literal attribute, or "". A backtick raw string is
+// taken literally; a double-quoted string is unescaped (strconv.Unquote), so escape sequences such as
+// \n in a multi-line default or \" in a requiredClaims regexp resolve to their real characters rather
+// than passing through as literal backslash sequences.
 func attrString(attrs map[string]ast.Expr, key string) string {
 	e, ok := attrs[key]
 	if !ok {
@@ -319,7 +322,14 @@ func attrString(attrs map[string]ast.Expr, key string) string {
 	if !ok {
 		return ""
 	}
-	return strings.Trim(bl.Value, "`\"")
+	if strings.HasPrefix(bl.Value, "`") {
+		return strings.Trim(bl.Value, "`")
+	}
+	s, err := strconv.Unquote(bl.Value)
+	if err == nil {
+		return s
+	}
+	return strings.Trim(bl.Value, `"`)
 }
 
 // attrBool reports whether the attribute is the identifier true.

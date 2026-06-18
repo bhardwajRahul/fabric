@@ -83,7 +83,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
 		tools := []llmapi.Tool{{Name: "Arithmetic", Description: "Calculator", InputSchema: json.RawMessage(`{}`)}}
-		_, toolCalls, _, err := client.Turn(ctx, "chatbox-default", messages, tools, nil)
+		_, toolCalls, _, _, err := client.Turn(ctx, "chatbox-default", messages, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(toolCalls), 1)
 			assert.Expect(toolCalls[0].Name, "Arithmetic")
@@ -94,7 +94,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7?"}}
-		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "42")
 		}
@@ -104,7 +104,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello there"}}
-		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "don't understand")
 		}
@@ -114,7 +114,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "tool", Content: `{"result":42}`}}
-		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "42")
 		}
@@ -123,7 +123,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("empty_messages", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		content, _, _, err := client.Turn(ctx, "chatbox-default", nil, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", nil, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "Chatbox demo")
 		}
@@ -133,7 +133,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 5 divided by 0?"}}
-		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "zero")
 		}
@@ -143,7 +143,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "system", Content: "You are a bot."}}
-		content, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
+		content, _, _, _, err := client.Turn(ctx, "chatbox-default", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(content, "don't understand")
 		}

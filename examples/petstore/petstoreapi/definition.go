@@ -1,0 +1,92 @@
+package petstoreapi
+
+import (
+	"github.com/microbus-io/fabric/define"
+)
+
+// Hostname is the default hostname of the microservice.
+const Hostname = "petstore.example"
+
+// Name is the decorative PascalCase name of the microservice.
+const Name = ""
+
+// Version is the major version of the microservice's public API.
+const Version = 1
+
+// Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
+const Description = `Petstore delegates to the Swagger Petstore API.
+
+This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
+Swagger at [https://swagger.io](https://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
+You can now help us improve the API whether it's by making changes to the definition itself or to the code.
+That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
+
+Some useful links:
+- [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
+- [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)`
+
+// RemoteBaseURL is the base URL of the remote Swagger Petstore API.
+var RemoteBaseURL = define.Config{
+	Value:      string(""),
+	Default:    "https://petstore3.swagger.io/api/v3",
+	Validation: "url",
+}
+
+// BearerToken is the OAuth2 bearer token presented to the remote Swagger Petstore API.
+var BearerToken = define.Config{
+	Value:  string(""),
+	Secret: true,
+}
+
+// AddPet adds a new pet to the store.
+//
+// Input:
+//   - httpRequestBody: httpRequestBody is the pet to add
+//
+// Output:
+//   - httpResponseBody: httpResponseBody is the created pet
+//   - httpStatusCode: httpStatusCode is the remote HTTP status code
+var AddPet = define.Function{
+	Host: Hostname, Method: "POST", Route: "/pet",
+	In: AddPetIn{}, Out: AddPetOut{},
+}
+
+// AddPetIn are the input arguments of AddPet.
+type AddPetIn struct { // MARKER: AddPet
+	HTTPRequestBody *Pet `json:"-"`
+}
+
+// AddPetOut are the output arguments of AddPet.
+type AddPetOut struct { // MARKER: AddPet
+	HTTPResponseBody *Pet `json:"-"`
+	HTTPStatusCode   int  `json:"-"`
+}
+
+// GetPetById returns a single pet.
+//
+// Input:
+//   - petId: petId is the ID of the pet to return
+//
+// Output:
+//   - httpResponseBody: httpResponseBody is the requested pet
+//   - httpStatusCode: httpStatusCode is the remote HTTP status code
+var GetPetById = define.Function{
+	Host: Hostname, Method: "GET", Route: "/pet/{petId}",
+	In: GetPetByIdIn{}, Out: GetPetByIdOut{},
+}
+
+// GetPetByIdIn are the input arguments of GetPetById.
+type GetPetByIdIn struct { // MARKER: GetPetById
+	PetId int64 `json:"petId,omitzero"`
+}
+
+// GetPetByIdOut are the output arguments of GetPetById.
+type GetPetByIdOut struct { // MARKER: GetPetById
+	HTTPResponseBody *Pet `json:"-"`
+	HTTPStatusCode   int  `json:"-"`
+}
+
+// UploadFile uploads an image of the pet.
+var UploadFile = define.Web{
+	Host: Hostname, Method: "POST", Route: "/pet/{petId}/uploadImage",
+}

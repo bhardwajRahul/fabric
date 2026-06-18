@@ -1,0 +1,68 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package litellmapi
+
+import (
+	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+	"github.com/microbus-io/fabric/define"
+)
+
+// Hostname is the default hostname of the microservice.
+const Hostname = "lite.llm.core"
+
+// Name is the decorative PascalCase name of the microservice.
+const Name = "LiteLLM"
+
+// Version is the major version of the microservice's public API.
+const Version = 1
+
+// Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
+const Description = `The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Chat Completions wire format.`
+
+// CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
+var CompletionURL = define.Config{
+	Value:      string(""),
+	Default:    "http://localhost:4000/v1/chat/completions",
+	Validation: "url",
+}
+
+// APIKey is the virtual key for the LiteLLM proxy.
+var APIKey = define.Config{
+	Value:  string(""),
+	Secret: true,
+}
+
+// Turn executes a single LLM turn through the LiteLLM proxy.
+var Turn = define.Function{
+	Host: Hostname, Method: "POST", Route: ":444/turn",
+	In: TurnIn{}, Out: TurnOut{},
+}
+
+// TurnIn are the input arguments of Turn.
+type TurnIn struct { // MARKER: Turn
+	Model    string              `json:"model,omitzero"`
+	Messages []llmapi.Message    `json:"messages,omitzero"`
+	Tools    []llmapi.Tool       `json:"tools,omitzero"`
+	Options  *llmapi.TurnOptions `json:"options,omitzero"`
+}
+
+// TurnOut are the output arguments of Turn.
+type TurnOut struct { // MARKER: Turn
+	Content   string            `json:"content,omitzero"`
+	ToolCalls []llmapi.ToolCall `json:"toolCalls,omitzero"`
+	Usage     llmapi.Usage      `json:"usage,omitzero"`
+}

@@ -5,7 +5,7 @@ general:
   hostname: svc.example
   description: The svc microservice is a fixture exercising every feature kind for code generation.
   package: github.com/microbus-io/fabric/cmd/genservice/testdata/svc
-  modifiedAt: "2026-06-18T21:33:40Z"
+  modifiedAt: "2026-06-18T23:28:44Z"
 
 configs:
   APIKey:
@@ -18,6 +18,15 @@ configs:
     validation: int [1,1000]
     default: 100
     callback: true
+  DenyList:
+    signature: DenyList() (value string)
+    description: |-
+      DenyList is a newline-separated denylist; exercises a multi-line config default round-tripping
+      through a backtick raw string (real newlines, not a literal \n) into the manifest and getter.
+    default: |-
+      /admin
+      /.git
+      *.env
   RefreshInterval:
     signature: RefreshInterval() (value time.Duration)
     description: RefreshInterval controls how often state is refreshed.
@@ -67,9 +76,17 @@ functions:
 
 webs:
   Dashboard:
-    description: Dashboard serves an HTML dashboard on any method.
+    description: Dashboard serves an HTML dashboard on any method (ANY -> 4-arg web client).
     method: ANY
     route: /dashboard
+  Status:
+    description: Status serves a plain status page (GET -> 2-arg web client, no body).
+    method: GET
+    route: /status
+  Upload:
+    description: Upload accepts a file upload (POST -> 3-arg web client, with body).
+    method: POST
+    route: /upload
 
 inboundEvents:
   OnSrcEvent:

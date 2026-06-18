@@ -78,6 +78,30 @@ func TestSvc_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("status", func(t *testing.T) { // MARKER: Status
+		assert := testarossa.For(t)
+
+		mock.MockStatus(func(w http.ResponseWriter, r *http.Request) (err error) {
+			return nil
+		})
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+		err := mock.Status(w, r)
+		assert.NoError(err)
+	})
+
+	t.Run("upload", func(t *testing.T) { // MARKER: Upload
+		assert := testarossa.For(t)
+
+		mock.MockUpload(func(w http.ResponseWriter, r *http.Request) (err error) {
+			return nil
+		})
+		w := httpx.NewResponseRecorder()
+		r := httpx.MustNewRequest("GET", "/", nil)
+		err := mock.Upload(w, r)
+		assert.NoError(err)
+	})
+
 	t.Run("process_step", func(t *testing.T) { // MARKER: ProcessStep
 		assert := testarossa.For(t)
 
