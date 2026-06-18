@@ -509,17 +509,49 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *wo
 	return status, nil
 }
 
+// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
+// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
+// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
+// returning (..., yield bool, err error). Only the explicit inputs cross into the child and only the
+// explicit outputs cross back - the caller's flow state is NOT shared. This is the blessed way for one
+// task to invoke another unit of work with state isolation; do not call Executor or foremanapi from a
+// task body.
+type Subflow struct {
+	flow *workflow.Flow
+}
+
+// NewSubflow creates a subflow client bound to the calling task's flow carrier.
+func NewSubflow(flow *workflow.Flow) Subflow {
+	return Subflow{flow: flow}
+}
+
+// marshalSubflow runs a child flow via the flow carrier and returns the parker's yield. A non-empty
+// taskName selects flow.Subtask (the engine synthesizes a single-task graph named taskName around url);
+// an empty taskName selects flow.Subgraph (the host loads the graph by url) - mirroring the engine's
+// taskName-presence discriminator. in is marshaled to the child's input; the child's final_state is
+// unmarshaled into out.
+func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) (yield bool, err error) {
+	if flow == nil {
+		return false, errors.New("Subflow requires a flow carrier (call from a task body)")
+	}
+	if taskName != "" {
+		return flow.Subtask(taskName, url, in, out)
+	}
+	return flow.Subgraph(url, in, out)
+}
+
 /*
 InitChat resolves tool URLs into tool schemas via each host's OpenAPI document and stores
 the resolved tools and options in flow state.
 */
-func (_c Executor) InitChat(ctx context.Context, messages []Message, toolURLs []string, options *ChatOptions) (err error) { // MARKER: InitChat
+func (_c Executor) InitChat(ctx context.Context, messages []Message, toolURLs []string, options *ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
+	var out InitChatOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{
 		Messages: messages,
 		ToolURLs: toolURLs,
 		Options:  options,
-	}, &InitChatOut{}, _c.inFlow, _c.outFlow)
-	return err // No trace
+	}, &out, _c.inFlow, _c.outFlow)
+	return out.MaxToolRounds, out.ToolRounds, err // No trace
 }
 
 /*
@@ -574,4 +606,82 @@ func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, 
 		Options:  options,
 	}, &out)
 	return out.MessagesOut, out.Usage, status, err
+}
+
+/*
+InitChat runs the InitChat task as a subtask of the calling flow.
+*/
+func (_sf Subflow) InitChat(ctx context.Context, messages []Message, toolURLs []string, options *ChatOptions) (maxToolRounds int, toolRounds int, yield bool, err error) { // MARKER: InitChat
+	var out InitChatOut
+	yield, err = marshalSubflow(_sf.flow, "InitChat", InitChat.URL(), InitChatIn{
+		Messages: messages,
+		ToolURLs: toolURLs,
+		Options:  options,
+	}, &out)
+	if yield || err != nil {
+		return maxToolRounds, toolRounds, yield, err
+	}
+	return out.MaxToolRounds, out.ToolRounds, false, nil
+}
+
+/*
+CallLLM runs the CallLLM task as a subtask of the calling flow.
+*/
+func (_sf Subflow) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, yield bool, err error) { // MARKER: CallLLM
+	var out CallLLMOut
+	yield, err = marshalSubflow(_sf.flow, "CallLLM", CallLLM.URL(), CallLLMIn{
+		Provider: provider,
+		Model:    model,
+		Messages: messages,
+	}, &out)
+	if yield || err != nil {
+		return llmContent, pendingToolCalls, turnUsage, yield, err
+	}
+	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, false, nil
+}
+
+/*
+ProcessResponse runs the ProcessResponse task as a subtask of the calling flow.
+*/
+func (_sf Subflow) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, yield bool, err error) { // MARKER: ProcessResponse
+	var out ProcessResponseOut
+	yield, err = marshalSubflow(_sf.flow, "ProcessResponse", ProcessResponse.URL(), ProcessResponseIn{
+		LLMContent:    llmContent,
+		TurnUsage:     turnUsage,
+		ToolRounds:    toolRounds,
+		MaxToolRounds: maxToolRounds,
+	}, &out)
+	if yield || err != nil {
+		return toolsRequested, toolRoundsOut, usageOut, yield, err
+	}
+	return out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, false, nil
+}
+
+/*
+ExecuteTool runs the ExecuteTool task as a subtask of the calling flow.
+*/
+func (_sf Subflow) ExecuteTool(ctx context.Context) (yield bool, err error) { // MARKER: ExecuteTool
+	yield, err = marshalSubflow(_sf.flow, "ExecuteTool", ExecuteTool.URL(), ExecuteToolIn{}, nil)
+	if yield || err != nil {
+		return yield, err
+	}
+	return false, nil
+}
+
+/*
+ChatLoop runs the ChatLoop workflow as a subgraph of the calling flow.
+*/
+func (_sf Subflow) ChatLoop(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, yield bool, err error) { // MARKER: ChatLoop
+	var out ChatLoopOut
+	yield, err = marshalSubflow(_sf.flow, "", ChatLoop.URL(), ChatLoopIn{
+		Provider: provider,
+		Model:    model,
+		Messages: messages,
+		ToolURLs: toolURLs,
+		Options:  options,
+	}, &out)
+	if yield || err != nil {
+		return messagesOut, usage, yield, err
+	}
+	return out.MessagesOut, out.Usage, false, nil
 }

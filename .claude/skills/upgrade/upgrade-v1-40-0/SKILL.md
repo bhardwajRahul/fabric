@@ -1,7 +1,7 @@
 ---
 name: upgrade-v1-40-0
 user-invocable: false
-description: Called by upgrade-microbus. Upgrades the project from v1.39.x to v1.40.0. Breaking workflow API cleanup in the dwarf module ("names over URLs"). (1) workflow.NewGraph dropped its url argument - NewGraph("Name", url) becomes NewGraph("Name") - the graph no longer carries a resolve URL; the resolve key is the separate URL still passed to the foreman's Run/Create. (2) graph.AddTask was renamed to graph.SetEndpoint with identical (name, url) arguments and create-or-update semantics. (3) FlowOutcome.FlowKey was removed - the flow key is identity, not outcome - so any code reading outcome.FlowKey must get the key elsewhere. (4) The foreman OnFlowStopped event/hook callback gained a leading flowKey argument: func(ctx, outcome) becomes func(ctx, flowKey string, outcome). The foreman's Run/Await/Snapshot endpoints are unchanged (still return the outcome), so only outcome.FlowKey readers among those callers are affected. All breaks are loud compile errors except graph node semantics, which are unchanged.
+description: Called by upgrade-microbus. Upgrades the project from v1.39.x to v1.40.0. Breaking workflow API cleanup in the dwarf module ("names over URLs"), plus a new subflow client. (1) workflow.NewGraph dropped its url argument - NewGraph("Name", url) becomes NewGraph("Name") - the graph no longer carries a resolve URL; the resolve key is the separate URL still passed to the foreman's Run/Create. (2) graph.AddTask was renamed to graph.SetEndpoint with identical (name, url) arguments and create-or-update semantics. (3) FlowOutcome.FlowKey was removed - the flow key is identity, not outcome - so any code reading outcome.FlowKey must get the key elsewhere. (4) The foreman OnFlowStopped event/hook callback gained a leading flowKey argument: func(ctx, outcome) becomes func(ctx, flowKey string, outcome). (5) The foreman CreateTask endpoint/client gained a required leading name argument - CreateTask(taskURL, ...) becomes CreateTask(name, taskURL, ...) - a loud break for callers. (6) Additive: each microservice's generated client now exposes a NewSubflow(flow) typed client (a Subflow type + NewSubflow + marshalSubflow boilerplate, plus a per-endpoint method for every task/workflow) for invoking another service's task or workflow as an isolated child flow from inside a task body, via flow.Subtask/flow.Subgraph; the boilerplate is added to every *api/client.go regardless of whether it currently has tasks/workflows, so it is already present when one is added later. The foreman's Run/Await/Snapshot endpoints are unchanged (still return the outcome), so only outcome.FlowKey readers among those callers are affected. All breaks are loud compile errors except graph node semantics, which are unchanged.
 ---
 
 ## What changed
@@ -28,6 +28,18 @@ behavioral changes this round.
   `func(ctx context.Context, outcome *workflow.FlowOutcome) error` to
   `func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) error`. `flowKey` identifies which
   flow stopped (it used to be read off `outcome.FlowKey`). The arity change is a compile error.
+- **The foreman `CreateTask` gained a required leading `name` (loud).** It went from
+  `CreateTask(ctx, taskURL, initialState, opts)` to `CreateTask(ctx, name, taskURL, initialState, opts)`,
+  matching `NewGraph`/`SetEndpoint`/`flow.Subtask`. `name` is the single-task flow's display name (shown in
+  diagrams/history; required, non-empty); `taskURL` is the dispatch target. Every `foremanClient.CreateTask(...)`
+  call is a compile error until the name is supplied.
+- **New `NewSubflow(flow)` typed client (additive).** Each microservice's generated `*api` package now exposes a
+  `Subflow` client for invoking that service's tasks and workflows as **isolated child flows from inside a task
+  body** - `otherapi.NewSubflow(flow).SomeTask(ctx, args...)` (a task → `flow.Subtask`) or `.SomeWorkflow(ctx,
+  args...)` (a workflow → `flow.Subgraph`). It is the blessed replacement for calling `foremanapi...Run` or the
+  test-only `Executor` from a task body. Nothing breaks if you ignore it, but the migration adds the boilerplate
+  to **every** `*api/client.go` (so it is present before a task/workflow is ever added) and a per-endpoint method
+  for each existing task/workflow.
 
 The foreman's `Run`, `Await`, and `Snapshot` endpoints are **unchanged** - they still return
 `(outcome *workflow.FlowOutcome, err error)`. Only callers that read `outcome.FlowKey` from those results are
@@ -39,24 +51,28 @@ Graph node names and transition wiring are unchanged - this is an API-shape clea
 
 ```
 Upgrade a Microbus project to v1.40.0:
-- [ ] Step 1: Detect workflow usage; skip the rest if none
+- [ ] Step 1: Detect workflow usage (Steps 2-6); Step 7 runs on every microservice regardless
 - [ ] Step 2: Drop the url argument from every workflow.NewGraph call
 - [ ] Step 3: Rename graph.AddTask(...) to graph.SetEndpoint(...)
 - [ ] Step 4: Add the leading flowKey argument to every OnFlowStopped hook callback
 - [ ] Step 5: Fix readers of the removed FlowOutcome.FlowKey field
-- [ ] Step 6: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
+- [ ] Step 6: Add the name argument to every foreman CreateTask caller
+- [ ] Step 7: Add the NewSubflow client to every microservice's *api/client.go
+- [ ] Step 8: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
 ```
 
 #### Step 1: Detect Workflow Usage
 
-If the project defines no tasks or workflow graphs and does not subscribe to `OnFlowStopped`, it does not touch
-this API; skip to Step 6 (the framework bump alone is safe). Detect:
+If the project defines no tasks or workflow graphs, does not subscribe to `OnFlowStopped`, and never calls the
+foreman's `CreateTask`, it does not touch the breaking API (Steps 2-6); skip to Step 7. Detect:
 
 ```bash
-grep -rlE 'workflow\.NewGraph\(|\.AddTask\(|\.OnFlowStopped\(|\.FlowKey\b' --include='*.go' .
+grep -rlE 'workflow\.NewGraph\(|\.AddTask\(|\.OnFlowStopped\(|\.FlowKey\b|\.CreateTask\(' --include='*.go' .
 ```
 
-No matches means nothing to migrate.
+No matches means nothing to migrate in Steps 2-6. **Step 7 (the additive `NewSubflow` client) still runs on
+every microservice**, even one with no workflows today, so the boilerplate is already present when a task or
+graph is added later.
 
 #### Step 2: Drop the url Argument From `workflow.NewGraph`
 
@@ -148,7 +164,112 @@ out, err := client.Await(ctx, flowKey)
 
 A `.FlowKey` access on a `List`/`History` result (`FlowSummary`) is unaffected - leave it.
 
-#### Step 6: Regenerate, Tidy, and Verify
+#### Step 6: Add the `name` Argument to `CreateTask` Callers
+
+The foreman's `CreateTask` gained a required leading `name`. Find every caller:
+
+```bash
+grep -rn '\.CreateTask(' --include='*.go' . | grep -v 'func '
+```
+
+For each, insert a `name` (the single-task flow's display name, PascalCase by convention) before the `taskURL`:
+
+```go
+// before
+flowKey, err := foremanapi.NewClient(svc).CreateTask(ctx, myserviceapi.DoThing.URL(), state, nil)
+// after - name first (matches NewGraph / SetEndpoint / flow.Subtask)
+flowKey, err := foremanapi.NewClient(svc).CreateTask(ctx, "DoThing", myserviceapi.DoThing.URL(), state, nil)
+```
+
+The arity change is a compile error, so `go vet` flags every missed call. The foreman's own `CreateTask`
+endpoint signature is part of the framework and is already updated by the version bump.
+
+#### Step 7: Add the `NewSubflow` Client to Every `*api/client.go`
+
+This step is **additive** and runs on **every** microservice in the project - even those with no tasks or
+workflows yet - so the typed subflow client is already present when one is added later. It edits the
+hand-maintained `*api/client.go`; it does **not** touch `manifest.yaml` or `mock.go`, so no `genmanifest`/
+`genmock` run is needed for it (Step 8 only re-runs them for the breaking changes above).
+
+**(a) Add the boilerplate to every `client.go`.** Immediately after the `marshalWorkflow` function in each
+`*api/client.go`, add the `Subflow` type, `NewSubflow`, and `marshalSubflow` helper (the imports it needs -
+`workflow` and `errors` - are already present wherever `marshalWorkflow` is):
+
+```go
+// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
+// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
+// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
+// returning (..., yield bool, err error). Only the explicit inputs cross into the child and only the
+// explicit outputs cross back - the caller's flow state is NOT shared. This is the blessed way for one
+// task to invoke another unit of work with state isolation; do not call Executor or foremanapi from a
+// task body.
+type Subflow struct {
+	flow *workflow.Flow
+}
+
+// NewSubflow creates a subflow client bound to the calling task's flow carrier.
+func NewSubflow(flow *workflow.Flow) Subflow {
+	return Subflow{flow: flow}
+}
+
+// marshalSubflow runs a child flow via the flow carrier and returns the parker's yield. A non-empty
+// taskName selects flow.Subtask (the engine synthesizes a single-task graph named taskName around url);
+// an empty taskName selects flow.Subgraph (the host loads the graph by url) - mirroring the engine's
+// taskName-presence discriminator. in is marshaled to the child's input; the child's final_state is
+// unmarshaled into out.
+func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) (yield bool, err error) {
+	if flow == nil {
+		return false, errors.New("Subflow requires a flow carrier (call from a task body)")
+	}
+	if taskName != "" {
+		return flow.Subtask(taskName, url, in, out)
+	}
+	return flow.Subgraph(url, in, out)
+}
+```
+
+(In a service with no tasks/workflows, `marshalSubflow` is an unused package function - legal in Go, and it
+becomes used the moment the first per-endpoint method below is added.)
+
+**(b) Add one `Subflow` method per task/workflow endpoint.** For each existing `Executor` endpoint method,
+append a parallel `Subflow` method. **Mirror the `Executor` method's signature exactly**, inserting `yield bool`
+before the trailing `err` - the `Executor` is the source of truth for the output names (it already resolves
+read-modify-write `Out`-suffix names like `reviewAttemptsOut`, which the raw JSON tag would collide with the
+input). A **task** endpoint maps to `flow.Subtask` with the PascalCase task name; a **workflow** endpoint maps
+to `flow.Subgraph` with an empty name and **drops** the Executor's `status` return:
+
+```go
+// task endpoint  ->  Subtask (PascalCase name), mirrors VerifyCredit(ctx, creditScore) (creditVerified, err)
+func (_sf Subflow) VerifyCredit(ctx context.Context, creditScore int) (creditVerified bool, yield bool, err error) { // MARKER: VerifyCredit
+	var out VerifyCreditOut
+	yield, err = marshalSubflow(_sf.flow, "VerifyCredit", VerifyCredit.URL(), VerifyCreditIn{
+		CreditScore: creditScore,
+	}, &out)
+	if yield || err != nil {
+		return creditVerified, yield, err
+	}
+	return out.CreditVerified, false, nil
+}
+
+// workflow endpoint  ->  Subgraph (empty name), drops the Executor's `status` return
+func (_sf Subflow) CreditApproval(ctx context.Context, applicant Applicant) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, yield bool, err error) { // MARKER: CreditApproval
+	var out CreditApprovalOut
+	yield, err = marshalSubflow(_sf.flow, "", CreditApproval.URL(), CreditApprovalIn{
+		Applicant: applicant,
+	}, &out)
+	if yield || err != nil {
+		return approved, creditVerified, employmentFailures, identityVerified, yield, err
+	}
+	return out.Approved, out.CreditVerified, out.EmploymentFailures, out.IdentityVerified, false, nil
+}
+```
+
+A task that returns no outputs passes `nil` as the last `marshalSubflow` argument (no `var out`) and returns
+just `(yield bool, err error)`. If an `Executor` method was hand-written to *discard* a task's declared outputs
+(it passes `&SomethingOut{}` and returns only `err`), fix that `Executor` method first to surface the outputs,
+then mirror it - both the `Executor` and the `Subflow` should expose what the task produces.
+
+#### Step 8: Regenerate, Tidy, and Verify
 
 The `NewGraph` and `AddTask` changes touch generated artifacts (`mock.go`, `manifest.yaml`), so regenerate them
 from the now-fixed source for every microservice you touched:

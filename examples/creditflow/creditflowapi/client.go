@@ -439,6 +439,37 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *wo
 	return status, nil
 }
 
+// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
+// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
+// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
+// returning (..., yield bool, err error). Only the explicit inputs cross into the child and only the
+// explicit outputs cross back - the caller's flow state is NOT shared. This is the blessed way for one
+// task to invoke another unit of work with state isolation; do not call Executor or foremanapi from a
+// task body.
+type Subflow struct {
+	flow *workflow.Flow
+}
+
+// NewSubflow creates a subflow client bound to the calling task's flow carrier.
+func NewSubflow(flow *workflow.Flow) Subflow {
+	return Subflow{flow: flow}
+}
+
+// marshalSubflow runs a child flow via the flow carrier and returns the parker's yield. A non-empty
+// taskName selects flow.Subtask (the engine synthesizes a single-task graph named taskName around url);
+// an empty taskName selects flow.Subgraph (the host loads the graph by url) - mirroring the engine's
+// taskName-presence discriminator. in is marshaled to the child's input; the child's final_state is
+// unmarshaled into out.
+func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) (yield bool, err error) {
+	if flow == nil {
+		return false, errors.New("Subflow requires a flow carrier (call from a task body)")
+	}
+	if taskName != "" {
+		return flow.Subtask(taskName, url, in, out)
+	}
+	return flow.Subgraph(url, in, out)
+}
+
 // marshalRequest supports functional endpoints.
 func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
 	if method == "ANY" {
@@ -567,4 +598,212 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+/*
+SubmitCreditApplication runs the SubmitCreditApplication task as a subtask of the calling flow.
+*/
+func (_sf Subflow) SubmitCreditApplication(ctx context.Context, applicant Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, yield bool, err error) { // MARKER: SubmitCreditApplication
+	var out SubmitCreditApplicationOut
+	yield, err = marshalSubflow(_sf.flow, "SubmitCreditApplication", SubmitCreditApplication.URL(), SubmitCreditApplicationIn{
+		Applicant: applicant,
+	}, &out)
+	if yield || err != nil {
+		return applicantName, ssn, address, phone, employers, creditScore, yield, err
+	}
+	return out.ApplicantName, out.SSN, out.Address, out.Phone, out.Employers, out.CreditScore, false, nil
+}
+
+/*
+VerifyCredit runs the VerifyCredit task as a subtask of the calling flow.
+*/
+func (_sf Subflow) VerifyCredit(ctx context.Context, creditScore int) (creditVerified bool, yield bool, err error) { // MARKER: VerifyCredit
+	var out VerifyCreditOut
+	yield, err = marshalSubflow(_sf.flow, "VerifyCredit", VerifyCredit.URL(), VerifyCreditIn{
+		CreditScore: creditScore,
+	}, &out)
+	if yield || err != nil {
+		return creditVerified, yield, err
+	}
+	return out.CreditVerified, false, nil
+}
+
+/*
+VerifyEmployment runs the VerifyEmployment task as a subtask of the calling flow.
+*/
+func (_sf Subflow) VerifyEmployment(ctx context.Context, applicantName string, employerName string) (employmentFailuresOut int, yield bool, err error) { // MARKER: VerifyEmployment
+	var out VerifyEmploymentOut
+	yield, err = marshalSubflow(_sf.flow, "VerifyEmployment", VerifyEmployment.URL(), VerifyEmploymentIn{
+		ApplicantName: applicantName,
+		EmployerName:  employerName,
+	}, &out)
+	if yield || err != nil {
+		return employmentFailuresOut, yield, err
+	}
+	return out.EmploymentFailuresOut, false, nil
+}
+
+/*
+InitIdentityVerification runs the InitIdentityVerification task as a subtask of the calling flow.
+*/
+func (_sf Subflow) InitIdentityVerification(ctx context.Context, applicantName string, ssn string, address string, phone string) (yield bool, err error) { // MARKER: InitIdentityVerification
+	yield, err = marshalSubflow(_sf.flow, "InitIdentityVerification", InitIdentityVerification.URL(), InitIdentityVerificationIn{
+		ApplicantName: applicantName,
+		SSN:           ssn,
+		Address:       address,
+		Phone:         phone,
+	}, nil)
+	if yield || err != nil {
+		return yield, err
+	}
+	return false, nil
+}
+
+/*
+VerifySSN runs the VerifySSN task as a subtask of the calling flow.
+*/
+func (_sf Subflow) VerifySSN(ctx context.Context, ssn string) (ssnVerified bool, yield bool, err error) { // MARKER: VerifySSN
+	var out VerifySSNOut
+	yield, err = marshalSubflow(_sf.flow, "VerifySSN", VerifySSN.URL(), VerifySSNIn{
+		SSN: ssn,
+	}, &out)
+	if yield || err != nil {
+		return ssnVerified, yield, err
+	}
+	return out.SsnVerified, false, nil
+}
+
+/*
+VerifyAddress runs the VerifyAddress task as a subtask of the calling flow.
+*/
+func (_sf Subflow) VerifyAddress(ctx context.Context, address string) (addressVerified bool, yield bool, err error) { // MARKER: VerifyAddress
+	var out VerifyAddressOut
+	yield, err = marshalSubflow(_sf.flow, "VerifyAddress", VerifyAddress.URL(), VerifyAddressIn{
+		Address: address,
+	}, &out)
+	if yield || err != nil {
+		return addressVerified, yield, err
+	}
+	return out.AddressVerified, false, nil
+}
+
+/*
+VerifyPhoneNumber runs the VerifyPhoneNumber task as a subtask of the calling flow.
+*/
+func (_sf Subflow) VerifyPhoneNumber(ctx context.Context, phone string) (phoneVerified bool, yield bool, err error) { // MARKER: VerifyPhoneNumber
+	var out VerifyPhoneNumberOut
+	yield, err = marshalSubflow(_sf.flow, "VerifyPhoneNumber", VerifyPhoneNumber.URL(), VerifyPhoneNumberIn{
+		Phone: phone,
+	}, &out)
+	if yield || err != nil {
+		return phoneVerified, yield, err
+	}
+	return out.PhoneVerified, false, nil
+}
+
+/*
+IdentityDecision runs the IdentityDecision task as a subtask of the calling flow.
+*/
+func (_sf Subflow) IdentityDecision(ctx context.Context, ssnVerified bool, addressVerified bool, phoneVerified bool) (identityVerified bool, yield bool, err error) { // MARKER: IdentityDecision
+	var out IdentityDecisionOut
+	yield, err = marshalSubflow(_sf.flow, "IdentityDecision", IdentityDecision.URL(), IdentityDecisionIn{
+		SsnVerified:     ssnVerified,
+		AddressVerified: addressVerified,
+		PhoneVerified:   phoneVerified,
+	}, &out)
+	if yield || err != nil {
+		return identityVerified, yield, err
+	}
+	return out.IdentityVerified, false, nil
+}
+
+/*
+RequestMoreInfo runs the RequestMoreInfo task as a subtask of the calling flow.
+*/
+func (_sf Subflow) RequestMoreInfo(ctx context.Context, reviewAttempts int) (reviewAttemptsOut int, yield bool, err error) { // MARKER: RequestMoreInfo
+	var out RequestMoreInfoOut
+	yield, err = marshalSubflow(_sf.flow, "RequestMoreInfo", RequestMoreInfo.URL(), RequestMoreInfoIn{
+		ReviewAttempts: reviewAttempts,
+	}, &out)
+	if yield || err != nil {
+		return reviewAttemptsOut, yield, err
+	}
+	return out.ReviewAttemptsOut, false, nil
+}
+
+/*
+ReviewCredit runs the ReviewCredit task as a subtask of the calling flow.
+*/
+func (_sf Subflow) ReviewCredit(ctx context.Context, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, yield bool, err error) { // MARKER: ReviewCredit
+	var out ReviewCreditOut
+	yield, err = marshalSubflow(_sf.flow, "ReviewCredit", ReviewCredit.URL(), ReviewCreditIn{
+		CreditScore:    creditScore,
+		CreditVerified: creditVerified,
+		ReviewAttempts: reviewAttempts,
+	}, &out)
+	if yield || err != nil {
+		return creditVerifiedOut, yield, err
+	}
+	return out.CreditVerifiedOut, false, nil
+}
+
+/*
+HandleCreditError runs the HandleCreditError task as a subtask of the calling flow.
+*/
+func (_sf Subflow) HandleCreditError(ctx context.Context, onErr *errors.TracedError) (creditVerified bool, yield bool, err error) { // MARKER: HandleCreditError
+	var out HandleCreditErrorOut
+	yield, err = marshalSubflow(_sf.flow, "HandleCreditError", HandleCreditError.URL(), HandleCreditErrorIn{
+		OnErr: onErr,
+	}, &out)
+	if yield || err != nil {
+		return creditVerified, yield, err
+	}
+	return out.CreditVerified, false, nil
+}
+
+/*
+Decision runs the Decision task as a subtask of the calling flow.
+*/
+func (_sf Subflow) Decision(ctx context.Context, creditVerified bool, employmentFailures int, identityVerified bool) (approved bool, yield bool, err error) { // MARKER: Decision
+	var out DecisionOut
+	yield, err = marshalSubflow(_sf.flow, "Decision", Decision.URL(), DecisionIn{
+		CreditVerified:     creditVerified,
+		EmploymentFailures: employmentFailures,
+		IdentityVerified:   identityVerified,
+	}, &out)
+	if yield || err != nil {
+		return approved, yield, err
+	}
+	return out.Approved, false, nil
+}
+
+/*
+IdentityVerification runs the IdentityVerification workflow as a subgraph of the calling flow.
+*/
+func (_sf Subflow) IdentityVerification(ctx context.Context, applicantName string, ssn string, address string, phone string) (identityVerified bool, yield bool, err error) { // MARKER: IdentityVerification
+	var out IdentityVerificationOut
+	yield, err = marshalSubflow(_sf.flow, "", IdentityVerification.URL(), IdentityVerificationIn{
+		ApplicantName: applicantName,
+		SSN:           ssn,
+		Address:       address,
+		Phone:         phone,
+	}, &out)
+	if yield || err != nil {
+		return identityVerified, yield, err
+	}
+	return out.IdentityVerified, false, nil
+}
+
+/*
+CreditApproval runs the CreditApproval workflow as a subgraph of the calling flow.
+*/
+func (_sf Subflow) CreditApproval(ctx context.Context, applicant Applicant) (approved bool, creditVerified bool, employmentFailures int, identityVerified bool, yield bool, err error) { // MARKER: CreditApproval
+	var out CreditApprovalOut
+	yield, err = marshalSubflow(_sf.flow, "", CreditApproval.URL(), CreditApprovalIn{
+		Applicant: applicant,
+	}, &out)
+	if yield || err != nil {
+		return approved, creditVerified, employmentFailures, identityVerified, yield, err
+	}
+	return out.Approved, out.CreditVerified, out.EmploymentFailures, out.IdentityVerified, false, nil
 }

@@ -593,3 +593,34 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *wo
 	}
 	return status, nil
 }
+
+// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
+// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
+// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
+// returning (..., yield bool, err error). Only the explicit inputs cross into the child and only the
+// explicit outputs cross back - the caller's flow state is NOT shared. This is the blessed way for one
+// task to invoke another unit of work with state isolation; do not call Executor or foremanapi from a
+// task body.
+type Subflow struct {
+	flow *workflow.Flow
+}
+
+// NewSubflow creates a subflow client bound to the calling task's flow carrier.
+func NewSubflow(flow *workflow.Flow) Subflow {
+	return Subflow{flow: flow}
+}
+
+// marshalSubflow runs a child flow via the flow carrier and returns the parker's yield. A non-empty
+// taskName selects flow.Subtask (the engine synthesizes a single-task graph named taskName around url);
+// an empty taskName selects flow.Subgraph (the host loads the graph by url) - mirroring the engine's
+// taskName-presence discriminator. in is marshaled to the child's input; the child's final_state is
+// unmarshaled into out.
+func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) (yield bool, err error) {
+	if flow == nil {
+		return false, errors.New("Subflow requires a flow carrier (call from a task body)")
+	}
+	if taskName != "" {
+		return flow.Subtask(taskName, url, in, out)
+	}
+	return flow.Subgraph(url, in, out)
+}
