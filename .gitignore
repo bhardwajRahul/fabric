@@ -1,28 +1,29 @@
-*.drawio.svg.bkp
-*.drawio.svg.dtmp
-*.drawio.bkp
-*.drawio.dtmp
-
+# Executables
 nats-server
-
-*.local.*
+gencreds
+genopenapispecs
+genservice
+gentopology
+genupgrade
+genworkflowmmd
 /main/main
 /main/__debug_bin*
-.DS_Store
 
+# Secrets
+*.local.*
 nats.creds
 *_nats.creds
-
 *.pem
 
+# SQLite databases
 *.db
 *.sqlite
 *.sqlite3
 
+# Other
 .claude/scheduled_tasks.lock
 /coreservices/venvpy/venv.py.core
 /main/venv.py.core
+.DS_Store
 
 /_*.md
-# Throwaway service for exercising the add-* skills during the definition.go skills rewrite (delete when done)
-examples/temperature/

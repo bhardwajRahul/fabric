@@ -170,6 +170,11 @@ func readManifest(path string) (*manifest, error) {
 	m.tasks = mappingEntries(childMapping(root, "tasks"))
 	m.workflows = mappingEntries(childMapping(root, "workflows"))
 	m.tickers = mappingEntries(childMapping(root, "tickers"))
+	for _, e := range m.inbound {
+		if decodeEndpoint(e.node).Package == "" {
+			return nil, fmt.Errorf("%s: inbound event %q is missing the source microservice package path", path, e.name)
+		}
+	}
 	return m, nil
 }
 
@@ -676,7 +681,8 @@ func emitTicker(b *strings.Builder, name string, t mfTicker, imports *importSet)
 
 func emitInbound(b *strings.Builder, name string, e mfEndpoint, imports *importSet) {
 	// The manifest records the source microservice's package path; the OutboundEvent var lives in that
-	// microservice's api package, which by convention is <service>/<service>api.
+	// microservice's api package, which by convention is <service>/<service>api. readManifest validates
+	// that Package is non-empty, so the join below never produces a malformed import.
 	apiPath := e.Package + "/" + lastSegment(e.Package) + "api"
 	alias := lastSegment(apiPath)
 	imports.add(apiPath)

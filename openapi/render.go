@@ -413,7 +413,7 @@ func fieldTagDescription(field reflect.StructField) string {
 	tag := field.Tag.Get("jsonschema")
 	for _, part := range strings.Split(tag, ",") {
 		if desc, ok := strings.CutPrefix(part, "description="); ok {
-			return desc
+			return strings.TrimSpace(desc)
 		}
 	}
 	return ""
