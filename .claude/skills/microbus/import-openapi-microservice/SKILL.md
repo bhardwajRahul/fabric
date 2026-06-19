@@ -176,7 +176,7 @@ delegator. Large APIs have hundreds of endpoints; import only the curated subset
 - **Interactive** (default for a bare "import this API"): present the endpoints grouped by route with
   `method`, `name`, `summary` and ask the user to choose. Offer "all" for small APIs.
 
-Skip endpoints already scaffolded (their `// MARKER: Name` is in `myserviceapi/endpoints.go`); re-import is
+Skip endpoints already scaffolded (their `// MARKER: Name` is in `myserviceapi/definition.go`); re-import is
 additive. Record the imported names under a `## Imported Endpoints` heading in the local `CLAUDE.md`.
 
 #### Step 7: Generate the Complex Types
@@ -205,24 +205,18 @@ For each endpoint with `feature: function`, follow the `add-function` skill with
   - `RemoteFunction(ctx, status string) (httpResponseBody []myserviceapi.Thing, httpStatusCode int, err error)`
   - `RemoteFunction(ctx, id int64) (httpStatusCode int, err error)` (no response body)
 
-`add-function` leaves the magic-arg struct shape implicit; use these exact field names and tags (placed
-per its endpoints.go/client.go steps). The Go field names `HTTPRequestBody`, `HTTPResponseBody`,
-`HTTPStatusCode` are matched by reflection; renaming them silently disables the magic, and each takes a
-`json:"-"` tag:
+Declare the In/Out structs in `definition.go` per `add-function` (the client `Response` wrapper and the rest
+of the boilerplate are generated). The Go field names `HTTPRequestBody`, `HTTPResponseBody`, `HTTPStatusCode`
+are matched by reflection; renaming them silently disables the magic, and each takes a `json:"-"` tag (types
+are bare here because `definition.go` is in the `myserviceapi` package):
 
 ```go
 type RemoteFunctionIn struct { // MARKER: RemoteFunction
-	HTTPRequestBody *myserviceapi.Thing `json:"-"`
+	HTTPRequestBody *Thing `json:"-"`
 }
 type RemoteFunctionOut struct { // MARKER: RemoteFunction
-	HTTPResponseBody *myserviceapi.Thing `json:"-"`
-	HTTPStatusCode   int                 `json:"-"`
-}
-
-// Response wrapper in client.go: Get returns every output plus err.
-func (_res *RemoteFunctionResponse) Get() (httpResponseBody *myserviceapi.Thing, httpStatusCode int, err error) { // MARKER: RemoteFunction
-	_d := _res.data.(*RemoteFunctionOut)
-	return _d.HTTPResponseBody, _d.HTTPStatusCode, _res.err
+	HTTPResponseBody *Thing `json:"-"`
+	HTTPStatusCode   int    `json:"-"`
 }
 ```
 

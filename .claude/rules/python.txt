@@ -101,7 +101,7 @@ Tests do not spin up the Python venv by default — the auto-start in `OnStartup
 | # | Scenario | How to enable | Cost |
 |---|---|---|---|
 | 1 | Mock + direct method call (e.g. `mock.MyFunction(ctx, ...)`) | `mock := myservice.NewMock(); mock.MockMyFunction(...); mock.MyFunction(ctx, ...)`. No `application.RunInTest` needed. | Zero |
-| 2 | Mock + cross-service over the bus | Add `myservice.NewMock()` to the test app. The genmock-generated `Mock.OnStartup` activates every Manual sub on the bus, so callers reach the Mock's handlers without any extra setup. | Zero |
+| 2 | Mock + cross-service over the bus | Add `myservice.NewMock()` to the test app. The generated `Mock.OnStartup` activates every Manual sub on the bus, so callers reach the Mock's handlers without any extra setup. | Zero |
 | 3 | Real service + no Python calls | Add `myservice.NewService()` to the test app. The venv is constructed in `OnStartup` but not started. Handlers that touch `svc.venv.Call` would error with `ErrNotReady`, but tests in this scenario don't call them. | Zero |
 | 4 | Real service + real Python from the service's own package | Add `myservice.NewService()` to the test app. After `app.RunInTest(t)`, call `svc.StartPyVenv(ctx)`. Returns when Ready or errors. | 30s+ on first run, fast on cached venv |
 | 5 | Real service + real Python from an upstream's tests | Same as scenario 4. `StartPyVenv` is exported precisely so cross-package tests can drive it. The upstream's test app adds the real downstream service and calls `downstream.StartPyVenv(ctx)` after `RunInTest`. | Same as 4 |
