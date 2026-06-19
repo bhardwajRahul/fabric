@@ -272,7 +272,7 @@ func buildClientModel(svc *service, header string) *clientModel {
 	if m.HasWeb() {
 		need(impContext, impIter, impHTTP, impPub, impHTTPX)
 	}
-	for p := range featureSelectorImports(svc) {
+	for p := range featureSelectorImports(svc, nil) {
 		need(p)
 	}
 	for p := range imports {

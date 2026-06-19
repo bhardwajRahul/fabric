@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"iter"
 	"net/http"
+	"net/netip"
 	"reflect"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/sub"
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -138,6 +140,50 @@ func NewSubflow(flow *workflow.Flow) Subflow {
 	return Subflow{flow: flow}
 }
 
+// MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
+type MulticastTrigger struct {
+	svc  service.Publisher
+	host string
+	opts []pub.Option
+}
+
+// NewMulticastTrigger creates a new multicast trigger of events of the microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
+}
+
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
+
+// Hook assists in the subscription to the events of the microservice.
+type Hook struct {
+	svc  service.Subscriber
+	host string
+	opts []sub.Option
+}
+
+// NewHook creates a new hook to the events of the microservice.
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{svc: listener, host: Hostname}
+}
+
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (c Hook) ForHost(host string) Hook {
+	return Hook{svc: c.svc, host: host, opts: c.opts}
+}
+
+// WithOptions returns a copy of the hook with options to be applied to subscriptions.
+func (c Hook) WithOptions(opts ...sub.Option) Hook {
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
+}
+
 // marshalRequest supports functional endpoints.
 func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
 	if method == "ANY" {
@@ -201,6 +247,23 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 			}
 		}
 	}
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // marshalTask supports task execution via the Executor.
@@ -514,4 +577,56 @@ func (_sf Subflow) MainFlow(ctx context.Context, item string, pet Pet) (done boo
 		return done, since, yield, err
 	}
 	return out.Done, out.Since, false, nil
+}
+
+// OnPeerSeenResponse packs the response of OnPeerSeen.
+type OnPeerSeenResponse multicastResponse // MARKER: OnPeerSeen
+
+// Get unpacks the return arguments of OnPeerSeen.
+func (_res *OnPeerSeenResponse) Get() (ack bool, err error) { // MARKER: OnPeerSeen
+	_d := _res.data.(*OnPeerSeenOut)
+	return _d.Ack, _res.err
+}
+
+// OnPeerSeen fires when a peer is observed. Peer is a non-scalar field whose package (net/netip) is
+// imported by no other feature, pinning that an outbound event's field types reach client.go (its
+// Trigger) but never intermediate.go, which generates no handler for an outbound event.
+func (_c MulticastTrigger) OnPeerSeen(ctx context.Context, peer netip.Addr) iter.Seq[*OnPeerSeenResponse] { // MARKER: OnPeerSeen
+	_in := OnPeerSeenIn{Peer: peer}
+	_out := OnPeerSeenOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnPeerSeen.Method, OnPeerSeen.Route, &_in, &_out)
+	return func(yield func(*OnPeerSeenResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnPeerSeenResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+// OnPeerSeen fires when a peer is observed. Peer is a non-scalar field whose package (net/netip) is
+// imported by no other feature, pinning that an outbound event's field types reach client.go (its
+// Trigger) but never intermediate.go, which generates no handler for an outbound event.
+func (c Hook) OnPeerSeen(handler func(ctx context.Context, peer netip.Addr) (ack bool, err error)) (unsub func() error, err error) { // MARKER: OnPeerSeen
+	doOnPeerSeen := func(w http.ResponseWriter, r *http.Request) error {
+		var in OnPeerSeenIn
+		var out OnPeerSeenOut
+		err = marshalFunction(w, r, OnPeerSeen.Route, &in, &out, func(_ any, _ any) error {
+			out.Ack, err = handler(r.Context(), in.Peer)
+			return err
+		})
+		return err // No trace
+	}
+	const name = "OnPeerSeen"
+	path := httpx.JoinHostAndPath(c.host, OnPeerSeen.Route)
+	subOpts := append([]sub.Option{
+		sub.At(OnPeerSeen.Method, path),
+		sub.InboundEvent(OnPeerSeenIn{}, OnPeerSeenOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnPeerSeen, subOpts...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }

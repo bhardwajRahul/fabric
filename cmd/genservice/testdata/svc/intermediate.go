@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -40,7 +41,7 @@ type ToDo interface {
 	ProcessStep(ctx context.Context, flow *workflow.Flow, item string) (done bool, err error) // MARKER: ProcessStep
 	ReviewStep(ctx context.Context, flow *workflow.Flow, count int) (countOut int, err error) // MARKER: ReviewStep
 	MainFlow(ctx context.Context) (graph *workflow.Graph, err error)                          // MARKER: MainFlow
-	OnSrcEvent(ctx context.Context, detail string) (ok bool, err error)                       // MARKER: OnSrcEvent
+	OnSrcEvent(ctx context.Context, detail string, origin url.URL) (ok bool, err error)       // MARKER: OnSrcEvent
 	Reconcile(ctx context.Context) (err error)                                                // MARKER: Reconcile
 	OnObserveQueueDepth(ctx context.Context) (err error)                                      // MARKER: QueueDepth
 	OnChangedMaxItems(ctx context.Context) (err error)                                        // MARKER: MaxItems

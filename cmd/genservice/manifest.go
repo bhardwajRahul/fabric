@@ -197,7 +197,7 @@ func emitManifestInbound(sb *strings.Builder, svc *service, fs []feature, resolv
 	sb.WriteByte('\n')
 	sb.WriteString("inboundEvents:\n")
 	for _, f := range fs {
-		iv, srcPath, err := inboundView(svc, f, resolveSource)
+		iv, srcPath, _, err := inboundView(svc, f, resolveSource)
 		if err != nil {
 			return err
 		}

@@ -19,6 +19,7 @@ limitations under the License.
 package svcapi
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/microbus-io/fabric/define"
@@ -160,6 +161,24 @@ type MainFlowOut struct {
 // OnSrcEvent handles the upstream srcapi.OnSrcEvent event.
 var OnSrcEvent = define.InboundEvent{
 	Source: srcapi.OnSrcEvent,
+}
+
+// OnPeerSeen fires when a peer is observed. Peer is a non-scalar field whose package (net/netip) is
+// imported by no other feature, pinning that an outbound event's field types reach client.go (its
+// Trigger) but never intermediate.go, which generates no handler for an outbound event.
+var OnPeerSeen = define.OutboundEvent{
+	Host: Hostname, Method: "POST", Route: ":417/on-peer-seen",
+	In: OnPeerSeenIn{}, Out: OnPeerSeenOut{},
+}
+
+// OnPeerSeenIn are the input arguments of OnPeerSeen.
+type OnPeerSeenIn struct {
+	Peer netip.Addr `json:"peer,omitzero"`
+}
+
+// OnPeerSeenOut are the output arguments of OnPeerSeen.
+type OnPeerSeenOut struct {
+	Ack bool `json:"ack,omitzero"`
 }
 
 // RequestsTotal counts requests handled, labelled by status.

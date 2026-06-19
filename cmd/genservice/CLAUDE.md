@@ -61,9 +61,26 @@ non-builtin identifier with `apiPkg` while leaving already-qualified selectors (
 since an inbound handler's parameters are the source event's types.
 
 Because qualified field types pull in packages the api struct imported (`time`, another api package),
-`featureSelectorImports` walks every In/Out field and resolves its `pkg.Type` selectors against the api package's
-own import aliases, feeding the computed import set of every emitter. This is shared by client, intermediate, and
-mock so the three agree on imports.
+`featureSelectorImports(svc, kinds)` walks the In/Out fields of the features whose kind is in `kinds` and resolves
+each `pkg.Type` selector against the api package's own import aliases, feeding the computed import set. The `kinds`
+filter exists because the emitters reference different feature subsets, and an import that no emitted code uses is a
+compile error in a file the agent may not hand-edit:
+
+- `client.go` renders the In/Out of *every* feature, so it passes `nil` (all kinds). An outbound event's field
+  types reach `client.go` through its `Trigger`, and an inbound event's through its `Hook`.
+- `intermediate.go` generates handlers only for functions, web handlers, tasks, and workflows, so it passes exactly
+  that set. An outbound event has no handler in `intermediate.go` (it is fired from the `Trigger` in `client.go`),
+  so pulling its field types' packages into `intermediate.go`'s imports would leave an unused import - e.g. an
+  outbound event with a `time.Time` field would import `time` into an `intermediate.go` that never references it.
+
+Inbound events are a third case, handled outside `featureSelectorImports`: an inbound handler's parameters are the
+*source* event's types, declared in the source api package, not this one. `inboundView` resolves those field
+selectors against the *source* package's aliases and returns both the source api package's import path (for the
+handler's bare domain types, which qualify to `srcPkg.Type`) and the packages of any `pkg.Type` selectors in the
+source fields (`time.Time`, another api package's type). Without the latter, an inbound handler taking a
+`time.Time` from its source event would reference `time` in `intermediate.go` with no import. `mock.go` reaches the
+same result by a different route: `mockAliases` merges the source package's aliases into its resolution set, so its
+generic `addResolved` over the rendered handler signatures already covers the source field types.
 
 In/Out fields are not the only types `intermediate.go` renders. A config getter (`RefreshInterval() time.Duration`),
 a metric recorder (`RecordLatency(ctx, value time.Duration)`), a ticker interval (`30 * time.Second`), and a
@@ -214,9 +231,14 @@ tree. The committed fixture files therefore *are* the goldens.
 
 - `testdata/svc` is a full service exercising every feature kind: functions (with magic HTTP args and the `xxxOut`
   task suffix), a web handler, tasks, a workflow, a cross-package inbound event (sourced from
-  `pressuretest/srcapi`), counter/gauge(observable)/histogram metrics, secret/callback/duration configs, a
-  ticker, plus a domain type (`Pet`) and an external type (`time.Time`) to exercise qualification across the
-  service-package files.
+  `pressuretest/srcapi`), an outbound event (`OnPeerSeen`), counter/gauge(observable)/histogram metrics,
+  secret/callback/duration configs, a ticker, plus a domain type (`Pet`) and an external type (`time.Time`) to
+  exercise qualification across the service-package files. Two fields pin the import-direction rules for events,
+  each typed from a package no other feature imports: the inbound source event carries a `net/url` field, and so
+  `net/url` must appear in `intermediate.go` (the handler signature) but the golden regresses if an inbound event's
+  source-package field types stop reaching `intermediate.go`; the outbound event carries a `net/netip` field, and
+  so `net/netip` must appear in `client.go` (the `Trigger`) but *not* in `intermediate.go`, the golden regressing
+  if an outbound event's field types start leaking into the handler file that has no handler for it.
 - `testdata/pressuretest/{srcapi,svcapi}` are api-only packages (client.go generation) covering every client type
   and helper, magic HTTP args, the `xxxOut` suffix, and a cross-package type alias.
 - `testdata/configonly` is an endpoint-less service (only configs and one metric). Beyond pinning the no-Subscribe

@@ -132,7 +132,7 @@ func buildMockModel(svc *service, pkg, apiPath, header string, resolveSource fun
 		case "Workflow":
 			workflows = append(workflows, graphMock(f.name, svc.apiPkg, svc.fieldsOf(f.in), svc.fieldsOf(f.out)))
 		case "InboundEvent":
-			iv, _, err := inboundView(svc, f, resolveSource)
+			iv, _, _, err := inboundView(svc, f, resolveSource)
 			if err != nil {
 				return nil, err
 			}

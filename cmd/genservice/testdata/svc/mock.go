@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
@@ -30,7 +31,7 @@ type Mock struct {
 	mockReviewStep          func(ctx context.Context, flow *workflow.Flow, count int) (countOut int, err error) // MARKER: ReviewStep
 	mockMainFlowGraph       func(ctx context.Context) (graph *workflow.Graph, err error)                        // MARKER: MainFlow
 	unsubMockMainFlow       func() error                                                                        // MARKER: MainFlow
-	mockOnSrcEvent          func(ctx context.Context, detail string) (ok bool, err error)                       // MARKER: OnSrcEvent
+	mockOnSrcEvent          func(ctx context.Context, detail string, origin url.URL) (ok bool, err error)       // MARKER: OnSrcEvent
 	mockReconcile           func(ctx context.Context) (err error)                                               // MARKER: Reconcile
 	mockOnObserveQueueDepth func(ctx context.Context) (err error)                                               // MARKER: QueueDepth
 	mockOnChangedMaxItems   func(ctx context.Context) (err error)                                               // MARKER: MaxItems
@@ -224,15 +225,15 @@ func (svc *Mock) MainFlow(ctx context.Context) (graph *workflow.Graph, err error
 }
 
 // MockOnSrcEvent sets up a mock handler for OnSrcEvent.
-func (svc *Mock) MockOnSrcEvent(handler func(ctx context.Context, detail string) (ok bool, err error)) *Mock { // MARKER: OnSrcEvent
+func (svc *Mock) MockOnSrcEvent(handler func(ctx context.Context, detail string, origin url.URL) (ok bool, err error)) *Mock { // MARKER: OnSrcEvent
 	svc.mockOnSrcEvent = handler
 	return svc
 }
 
 // OnSrcEvent executes the mock handler.
-func (svc *Mock) OnSrcEvent(ctx context.Context, detail string) (ok bool, err error) { // MARKER: OnSrcEvent
+func (svc *Mock) OnSrcEvent(ctx context.Context, detail string, origin url.URL) (ok bool, err error) { // MARKER: OnSrcEvent
 	if svc.mockOnSrcEvent != nil {
-		ok, err = svc.mockOnSrcEvent(ctx, detail)
+		ok, err = svc.mockOnSrcEvent(ctx, detail, origin)
 	}
 	return ok, errors.Trace(err)
 }

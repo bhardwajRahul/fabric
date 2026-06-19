@@ -447,10 +447,14 @@ func exprString(e ast.Expr) string {
 }
 
 // featureSelectorImports returns the import paths referenced by pkg.Type selectors in the In/Out
-// struct fields of every feature, resolved against the api package's own import aliases.
-func featureSelectorImports(svc *service) map[string]bool {
+// struct fields of features whose kind is in kinds, resolved against the api package's own import
+// aliases. A nil kinds set includes every feature; callers pass the subset whose In/Out they render.
+func featureSelectorImports(svc *service, kinds map[string]bool) map[string]bool {
 	out := map[string]bool{}
 	for _, f := range svc.features {
+		if kinds != nil && !kinds[f.kind] {
+			continue
+		}
 		for _, fld := range append(svc.fieldsOf(f.in), svc.fieldsOf(f.out)...) {
 			for _, sel := range selectorsIn(fld.typ) {
 				if path, ok := svc.imports[sel]; ok {

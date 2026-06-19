@@ -1,11 +1,11 @@
 # Executables
-nats-server
-gencreds
-genopenapispecs
-genservice
-gentopology
-genupgrade
-genworkflowmmd
+/nats-server
+/gencreds
+/genopenapispecs
+/genservice
+/gentopology
+/genupgrade
+/genworkflowmmd
 /main/main
 /main/__debug_bin*
 

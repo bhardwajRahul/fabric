@@ -19,6 +19,8 @@ limitations under the License.
 package srcapi
 
 import (
+	"net/url"
+
 	"github.com/microbus-io/fabric/define"
 )
 
@@ -36,9 +38,12 @@ type SrcThing struct {
 	Label string `json:"label,omitzero"`
 }
 
-// OnSrcEventIn are the input arguments of OnSrcEvent.
+// OnSrcEventIn are the input arguments of OnSrcEvent. Origin is a non-scalar field whose package
+// (net/url) is imported by no other feature, pinning that an inbound event's source-package field
+// types contribute their imports to the downstream service-package files (intermediate.go).
 type OnSrcEventIn struct {
-	Detail string `json:"detail,omitzero"`
+	Detail string  `json:"detail,omitzero"`
+	Origin url.URL `json:"origin,omitzero"`
 }
 
 // OnSrcEventOut are the output arguments of OnSrcEvent.

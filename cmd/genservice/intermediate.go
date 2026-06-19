@@ -138,12 +138,13 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 		case "Workflow":
 			m.Workflows = append(m.Workflows, endpointView(svc, f))
 		case "InboundEvent":
-			iv, srcPath, err := inboundView(svc, f, resolveSource)
+			iv, srcPath, typePaths, err := inboundView(svc, f, resolveSource)
 			if err != nil {
 				return nil, err
 			}
 			m.InboundEvents = append(m.InboundEvents, iv)
 			srcPaths = append(srcPaths, srcPath)
+			srcPaths = append(srcPaths, typePaths...)
 		case "Config":
 			cv := buildConfig(f)
 			cv.GoType = qualifyTypes(cv.Type, svc.apiPkg)
@@ -169,7 +170,7 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	}
 	for _, iv := range m.InboundEvents {
 		if iv.HookOptions != "" {
-			imports[impSub] = true // Hook.WithOptions(sub.…) references the sub package
+			imports[impSub] = true // Hook.WithOptions(sub....) references the sub package
 		}
 	}
 	if len(m.Funcs) > 0 {
@@ -199,14 +200,15 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	if intermediateNeedsStrconv(m) {
 		imports[impStrconv] = true
 	}
-	for p := range featureSelectorImports(svc) {
+	// Only the kinds whose handlers are emitted here contribute In/Out field-type imports; outbound and
+	// inbound events are excluded (inbound source types are added via inboundView's typePaths).
+	for p := range featureSelectorImports(svc, map[string]bool{
+		"Function": true, "Web": true, "Task": true, "Workflow": true,
+	}) {
 		imports[p] = true
 	}
-	// Config getters, metric recorders, ticker intervals, and time budgets render Go fragments
-	// (time.Duration, 30 * time.Second, ...) into the service package. Resolve the pkg.Type selectors
-	// in those fragments against the api package's imports, the same way In/Out fields are resolved, so
-	// the referenced package is imported. Without this a duration-valued metric references time.Duration
-	// with no time import, leaving intermediate.go uncompilable and unfixable (it is generated).
+	// Config getters, metric recorders, ticker intervals, and time budgets render value-typed fragments;
+	// resolve their selectors' packages against the api aliases, the same as In/Out fields.
 	for _, c := range m.Configs {
 		addResolved(imports, svc.imports, c.Type)
 	}
@@ -339,15 +341,16 @@ func intermediateNeedsStrconv(m *intermediateModel) bool {
 }
 
 // inboundView resolves an inbound event's handler signature from its source api package and returns
-// the view plus the source's import path.
-func inboundView(svc *service, f feature, resolveSource func(string) (*service, error)) (*featureView, string, error) {
+// the view, the source api package's import path, and the import paths of any pkg.Type selectors in
+// the source event's fields, resolved against the source package's own aliases.
+func inboundView(svc *service, f feature, resolveSource func(string) (*service, error)) (*featureView, string, []string, error) {
 	srcPath, ok := svc.imports[f.srcPkg]
 	if !ok {
-		return nil, "", fmt.Errorf("inbound event %q: unknown source package %q", f.name, f.srcPkg)
+		return nil, "", nil, fmt.Errorf("inbound event %q: unknown source package %q", f.name, f.srcPkg)
 	}
 	srcSvc, err := resolveSource(srcPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("inbound event %q: resolving source %s: %w", f.name, srcPath, err)
+		return nil, "", nil, fmt.Errorf("inbound event %q: resolving source %s: %w", f.name, srcPath, err)
 	}
 	var ev *feature
 	for i := range srcSvc.features {
@@ -357,7 +360,17 @@ func inboundView(svc *service, f feature, resolveSource func(string) (*service, 
 		}
 	}
 	if ev == nil {
-		return nil, "", fmt.Errorf("inbound event %q: source outbound event %s.%s not found", f.name, f.srcPkg, f.srcEvent)
+		return nil, "", nil, fmt.Errorf("inbound event %q: source outbound event %s.%s not found", f.name, f.srcPkg, f.srcEvent)
+	}
+	inFields := srcSvc.fieldsOf(ev.in)
+	outFields := srcSvc.fieldsOf(ev.out)
+	typeImports := map[string]bool{}
+	for _, fld := range append(append([]fieldDef{}, inFields...), outFields...) {
+		addResolved(typeImports, srcSvc.imports, fld.typ)
+	}
+	var paths []string
+	for p := range typeImports {
+		paths = append(paths, p)
 	}
 	return &featureView{
 		Name:        f.name,
@@ -367,9 +380,9 @@ func inboundView(svc *service, f feature, resolveSource func(string) (*service, 
 		SrcEvent:    f.srcEvent,
 		HookOptions: hookOptions(svc, f),
 		apiPkg:      f.srcPkg, // inbound handler params reference the source api package's types
-		inFields:    srcSvc.fieldsOf(ev.in),
-		outFields:   srcSvc.fieldsOf(ev.out),
-	}, srcPath, nil
+		inFields:    inFields,
+		outFields:   outFields,
+	}, srcPath, paths, nil
 }
 
 // hookOptions renders the sub.Options for an inbound event's Hook.WithOptions call from its

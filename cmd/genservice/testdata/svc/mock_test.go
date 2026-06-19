@@ -5,6 +5,7 @@ package svc
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -139,11 +140,12 @@ func TestSvc_Mock(t *testing.T) {
 	t.Run("on_src_event", func(t *testing.T) { // MARKER: OnSrcEvent
 		assert := testarossa.For(t)
 
-		mock.MockOnSrcEvent(func(ctx context.Context, detail string) (ok bool, err error) {
+		mock.MockOnSrcEvent(func(ctx context.Context, detail string, origin url.URL) (ok bool, err error) {
 			return
 		})
 		var detail string
-		_, err := mock.OnSrcEvent(ctx, detail)
+		var origin url.URL
+		_, err := mock.OnSrcEvent(ctx, detail, origin)
 		assert.NoError(err)
 	})
 

@@ -5,7 +5,7 @@ general:
   hostname: svc.example
   description: The svc microservice is a fixture exercising every feature kind for code generation.
   package: github.com/microbus-io/fabric/cmd/genservice/testdata/svc
-  modifiedAt: "2026-06-18T23:28:44Z"
+  modifiedAt: "2099-01-01T00:00:00Z"
 
 configs:
   APIKey:
@@ -52,6 +52,16 @@ metrics:
     buckets: [0.1, 0.5, 1, 5]
     otelName: svc_latency_seconds
 
+outboundEvents:
+  OnPeerSeen:
+    signature: OnPeerSeen(peer netip.Addr) (ack bool)
+    description: |-
+      OnPeerSeen fires when a peer is observed. Peer is a non-scalar field whose package (net/netip) is
+      imported by no other feature, pinning that an outbound event's field types reach client.go (its
+      Trigger) but never intermediate.go, which generates no handler for an outbound event.
+    method: POST
+    route: :417/on-peer-seen
+
 functions:
   Greet:
     signature: Greet(name string) (greeting string)
@@ -90,7 +100,7 @@ webs:
 
 inboundEvents:
   OnSrcEvent:
-    signature: OnSrcEvent(detail string) (ok bool)
+    signature: OnSrcEvent(detail string, origin url.URL) (ok bool)
     description: OnSrcEvent handles the upstream srcapi.OnSrcEvent event.
     package: github.com/microbus-io/fabric/cmd/genservice/testdata/pressuretest/srcapi
 

@@ -22,6 +22,7 @@ import (
 	"context"
 	"iter"
 	"net/http"
+	"net/url"
 	"reflect"
 
 	"github.com/microbus-io/errors"
@@ -149,8 +150,8 @@ func (_res *OnSrcEventResponse) Get() (ok bool, err error) { // MARKER: OnSrcEve
 }
 
 // OnSrcEvent fires when the source observes something noteworthy.
-func (_c MulticastTrigger) OnSrcEvent(ctx context.Context, detail string) iter.Seq[*OnSrcEventResponse] { // MARKER: OnSrcEvent
-	_in := OnSrcEventIn{Detail: detail}
+func (_c MulticastTrigger) OnSrcEvent(ctx context.Context, detail string, origin url.URL) iter.Seq[*OnSrcEventResponse] { // MARKER: OnSrcEvent
+	_in := OnSrcEventIn{Detail: detail, Origin: origin}
 	_out := OnSrcEventOut{}
 	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnSrcEvent.Method, OnSrcEvent.Route, &_in, &_out)
 	return func(yield func(*OnSrcEventResponse) bool) {
@@ -165,12 +166,12 @@ func (_c MulticastTrigger) OnSrcEvent(ctx context.Context, detail string) iter.S
 }
 
 // OnSrcEvent fires when the source observes something noteworthy.
-func (c Hook) OnSrcEvent(handler func(ctx context.Context, detail string) (ok bool, err error)) (unsub func() error, err error) { // MARKER: OnSrcEvent
+func (c Hook) OnSrcEvent(handler func(ctx context.Context, detail string, origin url.URL) (ok bool, err error)) (unsub func() error, err error) { // MARKER: OnSrcEvent
 	doOnSrcEvent := func(w http.ResponseWriter, r *http.Request) error {
 		var in OnSrcEventIn
 		var out OnSrcEventOut
 		err = marshalFunction(w, r, OnSrcEvent.Route, &in, &out, func(_ any, _ any) error {
-			out.OK, err = handler(r.Context(), in.Detail)
+			out.OK, err = handler(r.Context(), in.Detail, in.Origin)
 			return err
 		})
 		return err // No trace
