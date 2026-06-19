@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/microbus-io/errors"
 	"github.com/microbus-io/dwarf/workflow"
+	"github.com/microbus-io/errors"
 
 	"github.com/mycompany/myproject/myservice/myserviceapi"
 )
@@ -15,7 +15,7 @@ var (
 	_ http.Request
 	_ errors.TracedError
 	_ *workflow.Flow
-	_ myserviceapi.Client
+	_ = myserviceapi.Hostname
 )
 
 /*

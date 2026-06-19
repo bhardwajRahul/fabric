@@ -1,9 +1,11 @@
 ---
 name: add-microservice
-description: TRIGGER when user asks to create, scaffold, or initialize a new microservice. Creates the full directory structure including service.go, intermediate.go, client.go, mock.go, manifest.yaml, and test scaffolding.
+description: TRIGGER when user asks to create, scaffold, or initialize a new microservice. Creates the hand-written source (definition.go, service.go) and generates the boilerplate (client.go, intermediate.go, mock.go, mock_test.go, manifest.yaml) with cmd/genservice.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
+
+**CRITICAL**: A microservice has two hand-written source files - `<name>api/definition.go` (the API spec) and `service.go` (the handler logic) - plus hand-written resource and test files. Everything else (`client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) is GENERATED from `definition.go` by `cmd/genservice`. Never hand-write or hand-edit the generated files; run the generator.
 
 ## Workflow
 
@@ -14,16 +16,13 @@ Creating a new microservice:
 - [ ] Step 1: Determine the name and description
 - [ ] Step 2: Create a directory structure
 - [ ] Step 3: Prepare coding agent files
-- [ ] Step 4: Prepare endpoints.go
-- [ ] Step 5: Prepare client.go
-- [ ] Step 6: Prepare embed.go
-- [ ] Step 7: Prepare service.go
-- [ ] Step 8: Prepare intermediate.go
-- [ ] Step 9: Generate mock.go
-- [ ] Step 10: Prepare service_test.go
-- [ ] Step 11: Prepare manifest.yaml
-- [ ] Step 12: Add to main app
-- [ ] Step 13: Propose features
+- [ ] Step 4: Prepare definition.go
+- [ ] Step 5: Prepare embed.go
+- [ ] Step 6: Prepare service.go
+- [ ] Step 7: Prepare service_test.go
+- [ ] Step 8: Generate the boilerplate
+- [ ] Step 9: Add to main app
+- [ ] Step 10: Propose features
 ```
 
 #### Step 1: Determine the Name and Description
@@ -31,7 +30,7 @@ Creating a new microservice:
 Determine the name of the microservice. Use only letters `a` through `z` and `A` through `Z`.
 The templates in this skill use `myservice`, `myserviceapi`, `MyService` and `TestMyService` as placeholders that are based on the name of the microservice.
 
-Determine a Go-style description for the microserice in the form `MyService is X`.
+Determine a Go-style description for the microservice in the form `MyService is X`.
 
 #### Step 2: Create a Directory Structure
 
@@ -66,7 +65,7 @@ myproject/
 
 **IMPORTANT**: File names in the following steps are relative to the new `myservice` directory, unless indicated otherwise.
 
-File preparation steps can be performed in parallel.
+The hand-written file preparation steps (4-7) can be performed in parallel; the generator step (8) must follow them.
 
 #### Step 3: Prepare Coding Agent Files
 
@@ -86,18 +85,17 @@ Save the prompt as follows.
 Prompt comes here...
 ```
 
-#### Step 4: Prepare `endpoints.go`
+#### Step 4: Prepare `definition.go`
 
-Create `myserviceapi/endpoints.go` with the content of the template `endpoints.go` located in the directory of this skill.
+Create `myserviceapi/definition.go` with the content of the template `definition.go` located in the directory of this skill. This is the single source of truth for the microservice's API: the add-feature skills append `define.*` vars (and their In/Out structs) here, and `cmd/genservice` projects everything else from it.
 
 - The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
-- The `Def` struct holds the routing identity (`Method` and `Route`) of each endpoint. Add-feature skills append `Foo = Def{Method: ..., Route: ...}` lines to the `var (...)` block. The endpoint name, description, and input/output schemas live with the `svc.Subscribe(...)` call in `intermediate.go`, not in this file
+- `Name` is the decorative PascalCase name of the microservice (it cannot be derived from the lowercase directory)
+- `Version` is the major version of the public API; leave it at `1` for a new microservice
+- `Description` is the Go-style description from Step 1
+- The `define` import is pre-added with a `var _ = define.None` guard so the file compiles before any feature exists and the add-feature skills can append a `define.*` var without managing imports. Leave the guard in place
 
-#### Step 5: Prepare `client.go`
-
-Create `myserviceapi/client.go` with the content of the template `client.go` located in the directory of this skill. No edits required - this file holds the type-safe client/multicast/trigger/hook/executor proxies and shared marshaling helpers.
-
-#### Step 6: Prepare `embed.go`
+#### Step 5: Prepare `embed.go`
 
 Create `resources/embed.go` with the following content verbatim.
 
@@ -110,45 +108,31 @@ import "embed"
 var FS embed.FS
 ```
 
-#### Step 7: Prepare `service.go`
+#### Step 6: Prepare `service.go`
 
 Create `service.go` with the content of the template `service.go` located in the directory of this skill.
 
 - Match the package name to the directory name
 - Set the comment of the type definition of `Service` to describe this particular microservice. The provided value is a template. Do not copy it verbatim
 
-#### Step 8: Prepare `intermediate.go`
-
-Create `intermediate.go` with the content of the template `intermediate.go` located in the directory of this skill.
-
-- Set the description of the microservice in `svc.SetDescription`
-
-#### Step 9: Generate `mock.go`
-
-Run `go run github.com/microbus-io/fabric/cmd/genmock --path .` from the microservice's directory.
-
-#### Step 10: Prepare `service_test.go`
+#### Step 7: Prepare `service_test.go`
 
 Create `service_test.go` with the content of the template `service_test.go` located in the directory of this skill.
 
 - Match the package name to the directory name
 - The imports are pre-declared for convenience now, before adding test code later
 
-#### Step 11: Prepare `manifest.yaml`
+#### Step 8: Generate the Boilerplate
 
-Look in `go.mod` and identify the current version of the `github.com/microbus-io/fabric` dependency. This is the framework version. Set it in `manifest.yaml` next. When working inside the fabric repository itself, there is no such dependency. Use instead the latest version you can find in any other `manifest.yaml` in the project.
+From the microservice's directory, run the generator. It reads `myserviceapi/definition.go` and writes `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`.
 
-Create `manifest.yaml` with the following content.
-
-```yaml
-general:
-  hostname: myservice.myproject.mycompany
-  description: MyService does X.
-  package: github.com/mycompany/myproject/myservice
-  frameworkVersion: 1.23.0 
+```shell
+go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
-#### Step 12: Add to Main App
+Then verify the microservice compiles with `go vet ./...` from the project root (not `go build`, which conflicts with the `main/` directory name).
+
+#### Step 9: Add to Main App
 
 Find `main/main.go` relative to the project root. Add the new microservice to the app in the `main` function. Add the appropriate import statement at the top of the file.
 
@@ -168,7 +152,7 @@ func main() {
 }
 ```
 
-#### Step 13: Propose Features
+#### Step 10: Propose Features
 
 Ask the user if they'd like you to propose a design for the microservice. If the user declines, skip the remainder of this step.
 

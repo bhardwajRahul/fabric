@@ -38,5 +38,5 @@ var (
 	_ *errors.TracedError
 	_ *workflow.Flow
 	_ testarossa.Asserter
-	_ myserviceapi.Client
+	_ = myserviceapi.Hostname
 )
