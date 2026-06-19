@@ -2,7 +2,7 @@
 
 ## Enabling Authentication
 
-The `microbus/init-project` skill sets up the token issuers and authorization middleware automatically. The remaining piece each solution must provide is an **authenticator** - a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
+The `init-project` skill sets up the token issuers and authorization middleware automatically. The remaining piece each solution must provide is an **authenticator** - a microservice that validates credentials (e.g. username/password, OAuth code) and issues a bearer token:
 
 ```go
 bearertokenapi.NewClient(svc).Mint(ctx, map[string]any{

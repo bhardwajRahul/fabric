@@ -58,7 +58,7 @@ rm -rf temp-clone
 
 #### Step 6: Init the Project
 
-Follow the skill in `microbus/init-project` to initialize the project structure.
+Follow the `init-project` skill to initialize the project structure.
 
 #### Step 7: Tidy up
 

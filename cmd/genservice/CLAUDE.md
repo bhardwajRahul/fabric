@@ -65,6 +65,17 @@ Because qualified field types pull in packages the api struct imported (`time`, 
 own import aliases, feeding the computed import set of every emitter. This is shared by client, intermediate, and
 mock so the three agree on imports.
 
+In/Out fields are not the only types `intermediate.go` renders. A config getter (`RefreshInterval() time.Duration`),
+a metric recorder (`RecordLatency(ctx, value time.Duration)`), a ticker interval (`30 * time.Second`), and a
+`sub.TimeBudget(5 * time.Second)` option all emit Go fragments that may reference a non-stdlib-default package. So
+`emitIntermediate` runs each of those rendered fragments through `addResolved` against the api package's aliases,
+exactly as In/Out fields are resolved, rather than hard-coding which kinds happen to need `time`. The hazard this
+closes: a `Value: time.Duration(0)` metric renders `time.Duration` into the recorder, and without resolving the
+metric value type's package the generated `intermediate.go` referenced `time` with no import - leaving a file the
+agent is forbidden to hand-edit uncompilable. This is intermediate-only: `client.go` has no config/metric/ticker
+surface, and a metric's `OnObserve`/`OnChanged` callbacks (the only metric/config methods on `mock.go`) are
+`(ctx) error` and carry no value type.
+
 ## Feature-selective emission, conditional imports, no var guards
 
 The client emits only the proxy types a microservice actually needs: no `MulticastTrigger` without outbound
@@ -191,6 +202,10 @@ tree. The committed fixture files therefore *are* the goldens.
   service-package files.
 - `testdata/pressuretest/{srcapi,svcapi}` are api-only packages (client.go generation) covering every client type
   and helper, magic HTTP args, the `xxxOut` suffix, and a cross-package type alias.
+- `testdata/configonly` is an endpoint-less service (only configs and one metric). Beyond pinning the no-Subscribe
+  import mix, its `time.Duration`-valued metric is the *sole* `time` user, so the golden regresses if a metric
+  value type's package stops being resolved into `intermediate.go`'s imports. `svc` cannot pin this because its
+  duration config and ticker import `time` regardless.
 
 ## What genservice does not touch
 

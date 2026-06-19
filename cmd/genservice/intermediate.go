@@ -188,11 +188,27 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	if intermediateNeedsStrconv(m) {
 		imports[impStrconv] = true
 	}
-	if intermediateNeedsTime(m) {
-		imports[impTime] = true
-	}
 	for p := range featureSelectorImports(svc) {
 		imports[p] = true
+	}
+	// Config getters, metric recorders, ticker intervals, and time budgets render Go fragments
+	// (time.Duration, 30 * time.Second, ...) into the service package. Resolve the pkg.Type selectors
+	// in those fragments against the api package's imports, the same way In/Out fields are resolved, so
+	// the referenced package is imported. Without this a duration-valued metric references time.Duration
+	// with no time import, leaving intermediate.go uncompilable and unfixable (it is generated).
+	for _, c := range m.Configs {
+		addResolved(imports, svc.imports, c.Type)
+	}
+	for _, mt := range m.Metrics {
+		addResolved(imports, svc.imports, mt.ValueType)
+	}
+	for _, tk := range m.Tickers {
+		addResolved(imports, svc.imports, tk.Interval)
+	}
+	for _, group := range [][]*featureView{m.Funcs, m.Webs, m.Tasks, m.Workflows} {
+		for _, fv := range group {
+			addResolved(imports, svc.imports, fv.TimeBudget)
+		}
 	}
 	for p := range imports {
 		if isStdlib(p) {
@@ -306,26 +322,6 @@ func intermediateNeedsStrconv(m *intermediateModel) bool {
 	for _, c := range m.Configs {
 		if c.Type == "int" || c.Type == "bool" || c.Type == "float64" {
 			return true
-		}
-	}
-	return false
-}
-
-// intermediateNeedsTime reports whether time is referenced (tickers, duration configs, or time budgets).
-func intermediateNeedsTime(m *intermediateModel) bool {
-	if len(m.Tickers) > 0 {
-		return true
-	}
-	for _, c := range m.Configs {
-		if c.Type == "time.Duration" {
-			return true
-		}
-	}
-	for _, group := range [][]*featureView{m.Funcs, m.Webs, m.Tasks, m.Workflows} {
-		for _, fv := range group {
-			if fv.TimeBudget != "" {
-				return true
-			}
 		}
 	}
 	return false

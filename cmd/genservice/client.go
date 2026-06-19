@@ -35,7 +35,6 @@ const (
 	impReflect    = "reflect"
 	impStrconv    = "strconv"
 	impTesting    = "testing"
-	impTime       = "time"
 	impWorkflow   = "github.com/microbus-io/dwarf/workflow"
 	impErrors     = "github.com/microbus-io/errors"
 	impTestarossa = "github.com/microbus-io/testarossa"

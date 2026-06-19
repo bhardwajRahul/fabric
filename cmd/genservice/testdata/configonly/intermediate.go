@@ -5,6 +5,7 @@ package configonly
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
@@ -62,6 +63,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.SetOnObserveMetrics(svc.doOnObserveMetrics)
 	svc.SetOnConfigChanged(svc.doOnConfigChanged)
 
+	svc.DescribeHistogram("configonly_reconcile_duration", `ReconcileDuration records how long a reconciliation took, as a duration. Its time.Duration value type
+is the only thing in this fixture that requires the time import in the generated recorder.`, []float64{0.1, 0.5, 1, 5}) // MARKER: ReconcileDuration
 	svc.DefineConfig( // MARKER: Threshold
 		"Threshold",
 		cfg.Description(`Threshold is a plain integer config.`),
@@ -92,6 +95,12 @@ func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(str
 		}
 	}
 	return nil
+}
+
+// ReconcileDuration records how long a reconciliation took, as a duration. Its time.Duration value type
+// is the only thing in this fixture that requires the time import in the generated recorder.
+func (svc *Intermediate) RecordReconcileDuration(ctx context.Context, value time.Duration) (err error) { // MARKER: ReconcileDuration
+	return svc.RecordHistogram(ctx, "configonly_reconcile_duration", float64(value))
 }
 
 // Threshold is a plain integer config.
