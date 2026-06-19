@@ -8,15 +8,33 @@ on:
     branches:
       - "main"
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Run tests
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: NATS only
+            cmd: MICROBUS_SHORT_CIRCUIT=0 go test -count 1 -timeout 60s -cover ./...
+            nats: true
+          - name: Short-circuit only
+            cmd: go test -count 1 -timeout 60s -cover ./...
+            nats: false
+          - name: NATS and short-circuit
+            cmd: MICROBUS_NATS=nats://127.0.0.1:4222 go test -count 1 -timeout 60s -cover ./...
+            nats: true
     env:
       MICROBUS_LOG_DEBUG: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Setup NATS server
+        if: ${{ matrix.nats }}
         uses: onichandame/nats-action@master
         with:
           port: 4222
@@ -32,9 +50,5 @@ jobs:
         run: go version
       - name: Python version
         run: python3 --version && python3 -c "import venv; print('venv module OK')"
-      - name: Run tests (NATS only)
-        run: MICROBUS_SHORT_CIRCUIT=0 go test -count 1 -timeout 60s -cover ./...
-      - name: Run tests (short-circuit only)
-        run: go test -count 1 -timeout 60s -cover ./...
-      - name: Run tests (NATS and short-circuit)
-        run: MICROBUS_NATS=nats://127.0.0.1:4222 go test -count 1 -timeout 60s -cover ./...
+      - name: Run tests
+        run: ${{ matrix.cmd }}
