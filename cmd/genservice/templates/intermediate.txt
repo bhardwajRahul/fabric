@@ -231,4 +231,6 @@ func (svc *Intermediate) Set{{.Name}}(value {{.Type}}) (err error) { // MARKER: 
 {{end}}{{if eq .Queue "none"}}		sub.NoQueue(),
 {{else if eq .Queue "default"}}		sub.DefaultQueue(),
 {{else if .Queue}}		sub.Queue("{{.Queue}}"),
+{{end}}{{if .Manual}}		sub.Manual(),
+{{end}}{{if .TagArgs}}		sub.Tag({{.TagArgs}}),
 {{end}}{{end}}

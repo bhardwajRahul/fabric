@@ -1,11 +1,11 @@
 ---
 name: add-microservice
-description: TRIGGER when user asks to create, scaffold, or initialize a new microservice. Creates the hand-written source (definition.go, service.go) and generates the boilerplate (client.go, intermediate.go, mock.go, mock_test.go, manifest.yaml) with cmd/genservice.
+description: TRIGGER when user asks to create, scaffold, or initialize a new microservice.
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A microservice has two hand-written source files - `<name>api/definition.go` (the API spec) and `service.go` (the handler logic) - plus hand-written resource and test files. Everything else (`client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) is GENERATED from `definition.go` by `cmd/genservice`. Never hand-write or hand-edit the generated files; run the generator.
+**CRITICAL**: A microservice's hand-written source is `<name>api/definition.go` (the API spec) and `service.go` (the handler logic), plus the resource and test files. Run `cmd/genservice` to produce the rest.
 
 ## Workflow
 

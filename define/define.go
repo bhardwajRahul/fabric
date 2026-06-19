@@ -53,6 +53,8 @@ type Function struct {
 	RequiredClaims string        // boolean expression over JWT claims; empty means open
 	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
 	LoadBalancing  string        // "" (default), define.None, or a custom queue name
+	Manual         bool          // registered via sub.Manual(); brought online later with svc.ActivateSubscription(name)
+	Tags           []string      // sub.Tag labels for grouping subscriptions (e.g. "python")
 	In             any           // the FooIn{} struct, as a type carrier
 	Out            any           // the FooOut{} struct, as a type carrier
 }
@@ -68,6 +70,8 @@ type Web struct {
 	RequiredClaims string        // boolean expression over JWT claims; empty means open
 	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
 	LoadBalancing  string        // "" (default), define.None, or a custom queue name
+	Manual         bool          // registered via sub.Manual(); brought online later with svc.ActivateSubscription(name)
+	Tags           []string      // sub.Tag labels for grouping subscriptions (e.g. "python")
 }
 
 // URL is the full URL of the endpoint, joined with its Host.
@@ -81,6 +85,8 @@ type Task struct {
 	RequiredClaims string        // boolean expression over JWT claims; empty means open
 	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
 	LoadBalancing  string        // "" (default), define.None, or a custom queue name
+	Manual         bool          // registered via sub.Manual(); brought online later with svc.ActivateSubscription(name)
+	Tags           []string      // sub.Tag labels for grouping subscriptions (e.g. "python")
 	In             any           // the FooIn{} struct, as a type carrier
 	Out            any           // the FooOut{} struct, as a type carrier
 }
@@ -96,6 +102,8 @@ type Workflow struct {
 	RequiredClaims string        // boolean expression over JWT claims; empty means open
 	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
 	LoadBalancing  string        // "" (default), define.None, or a custom queue name
+	Manual         bool          // registered via sub.Manual(); brought online later with svc.ActivateSubscription(name)
+	Tags           []string      // sub.Tag labels for grouping subscriptions (e.g. "python")
 	In             any           // the FooIn{} struct, as a type carrier
 	Out            any           // the FooOut{} struct, as a type carrier
 }
@@ -126,6 +134,8 @@ type InboundEvent struct {
 	RequiredClaims string        // boolean expression over JWT claims; empty means open
 	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
 	LoadBalancing  string        // "" (default), define.None, or a custom queue name
+	Manual         bool          // registered via sub.Manual(); brought online later with svc.ActivateSubscription(name)
+	Tags           []string      // sub.Tag labels for grouping subscriptions (e.g. "python")
 }
 
 // Config is a runtime configuration property, sourced as a string then converted to Value's Go type.

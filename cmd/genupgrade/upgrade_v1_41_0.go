@@ -365,6 +365,8 @@ type subOpts struct {
 	claims        string
 	timeBudget    string // verbatim Go duration expression, e.g. "5 * time.Second"
 	loadBalancing string // "none" | custom queue | ""
+	manual        bool   // sub.Manual()
+	tags          []string
 }
 
 // scanSubscribeOpts maps each subscription name to its options, parsed from intermediate.go.
@@ -414,6 +416,14 @@ func scanSubscribeOpts(path string) map[string]subOpts {
 				o.loadBalancing = "none"
 			case "Queue":
 				o.loadBalancing = stringArg(c)
+			case "Manual":
+				o.manual = true
+			case "Tag":
+				for _, arg := range c.Args {
+					if bl, ok := arg.(*ast.BasicLit); ok {
+						o.tags = append(o.tags, strings.Trim(bl.Value, "`\""))
+					}
+				}
 			}
 		}
 		out[name] = o
@@ -565,6 +575,19 @@ func emitRoutable(b *strings.Builder, kind, name, defaultMethod string, mf mfEnd
 		b.WriteString("\tLoadBalancing: define.None,\n")
 	case o.loadBalancing != "" && o.loadBalancing != "default":
 		fmt.Fprintf(b, "\tLoadBalancing: %q,\n", o.loadBalancing)
+	}
+	if o.manual {
+		b.WriteString("\tManual: true,\n")
+	}
+	if len(o.tags) > 0 {
+		b.WriteString("\tTags: []string{")
+		for i, t := range o.tags {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(b, "%q", t)
+		}
+		b.WriteString("},\n")
 	}
 	if hasInOut {
 		fmt.Fprintf(b, "\tIn: %sIn{}, Out: %sOut{},\n", name, name)

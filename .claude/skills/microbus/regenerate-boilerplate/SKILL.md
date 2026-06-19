@@ -1,6 +1,6 @@
 ---
 name: regenerate-boilerplate
-description: Regenerates the boilerplate files of a microservice from its definition.go. Use when the generated files (client.go, intermediate.go, mock.go, mock_test.go, manifest.yaml) are corrupted, outdated, or need to be rebuilt from scratch.
+description: Use when a microservice's generated files are corrupted, outdated, or need to be rebuilt from scratch.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.

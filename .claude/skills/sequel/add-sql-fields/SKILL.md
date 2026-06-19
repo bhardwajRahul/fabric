@@ -1,6 +1,6 @@
 ---
 name: add-sql-fields
-description: TRIGGER when user asks to add fields, properties, or columns to a SQL CRUD microservice's object. Affects the struct, SQL migration, column mapping, query filter, validation, and tests.
+description: TRIGGER when user asks to add fields, properties, or columns to a SQL CRUD microservice's object.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.

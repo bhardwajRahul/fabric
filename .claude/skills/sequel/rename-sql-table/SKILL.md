@@ -1,6 +1,6 @@
 ---
 name: rename-sql-table
-description: TRIGGER when user asks to rename the database table used by a SQL CRUD microservice. Creates a SQL migration and updates all table references.
+description: TRIGGER when user asks to rename the database table used by a SQL CRUD microservice.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.

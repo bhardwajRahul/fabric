@@ -1,6 +1,6 @@
 ---
 name: add-python-microservice
-description: TRIGGER when user asks to create a microservice that calls Python, runs ML inference, uses PyTorch/pandas/sentence-transformers/numpy, or otherwise needs Python libraries for its core compute. Scaffolds a Microbus microservice that owns its own in-process Python virtual environment via github.com/microbus-io/pyvenv, with manual-subscription lifecycle, an embedded Python source tree, and a pip requirements file.
+description: TRIGGER when user asks to create a microservice that calls Python, runs ML inference, or uses Python libraries (PyTorch, pandas, sentence-transformers, numpy) for its core compute.
 ---
 
 **CRITICAL**: Read `.claude/rules/python.txt` before proceeding.

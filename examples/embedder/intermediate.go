@@ -89,12 +89,16 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		"Embed", svc.doEmbed,
 		sub.At(embedderapi.Embed.Method, embedderapi.Embed.Route),
 		sub.Description(`Embed returns the sentence-embedding vector for the input text.`),
+		sub.Manual(),
+		sub.Tag("python"),
 		sub.Function(embedderapi.EmbedIn{}, embedderapi.EmbedOut{}),
 	)
 	svc.Subscribe( // MARKER: Similarity
 		"Similarity", svc.doSimilarity,
 		sub.At(embedderapi.Similarity.Method, embedderapi.Similarity.Route),
 		sub.Description(`Similarity returns the cosine similarity between the embeddings of strings a and b.`),
+		sub.Manual(),
+		sub.Tag("python"),
 		sub.Function(embedderapi.SimilarityIn{}, embedderapi.SimilarityOut{}),
 	)
 	svc.Subscribe( // MARKER: Demo

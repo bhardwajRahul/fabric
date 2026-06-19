@@ -46,6 +46,7 @@ var MaxWorkers = define.Config{ // MARKER: MaxWorkers
 // Embed returns the sentence-embedding vector for the input text.
 var Embed = define.Function{ // MARKER: Embed
 	Host: Hostname, Method: "GET", Route: ":443/embed",
+	Manual: true, Tags: []string{"python"},
 	In: EmbedIn{}, Out: EmbedOut{},
 }
 
@@ -62,6 +63,7 @@ type EmbedOut struct { // MARKER: Embed
 // Similarity returns the cosine similarity between the embeddings of strings a and b.
 var Similarity = define.Function{ // MARKER: Similarity
 	Host: Hostname, Method: "GET", Route: ":443/similarity",
+	Manual: true, Tags: []string{"python"},
 	In: SimilarityIn{}, Out: SimilarityOut{},
 }
 

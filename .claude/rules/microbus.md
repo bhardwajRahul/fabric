@@ -12,6 +12,8 @@
 
 **CRITICAL**: Comments in the code that include the word `HINT` or `MARKER` in all-caps are there to guide you. Do not remove them.
 
+**CRITICAL**: Never edit a file with a comment that includes `Code generated` and `DO NOT EDIT`.
+
 ### Reading Framework Design Notes
 
 When you need to understand *why* a Microbus framework package behaves a certain way (not just *how* to use it), read the `CLAUDE.md` file inside that package in the local Go module cache. These files capture design rationale that godoc does not, and they are not bundled into this project. Substitute the package (e.g. `connector`) for `<package>`:

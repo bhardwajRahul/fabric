@@ -1,6 +1,6 @@
 ---
 name: add-sql-microservice
-description: TRIGGER when user asks to create a CRUD microservice, database-backed service, or a service to persist/store objects in SQL (MySQL, Postgres, MSSQL). Scaffolds full CRUD with REST endpoints, schema migrations, and query filtering.
+description: TRIGGER when user asks to create a CRUD microservice, database-backed service, or a service to persist/store objects in SQL (MySQL, Postgres, MSSQL).
 ---
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -11,7 +11,7 @@ description: TRIGGER when user asks to create a CRUD microservice, database-back
 
 **IMPORTANT**: Read `.claude/rules/sequel.txt` for SQL CRUD conventions before proceeding.
 
-**CRITICAL**: The `busstop` template ships only the hand-written source files - `mynounapi/definition.go` (the API spec), the domain types, `service.go`, the tests, and `resources/`. The boilerplate (`client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) is GENERATED from `definition.go` by `cmd/genservice` after the copy, not shipped in the template. Never hand-edit the generated files.
+**CRITICAL**: The `busstop` template ships only the hand-written source files - `mynounapi/definition.go` (the API spec), the domain types, `service.go`, the tests, and `resources/`. After the copy, `cmd/genservice` produces the boilerplate (Step 5).
 
 ## Workflow
 

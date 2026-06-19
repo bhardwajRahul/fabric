@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: Run after completing any change to a microservice. Regenerates the boilerplate from definition.go, vets compilation, updates documentation, version, and topology diagram. Skip if the skill you just followed already includes housekeeping as a final step.
+description: Run after completing any change to a microservice to bring its generated files, documentation, version, and topology diagram up to date. Skip if the skill you just followed already ran housekeeping as its final step.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices - the instructions in this skill are self-contained to this microservice. NATS ACLs are derived from source at deploy time by `cmd/gencreds` (not at housekeeping time), so a code change here doesn't require regenerating anything in other services.
@@ -26,7 +26,7 @@ Increment the `Version` const in `<name>api/definition.go`. The generated `inter
 
 #### Step 2: Regenerate the Boilerplate
 
-Run `go run github.com/microbus-io/fabric/cmd/genservice .` from the microservice's directory. From `<name>api/definition.go` it regenerates all five derived artifacts: `<name>api/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`. This is the single source of truth flowing into the boilerplate; never hand-edit those files.
+Run `go run github.com/microbus-io/fabric/cmd/genservice .` from the microservice's directory. From `<name>api/definition.go` it regenerates all five derived artifacts: `<name>api/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`.
 
 The `manifest.yaml` `general` block (`name`, `hostname`, `description`, `package`) is derived from the `definition.go` consts and the module path; `modifiedAt` is bumped to the current UTC time only when other content actually changed. Review the diff.
 

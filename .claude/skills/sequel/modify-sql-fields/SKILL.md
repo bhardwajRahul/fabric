@@ -1,6 +1,6 @@
 ---
 name: modify-sql-fields
-description: TRIGGER when user asks to change, rename, or retype fields, properties, or columns of a SQL CRUD microservice's object. Affects the struct, SQL migration, column mapping, query filter, validation, and tests.
+description: TRIGGER when user asks to change, rename, or retype fields, properties, or columns of a SQL CRUD microservice's object.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.

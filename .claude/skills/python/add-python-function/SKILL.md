@@ -1,6 +1,6 @@
 ---
 name: add-python-function
-description: TRIGGER when user asks to add a Python-backed function endpoint to an existing Python-backed microservice. The Go side is a normal Microbus function endpoint; the body delegates to a Python function via svc.venv.CallAndAwait. Affects intermediate.go, *api/endpoints.go, *api/client.go, mock.go, service.py, manifest.yaml.
+description: TRIGGER when user asks to add a Python-backed function endpoint to an existing Python-backed microservice.
 ---
 
 **CRITICAL**: Read `.claude/rules/python.txt` before proceeding. It explains the Go-Python boundary, the manual-subscription pattern, args/result conventions, and how the in-process pyvenv module is wired into the microservice.
@@ -15,7 +15,7 @@ Copy this checklist and track your progress:
 Adding a Python-backed function endpoint:
 - [ ] Step 1: Verify the microservice is Python-backed
 - [ ] Step 2: Determine the Go signature
-- [ ] Step 3: Run add-function with sub.Manual() and sub.Tag("python")
+- [ ] Step 3: Run add-function with Manual + Tags("python")
 - [ ] Step 4: Replace the handler body with svc.venv.CallAndAwait
 - [ ] Step 5: Add the Python function to service.py
 - [ ] Step 6: Housekeeping
@@ -35,35 +35,32 @@ func MyFunction(ctx context.Context, input1 string, input2 int) (output1 float64
 
 Python sees the inputs as a dict keyed by the field names in `MyFunctionIn` (driven by their `json:"..."` tags). The dict is passed to a Python function whose signature mirrors the Go one (excluding `ctx`).
 
-#### Step 3: Run `add-function` with `sub.Manual()` and `sub.Tag("python")`
+#### Step 3: Run `add-function` with `Manual` + `Tags("python")`
 
 Run the `add-function` skill, with these overrides applied as you reach each of its steps:
 
-- **Step 10 (Implement the Logic)**: skip. Step 4 below replaces it.
-- **Step 12 (Bind the Marshaler Function to the Microservice)**: add `sub.Manual()` and `sub.Tag("python")` to the `svc.Subscribe(...)` options block in `intermediate.go`:
+- **Step 7 (Declare the Endpoint in definition.go)**: add `Manual: true` and `Tags: []string{"python"}` to the `define.Function` var, so the endpoint is registered as a manual subscription tagged `python` and stays off the bus until the venv liveness callback activates the `python`-tagged group when Python is ready:
 
   ```go
-  svc.Subscribe( // MARKER: MyFunction
-      "MyFunction", svc.doMyFunction,
-      sub.At(myserviceapi.MyFunction.Method, myserviceapi.MyFunction.Route),
-      sub.Description(`...`),
-      sub.Function(myserviceapi.MyFunctionIn{}, myserviceapi.MyFunctionOut{}),
-      sub.Manual(),
-      sub.Tag("python"),
-  )
+  var MyFunction = define.Function{ // MARKER: MyFunction
+      Host: Hostname, Method: "ANY", Route: "/my-function",
+      Manual: true, Tags: []string{"python"},
+      In: MyFunctionIn{}, Out: MyFunctionOut{},
+  }
   ```
 
-- **Step 13 (regenerate the mock)**: run normally.
-- **Step 14 (test the function)**: run normally, then add a one-line opt-in HINT immediately after the `app.RunInTest(t)` line so a future reader can switch the test from mock-only to real-Python without hunting through docs:
+- **Step 8 (Implement the Logic in service.go)**: skip. Step 4 below replaces it.
+- **Step 9 (Generate the Boilerplate)**: run normally. `genservice` emits the `sub.Manual()` and `sub.Tag("python")` wiring into the generated `intermediate.go`.
+- **Step 10 (Test the Function)**: run normally, then add a one-line opt-in HINT immediately after the `app.RunInTest(t)` line so a future reader can switch the test from mock-only to real-Python without hunting through docs:
 
   ```go
   app.RunInTest(t)
-  
+
   // HINT: Uncomment to spin up real Python and exercise actual execution (slow on first run)
   // svc.StartPyVenv(ctx)
   ```
 
-- **Housekeeping step**: skip; housekeeping runs once at the end of this skill instead.
+- **Step 11 (Housekeeping)**: skip; housekeeping runs once at the end of this skill instead.
 
 When `add-function` finishes, return here for Step 4.
 
@@ -93,7 +90,7 @@ func (svc *Service) MyFunction(ctx context.Context, input1 string, input2 int) (
 
 #### Step 5: Add the Python Function to `service.py`
 
-Append a Python function to `service.py` (at the microservice's root) whose name is the snake_case form of the Go function name, accepting a dict and returning a dict. The docstring is the same description text passed to `sub.Description(...)` on the Go side.
+Append a Python function to `service.py` (at the microservice's root) whose name is the snake_case form of the Go function name, accepting a dict and returning a dict. The docstring is the same description text as the function's godoc on the Go side.
 
 ```python
 def my_function(args):  # MARKER: MyFunction

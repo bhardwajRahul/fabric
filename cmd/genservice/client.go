@@ -97,6 +97,8 @@ type featureView struct {
 	ReqClaims  string // sub.RequiredClaims expression, or ""
 	TimeBudget string // rendered sub.TimeBudget duration expr, or ""
 	Queue      string // "none" | "default" | custom queue name | ""
+	Manual     bool   // sub.Manual()
+	TagArgs    string // rendered sub.Tag arguments (e.g. `"python"`), or ""
 
 	// Web client shape (client.go webs only): "plain" (ctx, relativeURL), "body" (ctx, relativeURL, body),
 	// or "any" (ctx, method, relativeURL, body). Selected from the endpoint's HTTP method.

@@ -1,6 +1,6 @@
 ---
 name: add-python-task
-description: TRIGGER when user asks to add a Python-backed workflow task to an existing Python-backed microservice. The Go side is a normal Microbus workflow task endpoint on :428; the body uses svc.venv.Call + Await with the callID persisted in flow state so a long-running Python call survives task retries across the framework's 15-minute hop ceiling. Affects intermediate.go, *api/endpoints.go, *api/client.go, mock.go, service.py, manifest.yaml.
+description: TRIGGER when user asks to add a Python-backed workflow task to an existing Python-backed microservice.
 ---
 
 **CRITICAL**: Read `.claude/rules/python.txt` and `.claude/rules/workflows.txt` before proceeding. The former covers the Go-Python bridge; the latter covers task lifecycle, flow state, retries, and OnTimeout/OnError routing.
@@ -15,7 +15,7 @@ Copy this checklist and track your progress:
 Adding a Python-backed workflow task:
 - [ ] Step 1: Verify the microservice is Python-backed
 - [ ] Step 2: Determine the task signature
-- [ ] Step 3: Run add-task with sub.Manual() and sub.Tag("python")
+- [ ] Step 3: Run add-task with Manual + Tags("python")
 - [ ] Step 4: Replace the task body with the Call+Await durability pattern
 - [ ] Step 5: Add the Python function to service.py
 - [ ] Step 6: Housekeeping
@@ -35,35 +35,32 @@ func MyTask(ctx context.Context, flow *workflow.Flow, input1 string, input2 int)
 
 Python sees the inputs as a dict keyed by the field names in `MyTaskIn`. Python does not see `ctx` or `flow`.
 
-#### Step 3: Run `add-task` with `sub.Manual()` and `sub.Tag("python")`
+#### Step 3: Run `add-task` with `Manual` + `Tags("python")`
 
 Run the `add-task` skill, with these overrides applied as you reach each of its steps:
 
-- **Step 10 (Implement the Logic)**: skip. Step 4 below replaces it.
-- **Step 12 (Bind the Marshaler Function to the Microservice)**: add `sub.Manual()` and `sub.Tag("python")` to the `svc.Subscribe(...)` options block in `intermediate.go`:
+- **Step 7 (Declare the Task in definition.go)**: add `Manual: true` and `Tags: []string{"python"}` to the `define.Task` var, so the task is registered as a manual subscription tagged `python` and stays off the bus until the venv liveness callback activates the `python`-tagged group when Python is ready:
 
   ```go
-  svc.Subscribe( // MARKER: MyTask
-      "MyTask", svc.doMyTask,
-      sub.At(myserviceapi.MyTask.Method, myserviceapi.MyTask.Route),
-      sub.Description(`...`),
-      sub.Task(myserviceapi.MyTaskIn{}, myserviceapi.MyTaskOut{}),
-      sub.Manual(),
-      sub.Tag("python"),
-  )
+  var MyTask = define.Task{ // MARKER: MyTask
+      Host: Hostname, Method: "POST", Route: ":428/my-task",
+      Manual: true, Tags: []string{"python"},
+      In: MyTaskIn{}, Out: MyTaskOut{},
+  }
   ```
 
-- **Step 13 (regenerate the mock)**: run normally.
-- **Step 14 (test the task)**: run normally, then add a one-line opt-in HINT immediately after the `app.RunInTest(t)` line so a future reader can switch the test from mock-only to real-Python without hunting through docs:
+- **Step 8 (Implement the Logic in service.go)**: skip. Step 4 below replaces it.
+- **Step 9 (Generate the Boilerplate)**: run normally. `genservice` emits the `sub.Manual()` and `sub.Tag("python")` wiring into the generated `intermediate.go`.
+- **Step 10 (Test the Task)**: run normally, then add a one-line opt-in HINT immediately after the `app.RunInTest(t)` line so a future reader can switch the test from mock-only to real-Python without hunting through docs:
 
   ```go
   app.RunInTest(t)
-  
+
   // HINT: Uncomment to spin up real Python and exercise actual execution (slow on first run)
   // svc.StartPyVenv(ctx)
   ```
 
-- **Housekeeping step**: skip; housekeeping runs once at the end of this skill instead.
+- **Step 11 (Housekeeping)**: skip; housekeeping runs once at the end of this skill instead.
 
 When `add-task` finishes, return here for Step 4.
 
@@ -112,7 +109,7 @@ How the pattern composes:
 
 #### Step 5: Add the Python Function to `service.py`
 
-Append a Python function to `service.py` (at the microservice's root) whose name is the snake_case form of the Go task name, accepting a dict and returning a dict. The docstring is the same description text passed to `sub.Description(...)` on the Go side.
+Append a Python function to `service.py` (at the microservice's root) whose name is the snake_case form of the Go task name, accepting a dict and returning a dict. The docstring is the same description text as the task's godoc on the Go side.
 
 ```python
 def my_task(args):  # MARKER: MyTask

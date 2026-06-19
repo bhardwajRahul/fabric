@@ -226,6 +226,14 @@ func endpointView(svc *service, f feature) *featureView {
 		fv.TimeBudget = exprSource(svc.fset, tb)
 	}
 	fv.Queue = loadBalancingValue(f.attrs["LoadBalancing"])
+	fv.Manual = attrBool(f.attrs, "Manual")
+	if tags := stringSlice(f.attrs["Tags"]); len(tags) > 0 {
+		quoted := make([]string, len(tags))
+		for i, t := range tags {
+			quoted[i] = fmt.Sprintf("%q", t)
+		}
+		fv.TagArgs = strings.Join(quoted, ", ")
+	}
 	return fv
 }
 
@@ -376,6 +384,12 @@ func hookOptions(svc *service, f feature) string {
 		// default queue, no option
 	default:
 		opts = append(opts, fmt.Sprintf("sub.Queue(%q)", q))
+	}
+	if attrBool(f.attrs, "Manual") {
+		opts = append(opts, "sub.Manual()")
+	}
+	for _, t := range stringSlice(f.attrs["Tags"]) {
+		opts = append(opts, fmt.Sprintf("sub.Tag(%q)", t))
 	}
 	return strings.Join(opts, ", ")
 }

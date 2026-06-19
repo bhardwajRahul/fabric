@@ -1,6 +1,6 @@
 ---
 name: rename-sql-object
-description: TRIGGER when user asks to rename the object type or struct used by a SQL CRUD microservice. Renames across the API package, service code, and tests.
+description: TRIGGER when user asks to rename the object type or struct used by a SQL CRUD microservice.
 ---
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
@@ -32,7 +32,7 @@ Find the struct definition of `MyNoun` in `mynounapi/object.go` and rename it to
 
 #### Step 3: Update References
 
-Update only the hand-written files; the generated files (`mynounapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) are regenerated from `definition.go` in Step 5 - do not hand-edit them.
+Update only the hand-written files; the generated files (`mynounapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) are regenerated from `definition.go` in Step 5.
 
 Search the hand-written files in `mynounapi/` (`definition.go` and the sibling type files) for references to `MyNounKey` and `MyNoun`, and update to `MyNewNounKey` and `MyNewNoun`. In `definition.go` this covers the In/Out struct fields that carry the object/key types (e.g. `Obj *MyNoun`, `ObjKey MyNounKey`).
 

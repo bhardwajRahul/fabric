@@ -16,6 +16,15 @@ limitations under the License.
 
 package embedder
 
+import (
+	"slices"
+	"testing"
+
+	"github.com/microbus-io/fabric/application"
+	"github.com/microbus-io/fabric/connector"
+	"github.com/microbus-io/testarossa"
+)
+
 // TestEmbedder_Mock exercises the Service-interface mocking pattern. The end-to-end Python
 // path is covered by github.com/microbus-io/pyvenv's own integration tests; we don't repeat
 // that here.
@@ -23,3 +32,36 @@ package embedder
 // MARKER: Embed
 
 // MARKER: Similarity
+
+// TestEmbedder_PythonSubscriptionsManual guards the manual-subscription wiring. The Python-backed
+// endpoints must be registered with sub.Manual() and sub.Tag("python") so they stay off the bus
+// until the venv liveness callback activates the python-tagged group; the untagged web endpoints are
+// not gated. The test fails if the Manual/Tag wiring is ever dropped (as a codegen regression once did).
+func TestEmbedder_PythonSubscriptionsManual(t *testing.T) {
+	t.Parallel()
+	tt := testarossa.For(t)
+
+	svc := NewService()
+	app := application.New()
+	app.Add(svc)
+	app.RunInTest(t)
+
+	subs := map[string]connector.SubscriptionInfo{}
+	for _, s := range svc.Subscriptions() {
+		subs[s.Name] = s
+	}
+
+	for _, name := range []string{"Embed", "Similarity"} {
+		s, ok := subs[name]
+		if tt.True(ok, "subscription %s not found", name) {
+			tt.True(s.Manual, "%s must be a manual subscription", name)
+			tt.True(slices.Contains(s.Tags, "python"), "%s must be tagged python", name)
+		}
+	}
+
+	// The demo web endpoint is not python-gated.
+	demo, ok := subs["Demo"]
+	if tt.True(ok, "subscription Demo not found") {
+		tt.False(demo.Manual, "Demo must not be a manual subscription")
+	}
+}
