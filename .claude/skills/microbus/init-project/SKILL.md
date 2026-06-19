@@ -144,6 +144,12 @@ Create `.claude/settings.json` relative to the root of the project with the foll
 
 This auto-approves the Bash commands invoked by the `housekeeping` and `regenerate-boilerplate` skills, so an agent following them does not get prompted for each invocation. The file is project-shared and should be checked into git.
 
+**NOTE**: Writing `.claude/settings.json` adds permission allow-rules, which some harness safety modes
+classify as a self-modification and may block on the first attempt even though this skill instructs it.
+If the write is denied, surface the proposed contents to the user and ask them to approve it (or have
+them create the file), rather than trying to work around the denial. This step is a convenience to
+reduce permission prompts and is safe to skip if the user declines.
+
 #### Step 9: Prepare Authentication
 
 **IMPORTANT**: Read `.claude/rules/auth.txt` for authentication conventions before proceeding with this step.

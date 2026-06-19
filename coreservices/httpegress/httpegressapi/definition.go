@@ -30,7 +30,7 @@ const Hostname = "http.egress.core"
 // Name is the decorative PascalCase name of the microservice.
 const Name = "HTTPEgress"
 
-// Version is the major version of the microservice's public API.
+// Version is a generation counter bumped on each regeneration, not a semantic version.
 const Version = 158
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.

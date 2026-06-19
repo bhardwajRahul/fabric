@@ -93,7 +93,7 @@ Create `myserviceapi/definition.go` with the content of the template `definition
 
 - The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
 - `Name` is the decorative PascalCase name of the microservice (it cannot be derived from the lowercase directory)
-- `Version` is the major version of the public API; leave it at `1` for a new microservice
+- `Version` is a generation counter bumped on each regeneration (not a semantic version); leave it at `1` for a new microservice
 - `Description` is the Go-style description from Step 1
 - The `define` import is pre-added with a `var _ = define.None` guard so the file compiles before any feature exists and the add-feature skills can append a `define.*` var without managing imports. Leave the guard in place
 

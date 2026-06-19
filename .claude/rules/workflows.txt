@@ -27,6 +27,8 @@ func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, credi
 
 Input arguments are matched by name to fields in the flow's state. Output arguments are written back to the state under their name. An output argument with an `Out` suffix (e.g. `creditScoreOut`) implements a read-modify-write pattern - it appears as both input and output.
 
+A task need not have any outputs. A pure side-effect step (restart a node, attach a file, set a status, then `flow.Goto`) returns only `err error`, and its generated `Out` struct is an empty `struct{}`. That is valid and idiomatic - such a task contributes no state fields and routes purely by side effect, `flow.Goto`, or a downstream `Switch`/`When` reading state set by other tasks.
+
 **Prefer typed arguments over `flow.Get`/`flow.Set`.** Task inputs and outputs should be expressed as typed function arguments wherever the types are available in the API package. This makes the task's state contract explicit in the signature and lets the marshaler handle serialization. Reserve `flow.Get`/`flow.Set` only for internal types that are not part of the public API (e.g. intermediate state shared between tasks within the same microservice).
 
 ```go
@@ -332,6 +334,8 @@ if yield {
 `flow.Subtask` behaves **identically to `flow.Subgraph`** in this table - same park, re-entry, out-pointer, failure-as-`err`, and cancel/interrupt propagation. The only difference is at launch: it runs a single task (no graph definition needed), and the synthesized one-node child graph is named by `Subtask`'s first argument.
 
 **Re-entry is signaled by the parker's `yield` bool, not by a state field.** Do not invent a `*Out`-suffix flag or a "have I run before" arg - the framework already tracks it via `interrupt_done`/`subgraph_done` columns and surfaces it as `yield`. The `if yield { return nil }` line is the **before-resume region** and runs on every dispatch (first pass, re-entry, every retry attempt); everything after it is the **after-resume region** and runs once per resolution. Exactly-once side effects (firing an event, charging a card) belong after the guard.
+
+**State written before the park survives the park.** A `flow.Set*` / `flow.Delete` made in the same dispatch *before* calling `flow.Interrupt` (or `flow.Subgraph`) is recorded in the step's `changes` and persisted when the step parks, so it is visible as an input on re-entry and to downstream tasks. This is the basis for idempotent side-effecting parks: a task that creates an external resource, records its identifier with `flow.SetString`, and then parks reads that identifier back on re-entry and skips re-creating the resource (e.g. `if id == "" { id = create(); flow.SetString("id", id) }; flow.Interrupt(...)`). Persisting through the change set is what makes this work - a plain local variable, or relying on a return value (output args are written as their zero value when you `return nil` on `yield`), would *not* survive the park.
 
 **A step parks at most once per dispatch, interrupt XOR subgraph, never both and never two of the same kind.** Sequential side-trips are sequential tasks in the graph, not multiple parks in one task. The guard fires in two places: the `Flow` rejects a second park synchronously with an error from the parker; the foreman re-checks the returned flow after the task returns (trust boundary for a bypassed parker).
 

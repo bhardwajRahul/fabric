@@ -539,7 +539,7 @@ func synthesizeDefinition(man *manifest, ep *endpoints, version int, subs map[st
 		name = strings.TrimSuffix(ep.pkg, "api")
 	}
 	fmt.Fprintf(&head, "// Name is the decorative PascalCase name of the microservice.\nconst Name = %q\n\n", name)
-	fmt.Fprintf(&head, "// Version is the major version of the microservice's public API.\nconst Version = %d\n\n", version)
+	fmt.Fprintf(&head, "// Version is a generation counter bumped on each regeneration, not a semantic version.\nconst Version = %d\n\n", version)
 	fmt.Fprintf(&head, "// Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.\nconst Description = %s\n\n", rawString(man.description))
 
 	full := head.String() + body.String()

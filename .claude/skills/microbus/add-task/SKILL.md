@@ -191,7 +191,14 @@ From the microservice's directory, run the generator. It regenerates `myservicea
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
-Then verify the microservice compiles with `go vet ./...` from the project root.
+Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
+
+```shell
+go mod tidy
+go vet ./...
+```
+
+Run `go mod tidy` first: a task that introduces a new import (a downstream client, or the foreman for subflows and workflow tests) can pull transitive dependencies that are not yet in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
 
 #### Step 10: Test the Task
 

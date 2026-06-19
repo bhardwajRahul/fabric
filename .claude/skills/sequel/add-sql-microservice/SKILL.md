@@ -90,10 +90,15 @@ Perform these replacements in order:
 6. Replace `bus stop` with the singular noun of this microservice in lower case (with spaces between words), i.e. `my noun`
 7. Replace `busstop` with the singular noun of this microservice in lowercase (no spaces between words), i.e. `mynoun`
 8. Replace `bus_stop` with the singular noun of this microservice in snake_case, i.e. `my_noun`
-8. Replace `bus-stop` with the singular noun of this microservice in kebab-case, i.e. `my-noun`
-9. Replace `_CIPHER_KEY_____________________` with a unique 32-character random base64 string (characters `A-Z`, `a-z`, `0-9`, `+`, `/`)
-10. Replace `_CIPHER_NONCE___________________` with a 32-character random base64 string (characters `A-Z`, `a-z`, `0-9`, `+`, `/`)
-11. Replace `_SEQUENCE_` with an 8-character random hexadecimal string
+9. Replace `bus-stop` with the singular noun of this microservice in kebab-case, i.e. `my-noun`
+10. Replace `_CIPHER_KEY_____________________` with a unique 32-character random base64 string (characters `A-Z`, `a-z`, `0-9`, `+`, `/`)
+11. Replace `_CIPHER_NONCE___________________` with a 32-character random base64 string (characters `A-Z`, `a-z`, `0-9`, `+`, `/`)
+12. Replace `_SEQUENCE_` with an 8-character random hexadecimal string
+
+**IMPORTANT**: The cipher key and nonce are base64 and may contain the `/` character, so a `sed`
+substitution using the default `/` delimiter (`s/old/new/`) can break. Use an alternate delimiter
+that cannot appear in base64, e.g. `sed 's|_CIPHER_KEY_____________________|...|g'`, or apply those
+two replacements with a tool that takes the replacement as a literal argument rather than parsing it.
 
 Run `go fmt` on the microservice directory to reformat the Go source files.
 
@@ -105,7 +110,14 @@ From the new microservice's directory, run the generator. It reads `mynounapi/de
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
-Then verify the microservice compiles with `go vet ./...` from the project root.
+Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
+
+```shell
+go mod tidy
+go vet ./...
+```
+
+Run `go mod tidy` first: a SQL CRUD microservice pulls the `sequel` package and the database drivers, which may not yet be in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
 
 #### Step 6: Add to Main App
 

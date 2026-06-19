@@ -1,8 +1,9 @@
 package busstopapi
 
 import (
-	"github.com/microbus-io/fabric/define"
 	"time"
+
+	"github.com/microbus-io/fabric/define"
 )
 
 // HINT: This file is the single source of truth for the microservice's API. After editing it, run
@@ -15,8 +16,8 @@ const Hostname = "busstop.hostname"
 // Name is the decorative PascalCase name of the microservice.
 const Name = "BusStop"
 
-// Version is the major version of the microservice's public API.
-const Version = 2
+// Version is a generation counter bumped on each regeneration, not a semantic version.
+const Version = 1
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `BusStop persists bus stops in a SQL database.`
