@@ -144,7 +144,7 @@ func scanService(s service, bundleDir string, bundleHosts map[string]bool, resol
 		if dir == "" {
 			continue
 		}
-		hostname, err := readHostname(filepath.Join(dir, "endpoints.go"))
+		hostname, err := readHostname(filepath.Join(dir, "definition.go"))
 		if err != nil || hostname == "" {
 			continue
 		}
@@ -221,7 +221,7 @@ func findOwnAPIName(serviceDir string) (string, error) {
 		if !strings.HasSuffix(name, "api") || name == "api" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(serviceDir, name, "endpoints.go")); err == nil {
+		if _, err := os.Stat(filepath.Join(serviceDir, name, "definition.go")); err == nil {
 			return name, nil
 		}
 	}
@@ -394,7 +394,7 @@ func stripHost(authority string) string {
 	return u.Hostname()
 }
 
-// readHostname reads the Hostname constant from an *api/endpoints.go.
+// readHostname reads the Hostname constant from an *api/definition.go.
 func readHostname(path string) (string, error) {
 	f, err := parseFile(path)
 	if err != nil {

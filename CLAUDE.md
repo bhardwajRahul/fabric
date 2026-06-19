@@ -23,7 +23,7 @@ These directories contain microservices built using the framework. Treat them th
 - Follow all conventions in `.claude/rules/microbus.md`
 - Use the skills in `.claude/skills/` for scaffolding and adding features
 - Respect `MARKER` and `HINT` comments
-- **Source code is the source of truth; `manifest.yaml` is derived from it.** `cmd/genmanifest` regenerates the manifest from the code (the housekeeping skill runs it); never hand-edit the manifest, hand edits are overwritten. The manifest exists as a fast navigational map for coding agents - what a microservice exposes and depends on - so an agent can model the system without reading every file. After changing microservice code, regenerate the manifest rather than editing it.
+- **`<name>api/definition.go` is the source of truth; `manifest.yaml` and the boilerplate are derived from it.** `cmd/genservice` regenerates `manifest.yaml`, `*api/client.go`, `intermediate.go`, `mock.go`, and `mock_test.go` from `definition.go` (the housekeeping skill runs it); never hand-edit those generated files, hand edits are overwritten. The manifest exists as a fast navigational map for coding agents - what a microservice exposes - so an agent can model the system without reading every file. After changing `definition.go`, regenerate rather than editing the derived files.
 
 ## Working on code
 

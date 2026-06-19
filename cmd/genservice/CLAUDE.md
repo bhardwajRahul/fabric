@@ -10,11 +10,8 @@ that one file genservice emits five artifacts:
 - `mock.go` + `mock_test.go` - the mockable `Mock` and a structural smoke test.
 - `manifest.yaml` - the derived navigational view of what the microservice exposes.
 
-This is the forward generator of the `definition.go` redesign. It is meant to subsume the older `cmd/genmanifest`
-(manifest) and `cmd/genmock` (mock) tools, which read the previous source of truth (`intermediate.go` +
-`*api/endpoints.go`). The three coexist during the migration: genservice only runs on a microservice that already
-has a `definition.go`, while genmanifest/genmock keep serving the not-yet-migrated services. Once every service is
-migrated and the housekeeping skill switches to genservice, the older tools are deleted.
+genservice is the sole generator of a microservice's boilerplate. The housekeeping skill runs it; every
+microservice authors a `definition.go` and genservice produces everything else.
 
 ## The pipeline: parse once, project many times
 
@@ -45,8 +42,7 @@ keep the code skeleton readable as code rather than buried in string concatenati
 
 `manifest.yaml` is emitted by hand in `manifest.go` instead. YAML has no gofmt to lean on: quoting, key order, and
 block-scalar formatting all have to be exactly right in the emitted bytes. A custom emitter with deterministic key
-order per section is more predictable than `yaml.v3` (which quotes inconsistently and reorders keys), and it
-matches the byte-for-byte conventions the previous `cmd/genmanifest` established.
+order per section is more predictable than `yaml.v3`, which quotes inconsistently and reorders keys.
 
 Do not embed Go (or YAML) source as string constants inside the `.go` emitters. Code skeletons live in the `.txt`
 templates; the emitters build the data model and compute the small fragments (signatures, import sets) that the
@@ -74,9 +70,8 @@ mock so the three agree on imports.
 The client emits only the proxy types a microservice actually needs: no `MulticastTrigger` without outbound
 events, no `Executor`/`Subflow` without tasks or workflows, and only the `marshalXxx` helpers the emitted methods
 call. Imports are computed in Go from the feature mix (see `buildClientModel`) and emitted conditionally, so every
-import is referenced by real code. There is therefore no `var ( _ = pkg.Symbol )` guard block: the old guard
-blocks existed only because the templates imported a fixed superset, and emitting just-what-is-used removes the
-need.
+import is referenced by real code. There is therefore no `var ( _ = pkg.Symbol )` guard block: such guards are
+only needed when the templates import a fixed superset, which this generator does not.
 
 genservice deliberately does not depend on `goimports` to fix up imports. `goimports` is not part of the standard
 Go toolchain, so it cannot be assumed present on every machine that builds the project. Imports are computed
@@ -153,7 +148,7 @@ A workflow's `Mock` cannot simply call the user's handler the way a function moc
 invoke the graph directly: the Foreman runtime executes its tasks by posting state to subscribed task URLs.
 `MockMyWorkflow(handler)` therefore subscribes a synthetic task on `:428/mock-<kebab>-<rand>` that decodes the
 incoming flow, parses the workflow's In struct, calls the typed handler, writes the Out struct back, and replaces
-the graph with a single transition to that task. This mirrors the variant in the old `cmd/genmock`.
+the graph with a single transition to that task.
 
 ## Mode detection
 
@@ -207,6 +202,6 @@ tree. The committed fixture files therefore *are* the goldens.
 ## Known limitations
 
 - The import-alias heuristic uses the last path segment as the package name, which is wrong for a `/v2`-style
-  module path. This matches the assumptions of the older generators and has not bitten any project package.
+  module path. It has not bitten any project package.
 - Embedded In/Out struct fields are not flattened; In/Out types are assumed to be declared in the api package.
 - Metric labels are assumed to be string-typed, which holds for every current metric.

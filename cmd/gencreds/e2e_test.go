@@ -39,8 +39,8 @@ import (
 
 	"github.com/microbus-io/fabric/coreservices/configurator"
 
-	kitchen "github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen"
-	weird "github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird"
+	kitchen "github.com/microbus-io/fabric/cmd/gencreds/testdata/kitchen"
+	weird "github.com/microbus-io/fabric/cmd/gencreds/testdata/weird"
 
 	"github.com/nats-io/jwt/v2"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -188,8 +188,8 @@ func TestE2E_OperatorModeKitchenWeird(t *testing.T) {
 	e2e := bootOperatorModeNATS(t)
 	chdirToNested(t)
 
-	kitchenDir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
-	weirdDir := repoPath(t, "cmd/genmanifest/testdata/weird")
+	kitchenDir := repoPath(t, "cmd/gencreds/testdata/kitchen")
+	weirdDir := repoPath(t, "cmd/gencreds/testdata/weird")
 	configuratorDir := repoPath(t, "coreservices/configurator")
 
 	// Run gencreds in-process. Output dir is "." which is the nested tmp

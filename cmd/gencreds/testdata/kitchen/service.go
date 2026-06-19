@@ -23,8 +23,8 @@ import (
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/pub"
 
-	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen/kitchenapi"
-	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird/weirdapi"
+	"github.com/microbus-io/fabric/cmd/gencreds/testdata/kitchen/kitchenapi"
+	"github.com/microbus-io/fabric/cmd/gencreds/testdata/weird/weirdapi"
 )
 
 var (
@@ -36,7 +36,7 @@ var (
 )
 
 /*
-Service implements kitchen, a fixture for genmanifest exercising every detected call pattern.
+Service implements kitchen, a gencreds fixture exercising every detected call pattern.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove

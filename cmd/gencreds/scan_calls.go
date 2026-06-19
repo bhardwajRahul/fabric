@@ -17,7 +17,7 @@ limitations under the License.
 package main
 
 // Typed-client method-call detection + raw svc.Request detection +
-// downstream resolution. Ported from cmd/genmanifest's parse_calls.go.
+// downstream resolution.
 
 import (
 	"fmt"
@@ -560,7 +560,7 @@ func resolveDownstream(calls []clientCall, raws []rawRequest, fromDir, listDir s
 		if dir == "" {
 			continue
 		}
-		defs, hostname, err := parseAPIEndpoints(filepath.Join(dir, "endpoints.go"))
+		defs, hostname, err := parseAPIDefinitions(filepath.Join(dir, "definition.go"))
 		if err != nil || hostname == "" {
 			continue
 		}

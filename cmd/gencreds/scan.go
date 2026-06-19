@@ -29,9 +29,9 @@ package main
 //     on the MulticastTrigger receiver).
 //   - Own-route subscriptions (`svc.Subscribe(...)` in intermediate.go).
 //
-// Ported from cmd/genmanifest's parsing logic. Two copies coexist by
-// design during the JIT transition; the parity test pins them to the
-// same output.
+// The AST detection is self-contained: routes and required claims are read
+// from each service's *api/definition.go (the define.* literals), never from
+// a generated manifest.
 
 import (
 	"fmt"
@@ -58,15 +58,15 @@ func scanService(serviceDir, fromDir string, resolver *pkgresolver.Resolver) (ac
 	}
 
 	// Locate the service's own *api package (sibling directory ending in
-	// "api"). Its endpoints.go has the Hostname constant and the Def
+	// "api"). Its definition.go has the Hostname constant and the define.*
 	// literals.
 	ownAPIDir, ownAPIAlias, err := findOwnAPIDir(serviceDir)
 	if err != nil {
 		return aclInput{}, err
 	}
-	ownDefs, ownHost, err := parseAPIEndpoints(filepath.Join(ownAPIDir, "endpoints.go"))
+	ownDefs, ownHost, err := parseAPIDefinitions(filepath.Join(ownAPIDir, "definition.go"))
 	if err != nil {
-		return aclInput{}, fmt.Errorf("parse own *api/endpoints.go: %w", err)
+		return aclInput{}, fmt.Errorf("parse own *api/definition.go: %w", err)
 	}
 	if ownHost == "" {
 		return aclInput{}, fmt.Errorf("own *api package has no Hostname constant")
@@ -97,7 +97,7 @@ func scanService(serviceDir, fromDir string, resolver *pkgresolver.Resolver) (ac
 
 	// Own subscribed routes: parse intermediate.go for svc.Subscribe(...)
 	// calls. We just need each call's (Method, Route); skip the
-	// kind/signature fields genmanifest cares about.
+	// kind/signature fields the manifest cares about.
 	intermediatePath := filepath.Join(serviceDir, "intermediate.go")
 	ownRoutes, hookCalls, err := parseIntermediateForACL(intermediatePath, ownDefs, ownAPIAlias)
 	if err != nil {
@@ -161,14 +161,14 @@ func findOwnAPIDir(serviceDir string) (apiDir, alias string, err error) {
 		if !strings.HasSuffix(name, "api") || name == "api" {
 			continue
 		}
-		// Validate it has an endpoints.go.
-		ep := filepath.Join(serviceDir, name, "endpoints.go")
+		// Validate it has a definition.go.
+		ep := filepath.Join(serviceDir, name, "definition.go")
 		if _, err := os.Stat(ep); err != nil {
 			continue
 		}
 		return filepath.Join(serviceDir, name), name, nil
 	}
-	return "", "", fmt.Errorf("no *api/endpoints.go subdirectory in %s", serviceDir)
+	return "", "", fmt.Errorf("no *api/definition.go subdirectory in %s", serviceDir)
 }
 
 // def is a (Method, Route) pair extracted from a Def literal.
@@ -177,8 +177,11 @@ type def struct {
 	Route  string
 }
 
-// parseAPIEndpoints reads endpoints.go and returns name→def + Hostname.
-func parseAPIEndpoints(path string) (defs map[string]def, hostname string, err error) {
+// parseAPIDefinitions reads definition.go and returns name→def + Hostname.
+// Each define.* var contributes its (Method, Route) keyed fields; kinds that
+// carry no routing (configs, metrics, tickers, inbound events) yield an empty
+// def, which is harmless since only routable names are ever looked up.
+func parseAPIDefinitions(path string) (defs map[string]def, hostname string, err error) {
 	f, err := parseFile(path)
 	if err != nil {
 		return nil, "", err
@@ -211,7 +214,11 @@ func parseAPIEndpoints(path string) (defs map[string]def, hostname string, err e
 				if !ok {
 					continue
 				}
-				if id, ok := cl.Type.(*ast.Ident); !ok || id.Name != "Def" {
+				sel, ok := cl.Type.(*ast.SelectorExpr)
+				if !ok {
+					continue
+				}
+				if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "define" {
 					continue
 				}
 				d := def{}
@@ -241,7 +248,7 @@ func parseAPIEndpoints(path string) (defs map[string]def, hostname string, err e
 
 // outboundEventNames reads *api/client.go and returns the set of method
 // names declared on the MulticastTrigger receiver. Each such name is a
-// candidate outbound event whose Def lives in *api/endpoints.go.
+// candidate outbound event whose define.* var lives in *api/definition.go.
 //
 // Builder helpers like ForHost / WithOptions return another
 // MulticastTrigger to support method chaining. Genuine event triggers
@@ -249,8 +256,8 @@ func parseAPIEndpoints(path string) (defs map[string]def, hostname string, err e
 // classification keys off that distinction rather than a hand-maintained
 // allowlist of helper names, so a future framework helper added to
 // MulticastTrigger does not silently become a phantom outbound event.
-// The caller intersects the returned set with the Defs in
-// endpoints.go, so any false positive without a matching Def is harmless.
+// The caller intersects the returned set with the define.* vars in
+// definition.go, so any false positive without a matching var is harmless.
 func outboundEventNames(path string) (map[string]bool, error) {
 	f, err := parseFile(path)
 	if err != nil {
@@ -437,7 +444,7 @@ func resolveHook(h hookCall, fromFile, fromDir string, resolver *pkgresolver.Res
 	if err != nil || dir == "" {
 		return aclInboundEvent{}, err
 	}
-	defs, hostname, err := parseAPIEndpoints(filepath.Join(dir, "endpoints.go"))
+	defs, hostname, err := parseAPIDefinitions(filepath.Join(dir, "definition.go"))
 	if err != nil {
 		return aclInboundEvent{}, err
 	}

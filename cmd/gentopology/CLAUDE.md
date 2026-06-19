@@ -34,7 +34,7 @@ Per service:
 - **Service deps** - every `*api`-suffixed import (other than own) that
   has at least one `<alias>.NewClient(...)`, `<alias>.NewMulticastClient(...)`,
   or `<alias>.NewMulticastTrigger(...)` call site. The dep target is
-  resolved by reading the imported package's `endpoints.go` Hostname
+  resolved by reading the imported package's `definition.go` Hostname
   constant.
 - **Event subscriptions** - every `<alias>.NewHook(svc).OnX(...)` chain
   in `intermediate.go`. Filtered to *api packages only. Same hostname

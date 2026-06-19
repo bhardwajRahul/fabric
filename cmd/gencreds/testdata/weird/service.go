@@ -21,7 +21,7 @@ import (
 
 	"github.com/microbus-io/errors"
 
-	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird/weirdapi"
+	"github.com/microbus-io/fabric/cmd/gencreds/testdata/weird/weirdapi"
 )
 
 var (
@@ -31,7 +31,7 @@ var (
 )
 
 /*
-Service implements weird, a fixture for genmanifest exercising every Def route shape.
+Service implements weird, a gencreds fixture exercising every route shape.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove

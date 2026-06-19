@@ -119,7 +119,7 @@ func TestSignService_KitchenDecodesAndPermissionsContainExpected(t *testing.T) {
 	accountKP, accountPath := newTestAccount(t)
 	accountPub, _ := accountKP.PublicKey()
 
-	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
+	dir := repoPath(t, "cmd/gencreds/testdata/kitchen")
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	cfg := config{plane: "live", signingKey: accountPath}
 
@@ -163,7 +163,7 @@ func TestSignService_PersistUserNKeysIsStable(t *testing.T) {
 	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, _ := newTestAccount(t)
-	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
+	dir := repoPath(t, "cmd/gencreds/testdata/kitchen")
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	persistDir := t.TempDir()
 	cfg := config{plane: "p", persist: persistDir, signingKey: "ignored"}
@@ -189,7 +189,7 @@ func TestSignService_ExpirationOmittedByDefault(t *testing.T) {
 	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, accountPath := newTestAccount(t)
-	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
+	dir := repoPath(t, "cmd/gencreds/testdata/kitchen")
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	cfg := config{plane: "live", signingKey: accountPath}
 
@@ -206,7 +206,7 @@ func TestSignService_ExpirationSetsExpClaim(t *testing.T) {
 	// No parallel - scans the kitchen fixture.
 	assert := testarossa.For(t)
 	accountKP, accountPath := newTestAccount(t)
-	dir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
+	dir := repoPath(t, "cmd/gencreds/testdata/kitchen")
 	s := service{Hostname: "kitchen.fixture", Dir: dir}
 	cfg := config{plane: "live", signingKey: accountPath, expiration: 24 * time.Hour}
 
@@ -237,8 +237,8 @@ func contains(haystack []string, needle string) bool {
 func TestResolveBundle_ManifestList_KitchenAndWeird(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
-	kitchenDir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
-	weirdDir := repoPath(t, "cmd/genmanifest/testdata/weird")
+	kitchenDir := repoPath(t, "cmd/gencreds/testdata/kitchen")
+	weirdDir := repoPath(t, "cmd/gencreds/testdata/weird")
 	services, err := resolveManifestList(kitchenDir + "," + weirdDir)
 	if err != nil {
 		t.Fatalf("resolveManifestList: %v", err)
@@ -272,8 +272,8 @@ func TestRun_KitchenWeirdEndToEnd(t *testing.T) {
 	assert := testarossa.For(t)
 	_, accountPath := newTestAccount(t)
 	out := t.TempDir()
-	kitchenDir := repoPath(t, "cmd/genmanifest/testdata/kitchen")
-	weirdDir := repoPath(t, "cmd/genmanifest/testdata/weird")
+	kitchenDir := repoPath(t, "cmd/gencreds/testdata/kitchen")
+	weirdDir := repoPath(t, "cmd/gencreds/testdata/weird")
 	cfg := config{
 		manifests:  kitchenDir + "," + weirdDir,
 		signingKey: accountPath,

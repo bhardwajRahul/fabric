@@ -9,7 +9,7 @@ paths of the importer: function endpoints (JSON request/response, path-arg input
 
 Unlike sibling `examples/` microservices, this one is intentionally not wired into the framework's
 `main/main.go`. It exists purely as a generated artifact for validating the import pipeline and its
-housekeeping (genmanifest, genmock, gofmt). The full upstream Petstore API has 19 endpoints; only the
+housekeeping (genservice, gofmt). The full upstream Petstore API has 19 endpoints; only the
 three below were imported. The durable record of the remote API is `openapispecs.json`, which is tracked
 in source control so additional endpoints can be imported later without re-fetching.
 

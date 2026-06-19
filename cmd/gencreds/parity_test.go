@@ -30,7 +30,7 @@ import (
 )
 
 // updateGoldens, when set, rewrites the committed nats.acl goldens in
-// cmd/genmanifest/testdata/{kitchen,weird}/ from the live scan +
+// cmd/gencreds/testdata/{kitchen,weird}/ from the live scan +
 // buildACLRules output instead of comparing against them. Use after an
 // intentional change to the AST scanner or rule constructor:
 //
@@ -42,7 +42,7 @@ var updateGoldens = flag.Bool("update", false, "rewrite committed nats.acl golde
 // TestScan_FixtureGoldens runs the source-driven scan + buildACLRules
 // against the kitchen and weird fixtures and asserts the resulting
 // subjects match the committed `nats.acl` goldens. The goldens live
-// under cmd/genmanifest/testdata/{kitchen,weird}/ alongside the
+// under cmd/gencreds/testdata/{kitchen,weird}/ alongside the
 // fixtures themselves.
 //
 // Failure here means either:
@@ -57,7 +57,7 @@ func TestScan_FixtureGoldens(t *testing.T) {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			assert := testarossa.For(t)
-			dir := repoPath(t, "cmd/genmanifest/testdata/"+name)
+			dir := repoPath(t, "cmd/gencreds/testdata/"+name)
 			in, err := scanService(dir, dir, pkgresolver.New(dir))
 			if err != nil {
 				t.Fatalf("scanService: %v", err)

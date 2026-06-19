@@ -14,25 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package weirdapi
 
-import "strings"
+import "context"
 
-// lastSegment returns the final "/"-separated component of a package path.
-func lastSegment(p string) string {
-	idx := strings.LastIndex(p, "/")
-	if idx < 0 {
-		return p
-	}
-	return p[idx+1:]
-}
-
-// parentPackage returns the package path one level up. It's used to resolve a
-// `*api` package back to its enclosing service package.
-func parentPackage(p string) string {
-	idx := strings.LastIndex(p, "/")
-	if idx < 0 {
-		return p
-	}
-	return p[:idx]
+// PlainAndAck is a convenience helper that wraps Plain. gencreds's
+// helper-expansion path resolves a caller's PlainAndAck call to its
+// underlying Plain endpoint when emitting downstream rules.
+func (_c Client) PlainAndAck(ctx context.Context) (acked bool, err error) {
+	result, err := _c.Plain(ctx)
+	return result != "", err
 }

@@ -96,20 +96,20 @@ add-call into a shape the resolver can match, or to switch to
 ## Source-driven AST scan
 
 `scanService(serviceDir, fromDir)` walks the service's source and
-produces an `aclInput` ready for rule construction. The detection
-mirrors what `cmd/genmanifest` does for its lighter purpose, but
-captures the per-call detail genmanifest deliberately discards:
+produces an `aclInput` ready for rule construction. Routes and required
+claims are read straight from each service's `*api/definition.go` (the
+`define.*` literals), capturing the per-call detail a manifest discards:
 
 - **Own routes** - every `svc.Subscribe(...)` call in `intermediate.go`,
-  resolved to (Method, Route) via the service's own `*api/endpoints.go`.
-- **Outbound events** - Defs in `*api/endpoints.go` that appear as
-  `MulticastTrigger.OnX` methods in `*api/client.go`. Builder helpers
-  (`ForHost`, `WithOptions`, anything else that returns
+  resolved to (Method, Route) via the service's own `*api/definition.go`.
+- **Outbound events** - `define.*` vars in `*api/definition.go` that
+  appear as `MulticastTrigger.OnX` methods in `*api/client.go`. Builder
+  helpers (`ForHost`, `WithOptions`, anything else that returns
   `MulticastTrigger` for chaining) are filtered out by return-type
   shape, not by a hand-maintained name allowlist - this keeps a future
   helper added to `MulticastTrigger` from silently becoming a phantom
-  outbound event. The candidate set is then intersected with the Defs
-  in `endpoints.go`, so any false positive without a matching Def is
+  outbound event. The candidate set is then intersected with the vars
+  in `definition.go`, so any false positive without a matching var is
   harmless.
 - **Inbound events** - `pkgapi.NewHook(svc).OnX(...)` chains in
   `intermediate.go`. Each hook's source `*api` package is loaded via
@@ -124,8 +124,8 @@ captures the per-call detail genmanifest deliberately discards:
   Non-literal URLs collapse to wildcard hostname/port/path.
 
 Cross-package resolution: each foreign `*api` package is loaded via
-`go list -json -e <pkgPath>` and its `endpoints.go` parsed for the
-`Hostname` const + Def literals. The package source comes from
+`go list -json -e <pkgPath>` and its `definition.go` parsed for the
+`Hostname` const + `define.*` literals. The package source comes from
 `go.mod`'s locked module cache - same source the binary was built
 against - so the rule set is correct by construction.
 
@@ -379,15 +379,15 @@ existing `kitchen.MyFunc` driver runs whatever's in kitchen's body.
 Just:
 
 1. Add the new pattern to kitchen's `service.go`.
-2. Re-run `genmanifest` on kitchen (housekeeping).
+2. Re-run `cmd/genservice` on kitchen so its generated wiring and
+   manifest reflect the change.
 3. Regenerate the fixture's `nats.acl` golden:
    `go test ./cmd/gencreds/ -update -run TestScan_FixtureGoldens`.
    Review the diff and commit if intentional.
 4. The e2e test now exercises the new pattern automatically.
 
 The test does not enumerate patterns; it trusts kitchen's body to
-cover them. Pattern-by-pattern assertions live in
-`cmd/genmanifest`'s manifest goldens (manifest shape) and in
+cover them. Pattern-by-pattern subject assertions live in
 `TestScan_FixtureGoldens` (subject byte-equivalence).
 
 ### Adding a new ACL-rejection case
@@ -443,5 +443,5 @@ Two NATS-side deps land with this package:
   Ctrl-C goes to the embedded server first.
 - **The kitchen fixture's `MyFunc` is what drives the 14 patterns.** If
   someone reorders or removes patterns there, the e2e test silently
-  loses coverage. The genmanifest manifest goldens would catch the
-  *manifest* shape changing, but not the runtime exercise.
+  loses coverage. `TestScan_FixtureGoldens` would catch the derived
+  *subject set* changing, but not the runtime exercise.

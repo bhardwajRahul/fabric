@@ -21,8 +21,8 @@ package main
 
 import (
 	"github.com/microbus-io/fabric/application"
-	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/kitchen"
-	"github.com/microbus-io/fabric/cmd/genmanifest/testdata/weird"
+	"github.com/microbus-io/fabric/cmd/gencreds/testdata/kitchen"
+	"github.com/microbus-io/fabric/cmd/gencreds/testdata/weird"
 )
 
 func main() {

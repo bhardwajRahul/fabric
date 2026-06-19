@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package schema holds the typed shapes that the cmd/* tools share.
-// Manifest parsing lives here so cmd/genmanifest and cmd/gencreds read
+// Manifest parsing lives here so cmd/gencreds and cmd/gentopology read
 // the same struct definitions.
 package schema
 
