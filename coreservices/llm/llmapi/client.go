@@ -296,17 +296,6 @@ func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) 
 }
 
 // Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
-//
-// Input:
-//   - provider: provider is the hostname of the LLM provider microservice to use
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
-//   - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
-//
-// Output:
-//   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
-//   - usage: usage is the aggregate token consumption across all turns
 func (_c Client) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
@@ -324,17 +313,6 @@ func (_res *ChatResponse) Get() (messagesOut []Message, usage Usage, err error) 
 }
 
 // Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
-//
-// Input:
-//   - provider: provider is the hostname of the LLM provider microservice to use
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
-//   - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
-//
-// Output:
-//   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
-//   - usage: usage is the aggregate token consumption across all turns
 func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
@@ -351,17 +329,6 @@ func (_c MulticastClient) Chat(ctx context.Context, provider string, model strin
 }
 
 // Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-//
-// Input:
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - tools: tools is the resolved tool definitions with schemas
-//   - options: options configures max tokens and temperature (nil = provider defaults)
-//
-// Output:
-//   - content: content is the LLM's text response, if any
-//   - toolCalls: toolCalls is the list of tool calls requested by the LLM
-//   - usage: usage is the token consumption for this single turn
 func (_c Client) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, stopReason string, usage Usage, err error) { // MARKER: Turn
 	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
@@ -379,17 +346,6 @@ func (_res *TurnResponse) Get() (content string, toolCalls []ToolCall, stopReaso
 }
 
 // Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-//
-// Input:
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - tools: tools is the resolved tool definitions with schemas
-//   - options: options configures max tokens and temperature (nil = provider defaults)
-//
-// Output:
-//   - content: content is the LLM's text response, if any
-//   - toolCalls: toolCalls is the list of tool calls requested by the LLM
-//   - usage: usage is the token consumption for this single turn
 func (_c MulticastClient) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
 	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}

@@ -92,35 +92,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Chat
 		"Chat", svc.doChat,
 		sub.At(llmapi.Chat.Method, llmapi.Chat.Route),
-		sub.Description(`Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
-
-Input:
-  - provider: provider is the hostname of the LLM provider microservice to use
-  - model: model is the provider-specific model identifier
-  - messages: messages is the conversation history to send to the LLM
-  - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
-  - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
-
-Output:
-  - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
-  - usage: usage is the aggregate token consumption across all turns`),
+		sub.Description(`Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.`),
 		sub.Function(llmapi.ChatIn{}, llmapi.ChatOut{}),
 	)
 	svc.Subscribe( // MARKER: Turn
 		"Turn", svc.doTurn,
 		sub.At(llmapi.Turn.Method, llmapi.Turn.Route),
-		sub.Description(`Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-
-Input:
-  - model: model is the provider-specific model identifier
-  - messages: messages is the conversation history to send to the LLM
-  - tools: tools is the resolved tool definitions with schemas
-  - options: options configures max tokens and temperature (nil = provider defaults)
-
-Output:
-  - content: content is the LLM's text response, if any
-  - toolCalls: toolCalls is the list of tool calls requested by the LLM
-  - usage: usage is the token consumption for this single turn`),
+		sub.Description(`Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).`),
 		sub.Function(llmapi.TurnIn{}, llmapi.TurnOut{}),
 	)
 	svc.Subscribe( // MARKER: InitChat

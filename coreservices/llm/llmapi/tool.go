@@ -22,21 +22,21 @@ import "encoding/json"
 // produced internally by the LLM service from the OpenAPI documents of each requested host;
 // callers of [Client.Chat] supply endpoint URLs, not Tool values.
 type Tool struct {
-	Name        string          `json:"name,omitzero" jsonschema:"description=Name is the tool name presented to the LLM"`
-	Description string          `json:"description,omitzero" jsonschema:"description=Description is the natural-language description shown to the LLM"`
-	InputSchema json.RawMessage `json:"inputSchema,omitzero" jsonschema:"description=InputSchema is the JSON Schema for the tool's input parameters"`
-	URL         string          `json:"url,omitzero" jsonschema:"description=URL is the Microbus endpoint URL invoked when the LLM calls this tool"`
-	Method      string          `json:"method,omitzero" jsonschema:"description=Method is the HTTP method used to invoke the endpoint"`
-	Type        string          `json:"type,omitzero" jsonschema:"description=Type is the endpoint kind (function/web/workflow). Workflow tools are dispatched as dynamic subgraphs"`
+	Name        string          `json:"name,omitzero" jsonschema_description:"Name is the tool name presented to the LLM"`
+	Description string          `json:"description,omitzero" jsonschema_description:"Description is the natural-language description shown to the LLM"`
+	InputSchema json.RawMessage `json:"inputSchema,omitzero" jsonschema_description:"InputSchema is the JSON Schema for the tool's input parameters"`
+	URL         string          `json:"url,omitzero" jsonschema_description:"URL is the Microbus endpoint URL invoked when the LLM calls this tool"`
+	Method      string          `json:"method,omitzero" jsonschema_description:"Method is the HTTP method used to invoke the endpoint"`
+	Type        string          `json:"type,omitzero" jsonschema_description:"Type is the endpoint kind (function/web/workflow). Workflow tools are dispatched as dynamic subgraphs"`
 }
 
 // ToolCall represents an LLM's request to invoke a tool.
 type ToolCall struct {
-	ID        string          `json:"id,omitzero" jsonschema:"description=ID is a unique identifier for this tool call"`
-	Name      string          `json:"name,omitzero" jsonschema:"description=Name is the tool name the LLM wants to invoke"`
-	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema:"description=Arguments is the JSON-encoded arguments for the tool call"`
+	ID        string          `json:"id,omitzero" jsonschema_description:"ID is a unique identifier for this tool call"`
+	Name      string          `json:"name,omitzero" jsonschema_description:"Name is the tool name the LLM wants to invoke"`
+	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema_description:"Arguments is the JSON-encoded arguments for the tool call"`
 	// ThoughtSignature is an opaque, provider-issued token attached to this call that must be echoed
 	// back on subsequent turns to preserve the model's internal reasoning continuity. Currently used
 	// only by Gemini 2.5 thinking models; other providers leave it empty.
-	ThoughtSignature string `json:"thoughtSignature,omitzero" jsonschema:"description=ThoughtSignature is an opaque provider token (Gemini 2.5 thinking models) that must be round-tripped to preserve reasoning continuity"`
+	ThoughtSignature string `json:"thoughtSignature,omitzero" jsonschema_description:"ThoughtSignature is an opaque provider token (Gemini 2.5 thinking models) that must be round-tripped to preserve reasoning continuity"`
 }

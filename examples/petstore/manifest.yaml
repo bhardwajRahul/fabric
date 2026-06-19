@@ -15,7 +15,7 @@ general:
     - [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
     - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)
   package: github.com/microbus-io/fabric/examples/petstore
-  modifiedAt: "2026-06-19T00:03:27Z"
+  modifiedAt: "2026-06-19T16:23:53Z"
 
 configs:
   RemoteBaseURL:
@@ -31,28 +31,12 @@ configs:
 functions:
   AddPet:
     signature: AddPet(httpRequestBody *Pet) (httpResponseBody *Pet, httpStatusCode int)
-    description: |-
-      AddPet adds a new pet to the store.
-      
-      Input:
-        - httpRequestBody: httpRequestBody is the pet to add
-      
-      Output:
-        - httpResponseBody: httpResponseBody is the created pet
-        - httpStatusCode: httpStatusCode is the remote HTTP status code
+    description: AddPet adds a new pet to the store.
     method: POST
     route: /pet
   GetPetById:
     signature: GetPetById(petId int64) (httpResponseBody *Pet, httpStatusCode int)
-    description: |-
-      GetPetById returns a single pet.
-      
-      Input:
-        - petId: petId is the ID of the pet to return
-      
-      Output:
-        - httpResponseBody: httpResponseBody is the requested pet
-        - httpStatusCode: httpStatusCode is the remote HTTP status code
+    description: GetPetById returns a single pet.
     method: GET
     route: /pet/{petId}
 

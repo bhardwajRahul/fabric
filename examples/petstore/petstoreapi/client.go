@@ -131,13 +131,6 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 }
 
 // AddPet adds a new pet to the store.
-//
-// Input:
-//   - httpRequestBody: httpRequestBody is the pet to add
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the created pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 func (_c Client) AddPet(ctx context.Context, httpRequestBody *Pet) (httpResponseBody *Pet, httpStatusCode int, err error) { // MARKER: AddPet
 	_in := AddPetIn{HTTPRequestBody: httpRequestBody}
 	_out := AddPetOut{}
@@ -155,13 +148,6 @@ func (_res *AddPetResponse) Get() (httpResponseBody *Pet, httpStatusCode int, er
 }
 
 // AddPet adds a new pet to the store.
-//
-// Input:
-//   - httpRequestBody: httpRequestBody is the pet to add
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the created pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 func (_c MulticastClient) AddPet(ctx context.Context, httpRequestBody *Pet) iter.Seq[*AddPetResponse] { // MARKER: AddPet
 	_in := AddPetIn{HTTPRequestBody: httpRequestBody}
 	_out := AddPetOut{}
@@ -178,13 +164,6 @@ func (_c MulticastClient) AddPet(ctx context.Context, httpRequestBody *Pet) iter
 }
 
 // GetPetById returns a single pet.
-//
-// Input:
-//   - petId: petId is the ID of the pet to return
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the requested pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 func (_c Client) GetPetById(ctx context.Context, petId int64) (httpResponseBody *Pet, httpStatusCode int, err error) { // MARKER: GetPetById
 	_in := GetPetByIdIn{PetId: petId}
 	_out := GetPetByIdOut{}
@@ -202,13 +181,6 @@ func (_res *GetPetByIdResponse) Get() (httpResponseBody *Pet, httpStatusCode int
 }
 
 // GetPetById returns a single pet.
-//
-// Input:
-//   - petId: petId is the ID of the pet to return
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the requested pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 func (_c MulticastClient) GetPetById(ctx context.Context, petId int64) iter.Seq[*GetPetByIdResponse] { // MARKER: GetPetById
 	_in := GetPetByIdIn{PetId: petId}
 	_out := GetPetByIdOut{}

@@ -100,7 +100,7 @@ var Retry = define.Config{ // MARKER: Retry
 
 - The `Value` carrier may be a struct (`RetryPolicy{}`), a slice (`[]int{}`), a map (`map[string]bool{}`), or a slice/map of structs (`[]RetryPolicy{}`)
 - Set `Validation: "json"` so the stored value is checked as valid JSON; when present, `Default` is the JSON text of the value (e.g. `[80,443]` for a `[]int`, `{"beta":true}` for a `map[string]bool`)
-- Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `<name>api/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema:"description=..."` tags if the type also feeds an endpoint's OpenAPI schema
+- Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `<name>api/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema_description:"..."` tags if the type also feeds an endpoint's OpenAPI schema
 - The generated getter returns the typed value; a missing or malformed stored value yields the type's zero value
 
 #### Step 5: Implement the Callback

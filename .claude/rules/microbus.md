@@ -467,35 +467,28 @@ Microbus uses a number of naming conventions to drive framework behavior without
 
 ### OpenAPI Parameter Descriptions
 
-Two optional, complementary conventions enrich the OpenAPI spec with per-field descriptions (better docs and LLM
-tool-calling accuracy). Both are extracted by the generator and feed the JSON Schema; absent, descriptions are
-simply empty and the full godoc remains the endpoint description.
-
-**Scalar function args** - structured `Input:`/`Output:` sections in the endpoint godoc, one `- name: description`
-line per arg:
+Per-field descriptions enrich the OpenAPI spec (better docs and LLM tool-calling accuracy) via a single
+convention: a `jsonschema_description:"..."` tag on the In/Out struct field (read by `invopop/jsonschema`).
+Absent, descriptions are simply empty and the endpoint godoc remains the endpoint description. The tag works
+uniformly for body fields, scalar query/path arguments, and fields within nested custom struct types.
 
 ```go
-/*
-Forecast returns the weather forecast for a location.
+type ForecastIn struct {
+    City string `json:"city,omitzero" jsonschema_description:"The city name, e.g. San Francisco"`
+    Days int    `json:"days,omitzero" jsonschema_description:"Number of days to forecast, 1-14"`
+}
 
-Input:
-  - city: The city name, e.g. "San Francisco"
-  - days: Number of days to forecast, 1-14
-
-Output:
-  - forecast: Daily forecast summaries
-*/
-func (svc *Service) Forecast(ctx context.Context, city string, days int) (forecast []DayForecast, err error)
-```
-
-**Fields within custom struct types** - short `jsonschema:"description=..."` tags (read by `invopop/jsonschema`):
-
-```go
 type DayForecast struct {
-    Date string  `json:"date,omitzero" jsonschema:"description=Date is the forecast date in ISO 8601 format"`
-    High float64 `json:"high,omitzero" jsonschema:"description=High is the high temperature in Fahrenheit"`
+    Date string  `json:"date,omitzero" jsonschema_description:"Date is the forecast date in ISO 8601 format"`
+    High float64 `json:"high,omitzero" jsonschema_description:"High is the high temperature in Fahrenheit"`
 }
 ```
+
+Use the dedicated `jsonschema_description` tag rather than the `jsonschema:"description=..."` subtag form: it is
+read whole, so the description may contain commas (the `jsonschema` tag is comma-split into directives, which
+truncates a description at its first comma). Reserve the `jsonschema:"..."` tag for other directives such as
+`jsonschema:"example=6"`. The legacy `Input:`/`Output:` godoc-section convention has been retired; descriptions
+live only on the fields.
 
 ## Development Workflow
 

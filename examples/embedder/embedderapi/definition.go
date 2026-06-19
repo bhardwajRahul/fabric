@@ -52,12 +52,12 @@ var Embed = define.Function{ // MARKER: Embed
 
 // EmbedIn are the input arguments of Embed.
 type EmbedIn struct { // MARKER: Embed
-	Text string `json:"text,omitzero" jsonschema:"description=Text is the input string to embed"`
+	Text string `json:"text,omitzero" jsonschema_description:"Text is the input string to embed"`
 }
 
 // EmbedOut are the output arguments of Embed.
 type EmbedOut struct { // MARKER: Embed
-	Vector []float64 `json:"vector,omitzero" jsonschema:"description=Vector is the embedding produced by the model"`
+	Vector []float64 `json:"vector,omitzero" jsonschema_description:"Vector is the embedding produced by the model"`
 }
 
 // Similarity returns the cosine similarity between the embeddings of strings a and b.
@@ -69,13 +69,13 @@ var Similarity = define.Function{ // MARKER: Similarity
 
 // SimilarityIn are the input arguments of Similarity.
 type SimilarityIn struct { // MARKER: Similarity
-	A string `json:"a,omitzero" jsonschema:"description=A is the first input string"`
-	B string `json:"b,omitzero" jsonschema:"description=B is the second input string"`
+	A string `json:"a,omitzero" jsonschema_description:"A is the first input string"`
+	B string `json:"b,omitzero" jsonschema_description:"B is the second input string"`
 }
 
 // SimilarityOut are the output arguments of Similarity.
 type SimilarityOut struct { // MARKER: Similarity
-	Score float64 `json:"score,omitzero" jsonschema:"description=Score is the cosine similarity in [-1.0, 1.0]"`
+	Score float64 `json:"score,omitzero" jsonschema_description:"Score is the cosine similarity in [-1.0, 1.0]"`
 }
 
 // Demo serves the interactive demo page for the embedder.

@@ -50,17 +50,6 @@ var LLMTokens = define.Metric{ // MARKER: LLMTokens
 }
 
 // Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
-//
-// Input:
-//   - provider: provider is the hostname of the LLM provider microservice to use
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
-//   - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
-//
-// Output:
-//   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
-//   - usage: usage is the aggregate token consumption across all turns
 var Chat = define.Function{ // MARKER: Chat
 	Host: Hostname, Method: "POST", Route: ":444/chat",
 	In: ChatIn{}, Out: ChatOut{},
@@ -68,31 +57,20 @@ var Chat = define.Function{ // MARKER: Chat
 
 // ChatIn are the input arguments of Chat.
 type ChatIn struct { // MARKER: Chat
-	Provider string       `json:"provider,omitzero"`
-	Model    string       `json:"model,omitzero"`
-	Messages []Message    `json:"messages,omitzero"`
-	ToolURLs []string     `json:"toolURLs,omitzero"`
-	Options  *ChatOptions `json:"options,omitzero"`
+	Provider string       `json:"provider,omitzero" jsonschema_description:"provider is the hostname of the LLM provider microservice to use"`
+	Model    string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
+	Messages []Message    `json:"messages,omitzero" jsonschema_description:"messages is the conversation history to send to the LLM"`
+	ToolURLs []string     `json:"toolURLs,omitzero" jsonschema_description:"toolURLs is the list of Microbus endpoint URLs exposed to the LLM"`
+	Options  *ChatOptions `json:"options,omitzero" jsonschema_description:"options configures tool-call rounds, max tokens, temperature (nil = defaults)"`
 }
 
 // ChatOut are the output arguments of Chat.
 type ChatOut struct { // MARKER: Chat
-	MessagesOut []Message `json:"messagesOut,omitzero"`
-	Usage       Usage     `json:"usage,omitzero"`
+	MessagesOut []Message `json:"messagesOut,omitzero" jsonschema_description:"messagesOut is the full conversation including new messages produced by the LLM"`
+	Usage       Usage     `json:"usage,omitzero" jsonschema_description:"usage is the aggregate token consumption across all turns"`
 }
 
 // Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-//
-// Input:
-//   - model: model is the provider-specific model identifier
-//   - messages: messages is the conversation history to send to the LLM
-//   - tools: tools is the resolved tool definitions with schemas
-//   - options: options configures max tokens and temperature (nil = provider defaults)
-//
-// Output:
-//   - content: content is the LLM's text response, if any
-//   - toolCalls: toolCalls is the list of tool calls requested by the LLM
-//   - usage: usage is the token consumption for this single turn
 var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
@@ -100,18 +78,18 @@ var Turn = define.Function{ // MARKER: Turn
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Model    string       `json:"model,omitzero"`
-	Messages []Message    `json:"messages,omitzero"`
-	Tools    []Tool       `json:"tools,omitzero"`
-	Options  *TurnOptions `json:"options,omitzero"`
+	Model    string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
+	Messages []Message    `json:"messages,omitzero" jsonschema_description:"messages is the conversation history to send to the LLM"`
+	Tools    []Tool       `json:"tools,omitzero" jsonschema_description:"tools is the resolved tool definitions with schemas"`
+	Options  *TurnOptions `json:"options,omitzero" jsonschema_description:"options configures max tokens and temperature (nil = provider defaults)"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content    string     `json:"content,omitzero"`
-	ToolCalls  []ToolCall `json:"toolCalls,omitzero"`
+	Content    string     `json:"content,omitzero" jsonschema_description:"content is the LLM's text response, if any"`
+	ToolCalls  []ToolCall `json:"toolCalls,omitzero" jsonschema_description:"toolCalls is the list of tool calls requested by the LLM"`
 	StopReason string     `json:"stopReason,omitzero"`
-	Usage      Usage      `json:"usage,omitzero"`
+	Usage      Usage      `json:"usage,omitzero" jsonschema_description:"usage is the token consumption for this single turn"`
 }
 
 // InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.

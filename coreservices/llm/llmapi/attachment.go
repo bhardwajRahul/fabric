@@ -29,7 +29,7 @@ package llmapi
 // Providers that don't support multi-modal input silently ignore Attachments. Currently
 // supported by geminillm; other providers may follow.
 type Attachment struct {
-	MediaType string `json:"mediaType,omitzero" jsonschema:"description=MediaType is the IANA mime type (e.g. image/png, image/jpeg, application/pdf)"`
-	Data      []byte `json:"data,omitzero" jsonschema:"description=Data carries inline raw bytes; mutually exclusive with URI"`
-	URI       string `json:"uri,omitzero" jsonschema:"description=URI references a pre-uploaded artifact (Gemini File API URI, public HTTPS URL); mutually exclusive with Data"`
+	MediaType string `json:"mediaType,omitzero" jsonschema_description:"MediaType is the IANA mime type (e.g. image/png, image/jpeg, application/pdf)"`
+	Data      []byte `json:"data,omitzero" jsonschema_description:"Data carries inline raw bytes; mutually exclusive with URI"`
+	URI       string `json:"uri,omitzero" jsonschema_description:"URI references a pre-uploaded artifact (Gemini File API URI, public HTTPS URL); mutually exclusive with Data"`
 }

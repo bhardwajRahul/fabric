@@ -43,7 +43,7 @@ var DoThing = define.Function{
 
 // DoThingIn are the input arguments of DoThing.
 type DoThingIn struct {
-	Name  string `json:"name,omitzero" jsonschema:"description=Name is the subject of the thing"`
+	Name  string `json:"name,omitzero" jsonschema_description:"Name is the subject of the thing"`
 	Count int    `json:"count,omitzero"`
 }
 

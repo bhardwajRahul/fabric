@@ -185,7 +185,7 @@ For every type a selected endpoint references via `$ref: 'Name'` in its `params`
 `response`, define a Go struct from `types['Name']` in the specs (a `$ref` value is the bare type name and
 keys the `types` map directly; nested `$ref`s inside a type schema work the same way). Follow the
 `add-function` skill's "Define Complex Types" conventions (one file per type under `myserviceapi/`, `json`
-camelCase `omitzero`, `jsonschema:"description=..."` from the schema's `description`) for the Go mapping.
+camelCase `omitzero`, `jsonschema_description:"..."` from the schema's `description`) for the Go mapping.
 For `oneOf`/`anyOf`/`allOf` or free-form objects with no `properties`, fall back to `json.RawMessage` and
 note the fallback in the type's godoc.
 
@@ -195,7 +195,9 @@ For each endpoint with `feature: function`, follow the `add-function` skill with
 
 - **Method and route**: the specs `method` and `route` verbatim (already in Microbus `{arg}` syntax; keep
   the default `:443` port).
-- **Description**: the specs `summary`/`description`, with `Input:`/`Output:` godoc sections.
+- **Description**: the endpoint godoc is the specs `summary`/`description` only. Per-argument descriptions
+  go on the In/Out struct fields as `jsonschema_description:"..."` tags (the spec param/property
+  `description`), not in `Input:`/`Output:` godoc sections.
 - **Signature**: one typed argument per `params` entry (path, query, header alike; spec name, first letter
   lowercased). Use the param's `goType` when present; otherwise map its `schema` per `add-function`
   conventions. Add `httpRequestBody` of the body type when `requestBody` is present; return

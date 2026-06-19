@@ -26,13 +26,13 @@ package llmapi
 // ThinkingTokens at zero, which lets ThinkingTokens be summed across mixed-provider runs
 // without double-counting.
 type Usage struct {
-	InputTokens      int    `json:"inputTokens,omitzero" jsonschema:"description=InputTokens is the number of prompt tokens charged"`
-	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema:"description=OutputTokens is the number of billed completion tokens (includes ThinkingTokens)"`
-	ThinkingTokens   int    `json:"thinkingTokens,omitzero" jsonschema:"description=ThinkingTokens is the subset of OutputTokens spent on internal reasoning (Gemini 2.5 thoughtsTokenCount; others 0)"`
-	CacheReadTokens  int    `json:"cacheReadTokens,omitzero" jsonschema:"description=CacheReadTokens is the number of tokens served from the provider's prompt cache"`
-	CacheWriteTokens int    `json:"cacheWriteTokens,omitzero" jsonschema:"description=CacheWriteTokens is the number of tokens written to the provider's prompt cache"`
-	Model            string `json:"model,omitzero" jsonschema:"description=Model is the provider's model identifier that produced this completion"`
-	Turns            int    `json:"turns,omitzero" jsonschema:"description=Turns is the number of LLM turns aggregated in this Usage"`
+	InputTokens      int    `json:"inputTokens,omitzero" jsonschema_description:"InputTokens is the number of prompt tokens charged"`
+	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema_description:"OutputTokens is the number of billed completion tokens (includes ThinkingTokens)"`
+	ThinkingTokens   int    `json:"thinkingTokens,omitzero" jsonschema_description:"ThinkingTokens is the subset of OutputTokens spent on internal reasoning (Gemini 2.5 thoughtsTokenCount; others 0)"`
+	CacheReadTokens  int    `json:"cacheReadTokens,omitzero" jsonschema_description:"CacheReadTokens is the number of tokens served from the provider's prompt cache"`
+	CacheWriteTokens int    `json:"cacheWriteTokens,omitzero" jsonschema_description:"CacheWriteTokens is the number of tokens written to the provider's prompt cache"`
+	Model            string `json:"model,omitzero" jsonschema_description:"Model is the provider's model identifier that produced this completion"`
+	Turns            int    `json:"turns,omitzero" jsonschema_description:"Turns is the number of LLM turns aggregated in this Usage"`
 }
 
 // Add accumulates other into u. Model is overwritten by the latest non-empty value.

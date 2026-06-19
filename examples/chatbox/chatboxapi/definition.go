@@ -46,18 +46,18 @@ var Turn = define.Function{ // MARKER: Turn
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Model    string              `json:"model,omitzero" jsonschema:"description=Model is the model identifier"`
-	Messages []llmapi.Message    `json:"messages,omitzero" jsonschema:"description=Messages is the conversation history"`
-	Tools    []llmapi.Tool       `json:"tools,omitzero" jsonschema:"description=Tools is the list of tools available to the LLM"`
-	Options  *llmapi.TurnOptions `json:"options,omitzero" jsonschema:"description=Options configures the turn"`
+	Model    string              `json:"model,omitzero" jsonschema_description:"Model is the model identifier"`
+	Messages []llmapi.Message    `json:"messages,omitzero" jsonschema_description:"Messages is the conversation history"`
+	Tools    []llmapi.Tool       `json:"tools,omitzero" jsonschema_description:"Tools is the list of tools available to the LLM"`
+	Options  *llmapi.TurnOptions `json:"options,omitzero" jsonschema_description:"Options configures the turn"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content    string            `json:"content,omitzero" jsonschema:"description=Content is the LLM text response"`
-	ToolCalls  []llmapi.ToolCall `json:"toolCalls,omitzero" jsonschema:"description=ToolCalls is the list of tool calls"`
-	StopReason string            `json:"stopReason,omitzero" jsonschema:"description=StopReason is the normalized reason the turn ended"`
-	Usage      llmapi.Usage      `json:"usage,omitzero" jsonschema:"description=Usage is the token consumption"`
+	Content    string            `json:"content,omitzero" jsonschema_description:"Content is the LLM text response"`
+	ToolCalls  []llmapi.ToolCall `json:"toolCalls,omitzero" jsonschema_description:"ToolCalls is the list of tool calls"`
+	StopReason string            `json:"stopReason,omitzero" jsonschema_description:"StopReason is the normalized reason the turn ended"`
+	Usage      llmapi.Usage      `json:"usage,omitzero" jsonschema_description:"Usage is the token consumption"`
 }
 
 // Demo serves the interactive demo page for the chatbox.

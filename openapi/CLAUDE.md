@@ -96,8 +96,10 @@ Downstream cache mechanisms (notably Anthropic's prompt cache via `claudellm`) d
 
 If you change anything in this package that introduces a non-deterministic ordering - for example, replacing a map with a custom slice traversed in an order derived from `range` over another map without sorting - you can silently destroy cache hit rates in `claudellm` (and any future consumer that depends on byte-stable schemas). Tests would still pass; the failure would only surface as a worsening cache hit ratio in production.
 
-### Godoc `Input:` / `Output:` sections become per-field descriptions
+### Per-field descriptions come from struct tags, including for query/path params
 
-`parseParamDescriptions` scans the endpoint's `Description` for `Input:` and `Output:` sections, extracts bulleted lines of the form `- name: description`, and applies them to matching schema properties. Field name matching is by JSON tag (or struct field name as fallback). Existing descriptions are not overwritten - the godoc only fills *empty* property descriptions. So `jsonschema:"description=..."` tags on a struct take precedence over the godoc section.
+Field descriptions flow from the In/Out struct field tags that `invopop/jsonschema` reads when reflecting a whole struct: the dedicated `jsonschema_description:"..."` tag (preferred, read whole) or a `description=` directive in the comma-split `jsonschema:"..."` tag. For a request body or a nested custom type the whole struct is reflected, so these tags land on the schema properties for free.
 
-A non-list, non-blank line ends the current section. Blank lines within a section are tolerated so godoc-style spacing works.
+A scalar **query or path** parameter is the one case that needs help: the renderer reflects each such field from its *type alone* (`jsonschemaReflectFromType(field.Type)`), which drops the field-level tag. `fieldTagDescription` reads the tag directly off the `reflect.StructField` and sets `Parameter.Description`, mirroring invopop's precedence (`jsonschema_description` first, then `description=` in the `jsonschema` tag). This keeps query/path params describable by the same tags as body fields.
+
+The legacy `Input:`/`Output:` godoc-section convention (a `parseParamDescriptions` pass that filled empty property descriptions from bulleted godoc lines) was **retired**: descriptions live only on the fields, one mechanism. Prefer `jsonschema_description` over the `jsonschema:"description=..."` subtag because the latter is comma-split (a description with a comma is silently truncated at the first comma); reserve the `jsonschema` tag for directives like `example=`.

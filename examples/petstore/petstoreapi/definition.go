@@ -43,13 +43,6 @@ var BearerToken = define.Config{ // MARKER: BearerToken
 }
 
 // AddPet adds a new pet to the store.
-//
-// Input:
-//   - httpRequestBody: httpRequestBody is the pet to add
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the created pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 var AddPet = define.Function{ // MARKER: AddPet
 	Host: Hostname, Method: "POST", Route: "/pet",
 	In: AddPetIn{}, Out: AddPetOut{},
@@ -67,13 +60,6 @@ type AddPetOut struct { // MARKER: AddPet
 }
 
 // GetPetById returns a single pet.
-//
-// Input:
-//   - petId: petId is the ID of the pet to return
-//
-// Output:
-//   - httpResponseBody: httpResponseBody is the requested pet
-//   - httpStatusCode: httpStatusCode is the remote HTTP status code
 var GetPetById = define.Function{ // MARKER: GetPetById
 	Host: Hostname, Method: "GET", Route: "/pet/{petId}",
 	In: GetPetByIdIn{}, Out: GetPetByIdOut{},
@@ -81,7 +67,7 @@ var GetPetById = define.Function{ // MARKER: GetPetById
 
 // GetPetByIdIn are the input arguments of GetPetById.
 type GetPetByIdIn struct { // MARKER: GetPetById
-	PetId int64 `json:"petId,omitzero"`
+	PetId int64 `json:"petId,omitzero" jsonschema_description:"petId is the ID of the pet to return"`
 }
 
 // GetPetByIdOut are the output arguments of GetPetById.

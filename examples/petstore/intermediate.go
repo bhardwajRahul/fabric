@@ -69,27 +69,13 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: AddPet
 		"AddPet", svc.doAddPet,
 		sub.At(petstoreapi.AddPet.Method, petstoreapi.AddPet.Route),
-		sub.Description(`AddPet adds a new pet to the store.
-
-Input:
-  - httpRequestBody: httpRequestBody is the pet to add
-
-Output:
-  - httpResponseBody: httpResponseBody is the created pet
-  - httpStatusCode: httpStatusCode is the remote HTTP status code`),
+		sub.Description(`AddPet adds a new pet to the store.`),
 		sub.Function(petstoreapi.AddPetIn{}, petstoreapi.AddPetOut{}),
 	)
 	svc.Subscribe( // MARKER: GetPetById
 		"GetPetById", svc.doGetPetById,
 		sub.At(petstoreapi.GetPetById.Method, petstoreapi.GetPetById.Route),
-		sub.Description(`GetPetById returns a single pet.
-
-Input:
-  - petId: petId is the ID of the pet to return
-
-Output:
-  - httpResponseBody: httpResponseBody is the requested pet
-  - httpStatusCode: httpStatusCode is the remote HTTP status code`),
+		sub.Description(`GetPetById returns a single pet.`),
 		sub.Function(petstoreapi.GetPetByIdIn{}, petstoreapi.GetPetByIdOut{}),
 	)
 	svc.Subscribe( // MARKER: UploadFile

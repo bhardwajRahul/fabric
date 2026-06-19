@@ -18,6 +18,6 @@ package llmapi
 
 // TurnOptions configures a single Turn invocation. Zero-valued fields fall back to provider defaults.
 type TurnOptions struct {
-	MaxTokens   int     `json:"maxTokens,omitzero" jsonschema:"description=MaxTokens caps the response length"`
-	Temperature float64 `json:"temperature,omitzero" jsonschema:"description=Temperature controls sampling randomness"`
+	MaxTokens   int     `json:"maxTokens,omitzero" jsonschema_description:"MaxTokens caps the response length"`
+	Temperature float64 `json:"temperature,omitzero" jsonschema_description:"Temperature controls sampling randomness"`
 }

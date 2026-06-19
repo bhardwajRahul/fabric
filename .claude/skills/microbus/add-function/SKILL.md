@@ -71,7 +71,7 @@ Describe the endpoint starting with its name, in Go doc style: `MyFunction does 
 
 Describe **what the endpoint does and the effect it produces**, not who is expected to call it. `"Charges the card and returns a receipt id"` is good; `"called by the LLM as a tool"` or `"used by the checkout page"` is not.
 
-Do not write per-argument descriptions in the godoc. Put them in `jsonschema:"description=..."` tags on the In/Out struct fields (Step 7).
+Do not write per-argument descriptions in the godoc. Put them in `jsonschema_description:"..."` tags on the In/Out struct fields (Step 7).
 
 #### Step 5: Determine the Required Claims
 
@@ -90,8 +90,8 @@ package myserviceapi
 
 // MyStruct is X.
 type MyStruct struct {
-	FooField string `json:"fooField,omitzero" jsonschema:"description=FooField is X"`
-	BarField int    `json:"barField,omitzero" jsonschema:"description=BarField is X"`
+	FooField string `json:"fooField,omitzero" jsonschema_description:"FooField is X"`
+	BarField int    `json:"barField,omitzero" jsonschema_description:"BarField is X"`
 }
 ```
 
@@ -121,13 +121,13 @@ var MyFunction = define.Function{ // MARKER: MyFunction
 
 // MyFunctionIn are the input arguments of MyFunction.
 type MyFunctionIn struct { // MARKER: MyFunction
-	Input1 string           `json:"input1,omitzero" jsonschema:"description=Input1 is X"`
-	Input2 ThirdPartyStruct `json:"input2,omitzero" jsonschema:"description=Input2 is X"`
+	Input1 string           `json:"input1,omitzero" jsonschema_description:"Input1 is X"`
+	Input2 ThirdPartyStruct `json:"input2,omitzero" jsonschema_description:"Input2 is X"`
 }
 
 // MyFunctionOut are the output arguments of MyFunction.
 type MyFunctionOut struct { // MARKER: MyFunction
-	Output1 map[string]MyStruct `json:"output1,omitzero" jsonschema:"description=Output1 is X"`
+	Output1 map[string]MyStruct `json:"output1,omitzero" jsonschema_description:"Output1 is X"`
 }
 ```
 

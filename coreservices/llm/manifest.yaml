@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-06-18T23:21:29Z"
+  modifiedAt: "2026-06-19T16:23:53Z"
 
 configs:
   MaxToolRounds:
@@ -38,36 +38,12 @@ metrics:
 functions:
   Chat:
     signature: Chat(provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage)
-    description: |-
-      Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
-      
-      Input:
-        - provider: provider is the hostname of the LLM provider microservice to use
-        - model: model is the provider-specific model identifier
-        - messages: messages is the conversation history to send to the LLM
-        - toolURLs: toolURLs is the list of Microbus endpoint URLs exposed to the LLM
-        - options: options configures tool-call rounds, max tokens, temperature (nil = defaults)
-      
-      Output:
-        - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
-        - usage: usage is the aggregate token consumption across all turns
+    description: Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
     method: POST
     route: :444/chat
   Turn:
     signature: Turn(model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, stopReason string, usage Usage)
-    description: |-
-      Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-      
-      Input:
-        - model: model is the provider-specific model identifier
-        - messages: messages is the conversation history to send to the LLM
-        - tools: tools is the resolved tool definitions with schemas
-        - options: options configures max tokens and temperature (nil = provider defaults)
-      
-      Output:
-        - content: content is the LLM's text response, if any
-        - toolCalls: toolCalls is the list of tool calls requested by the LLM
-        - usage: usage is the token consumption for this single turn
+    description: Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
     method: POST
     route: :444/turn
 

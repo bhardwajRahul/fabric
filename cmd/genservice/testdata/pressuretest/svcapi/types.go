@@ -22,7 +22,7 @@ import (
 
 // Pet is a domain type referenced by the magic-HTTP-arg endpoints.
 type Pet struct {
-	Name string `json:"name,omitzero" jsonschema:"description=Name is the pet's name"`
+	Name string `json:"name,omitzero" jsonschema_description:"Name is the pet's name"`
 	Tag  string `json:"tag,omitzero"`
 }
 

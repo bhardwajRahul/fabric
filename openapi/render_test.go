@@ -36,88 +36,31 @@ func resolveSchema(schemas map[string]any, name string) map[string]any {
 	return schema
 }
 
-func TestParseParamDescriptions(t *testing.T) {
-	t.Parallel()
-
-	t.Run("full", func(t *testing.T) {
-		assert := testarossa.For(t)
-		desc := `Forecast returns the weather forecast for a location.
-
-Input:
-  - city: The city name, e.g. "San Francisco"
-  - days: Number of days to forecast, 1-14
-
-Output:
-  - forecast: Daily forecast summaries
-  - confidence: Model confidence score, 0.0 to 1.0`
-
-		params, results := parseParamDescriptions(desc)
-		assert.Expect(params["city"], `The city name, e.g. "San Francisco"`)
-		assert.Expect(params["days"], "Number of days to forecast, 1-14")
-		assert.Expect(results["forecast"], "Daily forecast summaries")
-		assert.Expect(results["confidence"], "Model confidence score, 0.0 to 1.0")
-	})
-
-	t.Run("no_sections", func(t *testing.T) {
-		assert := testarossa.For(t)
-		desc := "Simple description with no parameter docs."
-
-		params, results := parseParamDescriptions(desc)
-		assert.Expect(len(params), 0)
-		assert.Expect(len(results), 0)
-	})
-
-	t.Run("params_only", func(t *testing.T) {
-		assert := testarossa.For(t)
-		desc := `DoSomething does something.
-
-Input:
-  - name: The name to use`
-
-		params, results := parseParamDescriptions(desc)
-		assert.Expect(params["name"], "The name to use")
-		assert.Expect(len(results), 0)
-	})
-
-	t.Run("empty", func(t *testing.T) {
-		assert := testarossa.For(t)
-		params, results := parseParamDescriptions("")
-		assert.Expect(len(params), 0)
-		assert.Expect(len(results), 0)
-	})
-}
-
+// TestRender_ParamDescriptions covers the GET case where descriptions on scalar query parameters come
+// from the In struct fields' jsonschema tags. A query parameter is reflected from its field type alone,
+// so the tag is read directly by fieldTagDescription rather than via struct reflection.
 func TestRender_ParamDescriptions(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
 
 	type ForecastIn struct {
-		City string `json:"city,omitzero"`
-		Days int    `json:"days,omitzero"`
+		City string `json:"city,omitzero" jsonschema_description:"The city name"`
+		Days int    `json:"days,omitzero" jsonschema_description:"Number of days to forecast"`
 	}
 	type ForecastOut struct {
-		Forecast   string  `json:"forecast,omitzero"`
-		Confidence float64 `json:"confidence,omitzero"`
+		Forecast   string  `json:"forecast,omitzero" jsonschema_description:"Daily forecast summaries"`
+		Confidence float64 `json:"confidence,omitzero" jsonschema_description:"Model confidence score"`
 	}
 
 	svc := &Service{
 		ServiceName: "weather.test",
 		Endpoints: []*Endpoint{
 			{
-				Type:    "function",
-				Name:    "Forecast",
-				Method:  "GET",
-				Route:   "/forecast",
-				Summary: "Forecast(city string, days int) (forecast string, confidence float64)",
-				Description: `Forecast returns the weather forecast.
-
-Input:
-  - city: The city name
-  - days: Number of days to forecast
-
-Output:
-  - forecast: Daily forecast summaries
-  - confidence: Model confidence score`,
+				Type:       "function",
+				Name:       "Forecast",
+				Method:     "GET",
+				Route:      "/forecast",
+				Summary:    "Forecast(city string, days int) (forecast string, confidence float64)",
 				InputArgs:  ForecastIn{},
 				OutputArgs: ForecastOut{},
 			},
@@ -175,30 +118,22 @@ func TestRender_ParamDescriptions_POST(t *testing.T) {
 	assert := testarossa.For(t)
 
 	type CreateIn struct {
-		Name  string `json:"name,omitzero"`
-		Email string `json:"email,omitzero"`
+		Name  string `json:"name,omitzero" jsonschema_description:"The user's display name"`
+		Email string `json:"email,omitzero" jsonschema_description:"The user's email address"`
 	}
 	type CreateOut struct {
-		ID string `json:"id,omitzero"`
+		ID string `json:"id,omitzero" jsonschema_description:"The generated user ID"`
 	}
 
 	svc := &Service{
 		ServiceName: "user.test",
 		Endpoints: []*Endpoint{
 			{
-				Type:    "function",
-				Name:    "Create",
-				Method:  "POST",
-				Route:   "/create",
-				Summary: "Create(name string, email string) (id string)",
-				Description: `Create creates a new user.
-
-Input:
-  - name: The user's display name
-  - email: The user's email address
-
-Output:
-  - id: The generated user ID`,
+				Type:       "function",
+				Name:       "Create",
+				Method:     "POST",
+				Route:      "/create",
+				Summary:    "Create(name string, email string) (id string)",
 				InputArgs:  CreateIn{},
 				OutputArgs: CreateOut{},
 			},
@@ -238,8 +173,8 @@ func TestRender_JsonSchemaTags(t *testing.T) {
 	assert := testarossa.For(t)
 
 	type Location struct {
-		Lat  float64 `json:"lat" jsonschema:"description=Latitude in decimal degrees"`
-		Long float64 `json:"long" jsonschema:"description=Longitude in decimal degrees"`
+		Lat  float64 `json:"lat" jsonschema_description:"Latitude in decimal degrees"`
+		Long float64 `json:"long" jsonschema_description:"Longitude in decimal degrees"`
 	}
 	type SearchIn struct {
 		Location Location `json:"location,omitzero"`

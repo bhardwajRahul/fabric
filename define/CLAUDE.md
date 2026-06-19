@@ -70,7 +70,7 @@ handles each delivery.
 
 There is no `Description` field on any type. The endpoint/feature description is the godoc on the var, which
 keeps each literal purely structural and makes `go doc` of the api package a readable contract. Per-field
-descriptions live in `jsonschema:"description=..."` tags on the In/Out struct fields.
+descriptions live in `jsonschema_description:"..."` tags on the In/Out struct fields.
 
 ### Config: explicit Value, verbatim Validation, string Default
 

@@ -139,9 +139,6 @@ func Render(s *Service) *Document {
 		}
 		path = strings.Join(parts, "/")
 
-		// Extract parameter and result descriptions from the godoc
-		paramDescs, resultDescs := parseParamDescriptions(ep.Description)
-
 		// Functions
 		if ep.Type == FeatureFunction || ep.Type == FeatureWorkflow || ep.Type == FeatureTask {
 			method := ep.Method
@@ -176,7 +173,6 @@ func Render(s *Service) *Document {
 				schemaOut = jsonschemaReflect(outputArgs)
 			}
 			resolveRefs(doc, schemaOut, epKey+"_OUT")
-			applyDescriptionsToParams(doc, schemaOut, resultDescs)
 			doc.Components.Schemas[epKey+"_OUT"] = schemaOut
 
 			// httpRequestBody argument overrides the request body and forces all other arguments to be in the query or path
@@ -237,7 +233,7 @@ func Render(s *Service) *Document {
 						parameter.Style = "deepObject"
 						parameter.Explode = true
 					}
-					if desc, ok := paramDescs[name]; ok {
+					if desc := fieldTagDescription(field); desc != "" {
 						parameter.Description = desc
 					}
 					op.Parameters = append(op.Parameters, parameter)
@@ -246,7 +242,6 @@ func Render(s *Service) *Document {
 				// IN is JSON in the request body
 				schemaIn := jsonschemaReflect(inputArgs)
 				resolveRefs(doc, schemaIn, epKey+"_IN")
-				applyDescriptionsToParams(doc, schemaIn, paramDescs)
 				doc.Components.Schemas[epKey+"_IN"] = schemaIn
 
 				op.RequestBody = &RequestBody{
@@ -404,63 +399,24 @@ func methodHasBody(method string) bool {
 	}
 }
 
-// applyDescriptionsToParams sets the description field on schema properties that match the given map of field names to descriptions.
-// Field names in the map use the Go argument name (camelCase), which is matched against the JSON tag name of each property.
-// If the schema is a $ref, the referenced schema is looked up in the document's components and descriptions are applied there.
-func applyDescriptionsToParams(doc *Document, schema *jsonschema.Schema, descs map[string]string) {
-	if schema == nil || len(descs) == 0 {
-		return
+// fieldTagDescription returns the description declared on a struct field, mirroring how
+// invopop/jsonschema sources it when reflecting a whole struct: the dedicated `jsonschema_description`
+// tag (read whole) takes precedence, then a `description=` directive in the comma-separated `jsonschema`
+// tag. A query/path parameter's schema is reflected from the field's type alone, which drops the
+// field-level tag, so the description is read directly here - keeping query/path params describable by
+// the same tags as body fields. As with invopop, a `description=` directive in the `jsonschema` tag may
+// not contain a comma (it is split on commas); use `jsonschema_description` for a description that does.
+func fieldTagDescription(field reflect.StructField) string {
+	if desc := field.Tag.Get("jsonschema_description"); desc != "" {
+		return desc
 	}
-	// If the schema is a $ref, resolve it to the actual schema in components
-	target := schema
-	if schema.Ref != "" && strings.HasPrefix(schema.Ref, "#/components/schemas/") {
-		refName := schema.Ref[len("#/components/schemas/"):]
-		if resolved, ok := doc.Components.Schemas[refName]; ok {
-			target = resolved
+	tag := field.Tag.Get("jsonschema")
+	for _, part := range strings.Split(tag, ",") {
+		if desc, ok := strings.CutPrefix(part, "description="); ok {
+			return desc
 		}
 	}
-	for pair := target.Properties.Oldest(); pair != nil; pair = pair.Next() {
-		if desc, ok := descs[pair.Key]; ok && pair.Value.Description == "" {
-			pair.Value.Description = desc
-		}
-	}
-}
-
-// parseParamDescriptions extracts parameter and result descriptions from a godoc-style description string.
-// It looks for "Input:" and "Output:" sections with bulleted lists in the form "- name: description".
-func parseParamDescriptions(description string) (params map[string]string, results map[string]string) {
-	params = map[string]string{}
-	results = map[string]string{}
-
-	lines := strings.Split(description, "\n")
-	var target map[string]string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(trimmed, "Input:"):
-			target = params
-		case strings.HasPrefix(trimmed, "Output:"):
-			target = results
-		case target != nil && strings.HasPrefix(trimmed, "- "):
-			// Parse "- name: description"
-			entry := strings.TrimPrefix(trimmed, "- ")
-			if name, desc, ok := strings.Cut(entry, ":"); ok {
-				name = strings.TrimSpace(name)
-				desc = strings.TrimSpace(desc)
-				if name != "" && desc != "" {
-					target[name] = desc
-				}
-			}
-		case trimmed == "":
-			// Blank line: keep current section (godoc lists have blank lines around them)
-		default:
-			// Non-list line ends the current section
-			if target != nil {
-				target = nil
-			}
-		}
-	}
-	return params, results
+	return ""
 }
 
 func fieldName(field reflect.StructField) string {

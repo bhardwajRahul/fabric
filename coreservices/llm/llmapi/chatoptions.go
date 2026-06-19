@@ -18,7 +18,7 @@ package llmapi
 
 // ChatOptions configures a Chat invocation. Zero-valued fields fall back to defaults.
 type ChatOptions struct {
-	MaxToolRounds int     `json:"maxToolRounds,omitzero" jsonschema:"description=MaxToolRounds caps tool-call round-trips for this chat (overrides MaxToolRounds config)"`
-	MaxTokens     int     `json:"maxTokens,omitzero" jsonschema:"description=MaxTokens caps the response length per turn"`
-	Temperature   float64 `json:"temperature,omitzero" jsonschema:"description=Temperature controls sampling randomness"`
+	MaxToolRounds int     `json:"maxToolRounds,omitzero" jsonschema_description:"MaxToolRounds caps tool-call round-trips for this chat (overrides MaxToolRounds config)"`
+	MaxTokens     int     `json:"maxTokens,omitzero" jsonschema_description:"MaxTokens caps the response length per turn"`
+	Temperature   float64 `json:"temperature,omitzero" jsonschema_description:"Temperature controls sampling randomness"`
 }

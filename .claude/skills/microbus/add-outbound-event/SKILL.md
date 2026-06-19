@@ -80,8 +80,8 @@ package myserviceapi
 
 // MyStruct is X.
 type MyStruct struct {
-	FooField string `json:"fooField,omitzero" jsonschema:"description=FooField is X"`
-	BarField int    `json:"barField,omitzero" jsonschema:"description=BarField is X"`
+	FooField string `json:"fooField,omitzero" jsonschema_description:"FooField is X"`
+	BarField int    `json:"barField,omitzero" jsonschema_description:"BarField is X"`
 }
 ```
 
