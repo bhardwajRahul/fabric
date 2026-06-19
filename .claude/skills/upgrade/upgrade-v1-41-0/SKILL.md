@@ -36,9 +36,11 @@ you had, so there are no runtime changes and no `config.yaml`/`env.yaml`/`main/m
 Upgrade a Microbus project to v1.41.0:
 - [ ] Step 1: Locate every microservice
 - [ ] Step 2: Synthesize definition.go for each (genupgrade)
-- [ ] Step 3: Regenerate the boilerplate for each (genservice)
-- [ ] Step 4: Tidy and verify
 ```
+
+Regeneration and verification are **not** part of this skill - the `upgrade-microbus` orchestrator runs `genservice`
+and `go mod tidy && go vet ./... && go test ./...` once, after every numbered skill has applied its source
+transformation.
 
 #### Step 1: Locate Every Microservice
 
@@ -78,29 +80,9 @@ does not recover inbound-event `WithOptions` (queue/claims), which the manifest 
 hook in this project set `sub.NoQueue()`/`sub.RequiredClaims(...)` via `NewHook(svc).WithOptions(...)`, re-add the
 equivalent `LoadBalancing`/`RequiredClaims` field to that `define.InboundEvent` literal by hand after this step.
 
-#### Step 3: Regenerate the Boilerplate for Each Microservice
-
-With every `definition.go` now present, run `cmd/genservice` on each microservice directory to (re)generate
-`*api/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`:
-
-```bash
-find . -path ./vendor -prune -o -name definition.go -path '*api/definition.go' -print \
-  | while read -r def; do
-      svcdir=$(dirname "$(dirname "$def")")
-      go run github.com/microbus-io/fabric/cmd/genservice "$svcdir"
-    done
-```
-
-#### Step 4: Tidy and Verify
-
-```bash
-go mod tidy
-go vet ./...
-go test ./...
-```
-
-`go mod tidy` pulls the dependencies v1.41.0 requires. A clean `go vet ./...` confirms every microservice now
-compiles from its generated boilerplate; the tests confirm unchanged runtime behavior. Review the diff: each
-microservice should have gained a `definition.go`, lost its `endpoints.go`, and have regenerated derived files
-whose content matches what you had (modulo the `DO NOT EDIT` headers and the dropped `frameworkVersion` manifest
-field).
+After Step 2 every microservice has a `definition.go` and no `endpoints.go`, but its generated boilerplate
+(`client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) is still stale - the project does not
+compile yet. That is expected: the orchestrator's final step regenerates the boilerplate from each `definition.go`
+with `genservice` and verifies the whole project once. Each microservice should end up having gained a
+`definition.go`, lost its `endpoints.go`, and have regenerated derived files whose content matches what you had
+(modulo the `DO NOT EDIT` headers and the dropped `frameworkVersion` manifest field).

@@ -45,7 +45,7 @@ Upgrade a Microbus project to v1.32.0:
 - [ ] Step 1: Remove graph.SetTimeBudget calls; re-express load-bearing budgets via sub.TimeBudget
 - [ ] Step 2: Rename the foreman DefaultTimeBudget config to TimeBudget
 - [ ] Step 3: Insert a nil argument into foreman Create / Run callers
-- [ ] Step 4: Regenerate manifests and mocks with cmd/genmanifest and cmd/genmock
+- [ ] Step 4: (manifest + mock regeneration deferred to the orchestrator)
 ```
 
 #### Step 1: Remove `graph.SetTimeBudget` Calls
@@ -102,16 +102,9 @@ Do **not** edit generated per-workflow `Executor` methods or their call sites - 
 change. To pass options through the typed executor in a test, use
 `exec.WithFlowOptions(&workflow.FlowOptions{...})`. `CreateTask` is unchanged.
 
-#### Step 4: Regenerate Manifests and Mocks
+#### Step 4: Defer Manifest and Mock Regeneration
 
-From inside each microservice directory:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/genmanifest --path .
-go run github.com/microbus-io/fabric/cmd/genmock --path .
-```
-
-`genmanifest` bumps `frameworkVersion` to `1.32.0`, refreshes `modifiedAt`, emits the declared-only
-`timeBudget` field where `sub.TimeBudget` is declared, and stamps the `# Code generated ... DO NOT EDIT.`
-marker. `genmock` regenerates `mock.go`/`mock_test.go` with the updated `Create`/`Run` signatures and the
-`// Code generated ... DO NOT EDIT.` marker. Both are idempotent; run them at housekeeping time too.
+The `sub.TimeBudget` re-expressions and the `Create`/`Run` signature changes require regenerating each
+microservice's `manifest.yaml`, `mock.go`, and `mock_test.go`. Do **not** run a generator here - the
+`upgrade-microbus` orchestrator regenerates every microservice's boilerplate from source and verifies the whole
+project once, after every numbered skill has run.

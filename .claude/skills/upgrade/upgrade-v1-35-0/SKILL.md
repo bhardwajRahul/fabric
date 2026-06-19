@@ -142,7 +142,7 @@ Upgrade a Microbus project to v1.35.0:
 - [ ] Step 9: Capture the new nextCursor return from foreman List
 - [ ] Step 10: Rename foreman metric references in Grafana / alert configs
 - [ ] Step 11: Migrate sequel microservices to CreateTestingDatabase + OpenSingleton
-- [ ] Step 12: Regenerate manifests and mocks
+- [ ] Step 12: (manifest + mock regeneration deferred to the orchestrator)
 ```
 
 #### Step 1: Replace `svc.Now(ctx)` With `time.Now()`
@@ -491,16 +491,9 @@ After editing, build the project and run the microservice's tests to confirm the
 end-to-end - the per-test database is materialized lazily on first call, so a compile-clean
 migration is not sufficient to prove correctness.
 
-#### Step 12: Regenerate Manifests and Mocks
+#### Step 12: Defer Manifest and Mock Regeneration
 
-From inside each microservice directory:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/genmanifest --path .
-go run github.com/microbus-io/fabric/cmd/genmock --path .
-```
-
-`genmanifest` bumps `frameworkVersion` to `1.35.0` and refreshes `modifiedAt`. `genmock`
-regenerates `mock.go`/`mock_test.go` with the updated `Fork`/`Continue`/`List` signatures if any
-of those endpoints live in this microservice. Both are idempotent; run them at housekeeping time
-too.
+The `Fork`/`Continue`/`List` signature changes and the other source edits above require regenerating each
+microservice's `manifest.yaml`, `mock.go`, and `mock_test.go`. Do **not** run a generator here - the
+`upgrade-microbus` orchestrator regenerates every microservice's boilerplate from source and verifies the whole
+project once, after every numbered skill has run.

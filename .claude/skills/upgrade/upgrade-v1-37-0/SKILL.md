@@ -103,7 +103,7 @@ Upgrade a Microbus project to v1.37.0:
 - [ ] Step 8: Migrate foremanapi.Retry callers to Restart / RestartFrom; replace Fork callers with RestartFrom or remove
 - [ ] Step 9: Add stopReason to any LLM provider's Turn signature
 - [ ] Step 10: Move TESTING-mode config values out of config.yaml into the test setup
-- [ ] Step 11: Regenerate mocks + manifests, then go vet ./... && go test ./...
+- [ ] Step 11: (mock + manifest regeneration and verification deferred to the orchestrator)
 ```
 
 #### Step 1: Fix the Loud Retry-Variant Removals
@@ -568,29 +568,14 @@ app.RunInTest(t)
 Production deployments (`PROD`, `LAB`, `LOCAL`) still read the files; only `TESTING` changed.
 `config.yaml` entries that exist purely to back production behavior need no migration.
 
-#### Step 11: Regenerate Mocks and Manifests, Then Verify
+#### Step 11: Defer Regeneration and Verification
 
-Caller tasks added in Step 2 and any renames in Step 6 change the `ToDo` interface and endpoint set, so
-regenerate per microservice that you touched:
+Caller tasks added in Step 2 and any renames in Step 6 change the `ToDo` interface and endpoint set, so each
+microservice you touched needs its `mock.go` and `manifest.yaml` regenerated. Do **not** run a generator, `go vet`,
+or `go test` here - the `upgrade-microbus` orchestrator regenerates every microservice's boilerplate from source
+and runs `go mod tidy && go vet ./... && go test ./...` once, after every numbered skill has run.
 
-```bash
-for d in $(find . -name "mock.go" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmock --path "$d"
-done
-for d in $(find . -name "manifest.yaml" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmanifest --path "$d"
-done
-```
-
-`genmanifest` bumps `frameworkVersion` to `1.37.0` in each manifest it regenerates. Then from the project
-root:
-
-```bash
-go vet ./...
-go test ./...
-```
-
-The load-bearing assertions are the silent ones: a workflow test that previously saw a subgraph's output in
+The load-bearing assertions in that final verification are the silent ones: a workflow test that previously saw a subgraph's output in
 parent state, a resume that fed data back to an interrupted task, or a fan-in field summed across branches.
 If a test now sees a zero value, an empty `out`, or a last-write-wins value, the corresponding rewrite from
 Step 2-5 is missing at that call site.

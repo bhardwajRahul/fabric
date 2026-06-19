@@ -13,8 +13,10 @@ Upgrade a Microbus project to v1.27.1:
 - [ ] Step 1: Find all microservices to upgrade
 - [ ] Step 2: Split client.go into client.go + endpoints.go
 - [ ] Step 3: Update manifests
-- [ ] Step 4: Vet
 ```
+
+Verification is **not** part of this skill - the `upgrade-microbus` orchestrator runs `go vet ./...` once, after
+every numbered skill has applied its source transformation.
 
 #### Step 1: Find All Microservices to Upgrade
 
@@ -52,6 +54,3 @@ Do not modify `client.go`'s import block or the `var (_ context.Context; _ json.
 
 Update the `frameworkVersion` in all `manifest.yaml` files in the project to `1.27.1`. Update each manifest's `modifiedAt` to the current UTC timestamp in RFC 3339 format.
 
-#### Step 4: Vet
-
-Run `go vet ./main/...` on the project. Fix any compilation errors caused by missed imports or duplicate declarations before finishing.

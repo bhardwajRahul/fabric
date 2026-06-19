@@ -30,9 +30,8 @@ Upgrade a Microbus project to v1.29.0:
 - [ ] Step 1: Flag reserved id- / loc- hostnames
 - [ ] Step 2: Drop redundant iss=~ predicates from intermediate.go
 - [ ] Step 3: Drop the microbus:"1" bearer-token escape hatch
-- [ ] Step 4: Regenerate manifests with cmd/genmanifest
-- [ ] Step 5: Regenerate topology with cmd/gentopology
-- [ ] Step 6: Heads-up audits (env-var NATS auth, :666 endpoints)
+- [ ] Step 4: (manifest + topology regeneration deferred to the orchestrator)
+- [ ] Step 5: Heads-up audits (env-var NATS auth, :666 endpoints)
 ```
 
 #### Step 1: Flag Reserved `id-` / `loc-` Hostnames
@@ -59,7 +58,7 @@ predicate by removing the redundant clause (and any leading/trailing `&&`).
 If `iss=~"..."` is the entire predicate, remove the `sub.RequiredClaims(...)`
 call altogether.
 
-Step 4 will rewrite manifests from the updated source.
+The orchestrator's final regeneration will rewrite manifests from the updated source.
 
 #### Step 3: Drop the `microbus:"1"` Bearer-Token Escape Hatch
 
@@ -80,41 +79,14 @@ through the access-token verifier, not the bearer-token verifier.
 
 List file:line for each hit and let the developer decide on the rewrite.
 
-#### Step 4: Regenerate Manifests With `cmd/genmanifest`
+#### Step 4: Defer Manifest and Topology Regeneration
 
-For every microservice in the project (every directory containing a
-`manifest.yaml`), run from inside the directory:
+The source edits in Steps 1-3 require regenerating each microservice's manifest (the predicate and hostname changes
+are read from source) and the project topology. Do **not** run a generator here - the `upgrade-microbus`
+orchestrator regenerates every microservice's boilerplate from source and verifies the whole project once, after
+every numbered skill has run.
 
-```bash
-go run github.com/microbus-io/fabric/cmd/genmanifest --path .
-```
-
-This rewrites the manifest from the source: identity, configs, metrics,
-tickers, endpoints (`webs`, `functions`, `tasks`, `workflows`,
-`outboundEvents`), inbound event subscriptions. It bumps `frameworkVersion`
-and updates `modifiedAt`. The dropped fields from the v1.28 schema
-(`general.db`, `general.cloud`, top-level `downstream:`,
-`inboundEvents.*.source`) are not re-emitted.
-
-Common errors:
-- *Missing `Hostname` constant in `*api/endpoints.go`*: every microservice's
-  `*api` package must declare `const Hostname = "..."`.
-- *Non-literal `sub.At(method, route)`*: genmanifest only resolves literal
-  arguments. Inline the literal.
-
-#### Step 5: Regenerate Topology With `cmd/gentopology`
-
-From the project root:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/gentopology --bundle main/main.go
-```
-
-Rewrites `main/topology.mmd`. Trust-root microservices (any endpoint on
-`:666`) render in orange with `|danger|`-labeled inbound edges. Service deps,
-event hooks, SQL imports, and HTTP-egress targets are derived from source.
-
-#### Step 6: Heads-Up Audits
+#### Step 5: Heads-Up Audits
 
 Two non-blocking changes worth flagging.
 

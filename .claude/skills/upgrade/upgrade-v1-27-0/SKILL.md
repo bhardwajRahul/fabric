@@ -49,7 +49,7 @@ Upgrade a Microbus project to the current layout:
 - [ ] Step 5: Rename openaillm references to chatgptllm
 - [ ] Step 6: Update manifests
 - [ ] Step 7: Apply Wave 3 fixups
-- [ ] Step 8: Vet and test
+- [ ] Step 8: Grep for stragglers (verification deferred to the orchestrator)
 ```
 
 #### Step 1: Find All Microservices to Upgrade
@@ -244,9 +244,11 @@ Matches outside `requiredClaims` (e.g. comments, fixture tokens that hard-code a
 
 **g. Optional: add `mcpportal`**: if the project wants MCP integration for LLM clients, add `mcpportal.NewService()` to `main/main.go` alongside `openapiportal.NewService()`.
 
-#### Step 8: Vet and Test
+#### Step 8: Grep for Stragglers
 
-Run `go vet ./...` and `go test ./...` on the project. Fix any compilation or test failures before finishing.
+Do **not** run `go vet`/`go test` here - the `upgrade-microbus` orchestrator verifies the whole project once,
+after every numbered skill has run. What this skill does add is a source-level grep sweep for leftovers from the
+old layout.
 
 Common stragglers to grep for (post-upgrade, none of these should appear in production code):
 

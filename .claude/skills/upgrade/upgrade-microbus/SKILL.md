@@ -16,6 +16,7 @@ Upgrade the project to the latest Microbus framework:
 - [ ] Step 3: Determine the latest version
 - [ ] Step 4: Download latest agent rules and skills
 - [ ] Step 5: Upgrade
+- [ ] Step 6: Regenerate, tidy, and verify
 ```
 
 #### Step 1: Determine the Original Version
@@ -60,3 +61,22 @@ rm -rf temp-clone
 Scan `.claude/skills/upgrade/` and identify all skill directories named `upgrade-vX-Y-Z`. The hyphens in the directory name correspond to dots in the semver - e.g. `upgrade-v1-27-0` is the skill for version `v1.27.0`. Sort the identified skills by version from earliest to latest. Follow each skill whose version is later than the **original version**, in order.
 
 For example, if upgrading from original version `v1.21.0`, follow skill `upgrade-v1-22-0` first, then `upgrade-v1-23-0`, and so on. Skip any upgrade skill whose version is equal to or earlier than the original version.
+
+**CRITICAL**: While following a numbered `upgrade-vX-Y-Z` skill, apply only its source edits. Do **not** run any code generator, `go mod tidy`, `go vet`, or `go test`, even if the skill's text says to - all regeneration and verification happen once, in Step 6. Between numbered skills the project does not compile; that is expected.
+
+#### Step 6: Regenerate, Tidy, and Verify
+
+Run this once, after every numbered skill selected in Step 5 has completed. Regenerate each microservice's boilerplate from its `definition.go` with the current generator, then resolve dependencies and verify the whole project:
+
+```bash
+find . -path ./vendor -prune -o -name definition.go -path '*api/definition.go' -print \
+  | while read -r def; do
+      svcdir=$(dirname "$(dirname "$def")")
+      go run github.com/microbus-io/fabric/cmd/genservice "$svcdir"
+    done
+go mod tidy
+go vet ./...
+go test ./...
+```
+
+This is the only point at which the project is expected to compile. A clean `go vet ./...` confirms every numbered migration composed correctly against the final framework version; the tests confirm unchanged runtime behavior. This step runs even when Step 5 selected no numbered skills (a patch-only bump), so the current generator always re-emits each microservice's boilerplate - which catches generator-level fixes shipped in the new version.

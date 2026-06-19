@@ -24,6 +24,17 @@ These directories contain microservices built using the framework. Treat them th
 - **`<name>api/definition.go` is the source of truth; `manifest.yaml` and the boilerplate are derived from it.** `cmd/genservice` regenerates `manifest.yaml`, `*api/client.go`, `intermediate.go`, `mock.go`, and `mock_test.go` from `definition.go` (the housekeeping skill runs it); never hand-edit those generated files, hand edits are overwritten. The manifest exists as a fast navigational map for coding agents - what a microservice exposes - so an agent can model the system without reading every file. After changing `definition.go`, regenerate rather than editing the derived files.
 - **The generated `ToDo` interface in `intermediate.go` must stay an interface.** `NewIntermediate(impl ToDo)` takes an interface, not a concrete `*Service`, so one constructor serves both `*Service` in production and `*Mock` in tests; it is also the compile-time proof that both implement every handler. genservice derives it from the feature set, so there is nothing to hand-edit - but do not redesign the generator to take a concrete type, which would break mocking.
 
+## Authoring framework upgrade skills
+
+When a new fabric version needs a mechanical migration, its versioned `upgrade-vX-Y-Z` skill (under
+`.claude/skills/upgrade/`) must invoke **only** `cmd/genupgrade -v X.Y.Z`, plus pure-shell edits (`sed`/`perl`/
+`grep`). It must never run a boilerplate generator or `go vet`/`go test`/`go mod tidy`. A numbered skill is a
+frozen artifact, but `upgrade-microbus` runs it against the *target* version's `go.mod`, so any other tool it names
+may have been renamed or removed by a later version (this is exactly how the retired `genmanifest`/`genmock` calls
+in older skills came to fail). The `upgrade-microbus` orchestrator owns the single regeneration and verification
+pass, run once after every numbered skill has applied its source edits. Ship each version's mechanical transform as
+an append-only routine in [genupgrade](cmd/genupgrade), which keeps the full rationale.
+
 ## Working on code
 
 - **Comments explain the API, not the rationale.** A comment on a function, type, or field should describe what it is and how to use it. Design rationale (the *why*) belongs in the package's `CLAUDE.md`, not in godoc or inline comments.

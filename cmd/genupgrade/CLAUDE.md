@@ -5,11 +5,12 @@ source-code change registers an upgrade routine here, and the matching `upgrade-
 `genupgrade -v <version> -path <microservice dir>` for the mechanical part while handling the judgment parts
 itself. genupgrade operates on one microservice directory at a time.
 
-It never calls other generators. The upgrade skill runs genservice as a separate step afterward:
+It never calls other generators. The `upgrade-microbus` orchestrator runs genservice once, after every numbered
+skill has applied its source transformation (see "Why upgrade skills may invoke only genupgrade" below):
 
 ```
-step 1: genupgrade -v 1.41.0 -path .   # rewrite the spec
-step 2: genservice  (on each microservice directory)   # regenerate boilerplate from the rewritten spec
+step 1: genupgrade -v 1.41.0 -path .   # numbered skill rewrites the spec (per microservice)
+step 2: genservice  (on each microservice directory)   # orchestrator regenerates boilerplate, once, at the end
 ```
 
 ## Scope: -path is whatever the version operates on
@@ -42,6 +43,25 @@ agent/judgment arm, and genupgrade is their deterministic counterpart.
 introduced and is **frozen once shipped** - never rewritten, only new versions appended - exactly like a
 versioned upgrade skill. An unknown `-v` errors with the supported list. Once every downstream is past a
 version its routine is dead weight, but it stays for the historical record (pruning is a separate decision).
+
+## Why upgrade skills may invoke only genupgrade
+
+A numbered `upgrade-vX-Y-Z` skill is a frozen, versioned artifact, but `upgrade-microbus` runs it against the
+**target** framework version's `go.mod` (it downloads the latest `.claude` and `go get`s the latest fabric before
+following any numbered skill). So every `go run github.com/microbus-io/fabric/cmd/<tool>` in a numbered skill
+resolves to a *future* version's binary. That is only safe for a tool guaranteed to exist at every later version.
+genupgrade is the one such tool - append-only and frozen, its routines never pruned - so the latest binary always
+carries the routine a given `-v X.Y.Z` names. The boilerplate generators do **not** have this property: `genmanifest`
+and `genmock` were superseded by `genservice` at 1.41.0, so a skill frozen at, say, 1.39.0 that ran `genmock`
+detonates the moment its chain targets a version where `genmock` is gone. Verification has the same defect from the
+other direction: `go vet`/`go test` mid-chain check a half-migrated tree against the final framework and fail.
+
+The invariant, therefore: **a numbered skill invokes only `genupgrade` (plus pure-shell `sed`/`perl`/`grep` edits,
+which depend on no fabric tool); it never runs a boilerplate generator and never verifies.** Regeneration with the
+current generator and the single `go mod tidy && go vet ./... && go test ./...` are owned by `upgrade-microbus`'s
+final step, the one point where the fully-migrated tree is expected to compile. When cutting a version that needs a
+mechanical transform, ship it as a genupgrade routine here - not as a generator call or a verify step baked into the
+frozen skill.
 
 ## The 1.41.0 routine: endpoints.go -> definition.go
 

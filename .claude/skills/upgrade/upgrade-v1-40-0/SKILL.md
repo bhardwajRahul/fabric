@@ -58,8 +58,12 @@ Upgrade a Microbus project to v1.40.0:
 - [ ] Step 5: Fix readers of the removed FlowOutcome.FlowKey field
 - [ ] Step 6: Add the name argument to every foreman CreateTask caller
 - [ ] Step 7: Add the NewSubflow client to every microservice's *api/client.go
-- [ ] Step 8: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
 ```
+
+Regeneration and verification are **not** part of this skill - the `upgrade-microbus` orchestrator regenerates each
+microservice's boilerplate and runs `go mod tidy && go vet ./... && go test ./...` once, after every numbered skill
+has applied its source transformation. The `NewGraph`/`AddTask` edits above also touch generated files (`mock.go`,
+`manifest.yaml`); that final regeneration overwrites them from source, so there is no need to regenerate here.
 
 #### Step 1: Detect Workflow Usage
 
@@ -269,28 +273,6 @@ just `(yield bool, err error)`. If an `Executor` method was hand-written to *dis
 (it passes `&SomethingOut{}` and returns only `err`), fix that `Executor` method first to surface the outputs,
 then mirror it - both the `Executor` and the `Subflow` should expose what the task produces.
 
-#### Step 8: Regenerate, Tidy, and Verify
-
-The `NewGraph` and `AddTask` changes touch generated artifacts (`mock.go`, `manifest.yaml`), so regenerate them
-from the now-fixed source for every microservice you touched:
-
-```bash
-for d in $(find . -name "mock.go" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmock --path "$d"
-done
-for d in $(find . -name "manifest.yaml" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmanifest --path "$d"
-done
-```
-
-`genmock` re-emits `mock.go` with the one-argument `NewGraph`, and `genmanifest` bumps each manifest's
-`frameworkVersion` to `1.40.0`. Then resolve dependencies and verify:
-
-```bash
-go mod tidy
-go vet ./...
-go test ./...
-```
-
-`go mod tidy` pulls the dwarf version the upgraded fabric requires. All four breaks are compile errors, so a
-clean `go vet ./...` is strong evidence the migration is complete; the workflow tests confirm runtime behavior.
+All four breaking changes above are compile errors, so once the orchestrator's final step regenerates the
+boilerplate and runs `go vet ./...`, a clean result is strong evidence the migration is complete; the workflow
+tests confirm runtime behavior.

@@ -70,7 +70,7 @@ Upgrade a Microbus project to v1.39.0:
 - [ ] Step 5: Change flow.Goto arguments from endpoint URLs to node names
 - [ ] Step 6: Convert flow.Subgraph / flow.Interrupt call sites to the out-pointer signature
 - [ ] Step 7: Replace foremanapi.StartNotify with FlowOptions.NotifyOnStop
-- [ ] Step 8: Regenerate mocks + manifests, then go mod tidy && go vet ./... && go test ./...
+- [ ] Step 8: Copy updated Grafana dashboards (regeneration + verification deferred to the orchestrator)
 ```
 
 #### Step 1: Bump the sequel Dependency
@@ -257,31 +257,13 @@ err = client.Start(ctx, flowID)
 
 The inbound `OnFlowStopped` event sink is unchanged. A project that never called `StartNotify` needs no change.
 
-#### Step 8: Regenerate, Tidy, and Verify
+#### Step 8: Copy Updated Grafana Dashboards
 
-The import move and `NewGraph` change touch generated artifacts (`mock.go`, `mock_test.go`, `manifest.yaml`),
-so regenerate them from the now-fixed source for every microservice you touched:
-
-```bash
-for d in $(find . -name "mock.go" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmock --path "$d"
-done
-for d in $(find . -name "manifest.yaml" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmanifest --path "$d"
-done
-```
-
-`genmock` re-emits `mock.go` with the `dwarf/workflow` import and the two-argument `NewGraph`, and
-`genmanifest` bumps each manifest's `frameworkVersion` to `1.39.0`. Then resolve dependencies and verify:
-
-```bash
-go mod tidy
-go vet ./...
-go test ./...
-```
-
+The import move and `NewGraph` change touch generated artifacts (`mock.go`, `mock_test.go`, `manifest.yaml`), but
+do not regenerate them here - the `upgrade-microbus` orchestrator regenerates every microservice's boilerplate from
+source and runs `go mod tidy && go vet ./... && go test ./...` once, after every numbered skill has run. That
 `go mod tidy` adds `github.com/microbus-io/dwarf` (at fabric's required version) and the sequel bump. The
-load-bearing check is the silent one from Step 5: a workflow test that drives a `Goto` transition will fail
+load-bearing check there is the silent break from Step 5: a workflow test that drives a `Goto` transition will fail
 to route if a call still passes a `.URL()` instead of the node name.
 
 The sequel signals wired in Step 2 are charted by the framework's `SQL Overview` Grafana dashboard

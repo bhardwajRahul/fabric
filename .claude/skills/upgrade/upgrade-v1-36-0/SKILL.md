@@ -18,10 +18,11 @@ Upgrade a Microbus project to v1.36.0:
 - [ ] Step 1: Delete graph.DeclareInputs / graph.DeclareOutputs calls
 - [ ] Step 2: Delete references to workflow.FilterState / graph.Inputs() / graph.Outputs()
 - [ ] Step 3: For subgraphs whose old declarations were narrow (not "*"), add Before<NodeName> / After<NodeName> adapter tasks
-- [ ] Step 4: Regenerate mocks (genmock)
-- [ ] Step 5: Regenerate workflow mermaid diagrams (genworkflowmmd)
-- [ ] Step 6: Regenerate manifests (genmanifest) and run go vet ./... && go test ./...
 ```
+
+Regeneration (mocks, manifests, workflow diagrams) and verification are **not** part of this skill - the
+`upgrade-microbus` orchestrator regenerates each microservice's boilerplate and runs `go mod tidy &&
+go vet ./... && go test ./...` once, after every numbered skill has applied its source transformation.
 
 #### Step 1: Delete `DeclareInputs` / `DeclareOutputs` Calls
 
@@ -54,39 +55,11 @@ For each subgraph whose old declaration named specific fields, decide whether th
 
 Wire the adapters into the graph around the subgraph node.
 
-#### Step 4: Regenerate Mocks
+#### Step 4: Defer Regeneration and Verification
 
-```bash
-for d in $(find . -name "mock.go" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genmock --path "$d"
-done
-```
-
-`genmock` no longer emits `g.DeclareInputs("*")` / `g.DeclareOutputs("*")`. Idempotent.
-
-#### Step 5: Regenerate Workflow Mermaid Diagrams
-
-```bash
-for d in $(find . -name "*.mmd" -exec dirname {} \; | sort -u); do
-    go run github.com/microbus-io/fabric/cmd/genworkflowmmd -path "$d"
-done
-```
-
-Any adapter tasks added in Step 3 appear as new nodes; expected.
-
-#### Step 6: Regenerate Manifests and Verify the Build
-
-From each microservice directory:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/genmanifest --path .
-```
-
-`genmanifest` bumps `frameworkVersion` to `1.36.0`. Then from the project root:
-
-```bash
-go vet ./...
-go test ./...
-```
+The `DeclareInputs`/`DeclareOutputs` removals and any adapter tasks added in Step 3 require regenerating each
+microservice's `mock.go`, `manifest.yaml`, and workflow Mermaid diagrams. Do **not** run a generator, `go vet`, or
+`go test` here - the `upgrade-microbus` orchestrator regenerates every microservice's boilerplate from source and
+verifies the whole project once, after every numbered skill has run.
 
 A subgraph-using test that previously asserted a field was filtered out (e.g. `assert.False(_, hasInput)`) is the behavior change landing. Flip the assertion to expect the field present, or add a Step 3 adapter to mimic the old filter.

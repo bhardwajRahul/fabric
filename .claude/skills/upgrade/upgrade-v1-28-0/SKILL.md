@@ -187,12 +187,11 @@ The `llmapi.TurnCompletion` type was deleted. Any code that still references it 
 
 **j. Final verification.**
 
-After all edits, suggest the user run:
-```
-go vet ./...
-go test ./... -count=1
-```
-and grep for the `// TODO:` comments inserted at every migrated `Chat`, `Turn`, and `ChatLoop` call site to confirm provider/model values have been filled in. Any `Chat(ctx, "", "", ...)`, `Turn(ctx, "", ...)`, or `ChatLoop(ctx, "", "", ...)` left in the code will fail at runtime with a 400 Bad Request from the new validation.
+Do **not** run `go vet`/`go test` here - the `upgrade-microbus` orchestrator verifies the whole project once, after
+every numbered skill has run. What remains specific to this skill: grep for the `// TODO:` comments inserted at every
+migrated `Chat`, `Turn`, and `ChatLoop` call site to confirm provider/model values have been filled in. Any
+`Chat(ctx, "", "", ...)`, `Turn(ctx, "", ...)`, or `ChatLoop(ctx, "", "", ...)` left in the code will fail at
+runtime with a 400 Bad Request from the new validation.
 
 #### Step 7: Audit `env.yaml` / `env.Push` Semantics Flip
 

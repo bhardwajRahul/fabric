@@ -30,8 +30,7 @@ Upgrade a Microbus project to v1.30.0:
 - [ ] Step 5: Adopt named graph nodes and SetFanIn
 - [ ] Step 6: Review httpingress AllowedOrigins
 - [ ] Step 7: Delete legacy TestXxx_Mock from service_test.go
-- [ ] Step 8: Regenerate every mock with cmd/genmock
-- [ ] Step 9: Regenerate manifests with cmd/genmanifest
+- [ ] Step 8: (mock + manifest regeneration deferred to the orchestrator)
 ```
 
 #### Step 1: Rename `AddErrorTransition` to `AddTransitionOnError`
@@ -92,22 +91,10 @@ Check `config.yaml` / `config.local.yaml` and `env.yaml` / `env.local.yaml` for 
 
 Delete every top-level `Test.*_Mock` function (no receiver) from each `service_test.go`. Run `goimports -w` on the modified files to drop newly-unused imports.
 
-#### Step 8: Regenerate Every Mock With `cmd/genmock`
+#### Step 8: Defer Mock and Manifest Regeneration
 
-`cmd/genmock` is new in this release. From inside each microservice directory:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/genmock --path .
-```
-
-Regenerates `mock.go` (zero-value convention) and `mock_test.go`. The generator is idempotent.
-
-#### Step 9: Regenerate Manifests With `cmd/genmanifest`
-
-From inside each microservice directory:
-
-```bash
-go run github.com/microbus-io/fabric/cmd/genmanifest --path .
-```
-
-Bumps `frameworkVersion` to `1.30.0` and refreshes `modifiedAt`.
+The named-node and `mock_test.go` changes require regenerating each microservice's `mock.go`, `mock_test.go`, and
+`manifest.yaml`. Do **not** run a generator here - the `upgrade-microbus` orchestrator regenerates every
+microservice's boilerplate from source and verifies the whole project once, after every numbered skill has run.
+Step 7 (deleting the legacy `TestXxx_Mock`) is still done here, by hand, so the regenerated `mock_test.go` does not
+collide.
