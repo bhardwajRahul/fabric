@@ -73,6 +73,8 @@ Create `CLAUDE.md` with the hostname as an H1 heading:
 
 ```md
 # my.service.hostname
+
+**CRITICAL**: This directory is a Microbus microservice. Before performing any task, check for pertinent skills in `.claude/skills/` and its subdirectories. Follow the workflow of the most relevant skill.
 ```
 
 Create `PROMPTS.md` with the prompt used to create this microservice. Rephrase the language to include context that was not made explicit in the original prompt. The intent is to maintain an auditable trail of the prompts, and to allow a future agent to reproduce the functionality of the microservice from these prompts.

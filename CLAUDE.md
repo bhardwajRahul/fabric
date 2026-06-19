@@ -6,8 +6,6 @@ This repository is the **Microbus framework** itself - the foundation that downs
 
 2. **Microservices built with the framework** - `coreservices/` and `examples/` contain microservices that follow the same conventions as any downstream application. When working in these directories, follow the patterns and skills described in `.claude/rules/microbus.md`.
 
-3. **Verification fixtures** - `verify/` contains microservices that exist only to pin runtime behavior of the framework via end-to-end tests (`go test ./verify/<name>/...`). They follow the same scaffolding conventions as `coreservices/` and `examples/`, but **must not be wired into `main/main.go`** - they are exercised by their own `service_test.go`, not by the bundled app. Adding a `verify/` import to `main/main.go` is a mistake; remove it.
-
 ## Working on framework packages
 
 - **Public API surface matters.** Exported types, functions, and interfaces in framework packages are consumed by downstream projects. Avoid breaking changes to exported signatures.
@@ -24,6 +22,7 @@ These directories contain microservices built using the framework. Treat them th
 - Use the skills in `.claude/skills/` for scaffolding and adding features
 - Respect `MARKER` and `HINT` comments
 - **`<name>api/definition.go` is the source of truth; `manifest.yaml` and the boilerplate are derived from it.** `cmd/genservice` regenerates `manifest.yaml`, `*api/client.go`, `intermediate.go`, `mock.go`, and `mock_test.go` from `definition.go` (the housekeeping skill runs it); never hand-edit those generated files, hand edits are overwritten. The manifest exists as a fast navigational map for coding agents - what a microservice exposes - so an agent can model the system without reading every file. After changing `definition.go`, regenerate rather than editing the derived files.
+- **The generated `ToDo` interface in `intermediate.go` must stay an interface.** `NewIntermediate(impl ToDo)` takes an interface, not a concrete `*Service`, so one constructor serves both `*Service` in production and `*Mock` in tests; it is also the compile-time proof that both implement every handler. genservice derives it from the feature set, so there is nothing to hand-edit - but do not redesign the generator to take a concrete type, which would break mocking.
 
 ## Working on code
 

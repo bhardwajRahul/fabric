@@ -47,16 +47,4 @@ InitIdentityVerification → (fan-out)
 
 ## Why no fault injection
 
-Earlier versions of this example carried a `faultInjection string` field on `CreditApprovalIn` that tasks would inspect (`strings.Contains(faultInjection, "Error")`, etc.) to trigger error/retry/sleep/interrupt/timeout/goto behaviors. Those branches were removed: each mechanism now has a focused verification fixture under `verify/`:
-
-| Removed fault     | Verifier covering the mechanism                           |
-| ----------------- | --------------------------------------------------------- |
-| `"Error"`         | `verify/errorflow`, `verify/fanouterrorflow`              |
-| `"Retry"`         | `verify/retryflow`                                        |
-| `"Subgraph"`      | `verify/dynamicsubgraphflow`                              |
-| `"MissingSSN"`    | `verify/interruptflow`                                    |
-| `"Delay"`         | `verify/timebudgetflow`                                   |
-| `"Sleep"`         | `verify/sleepflow`                                        |
-| `"BadGoto"`       | `verify/gotoflow` (the `BadGoto` workflow)                |
-
-Keeping creditflow a clean example of a *real* workflow shape (without test-only branches) makes it more useful for new readers; the verify microservices stress each mechanism in isolation.
+creditflow deliberately has no fault-injection hooks (no `faultInjection`-style field that tasks inspect to force error/retry/sleep/interrupt/timeout/goto behaviors). Those workflow mechanisms are stress-tested in isolation by the dwarf workflow engine's own test suite, so this example stays a clean illustration of a *real* workflow shape, without test-only branches.

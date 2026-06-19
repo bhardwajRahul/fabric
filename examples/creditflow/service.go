@@ -59,22 +59,6 @@ type Service struct {
 
 // OnStartup is called when the microservice is started up.
 
-// outcomeStatus extracts the Status from a FlowOutcome, returning "" on nil.
-func outcomeStatus(o *workflow.FlowOutcome) string {
-	if o == nil {
-		return ""
-	}
-	return o.Status
-}
-
-// outcomeState extracts the State from a FlowOutcome, returning nil on nil.
-func outcomeState(o *workflow.FlowOutcome) map[string]any {
-	if o == nil {
-		return nil
-	}
-	return o.State
-}
-
 // outcomeStatusState extracts the Status and State from a FlowOutcome.
 func outcomeStatusState(o *workflow.FlowOutcome) (string, map[string]any) {
 	if o == nil {
@@ -309,7 +293,7 @@ func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Cl
 	}
 	outcome, err := foremanClient.AwaitAndParse(ctx, flowKey, &result.out)
 
-	result.status = outcomeStatus(outcome)
+	result.status, _ = outcomeStatusState(outcome)
 	if err != nil {
 		return flowKey, result, errors.Trace(err)
 	}

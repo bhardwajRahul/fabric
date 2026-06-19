@@ -762,8 +762,6 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		}
 	})
 
-	// time_budget_exceeded: covered by verify/timebudgetflow.
-
 	t.Run("breakpoint", func(t *testing.T) {
 		assert := testarossa.For(t)
 
@@ -846,7 +844,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		// The subgraph breakpoint propagates up - the parent flow becomes interrupted
 		outcome, err := foremanClient.Await(ctx, flowKey)
 
-		status := outcomeStatus(outcome)
+		status, _ := outcomeStatusState(outcome)
 		if !assert.Expect(err, nil, status, workflow.StatusInterrupted) {
 			return
 		}
@@ -858,22 +856,13 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		// Verify the parent is cancelled
 		outcome, err = foremanClient.Await(ctx, flowKey)
 
-		parentStatus := outcomeStatus(outcome)
+		parentStatus, _ := outcomeStatusState(outcome)
 		assert.Expect(
 			err, nil,
 			parentStatus, workflow.StatusCancelled,
 		)
 	})
-
-	// The following fault-injection subtests were removed and are covered by:
-	//   subgraph_interrupt_resume -> verify/interruptflow + verify/subgraphflow
-	//   retry                     -> verify/retryflow
-	//   sleep                     -> verify/sleepflow
-	//   bad_goto                  -> verify/gotoflow (BadGoto workflow)
-	//   error_transition          -> verify/errorflow + verify/fanouterrorflow
 }
-
-// TestCreditFlow_DynamicSubgraph: covered by verify/dynamicsubgraphflow.
 
 func TestCreditFlow_NotifyOnStop(t *testing.T) {
 	t.Parallel()
@@ -950,8 +939,6 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 		assert.NotNil(n.snapshot)
 	})
 
-	// interrupted: covered by verify/interruptflow.
-
 	t.Run("cancelled", func(t *testing.T) {
 		assert := testarossa.For(t)
 
@@ -978,8 +965,6 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 		assert.Expect(n.status, workflow.StatusCancelled)
 		assert.NotNil(n.snapshot)
 	})
-
-	// failed: covered by verify/timebudgetflow (foreman timeout) and verify/retryflow (retry exhaustion).
 }
 
 func TestCreditFlow_Demo(t *testing.T) { // MARKER: Demo
@@ -1074,9 +1059,7 @@ func BenchmarkCreditFlow_CreditApproval(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		outcome, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
-
-		_ = outcomeStatus(outcome)
+		_, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1117,9 +1100,7 @@ func BenchmarkCreditFlow_CreditApprovalParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			outcome, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
-
-			_ = outcomeStatus(outcome)
+			_, err := foremanClient.Run(ctx, creditflowapi.CreditApproval.URL(), applicant, nil)
 			if err != nil {
 				b.Fatal(err)
 			}
