@@ -75,7 +75,8 @@ type configView struct {
 	Name       string
 	Doc        string // raw description for cfg.Description
 	DocComment string
-	Type       string // getter Go type: string | int | float64 | bool | time.Duration
+	Type       string // raw getter type: a scalar (string|int|float64|bool|time.Duration) or an api-package struct
+	GoType     string // Type qualified for the service package (svcapi.Policy); equals Type for scalars
 	Scalar     bool   // whether Type is one of the supported scalar getter types
 	Default    string
 	Validation string
@@ -144,7 +145,9 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 			m.InboundEvents = append(m.InboundEvents, iv)
 			srcPaths = append(srcPaths, srcPath)
 		case "Config":
-			m.Configs = append(m.Configs, buildConfig(f))
+			cv := buildConfig(f)
+			cv.GoType = qualifyTypes(cv.Type, svc.apiPkg)
+			m.Configs = append(m.Configs, cv)
 		case "Metric":
 			m.Metrics = append(m.Metrics, buildMetric(svc, f))
 		case "Ticker":
@@ -184,6 +187,14 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	}
 	if len(m.Configs) > 0 {
 		imports[impCfg] = true
+	}
+	// A struct-valued config's getter/setter marshal JSON; the setter traces a marshal error.
+	for _, c := range m.Configs {
+		if !c.Scalar {
+			imports[impJSON] = true
+			imports[impErrors] = true
+			break
+		}
 	}
 	if intermediateNeedsStrconv(m) {
 		imports[impStrconv] = true

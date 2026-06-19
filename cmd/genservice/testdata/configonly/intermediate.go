@@ -4,6 +4,7 @@ package configonly
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -77,6 +78,13 @@ is the only thing in this fixture that requires the time import in the generated
 		cfg.DefaultValue(`/admin
 /.git`),
 	)
+	svc.DefineConfig( // MARKER: Retry
+		"Retry",
+		cfg.Description(`Retry is a structured (JSON) config whose value carrier is a struct, exercising the json getter/setter
+and the qualification of the value type into the service package.`),
+		cfg.DefaultValue(`{"maxRetries":3,"backoff":"1s"}`),
+		cfg.Validation(`json`),
+	)
 
 	return svc
 }
@@ -123,4 +131,21 @@ func (svc *Intermediate) DenyList() (value string) { // MARKER: DenyList
 // SetDenyList sets the value of the configuration property.
 func (svc *Intermediate) SetDenyList(value string) (err error) { // MARKER: DenyList
 	return svc.SetConfig("DenyList", value)
+}
+
+// Retry is a structured (JSON) config whose value carrier is a struct, exercising the json getter/setter
+// and the qualification of the value type into the service package.
+func (svc *Intermediate) Retry() (value configonlyapi.RetryPolicy) { // MARKER: Retry
+	_val := svc.Config("Retry")
+	_ = json.Unmarshal([]byte(_val), &value)
+	return value
+}
+
+// SetRetry sets the value of the configuration property.
+func (svc *Intermediate) SetRetry(value configonlyapi.RetryPolicy) (err error) { // MARKER: Retry
+	_data, err := json.Marshal(value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return svc.SetConfig("Retry", string(_data))
 }

@@ -19,7 +19,8 @@ limitations under the License.
 // mock_test.go for a microservice with no Subscribe surface, so the http/httpx/sub imports (intermediate)
 // and the context import (mock_test) are emitted from the feature mix rather than leaking in via the api
 // client.go. The duration-valued metric is the sole reason time is imported, pinning that a metric value
-// type's package is resolved into the recorder's imports.
+// type's package is resolved into the recorder's imports. The struct-valued config pins the JSON
+// getter/setter and the api-package qualification of a non-scalar config value type.
 package configonlyapi
 
 import (
@@ -61,4 +62,18 @@ var ReconcileDuration = define.Metric{
 	Kind: define.Histogram, Value: time.Duration(0),
 	Buckets:  []float64{0.1, 0.5, 1, 5},
 	OTelName: "configonly_reconcile_duration",
+}
+
+// RetryPolicy is the structured value of the Retry config; an api-package type carried by a struct config.
+type RetryPolicy struct {
+	MaxRetries int    `json:"maxRetries,omitzero"`
+	Backoff    string `json:"backoff,omitzero"`
+}
+
+// Retry is a structured (JSON) config whose value carrier is a struct, exercising the json getter/setter
+// and the qualification of the value type into the service package.
+var Retry = define.Config{
+	Value:      RetryPolicy{},
+	Default:    `{"maxRetries":3,"backoff":"1s"}`,
+	Validation: "json",
 }

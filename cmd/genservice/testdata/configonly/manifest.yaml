@@ -20,6 +20,13 @@ configs:
       /admin
       /.git
     callback: true
+  Retry:
+    signature: Retry() (value RetryPolicy)
+    description: |-
+      Retry is a structured (JSON) config whose value carrier is a struct, exercising the json getter/setter
+      and the qualification of the value type into the service package.
+    validation: json
+    default: "{\"maxRetries\":3,\"backoff\":\"1s\"}"
 
 metrics:
   ReconcileDuration:

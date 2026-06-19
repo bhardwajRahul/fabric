@@ -33,7 +33,11 @@ Read the local `CLAUDE.md` file in the microservice's directory. It contains mic
 
 #### Step 2: Determine the Type
 
-Determine the type of the configuration property. It must be one of `string`, `int`, `bool`, `float64`, or `time.Duration`.
+Determine the type of the configuration property.
+
+A **scalar** config is one of `string`, `int`, `bool`, `float64`, or `time.Duration`. These are stored and converted natively.
+
+A config may also be a **structured (JSON) value**: a struct, a slice (`[]int`), a map (`map[string]bool`), or any JSON-serializable composite (including slices/maps of structs). Its value is stored as JSON text; the generated getter unmarshals it into the typed value and the setter marshals it back. Reach for a structured config when the knob is a list, a set, or a group of related fields rather than a single scalar.
 
 #### Step 3: Determine the Properties
 
@@ -77,6 +81,28 @@ var MyConfig = define.Config{ // MARKER: MyConfig
 - `Secret: true` marks a value that is never logged; omit when false
 - `Callback: true` makes `OnChanged<Name>` fire on change; omit when false
 
+For a **structured (JSON) config**, the `Value` carrier is a composite literal of the type, and `Validation` is `json`:
+
+```go
+// RetryPolicy is the structured value of the Retry config.
+type RetryPolicy struct {
+	MaxRetries int    `json:"maxRetries,omitzero"`
+	Backoff    string `json:"backoff,omitzero"`
+}
+
+// Retry configures how failed operations are retried.
+var Retry = define.Config{ // MARKER: Retry
+	Value:      RetryPolicy{},
+	Default:    `{"maxRetries":3,"backoff":"1s"}`,
+	Validation: "json",
+}
+```
+
+- The `Value` carrier may be a struct (`RetryPolicy{}`), a slice (`[]int{}`), a map (`map[string]bool{}`), or a slice/map of structs (`[]RetryPolicy{}`)
+- Set `Validation: "json"` so the stored value is checked as valid JSON; when present, `Default` is the JSON text of the value (e.g. `[80,443]` for a `[]int`, `{"beta":true}` for a `map[string]bool`)
+- Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `<name>api/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema:"description=..."` tags if the type also feeds an endpoint's OpenAPI schema
+- The generated getter returns the typed value; a missing or malformed stored value yields the type's zero value
+
 #### Step 5: Implement the Callback
 
 Skip this step if the config does not have a callback.
@@ -110,6 +136,8 @@ myConfig := svc.MyConfig()
 ```
 
 Use `svc.SetMyConfig(value)` to set the value programmatically, for example in tests.
+
+For a structured config the getter returns the typed value (`retry := svc.Retry()` yields a `RetryPolicy`) and the setter takes it. When you need to name the type to construct a value, it is in the api package: `svc.SetRetry(<name>api.RetryPolicy{MaxRetries: 5})`.
 
 #### Step 8: Test the Callback
 

@@ -240,9 +240,7 @@ func emitManifestConfigs(sb *strings.Builder, fs []feature) {
 		sb.WriteString("  ")
 		sb.WriteString(c.Name)
 		sb.WriteString(":\n")
-		if c.Scalar {
-			writeManifestKV(sb, "    ", "signature", c.Name+"() (value "+c.Type+")")
-		}
+		writeManifestKV(sb, "    ", "signature", c.Name+"() (value "+c.Type+")")
 		writeManifestKV(sb, "    ", "description", c.Doc)
 		writeManifestKV(sb, "    ", "validation", c.Validation)
 		writeManifestKV(sb, "    ", "default", c.Default)

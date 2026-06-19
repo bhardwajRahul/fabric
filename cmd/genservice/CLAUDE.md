@@ -76,6 +76,23 @@ agent is forbidden to hand-edit uncompilable. This is intermediate-only: `client
 surface, and a metric's `OnObserve`/`OnChanged` callbacks (the only metric/config methods on `mock.go`) are
 `(ctx) error` and carry no value type.
 
+## Struct-valued configs
+
+A `define.Config` value carrier is usually a scalar (`string("")`, `int(0)`, `time.Duration(0)`), but it may be an
+api-package struct (`Value: RetryPolicy{}`) for a configuration knob whose shape is structured. The config value is
+always stored as a string in the connector, so a struct config is just `cfg.Validation("json")` over a JSON-text
+value; the typed accessor does the marshaling. `configView` carries both the raw `Type` (a scalar name or the bare
+struct name - used by the scalar getter switch and the manifest signature, which documents the api-level contract
+unqualified) and `GoType`, the same type qualified for the service package via `qualifyTypes` (`RetryPolicy` ->
+`svcapi.RetryPolicy`, scalars unchanged). The generated getter (`func (svc *Intermediate) Retry() (value
+svcapi.RetryPolicy)`) reads `svc.Config` and `json.Unmarshal`s it, swallowing the error to a zero value the same way
+the scalar getters swallow parse errors; the setter `json.Marshal`s and `errors.Trace`s a marshal failure. The
+struct type must live in the api package (it is named from `definition.go`, which is in the api package, so it
+cannot live in the service package without an import cycle) - which is exactly what lets a test in the service
+package name `svcapi.RetryPolicy{...}` and call the typed setter. `encoding/json` + `errors` are added to
+`intermediate.go`'s imports only when a non-scalar config is present. `mock.go` is unaffected (a config surfaces
+there only as its `OnChanged` callback, which carries no value type).
+
 ## Feature-selective emission, conditional imports, no var guards
 
 The client emits only the proxy types a microservice actually needs: no `MulticastTrigger` without outbound

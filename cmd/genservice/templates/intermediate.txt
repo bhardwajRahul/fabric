@@ -201,8 +201,8 @@ func (svc *Intermediate) do{{.Name}}(w http.ResponseWriter, r *http.Request) (er
 	)
 }
 
-{{end}}{{range .Configs}}{{if .Scalar}}{{.DocComment}}func (svc *Intermediate) {{.Name}}() (value {{.Type}}) { // MARKER: {{.Name}}
-{{if eq .Type "string"}}	return svc.Config("{{.Name}}")
+{{end}}{{range .Configs}}{{.DocComment}}func (svc *Intermediate) {{.Name}}() (value {{.GoType}}) { // MARKER: {{.Name}}
+{{if .Scalar}}{{if eq .Type "string"}}	return svc.Config("{{.Name}}")
 {{else if eq .Type "int"}}	_val := svc.Config("{{.Name}}")
 	_i, _ := strconv.ParseInt(_val, 10, 64)
 	return int(_i)
@@ -215,18 +215,26 @@ func (svc *Intermediate) do{{.Name}}(w http.ResponseWriter, r *http.Request) (er
 {{else if eq .Type "time.Duration"}}	_val := svc.Config("{{.Name}}")
 	_dur, _ := time.ParseDuration(_val)
 	return _dur
+{{end}}{{else}}	_val := svc.Config("{{.Name}}")
+	_ = json.Unmarshal([]byte(_val), &value)
+	return value
 {{end}}}
 
 // Set{{.Name}} sets the value of the configuration property.
-func (svc *Intermediate) Set{{.Name}}(value {{.Type}}) (err error) { // MARKER: {{.Name}}
-{{if eq .Type "string"}}	return svc.SetConfig("{{.Name}}", value)
+func (svc *Intermediate) Set{{.Name}}(value {{.GoType}}) (err error) { // MARKER: {{.Name}}
+{{if .Scalar}}{{if eq .Type "string"}}	return svc.SetConfig("{{.Name}}", value)
 {{else if eq .Type "int"}}	return svc.SetConfig("{{.Name}}", strconv.Itoa(value))
 {{else if eq .Type "bool"}}	return svc.SetConfig("{{.Name}}", strconv.FormatBool(value))
 {{else if eq .Type "float64"}}	return svc.SetConfig("{{.Name}}", strconv.FormatFloat(value, 'f', -1, 64))
 {{else if eq .Type "time.Duration"}}	return svc.SetConfig("{{.Name}}", value.String())
+{{end}}{{else}}	_data, err := json.Marshal(value)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return svc.SetConfig("{{.Name}}", string(_data))
 {{end}}}
 
-{{end}}{{end}}{{define "subopts"}}{{if .ReqClaims}}		sub.RequiredClaims(`{{.ReqClaims}}`),
+{{end}}{{define "subopts"}}{{if .ReqClaims}}		sub.RequiredClaims(`{{.ReqClaims}}`),
 {{end}}{{if .TimeBudget}}		sub.TimeBudget({{.TimeBudget}}),
 {{end}}{{if eq .Queue "none"}}		sub.NoQueue(),
 {{else if eq .Queue "default"}}		sub.DefaultQueue(),
