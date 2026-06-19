@@ -11,6 +11,8 @@ description: TRIGGER when user asks to create a CRUD microservice, database-back
 
 **IMPORTANT**: Read `.claude/rules/sequel.txt` for SQL CRUD conventions before proceeding.
 
+**CRITICAL**: The `busstop` template ships only the hand-written source files - `mynounapi/definition.go` (the API spec), the domain types, `service.go`, the tests, and `resources/`. The boilerplate (`client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, `manifest.yaml`) is GENERATED from `definition.go` by `cmd/genservice` after the copy, not shipped in the template. Never hand-edit the generated files.
+
 ## Workflow
 
 Copy this checklist and track your progress:
@@ -21,10 +23,11 @@ Creating a new microservice:
 - [ ] Step 2: Create a Directory Structure for the New Microservice
 - [ ] Step 3: Copy Template Files
 - [ ] Step 4: Find and Replace
-- [ ] Step 5: Add to Main App
-- [ ] Step 6: Add to config file
-- [ ] Step 7: Housekeeping
-- [ ] Step 8: Propose Object Fields
+- [ ] Step 5: Generate the Boilerplate
+- [ ] Step 6: Add to Main App
+- [ ] Step 7: Add to config file
+- [ ] Step 8: Housekeeping
+- [ ] Step 9: Propose Object Fields
 ```
 
 #### Step 1: Determine the Noun and Hostname
@@ -94,7 +97,17 @@ Perform these replacements in order:
 
 Run `go fmt` on the microservice directory to reformat the Go source files.
 
-#### Step 5: Add to Main App
+#### Step 5: Generate the Boilerplate
+
+From the new microservice's directory, run the generator. It reads `mynounapi/definition.go` and writes `mynounapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`.
+
+```shell
+go run github.com/microbus-io/fabric/cmd/genservice .
+```
+
+Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 6: Add to Main App
 
 Find `main/main.go` relative to the project root. Add the new microservice to the app in the `main` function. Add the appropriate import statement at the top of the file.
 
@@ -114,7 +127,7 @@ func main() {
 }
 ```
 
-#### Step 6: Add to Config File
+#### Step 7: Add to Config File
 
 Look for `config.local.yaml` at the root of the project. If the file does not exist, create it.
 
@@ -129,11 +142,11 @@ all:
   # SQLDataSourceName: sqlserver://sa:Password123@127.0.0.1:1433?database=microbus
 ```
 
-#### Step 7: Housekeeping
+#### Step 8: Housekeeping
 
-Follow the `housekeeping` skill. Skip the manifest step.
+Follow the `housekeeping` skill.
 
-#### Step 8: Propose Object Fields
+#### Step 9: Propose Object Fields
 
 Ask the user if they'd like you to propose a design for the microservice. If the user declines, skip the remainder of this step.
 

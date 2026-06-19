@@ -18,7 +18,6 @@ import (
 	"github.com/microbus-io/fabric/application"
 	"github.com/microbus-io/fabric/connector"
 	"github.com/microbus-io/fabric/frame"
-	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/testarossa"
