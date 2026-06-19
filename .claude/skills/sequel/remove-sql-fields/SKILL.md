@@ -113,4 +113,4 @@ Remove references to the deprecated fields in `mynounapi/object_test.go` and `my
 
 #### Step 8: Housekeeping
 
-Follow the `housekeeping` skill. Skip the manifest, topology and tidy up steps.
+Follow the `housekeeping` skill. Removing fields changes only the hand-written domain code (`object.go`, `query.go`, `service.go`, `resources/sql`), not `definition.go`, so the boilerplate regeneration is a no-op; the `Version` bump and `go vet` still apply.

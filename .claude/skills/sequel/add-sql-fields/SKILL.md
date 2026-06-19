@@ -307,4 +307,4 @@ Extend the integration tests to take into account the schema changes. Look for t
 
 #### Step 8: Housekeeping
 
-Follow the `housekeeping` skill. Skip the manifest, topology and tidy up steps.
+Follow the `housekeeping` skill. Adding fields changes only the hand-written domain code (`object.go`, `query.go`, `service.go`, `resources/sql`), not `definition.go`, so the boilerplate regeneration is a no-op; the `Version` bump and `go vet` still apply.

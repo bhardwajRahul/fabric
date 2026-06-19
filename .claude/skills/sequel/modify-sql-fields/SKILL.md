@@ -124,4 +124,4 @@ Adjust references to the changed fields in `mynounapi/object_test.go` and `mynou
 
 #### Step 8: Housekeeping
 
-Follow the `housekeeping` skill. Skip the manifest, topology and tidy up steps.
+Follow the `housekeeping` skill. Modifying fields changes only the hand-written domain code (`object.go`, `query.go`, `service.go`, `resources/sql`), not `definition.go`, so the boilerplate regeneration is a no-op; the `Version` bump and `go vet` still apply.

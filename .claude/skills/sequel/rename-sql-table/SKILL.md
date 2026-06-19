@@ -60,4 +60,4 @@ EXEC sp_rename 'old_table_name_idx_field', 'new_table_name_idx_field', 'INDEX';
 
 #### Step 3: Housekeeping
 
-Follow the `housekeeping` skill. Skip the manifest, topology and tidy up steps.
+Follow the `housekeeping` skill. Renaming the SQL table changes only the hand-written `service.go` column mappings and `resources/sql` migrations, not `definition.go`, so the boilerplate regeneration is a no-op; the `Version` bump and `go vet` still apply.
