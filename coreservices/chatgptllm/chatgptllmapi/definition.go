@@ -21,6 +21,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "chatgpt.llm.core"
 
@@ -34,20 +38,20 @@ const Version = 4
 const Description = `The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Chat Completions API.`
 
 // CompletionURL is the URL of the OpenAI chat completions endpoint.
-var CompletionURL = define.Config{
+var CompletionURL = define.Config{ // MARKER: CompletionURL
 	Value:      string(""),
 	Default:    "https://api.openai.com/v1/chat/completions",
 	Validation: "url",
 }
 
 // APIKey is the API key for the OpenAI API.
-var APIKey = define.Config{
+var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
 }
 
 // Turn executes a single LLM turn using the ChatGPT provider.
-var Turn = define.Function{
+var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
 }

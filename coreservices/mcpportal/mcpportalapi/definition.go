@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "mcp.core"
 
@@ -35,6 +39,6 @@ Clients send JSON-RPC 2.0 envelopes to a single wire endpoint (POST //mcp:0); th
 dispatches on the JSON-RPC method to handlers for initialize, tools/list, and tools/call.`
 
 // MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.
-var MCP = define.Web{
+var MCP = define.Web{ // MARKER: MCP
 	Host: Hostname, Method: "POST", Route: "//mcp:0",
 }

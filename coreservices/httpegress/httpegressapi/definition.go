@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "http.egress.core"
 
@@ -34,6 +38,6 @@ const Description = `The HTTP egress microservice relays HTTP requests to the in
 
 // MakeRequest proxies a request to a URL and returns the HTTP response, respecting the timeout set in the context.
 // The proxied request is expected to be posted in the body of the request in binary form (RFC7231).
-var MakeRequest = define.Web{
+var MakeRequest = define.Web{ // MARKER: MakeRequest
 	Host: Hostname, Method: "POST", Route: ":444/make-request",
 }

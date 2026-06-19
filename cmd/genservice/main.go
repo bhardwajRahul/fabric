@@ -18,8 +18,10 @@ limitations under the License.
 // Given an api package directory it generates client.go; given a service directory (with an <x>api
 // subdirectory) it generates client.go, intermediate.go, mock.go, mock_test.go, and manifest.yaml.
 //
-// Usage: genservice [-check] <dir> [<dir>...]. With -check, nothing is written; the command exits 2 if
-// any output is out of date (a CI guard), 1 on error, 0 when everything is current.
+// Usage: genservice [-check] <dir> [<dir>...]. Each dir may be a microservice directory or its api
+// package; an api package belonging to a microservice regenerates all five artifacts, so either points at
+// the same result. With -check, nothing is written; the command exits 2 if any output is out of date (a CI
+// guard), 1 on error, 0 when everything is current.
 package main
 
 import (
@@ -87,8 +89,16 @@ func main() {
 // emitAll detects whether dir is an api package (has definition.go) or a service directory (has an
 // <x>api subdirectory with definition.go) and returns the files to generate, without writing them.
 // now is the RFC 3339 timestamp used for a fresh or content-changed manifest.
+//
+// An api package that belongs to a microservice (its parent is the owning service directory, by the
+// <x>api naming convention and a sibling service.go) is promoted to full service-directory generation, so
+// pointing genservice at the api dir regenerates all five artifacts rather than client.go alone and the
+// other four cannot silently drift. Client-only generation remains for a standalone api/contract package.
 func emitAll(dir, now string) ([]output, error) {
 	if fileExists(filepath.Join(dir, "definition.go")) {
+		if parent, ok := owningServiceDir(dir); ok {
+			return emitAllService(parent, dir, now)
+		}
 		return emitAllClient(dir)
 	}
 	apiDir, err := findAPISubdir(dir)
@@ -96,6 +106,20 @@ func emitAll(dir, now string) ([]output, error) {
 		return nil, err
 	}
 	return emitAllService(dir, apiDir, now)
+}
+
+// owningServiceDir reports whether apiDir is the api package of a microservice, returning the parent
+// service directory. The api package of microservice <x> is conventionally <x>/<x>api with a sibling
+// service.go; a standalone api/contract package (no such parent) is not promoted.
+func owningServiceDir(apiDir string) (string, bool) {
+	parent := filepath.Dir(apiDir)
+	if filepath.Base(apiDir) != filepath.Base(parent)+"api" {
+		return "", false
+	}
+	if !fileExists(filepath.Join(parent, "service.go")) {
+		return "", false
+	}
+	return parent, true
 }
 
 // emitAllClient produces the api package's client.go.

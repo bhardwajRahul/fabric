@@ -4,11 +4,15 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "petstore.example"
 
 // Name is the decorative PascalCase name of the microservice.
-const Name = ""
+const Name = "Petstore"
 
 // Version is the major version of the microservice's public API.
 const Version = 1
@@ -26,14 +30,14 @@ Some useful links:
 - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)`
 
 // RemoteBaseURL is the base URL of the remote Swagger Petstore API.
-var RemoteBaseURL = define.Config{
+var RemoteBaseURL = define.Config{ // MARKER: RemoteBaseURL
 	Value:      string(""),
 	Default:    "https://petstore3.swagger.io/api/v3",
 	Validation: "url",
 }
 
 // BearerToken is the OAuth2 bearer token presented to the remote Swagger Petstore API.
-var BearerToken = define.Config{
+var BearerToken = define.Config{ // MARKER: BearerToken
 	Value:  string(""),
 	Secret: true,
 }
@@ -46,7 +50,7 @@ var BearerToken = define.Config{
 // Output:
 //   - httpResponseBody: httpResponseBody is the created pet
 //   - httpStatusCode: httpStatusCode is the remote HTTP status code
-var AddPet = define.Function{
+var AddPet = define.Function{ // MARKER: AddPet
 	Host: Hostname, Method: "POST", Route: "/pet",
 	In: AddPetIn{}, Out: AddPetOut{},
 }
@@ -70,7 +74,7 @@ type AddPetOut struct { // MARKER: AddPet
 // Output:
 //   - httpResponseBody: httpResponseBody is the requested pet
 //   - httpStatusCode: httpStatusCode is the remote HTTP status code
-var GetPetById = define.Function{
+var GetPetById = define.Function{ // MARKER: GetPetById
 	Host: Hostname, Method: "GET", Route: "/pet/{petId}",
 	In: GetPetByIdIn{}, Out: GetPetByIdOut{},
 }
@@ -87,6 +91,6 @@ type GetPetByIdOut struct { // MARKER: GetPetById
 }
 
 // UploadFile uploads an image of the pet.
-var UploadFile = define.Web{
+var UploadFile = define.Web{ // MARKER: UploadFile
 	Host: Hostname, Method: "POST", Route: "/pet/{petId}/uploadImage",
 }

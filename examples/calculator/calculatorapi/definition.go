@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "calculator.example"
 
@@ -33,19 +37,19 @@ const Version = 353
 const Description = `The Calculator microservice performs simple mathematical operations.`
 
 // UsedOperators tracks the types of the arithmetic operators used.
-var UsedOperators = define.Metric{
+var UsedOperators = define.Metric{ // MARKER: UsedOperators
 	Kind: define.Counter, Value: int(0), Labels: []string{"op"},
 	OTelName: "used_operators",
 }
 
 // SumOperations tracks the total sum of the results of all operators.
-var SumOperations = define.Metric{
+var SumOperations = define.Metric{ // MARKER: SumOperations
 	Kind: define.Gauge, Value: int(0), Labels: []string{"op"},
 	OTelName: "sum_operations", Observable: true,
 }
 
 // Arithmetic performs an arithmetic operation between two integers x and y given an operator op.
-var Arithmetic = define.Function{
+var Arithmetic = define.Function{ // MARKER: Arithmetic
 	Host: Hostname, Method: "GET", Route: ":443/arithmetic",
 	In: ArithmeticIn{}, Out: ArithmeticOut{},
 }
@@ -66,7 +70,7 @@ type ArithmeticOut struct { // MARKER: Arithmetic
 }
 
 // Square prints the square of the integer x.
-var Square = define.Function{
+var Square = define.Function{ // MARKER: Square
 	Host: Hostname, Method: "GET", Route: ":443/square",
 	In: SquareIn{}, Out: SquareOut{},
 }
@@ -83,7 +87,7 @@ type SquareOut struct { // MARKER: Square
 }
 
 // Distance calculates the distance between two points. It demonstrates the use of the defined type Point.
-var Distance = define.Function{
+var Distance = define.Function{ // MARKER: Distance
 	Host: Hostname, Method: "ANY", Route: ":443/distance",
 	In: DistanceIn{}, Out: DistanceOut{},
 }

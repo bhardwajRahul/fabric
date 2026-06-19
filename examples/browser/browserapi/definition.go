@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "browser.example"
 
@@ -33,6 +37,6 @@ const Version = 135
 const Description = `The browser microservice implements a simple web browser that utilizes the egress proxy.`
 
 // Browse shows a simple address bar and the source code of a URL.
-var Browse = define.Web{
+var Browse = define.Web{ // MARKER: Browse
 	Host: Hostname, Method: "ANY", Route: "/browse",
 }

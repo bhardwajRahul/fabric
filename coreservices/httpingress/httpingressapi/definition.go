@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "http.ingress.core"
 
@@ -34,7 +38,7 @@ const Version = 380
 const Description = `The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.`
 
 // TimeBudget specifies the timeout for handling a request, after it has been read.
-var TimeBudget = define.Config{
+var TimeBudget = define.Config{ // MARKER: TimeBudget
 	Value:      time.Duration(0),
 	Default:    "20s",
 	Validation: "dur [1s,15m]",
@@ -44,14 +48,14 @@ var TimeBudget = define.Config{
 // followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
 // certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
 // files are present. Port 80 is always plaintext.
-var Ports = define.Config{
+var Ports = define.Config{ // MARKER: Ports
 	Value:    string(""),
 	Default:  "8080",
 	Callback: true,
 }
 
 // RequestMemoryLimit is the memory capacity used to hold pending requests, in megabytes.
-var RequestMemoryLimit = define.Config{
+var RequestMemoryLimit = define.Config{ // MARKER: RequestMemoryLimit
 	Value:      int(0),
 	Default:    "4096",
 	Validation: "int [1,]",
@@ -61,7 +65,7 @@ var RequestMemoryLimit = define.Config{
 // When empty (the default), Access-Control-Allow-Origin is pinned to the request's own scheme://host,
 // which permits only same-origin browser reads. The * origin can be used to reflect any caller's Origin;
 // operators must opt into that explicitly because it combines with credentials.
-var AllowedOrigins = define.Config{
+var AllowedOrigins = define.Config{ // MARKER: AllowedOrigins
 	Value:    string(""),
 	Callback: true,
 }
@@ -69,7 +73,7 @@ var AllowedOrigins = define.Config{
 // PortMappings is REMOVED. The x:y->z port-rewrite model has been replaced by AllowedInternalPorts
 // (internal-port allowlist, no rewrite). Setting this config to any non-empty value causes the
 // microservice to refuse to start, rather than silently ignore an operator's intended posture.
-var PortMappings = define.Config{
+var PortMappings = define.Config{ // MARKER: PortMappings
 	Value:    string(""),
 	Callback: true,
 }
@@ -80,13 +84,13 @@ var PortMappings = define.Config{
 // All entries must satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise.
 // Ports :666 and :888 are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL
 // deployment this config is ignored and every port except :666 and :888 is reachable.
-var AllowedInternalPorts = define.Config{
+var AllowedInternalPorts = define.Config{ // MARKER: AllowedInternalPorts
 	Value:    string(""),
 	Callback: true,
 }
 
 // ReadTimeout specifies the timeout for fully reading a request.
-var ReadTimeout = define.Config{
+var ReadTimeout = define.Config{ // MARKER: ReadTimeout
 	Value:      time.Duration(0),
 	Default:    "5m",
 	Validation: "dur [1s,]",
@@ -94,7 +98,7 @@ var ReadTimeout = define.Config{
 }
 
 // WriteTimeout specifies the timeout for fully writing the response to a request.
-var WriteTimeout = define.Config{
+var WriteTimeout = define.Config{ // MARKER: WriteTimeout
 	Value:      time.Duration(0),
 	Default:    "5m",
 	Validation: "dur [1s,]",
@@ -102,7 +106,7 @@ var WriteTimeout = define.Config{
 }
 
 // ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
-var ReadHeaderTimeout = define.Config{
+var ReadHeaderTimeout = define.Config{ // MARKER: ReadHeaderTimeout
 	Value:      time.Duration(0),
 	Default:    "20s",
 	Validation: "dur [1s,]",
@@ -112,7 +116,7 @@ var ReadHeaderTimeout = define.Config{
 // A newline-separated list of paths or extensions to block with a 404.
 // Paths should not include any arguments and are matched exactly.
 // Extensions are specified with "*.ext" and are matched against the extension of the path only.
-var BlockedPaths = define.Config{
+var BlockedPaths = define.Config{ // MARKER: BlockedPaths
 	Value: string(""),
 	Default: `/geoserver
 /console/

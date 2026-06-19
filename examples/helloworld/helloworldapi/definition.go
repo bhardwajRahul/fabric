@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "helloworld.example"
 
@@ -33,6 +37,6 @@ const Version = 82
 const Description = `The HelloWorld microservice demonstrates the classic minimalist example.`
 
 // HelloWorld prints the classic greeting.
-var HelloWorld = define.Web{
+var HelloWorld = define.Web{ // MARKER: HelloWorld
 	Host: Hostname, Method: "GET", Route: "/hello-world",
 }

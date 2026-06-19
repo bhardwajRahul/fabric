@@ -36,6 +36,11 @@ import (
 // definePkg is the import path of the declarative vocabulary package.
 const definePkg = "github.com/microbus-io/fabric/define"
 
+// definitionHint steers an agent back to codegen instead of hand-editing the generated boilerplate.
+const definitionHint = `// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.`
+
 // upgradeV1_41_0 migrates one microservice from the endpoints.go model to the definition.go model: it
 // synthesizes <x>api/definition.go from the microservice's manifest.yaml (the feature spec), its
 // <x>api/endpoints.go (In/Out and domain type declarations, Hostname, and Def method/route), and its
@@ -514,8 +519,16 @@ func synthesizeDefinition(man *manifest, ep *endpoints, version int, subs map[st
 	head.WriteString("\n\n")
 	head.WriteString(imports.block())
 	head.WriteString("\n")
+	head.WriteString(definitionHint)
+	head.WriteString("\n\n")
 	fmt.Fprintf(&head, "// Hostname is the default hostname of the microservice.\nconst Hostname = %q\n\n", hostname)
-	fmt.Fprintf(&head, "// Name is the decorative PascalCase name of the microservice.\nconst Name = %q\n\n", man.name)
+	// The decorative name is authored in definition.go going forward; an old manifest may lack it, so fall
+	// back to the lowercase package name (the api package minus its "api" suffix) for the agent to refine.
+	name := man.name
+	if name == "" {
+		name = strings.TrimSuffix(ep.pkg, "api")
+	}
+	fmt.Fprintf(&head, "// Name is the decorative PascalCase name of the microservice.\nconst Name = %q\n\n", name)
 	fmt.Fprintf(&head, "// Version is the major version of the microservice's public API.\nconst Version = %d\n\n", version)
 	fmt.Fprintf(&head, "// Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.\nconst Description = %s\n\n", rawString(man.description))
 
@@ -538,7 +551,7 @@ func emitRoutable(b *strings.Builder, kind, name, defaultMethod string, mf mfEnd
 	o := subs[name]
 
 	b.WriteString(godoc(mf.Description, name))
-	fmt.Fprintf(b, "var %s = define.%s{\n", name, kind)
+	fmt.Fprintf(b, "var %s = define.%s{ // MARKER: %s\n", name, kind, name)
 	fmt.Fprintf(b, "\tHost: Hostname, Method: %q, Route: %q,\n", method, route)
 	if o.claims != "" {
 		fmt.Fprintf(b, "\tRequiredClaims: %q,\n", o.claims)
@@ -580,7 +593,7 @@ func emitConfig(b *strings.Builder, name string, c mfConfig, imports *importSet)
 	valType := configValueType(c.Signature)
 	imports.addType(valType)
 	b.WriteString(godoc(c.Description, name))
-	fmt.Fprintf(b, "var %s = define.Config{\n", name)
+	fmt.Fprintf(b, "var %s = define.Config{ // MARKER: %s\n", name, name)
 	fmt.Fprintf(b, "\tValue: %s,\n", valueCarrier(valType))
 	if c.Default != "" {
 		fmt.Fprintf(b, "\tDefault: %s,\n", goStringLit(c.Default))
@@ -600,7 +613,7 @@ func emitConfig(b *strings.Builder, name string, c mfConfig, imports *importSet)
 func emitMetric(b *strings.Builder, name string, m mfMetric) {
 	valType, labels := metricValueAndLabels(m.Signature)
 	b.WriteString(godoc(m.Description, name))
-	fmt.Fprintf(b, "var %s = define.Metric{\n", name)
+	fmt.Fprintf(b, "var %s = define.Metric{ // MARKER: %s\n", name, name)
 	fmt.Fprintf(b, "\tKind: define.%s, Value: %s,", metricKindConst(m.Kind), valueCarrier(valType))
 	if len(labels) > 0 {
 		b.WriteString(" Labels: []string{")
@@ -632,7 +645,7 @@ func emitMetric(b *strings.Builder, name string, m mfMetric) {
 
 func emitTicker(b *strings.Builder, name string, t mfTicker, imports *importSet) {
 	b.WriteString(godoc(t.Description, name))
-	fmt.Fprintf(b, "var %s = define.Ticker{\n", name)
+	fmt.Fprintf(b, "var %s = define.Ticker{ // MARKER: %s\n", name, name)
 	fmt.Fprintf(b, "\tInterval: %s,\n", durationExpr(t.Interval))
 	b.WriteString("}\n\n")
 	imports.add("time")
@@ -645,7 +658,7 @@ func emitInbound(b *strings.Builder, name string, e mfEndpoint, imports *importS
 	alias := lastSegment(apiPath)
 	imports.add(apiPath)
 	b.WriteString(godoc(e.Description, name))
-	fmt.Fprintf(b, "var %s = define.InboundEvent{\n", name)
+	fmt.Fprintf(b, "var %s = define.InboundEvent{ // MARKER: %s\n", name, name)
 	fmt.Fprintf(b, "\tSource: %s.%s,\n", alias, name)
 	b.WriteString("}\n\n")
 }

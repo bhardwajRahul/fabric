@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "yellowpages.example"
 
@@ -34,13 +38,13 @@ const Version = 11
 const Description = `Person persists persons in a SQL database.`
 
 // SQLDataSourceName is the connection string of the SQL database.
-var SQLDataSourceName = define.Config{
+var SQLDataSourceName = define.Config{ // MARKER: SQLDataSourceName
 	Value:  string(""),
 	Secret: true,
 }
 
 // OnPersonCreated is triggered when persons are created.
-var OnPersonCreated = define.OutboundEvent{
+var OnPersonCreated = define.OutboundEvent{ // MARKER: OnPersonCreated
 	Host: Hostname, Method: "POST", Route: ":417/on-person-created",
 	In: OnPersonCreatedIn{}, Out: OnPersonCreatedOut{},
 }
@@ -55,7 +59,7 @@ type OnPersonCreatedOut struct { // MARKER: OnPersonCreated
 }
 
 // OnPersonDeleted is triggered when persons are deleted.
-var OnPersonDeleted = define.OutboundEvent{
+var OnPersonDeleted = define.OutboundEvent{ // MARKER: OnPersonDeleted
 	Host: Hostname, Method: "POST", Route: ":417/on-person-deleted",
 	In: OnPersonDeletedIn{}, Out: OnPersonDeletedOut{},
 }
@@ -70,7 +74,7 @@ type OnPersonDeletedOut struct { // MARKER: OnPersonDeleted
 }
 
 // OnPersonStored is triggered when persons are stored.
-var OnPersonStored = define.OutboundEvent{
+var OnPersonStored = define.OutboundEvent{ // MARKER: OnPersonStored
 	Host: Hostname, Method: "POST", Route: ":417/on-person-stored",
 	In: OnPersonStoredIn{}, Out: OnPersonStoredOut{},
 }
@@ -85,7 +89,7 @@ type OnPersonStoredOut struct { // MARKER: OnPersonStored
 }
 
 // Create creates a new object, returning its key.
-var Create = define.Function{
+var Create = define.Function{ // MARKER: Create
 	Host: Hostname, Method: "ANY", Route: "/create",
 	In: CreateIn{}, Out: CreateOut{},
 }
@@ -101,7 +105,7 @@ type CreateOut struct { // MARKER: Create
 }
 
 // Store updates the object.
-var Store = define.Function{
+var Store = define.Function{ // MARKER: Store
 	Host: Hostname, Method: "ANY", Route: "/store",
 	In: StoreIn{}, Out: StoreOut{},
 }
@@ -117,7 +121,7 @@ type StoreOut struct { // MARKER: Store
 }
 
 // MustStore updates the object.
-var MustStore = define.Function{
+var MustStore = define.Function{ // MARKER: MustStore
 	Host: Hostname, Method: "ANY", Route: "/must-store",
 	In: MustStoreIn{}, Out: MustStoreOut{},
 }
@@ -132,7 +136,7 @@ type MustStoreOut struct { // MARKER: MustStore
 }
 
 // Revise updates the object only if the revision matches.
-var Revise = define.Function{
+var Revise = define.Function{ // MARKER: Revise
 	Host: Hostname, Method: "ANY", Route: "/revise",
 	In: ReviseIn{}, Out: ReviseOut{},
 }
@@ -148,7 +152,7 @@ type ReviseOut struct { // MARKER: Revise
 }
 
 // MustRevise updates the object only if the revision matches.
-var MustRevise = define.Function{
+var MustRevise = define.Function{ // MARKER: MustRevise
 	Host: Hostname, Method: "ANY", Route: "/must-revise",
 	In: MustReviseIn{}, Out: MustReviseOut{},
 }
@@ -163,7 +167,7 @@ type MustReviseOut struct { // MARKER: MustRevise
 }
 
 // Delete deletes the object.
-var Delete = define.Function{
+var Delete = define.Function{ // MARKER: Delete
 	Host: Hostname, Method: "ANY", Route: "/delete",
 	In: DeleteIn{}, Out: DeleteOut{},
 }
@@ -179,7 +183,7 @@ type DeleteOut struct { // MARKER: Delete
 }
 
 // MustDelete deletes the object.
-var MustDelete = define.Function{
+var MustDelete = define.Function{ // MARKER: MustDelete
 	Host: Hostname, Method: "ANY", Route: "/must-delete",
 	In: MustDeleteIn{}, Out: MustDeleteOut{},
 }
@@ -194,7 +198,7 @@ type MustDeleteOut struct { // MARKER: MustDelete
 }
 
 // List returns the objects matching the query, and the total count of matches regardless of the limit.
-var List = define.Function{
+var List = define.Function{ // MARKER: List
 	Host: Hostname, Method: "ANY", Route: "/list",
 	In: ListIn{}, Out: ListOut{},
 }
@@ -211,7 +215,7 @@ type ListOut struct { // MARKER: List
 }
 
 // Lookup returns the single object matching the query. It errors if more than one object matches the query.
-var Lookup = define.Function{
+var Lookup = define.Function{ // MARKER: Lookup
 	Host: Hostname, Method: "ANY", Route: "/lookup",
 	In: LookupIn{}, Out: LookupOut{},
 }
@@ -228,7 +232,7 @@ type LookupOut struct { // MARKER: Lookup
 }
 
 // MustLookup returns the single object matching the query. It errors unless exactly one object matches the query.
-var MustLookup = define.Function{
+var MustLookup = define.Function{ // MARKER: MustLookup
 	Host: Hostname, Method: "ANY", Route: "/must-lookup",
 	In: MustLookupIn{}, Out: MustLookupOut{},
 }
@@ -244,7 +248,7 @@ type MustLookupOut struct { // MARKER: MustLookup
 }
 
 // Load returns the object associated with the key.
-var Load = define.Function{
+var Load = define.Function{ // MARKER: Load
 	Host: Hostname, Method: "ANY", Route: "/load",
 	In: LoadIn{}, Out: LoadOut{},
 }
@@ -261,7 +265,7 @@ type LoadOut struct { // MARKER: Load
 }
 
 // MustLoad returns the object associated with the key. It errors if the object is not found.
-var MustLoad = define.Function{
+var MustLoad = define.Function{ // MARKER: MustLoad
 	Host: Hostname, Method: "ANY", Route: "/must-load",
 	In: MustLoadIn{}, Out: MustLoadOut{},
 }
@@ -277,7 +281,7 @@ type MustLoadOut struct { // MARKER: MustLoad
 }
 
 // BulkLoad returns the objects matching the keys.
-var BulkLoad = define.Function{
+var BulkLoad = define.Function{ // MARKER: BulkLoad
 	Host: Hostname, Method: "ANY", Route: "/bulk-load",
 	In: BulkLoadIn{}, Out: BulkLoadOut{},
 }
@@ -293,7 +297,7 @@ type BulkLoadOut struct { // MARKER: BulkLoad
 }
 
 // BulkDelete deletes the objects matching the keys, returning the keys of the deleted objects.
-var BulkDelete = define.Function{
+var BulkDelete = define.Function{ // MARKER: BulkDelete
 	Host: Hostname, Method: "ANY", Route: "/bulk-delete",
 	In: BulkDeleteIn{}, Out: BulkDeleteOut{},
 }
@@ -309,7 +313,7 @@ type BulkDeleteOut struct { // MARKER: BulkDelete
 }
 
 // BulkCreate creates multiple objects, returning their keys.
-var BulkCreate = define.Function{
+var BulkCreate = define.Function{ // MARKER: BulkCreate
 	Host: Hostname, Method: "ANY", Route: "/bulk-create",
 	In: BulkCreateIn{}, Out: BulkCreateOut{},
 }
@@ -325,7 +329,7 @@ type BulkCreateOut struct { // MARKER: BulkCreate
 }
 
 // BulkStore updates multiple objects, returning the keys of the stored objects.
-var BulkStore = define.Function{
+var BulkStore = define.Function{ // MARKER: BulkStore
 	Host: Hostname, Method: "ANY", Route: "/bulk-store",
 	In: BulkStoreIn{}, Out: BulkStoreOut{},
 }
@@ -342,7 +346,7 @@ type BulkStoreOut struct { // MARKER: BulkStore
 
 // BulkRevise updates multiple objects, returning the number of rows affected.
 // Only rows with matching revisions are updated.
-var BulkRevise = define.Function{
+var BulkRevise = define.Function{ // MARKER: BulkRevise
 	Host: Hostname, Method: "ANY", Route: "/bulk-revise",
 	In: BulkReviseIn{}, Out: BulkReviseOut{},
 }
@@ -358,7 +362,7 @@ type BulkReviseOut struct { // MARKER: BulkRevise
 }
 
 // Purge deletes all objects matching the query, returning the keys of the deleted objects.
-var Purge = define.Function{
+var Purge = define.Function{ // MARKER: Purge
 	Host: Hostname, Method: "ANY", Route: "/purge",
 	In: PurgeIn{}, Out: PurgeOut{},
 }
@@ -374,7 +378,7 @@ type PurgeOut struct { // MARKER: Purge
 }
 
 // Count returns the number of objects matching the query, disregarding pagination.
-var Count = define.Function{
+var Count = define.Function{ // MARKER: Count
 	Host: Hostname, Method: "ANY", Route: "/count",
 	In: CountIn{}, Out: CountOut{},
 }
@@ -390,7 +394,7 @@ type CountOut struct { // MARKER: Count
 }
 
 // CreateREST creates a new person via REST, returning its key.
-var CreateREST = define.Function{
+var CreateREST = define.Function{ // MARKER: CreateREST
 	Host: Hostname, Method: "POST", Route: "/persons",
 	In: CreateRESTIn{}, Out: CreateRESTOut{},
 }
@@ -407,7 +411,7 @@ type CreateRESTOut struct { // MARKER: CreateREST
 }
 
 // StoreREST updates an existing person via REST.
-var StoreREST = define.Function{
+var StoreREST = define.Function{ // MARKER: StoreREST
 	Host: Hostname, Method: "PUT", Route: "/persons/{key}",
 	In: StoreRESTIn{}, Out: StoreRESTOut{},
 }
@@ -424,7 +428,7 @@ type StoreRESTOut struct { // MARKER: StoreREST
 }
 
 // DeleteREST deletes an existing person via REST.
-var DeleteREST = define.Function{
+var DeleteREST = define.Function{ // MARKER: DeleteREST
 	Host: Hostname, Method: "DELETE", Route: "/persons/{key}",
 	In: DeleteRESTIn{}, Out: DeleteRESTOut{},
 }
@@ -440,7 +444,7 @@ type DeleteRESTOut struct { // MARKER: DeleteREST
 }
 
 // LoadREST loads a person by key via REST.
-var LoadREST = define.Function{
+var LoadREST = define.Function{ // MARKER: LoadREST
 	Host: Hostname, Method: "GET", Route: "/persons/{key}",
 	In: LoadRESTIn{}, Out: LoadRESTOut{},
 }
@@ -457,7 +461,7 @@ type LoadRESTOut struct { // MARKER: LoadREST
 }
 
 // ListREST lists persons matching the query via REST.
-var ListREST = define.Function{
+var ListREST = define.Function{ // MARKER: ListREST
 	Host: Hostname, Method: "GET", Route: "/persons",
 	In: ListRESTIn{}, Out: ListRESTOut{},
 }
@@ -474,7 +478,7 @@ type ListRESTOut struct { // MARKER: ListREST
 }
 
 // TryReserve attempts to reserve a person for the given duration, returning true if successful.
-var TryReserve = define.Function{
+var TryReserve = define.Function{ // MARKER: TryReserve
 	Host: Hostname, Method: "ANY", Route: "/try-reserve",
 	In: TryReserveIn{}, Out: TryReserveOut{},
 }
@@ -492,7 +496,7 @@ type TryReserveOut struct { // MARKER: TryReserve
 
 // TryBulkReserve attempts to reserve persons for the given duration, returning the keys of those successfully reserved.
 // Only persons whose reservation has expired (reserved_before < NOW) are reserved.
-var TryBulkReserve = define.Function{
+var TryBulkReserve = define.Function{ // MARKER: TryBulkReserve
 	Host: Hostname, Method: "ANY", Route: "/try-bulk-reserve",
 	In: TryBulkReserveIn{}, Out: TryBulkReserveOut{},
 }
@@ -509,7 +513,7 @@ type TryBulkReserveOut struct { // MARKER: TryBulkReserve
 }
 
 // Reserve unconditionally reserves a person for the given duration, returning true if the person exists.
-var Reserve = define.Function{
+var Reserve = define.Function{ // MARKER: Reserve
 	Host: Hostname, Method: "ANY", Route: "/reserve",
 	In: ReserveIn{}, Out: ReserveOut{},
 }
@@ -526,7 +530,7 @@ type ReserveOut struct { // MARKER: Reserve
 }
 
 // BulkReserve unconditionally reserves persons for the given duration, returning the keys of those that exist.
-var BulkReserve = define.Function{
+var BulkReserve = define.Function{ // MARKER: BulkReserve
 	Host: Hostname, Method: "ANY", Route: "/bulk-reserve",
 	In: BulkReserveIn{}, Out: BulkReserveOut{},
 }
@@ -543,6 +547,6 @@ type BulkReserveOut struct { // MARKER: BulkReserve
 }
 
 // Demo serves the web user interface for managing persons.
-var Demo = define.Web{
+var Demo = define.Web{ // MARKER: Demo
 	Host: Hostname, Method: "ANY", Route: "/demo",
 }

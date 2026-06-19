@@ -21,6 +21,10 @@ import (
 	"github.com/microbus-io/fabric/examples/eventsource/eventsourceapi"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "eventsink.example"
 
@@ -34,7 +38,7 @@ const Version = 261
 const Description = `The event sink microservice handles events that are fired by the event source microservice.`
 
 // Registered returns the list of registered users.
-var Registered = define.Function{
+var Registered = define.Function{ // MARKER: Registered
 	Host: Hostname, Method: "ANY", Route: ":443/registered",
 	In: RegisteredIn{}, Out: RegisteredOut{},
 }
@@ -49,11 +53,11 @@ type RegisteredOut struct { // MARKER: Registered
 }
 
 // OnAllowRegister blocks registrations from gmail and hotmail domains.
-var OnAllowRegister = define.InboundEvent{
+var OnAllowRegister = define.InboundEvent{ // MARKER: OnAllowRegister
 	Source: eventsourceapi.OnAllowRegister,
 }
 
 // OnRegistered keeps track of registrations.
-var OnRegistered = define.InboundEvent{
+var OnRegistered = define.InboundEvent{ // MARKER: OnRegistered
 	Source: eventsourceapi.OnRegistered,
 }

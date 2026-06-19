@@ -157,11 +157,15 @@ the graph with a single transition to that task. This mirrors the variant in the
 
 ## Mode detection
 
-`emitAll` decides what to generate from the directory shape: a directory that itself contains `definition.go` is
-an api package, and only `client.go` is produced. A directory with an `<x>api` subdirectory containing
-`definition.go` is a service directory, and all five artifacts are produced. Import paths (api package, resources,
-service package) are computed by walking up to the nearest `go.mod` (`findModule`) and doing string math against
-the module root (`importPathOf`, `inModuleDir`).
+`emitAll` decides what to generate from the directory shape. A directory with an `<x>api` subdirectory containing
+`definition.go` is a service directory, and all five artifacts are produced. A directory that itself contains
+`definition.go` is an api package; if it belongs to a microservice (`owningServiceDir`: the parent is `<x>` to the
+api's `<x>api` and has a sibling `service.go`) it is **promoted** to full service-directory generation from the
+parent, so pointing genservice at the api dir produces all five artifacts and the other four cannot silently drift
+behind a `client.go`-only regeneration. Only a standalone api/contract package with no owning `service.go` (the
+`pressuretest/*` fixtures) falls back to `client.go`-only. Import paths (api package, resources, service package)
+are computed by walking up to the nearest `go.mod` (`findModule`) and doing string math against the module root
+(`importPathOf`, `inModuleDir`).
 
 ## Cross-package inbound events
 

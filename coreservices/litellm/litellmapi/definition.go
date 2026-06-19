@@ -21,6 +21,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "lite.llm.core"
 
@@ -34,20 +38,20 @@ const Version = 1
 const Description = `The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Chat Completions wire format.`
 
 // CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
-var CompletionURL = define.Config{
+var CompletionURL = define.Config{ // MARKER: CompletionURL
 	Value:      string(""),
 	Default:    "http://localhost:4000/v1/chat/completions",
 	Validation: "url",
 }
 
 // APIKey is the virtual key for the LiteLLM proxy.
-var APIKey = define.Config{
+var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
 }
 
 // Turn executes a single LLM turn through the LiteLLM proxy.
-var Turn = define.Function{
+var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
 }

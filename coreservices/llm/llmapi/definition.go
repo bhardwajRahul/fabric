@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "llm.core"
 
@@ -33,14 +37,14 @@ const Version = 12
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
 
 // MaxToolRounds is the maximum number of tool call round-trips per invocation.
-var MaxToolRounds = define.Config{
+var MaxToolRounds = define.Config{ // MARKER: MaxToolRounds
 	Value:      int(0),
 	Default:    "10",
 	Validation: "int [1,50]",
 }
 
 // LLMTokens counts tokens consumed per LLM turn
-var LLMTokens = define.Metric{
+var LLMTokens = define.Metric{ // MARKER: LLMTokens
 	Kind: define.Counter, Value: int(0), Labels: []string{"provider", "model", "direction"},
 	OTelName: "microbus_llm_tokens_total",
 }
@@ -57,7 +61,7 @@ var LLMTokens = define.Metric{
 // Output:
 //   - messagesOut: messagesOut is the full conversation including new messages produced by the LLM
 //   - usage: usage is the aggregate token consumption across all turns
-var Chat = define.Function{
+var Chat = define.Function{ // MARKER: Chat
 	Host: Hostname, Method: "POST", Route: ":444/chat",
 	In: ChatIn{}, Out: ChatOut{},
 }
@@ -89,7 +93,7 @@ type ChatOut struct { // MARKER: Chat
 //   - content: content is the LLM's text response, if any
 //   - toolCalls: toolCalls is the list of tool calls requested by the LLM
 //   - usage: usage is the token consumption for this single turn
-var Turn = define.Function{
+var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
 }
@@ -111,7 +115,7 @@ type TurnOut struct { // MARKER: Turn
 }
 
 // InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
-var InitChat = define.Task{
+var InitChat = define.Task{ // MARKER: InitChat
 	Host: Hostname, Method: "POST", Route: ":428/init-chat",
 	In: InitChatIn{}, Out: InitChatOut{},
 }
@@ -130,7 +134,7 @@ type InitChatOut struct { // MARKER: InitChat
 }
 
 // CallLLM sends the current messages and tools to the LLM provider.
-var CallLLM = define.Task{
+var CallLLM = define.Task{ // MARKER: CallLLM
 	Host: Hostname, Method: "POST", Route: ":428/call-llm",
 	In: CallLLMIn{}, Out: CallLLMOut{},
 }
@@ -150,7 +154,7 @@ type CallLLMOut struct { // MARKER: CallLLM
 }
 
 // ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
-var ProcessResponse = define.Task{
+var ProcessResponse = define.Task{ // MARKER: ProcessResponse
 	Host: Hostname, Method: "POST", Route: ":428/process-response",
 	In: ProcessResponseIn{}, Out: ProcessResponseOut{},
 }
@@ -175,7 +179,7 @@ type ProcessResponseOut struct { // MARKER: ProcessResponse
 }
 
 // ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
-var ExecuteTool = define.Task{
+var ExecuteTool = define.Task{ // MARKER: ExecuteTool
 	Host: Hostname, Method: "POST", Route: ":428/execute-tool",
 	In: ExecuteToolIn{}, Out: ExecuteToolOut{},
 }
@@ -189,7 +193,7 @@ type ExecuteToolOut struct { // MARKER: ExecuteTool
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
-var ChatLoop = define.Workflow{
+var ChatLoop = define.Workflow{ // MARKER: ChatLoop
 	Host: Hostname, Method: "GET", Route: ":428/chat-loop",
 	In: ChatLoopIn{}, Out: ChatLoopOut{},
 }

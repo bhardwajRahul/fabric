@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "configurator.core"
 
@@ -34,7 +38,7 @@ const Version = 254
 const Description = `The Configurator is a core microservice that centralizes the dissemination of configuration values to other microservices.`
 
 // Values returns the values associated with the specified config property names for the caller microservice.
-var Values = define.Function{
+var Values = define.Function{ // MARKER: Values
 	Host: Hostname, Method: "ANY", Route: ":888/values",
 	In: ValuesIn{}, Out: ValuesOut{},
 }
@@ -51,7 +55,7 @@ type ValuesOut struct { // MARKER: Values
 
 // Refresh tells all microservices to contact the configurator and refresh their configs.
 // An error is returned if any of the values sent to the microservices fails validation.
-var Refresh = define.Function{
+var Refresh = define.Function{ // MARKER: Refresh
 	Host: Hostname, Method: "ANY", Route: ":444/refresh",
 	In: RefreshIn{}, Out: RefreshOut{},
 }
@@ -65,7 +69,7 @@ type RefreshOut struct { // MARKER: Refresh
 }
 
 // SyncRepo is used to synchronize values among replica peers of the configurator.
-var SyncRepo = define.Function{
+var SyncRepo = define.Function{ // MARKER: SyncRepo
 	Host: Hostname, Method: "ANY", Route: ":888/sync-repo",
 	LoadBalancing: define.None,
 	In:            SyncRepoIn{}, Out: SyncRepoOut{},
@@ -82,7 +86,7 @@ type SyncRepoOut struct { // MARKER: SyncRepo
 }
 
 // Deprecated.
-var Values443 = define.Function{
+var Values443 = define.Function{ // MARKER: Values443
 	Host: Hostname, Method: "ANY", Route: ":443/values",
 	In: Values443In{}, Out: Values443Out{},
 }
@@ -98,7 +102,7 @@ type Values443Out struct { // MARKER: Values443
 }
 
 // Deprecated.
-var Refresh443 = define.Function{
+var Refresh443 = define.Function{ // MARKER: Refresh443
 	Host: Hostname, Method: "ANY", Route: ":443/refresh",
 	In: Refresh443In{}, Out: Refresh443Out{},
 }
@@ -112,7 +116,7 @@ type Refresh443Out struct { // MARKER: Refresh443
 }
 
 // Deprecated.
-var Sync443 = define.Function{
+var Sync443 = define.Function{ // MARKER: Sync443
 	Host: Hostname, Method: "ANY", Route: ":443/sync",
 	In: Sync443In{}, Out: Sync443Out{},
 }
@@ -128,6 +132,6 @@ type Sync443Out struct { // MARKER: Sync443
 }
 
 // PeriodicRefresh tells all microservices to contact the configurator and refresh their configs.
-var PeriodicRefresh = define.Ticker{
+var PeriodicRefresh = define.Ticker{ // MARKER: PeriodicRefresh
 	Interval: 20 * time.Minute,
 }

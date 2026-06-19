@@ -21,6 +21,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "gemini.llm.core"
 
@@ -34,20 +38,20 @@ const Version = 6
 const Description = `The Gemini LLM provider microservice implements the Turn endpoint for the Google Gemini API.`
 
 // CompletionURL is the base URL of the Gemini models endpoint; the model and generateContent action are appended per request.
-var CompletionURL = define.Config{
+var CompletionURL = define.Config{ // MARKER: CompletionURL
 	Value:      string(""),
 	Default:    "https://generativelanguage.googleapis.com/v1beta/models",
 	Validation: "url",
 }
 
 // APIKey is the API key for the Gemini API.
-var APIKey = define.Config{
+var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
 }
 
 // Turn executes a single LLM turn using the Gemini provider.
-var Turn = define.Function{
+var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
 }

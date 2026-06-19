@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "eventsource.example"
 
@@ -33,7 +37,7 @@ const Version = 270
 const Description = `The event source microservice fires events that are caught by the event sink microservice.`
 
 // OnAllowRegister is triggered before registration to check if any sink blocks it.
-var OnAllowRegister = define.OutboundEvent{
+var OnAllowRegister = define.OutboundEvent{ // MARKER: OnAllowRegister
 	Host: Hostname, Method: "POST", Route: ":417/on-allow-register",
 	In: OnAllowRegisterIn{}, Out: OnAllowRegisterOut{},
 }
@@ -49,7 +53,7 @@ type OnAllowRegisterOut struct { // MARKER: OnAllowRegister
 }
 
 // OnRegistered is triggered after successful registration.
-var OnRegistered = define.OutboundEvent{
+var OnRegistered = define.OutboundEvent{ // MARKER: OnRegistered
 	Host: Hostname, Method: "POST", Route: ":417/on-registered",
 	In: OnRegisteredIn{}, Out: OnRegisteredOut{},
 }
@@ -64,7 +68,7 @@ type OnRegisteredOut struct { // MARKER: OnRegistered
 }
 
 // Register attempts to register a new user.
-var Register = define.Function{
+var Register = define.Function{ // MARKER: Register
 	Host: Hostname, Method: "ANY", Route: ":443/register",
 	In: RegisterIn{}, Out: RegisterOut{},
 }

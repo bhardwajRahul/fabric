@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "control.core"
 
@@ -34,7 +38,7 @@ const Description = `This microservice is created for the sake of generating the
 The microservice itself does nothing and should not be included in applications.`
 
 // OnNewSubs informs of new subscriptions.
-var OnNewSubs = define.OutboundEvent{
+var OnNewSubs = define.OutboundEvent{ // MARKER: OnNewSubs
 	Host: Hostname, Method: "POST", Route: ":888/on-new-subs",
 	In: OnNewSubsIn{}, Out: OnNewSubsOut{},
 }
@@ -48,7 +52,7 @@ type OnNewSubsOut struct { // MARKER: OnNewSubs
 }
 
 // Ping responds to the message with a pong.
-var Ping = define.Function{
+var Ping = define.Function{ // MARKER: Ping
 	Host: Hostname, Method: "ANY", Route: ":888/ping",
 	LoadBalancing: define.None,
 	In:            PingIn{}, Out: PingOut{},
@@ -64,7 +68,7 @@ type PingOut struct { // MARKER: Ping
 }
 
 // ConfigRefresh pulls the latest config values from the configurator microservice.
-var ConfigRefresh = define.Function{
+var ConfigRefresh = define.Function{ // MARKER: ConfigRefresh
 	Host: Hostname, Method: "ANY", Route: ":888/config-refresh",
 	LoadBalancing: define.None,
 	In:            ConfigRefreshIn{}, Out: ConfigRefreshOut{},
@@ -79,7 +83,7 @@ type ConfigRefreshOut struct { // MARKER: ConfigRefresh
 }
 
 // Trace forces exporting the indicated tracing span.
-var Trace = define.Function{
+var Trace = define.Function{ // MARKER: Trace
 	Host: Hostname, Method: "ANY", Route: ":888/trace",
 	LoadBalancing: define.None,
 	In:            TraceIn{}, Out: TraceOut{},
@@ -95,7 +99,7 @@ type TraceOut struct { // MARKER: Trace
 }
 
 // OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their ingress boundary.
-var OpenAPI = define.Function{
+var OpenAPI = define.Function{ // MARKER: OpenAPI
 	Host: Hostname, Method: "GET", Route: ":888/openapi.json",
 	In: OpenAPIIn{}, Out: OpenAPIOut{},
 }
@@ -111,7 +115,7 @@ type OpenAPIOut struct { // MARKER: OpenAPI
 }
 
 // Metrics returns the Prometheus metrics collected by the microservice.
-var Metrics = define.Web{
+var Metrics = define.Web{ // MARKER: Metrics
 	Host: Hostname, Method: "ANY", Route: ":888/metrics",
 	LoadBalancing: define.None,
 }

@@ -20,11 +20,15 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "embedder.example"
 
 // Name is the decorative PascalCase name of the microservice.
-const Name = ""
+const Name = "Embedder"
 
 // Version is the major version of the microservice's public API.
 const Version = 2
@@ -33,14 +37,14 @@ const Version = 2
 const Description = `Embedder is a sentence-embedding microservice backed by sentence-transformers running in an in-process Python virtual environment via github.com/microbus-io/pyvenv.`
 
 // MaxWorkers caps how many calls into the Python venv may run concurrently.
-var MaxWorkers = define.Config{
+var MaxWorkers = define.Config{ // MARKER: MaxWorkers
 	Value:      int(0),
 	Default:    "2",
 	Validation: "int [1,]",
 }
 
 // Embed returns the sentence-embedding vector for the input text.
-var Embed = define.Function{
+var Embed = define.Function{ // MARKER: Embed
 	Host: Hostname, Method: "GET", Route: ":443/embed",
 	In: EmbedIn{}, Out: EmbedOut{},
 }
@@ -56,7 +60,7 @@ type EmbedOut struct { // MARKER: Embed
 }
 
 // Similarity returns the cosine similarity between the embeddings of strings a and b.
-var Similarity = define.Function{
+var Similarity = define.Function{ // MARKER: Similarity
 	Host: Hostname, Method: "GET", Route: ":443/similarity",
 	In: SimilarityIn{}, Out: SimilarityOut{},
 }
@@ -73,16 +77,16 @@ type SimilarityOut struct { // MARKER: Similarity
 }
 
 // Demo serves the interactive demo page for the embedder.
-var Demo = define.Web{
+var Demo = define.Web{ // MARKER: Demo
 	Host: Hostname, Method: "ANY", Route: ":443/demo",
 }
 
 // DemoInit kicks off Python venv allocation in the background.
-var DemoInit = define.Web{
+var DemoInit = define.Web{ // MARKER: DemoInit
 	Host: Hostname, Method: "POST", Route: ":443/demo/init",
 }
 
 // DemoStatus returns the current venv initialization status and tailed logs.
-var DemoStatus = define.Web{
+var DemoStatus = define.Web{ // MARKER: DemoStatus
 	Host: Hostname, Method: "GET", Route: ":443/demo/status",
 }

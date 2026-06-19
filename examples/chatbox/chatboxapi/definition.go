@@ -21,6 +21,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "chatbox.example"
 
@@ -35,7 +39,7 @@ const Description = `Chatbox is a demo LLM provider that pattern-matches user me
 
 // Turn executes a single LLM turn using the chatbox demo provider.
 // It pattern-matches math questions and generates tool calls to the calculator.
-var Turn = define.Function{
+var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
 }
@@ -57,6 +61,6 @@ type TurnOut struct { // MARKER: Turn
 }
 
 // Demo serves the interactive demo page for the chatbox.
-var Demo = define.Web{
+var Demo = define.Web{ // MARKER: Demo
 	Host: Hostname, Method: "ANY", Route: "//chatbox.example/demo",
 }

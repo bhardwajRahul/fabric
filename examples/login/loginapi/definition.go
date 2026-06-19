@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "login.example"
 
@@ -35,30 +39,30 @@ const Description = `The Login microservice demonstrates usage of authentication
 // Login renders a simple login screen that authenticates a user.
 // Known users are hardcoded as "admin", "manager" and "user".
 // The password is "password".
-var Login = define.Web{
+var Login = define.Web{ // MARKER: Login
 	Host: Hostname, Method: "ANY", Route: "/login",
 }
 
 // Logout renders a page that logs out the user.
-var Logout = define.Web{
+var Logout = define.Web{ // MARKER: Logout
 	Host: Hostname, Method: "ANY", Route: "/logout",
 }
 
 // Welcome renders a page that is shown to the user after a successful login.
 // Rendering is adjusted based on the user's roles.
-var Welcome = define.Web{
+var Welcome = define.Web{ // MARKER: Welcome
 	Host: Hostname, Method: "ANY", Route: "/welcome",
 	RequiredClaims: "roles.a || roles.m || roles.u",
 }
 
 // AdminOnly is only accessible by admins.
-var AdminOnly = define.Web{
+var AdminOnly = define.Web{ // MARKER: AdminOnly
 	Host: Hostname, Method: "GET", Route: "/admin-only",
 	RequiredClaims: "roles.a",
 }
 
 // ManagerOnly is only accessible by managers.
-var ManagerOnly = define.Web{
+var ManagerOnly = define.Web{ // MARKER: ManagerOnly
 	Host: Hostname, Method: "GET", Route: "/manager-only",
 	RequiredClaims: "roles.m",
 }

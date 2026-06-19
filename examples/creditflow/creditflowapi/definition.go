@@ -22,6 +22,10 @@ import (
 	"time"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "creditflow.example"
 
@@ -35,12 +39,12 @@ const Version = 7
 const Description = `CreditFlow is an example microservice that demonstrates agentic workflow features.`
 
 // Demo serves the demo page for the credit approval workflow.
-var Demo = define.Web{
+var Demo = define.Web{ // MARKER: Demo
 	Host: Hostname, Method: "ANY", Route: "/demo",
 }
 
 // SubmitCreditApplication receives a credit application and sets up the workflow state.
-var SubmitCreditApplication = define.Task{
+var SubmitCreditApplication = define.Task{ // MARKER: SubmitCreditApplication
 	Host: Hostname, Method: "POST", Route: ":428/submit-credit-application",
 	In: SubmitCreditApplicationIn{}, Out: SubmitCreditApplicationOut{},
 }
@@ -61,7 +65,7 @@ type SubmitCreditApplicationOut struct { // MARKER: SubmitCreditApplication
 }
 
 // VerifyCredit checks the applicant's credit score.
-var VerifyCredit = define.Task{
+var VerifyCredit = define.Task{ // MARKER: VerifyCredit
 	Host: Hostname, Method: "POST", Route: ":428/verify-credit",
 	In: VerifyCreditIn{}, Out: VerifyCreditOut{},
 }
@@ -77,7 +81,7 @@ type VerifyCreditOut struct { // MARKER: VerifyCredit
 }
 
 // VerifyEmployment checks the applicant's employment status.
-var VerifyEmployment = define.Task{
+var VerifyEmployment = define.Task{ // MARKER: VerifyEmployment
 	Host: Hostname, Method: "POST", Route: ":428/verify-employment",
 	In: VerifyEmploymentIn{}, Out: VerifyEmploymentOut{},
 }
@@ -94,7 +98,7 @@ type VerifyEmploymentOut struct { // MARKER: VerifyEmployment
 }
 
 // InitIdentityVerification is the entry point for the identity verification subgraph.
-var InitIdentityVerification = define.Task{
+var InitIdentityVerification = define.Task{ // MARKER: InitIdentityVerification
 	Host: Hostname, Method: "POST", Route: ":428/init-identity-verification",
 	In: InitIdentityVerificationIn{}, Out: InitIdentityVerificationOut{},
 }
@@ -112,7 +116,7 @@ type InitIdentityVerificationOut struct { // MARKER: InitIdentityVerification
 }
 
 // VerifySSN checks the applicant's SSN.
-var VerifySSN = define.Task{
+var VerifySSN = define.Task{ // MARKER: VerifySSN
 	Host: Hostname, Method: "POST", Route: ":428/verify-ssn",
 	In: VerifySSNIn{}, Out: VerifySSNOut{},
 }
@@ -128,7 +132,7 @@ type VerifySSNOut struct { // MARKER: VerifySSN
 }
 
 // VerifyAddress checks the applicant's address.
-var VerifyAddress = define.Task{
+var VerifyAddress = define.Task{ // MARKER: VerifyAddress
 	Host: Hostname, Method: "POST", Route: ":428/verify-address",
 	In: VerifyAddressIn{}, Out: VerifyAddressOut{},
 }
@@ -144,7 +148,7 @@ type VerifyAddressOut struct { // MARKER: VerifyAddress
 }
 
 // VerifyPhoneNumber checks the applicant's phone number.
-var VerifyPhoneNumber = define.Task{
+var VerifyPhoneNumber = define.Task{ // MARKER: VerifyPhoneNumber
 	Host: Hostname, Method: "POST", Route: ":428/verify-phone-number",
 	TimeBudget: time.Second,
 	In:         VerifyPhoneNumberIn{}, Out: VerifyPhoneNumberOut{},
@@ -161,7 +165,7 @@ type VerifyPhoneNumberOut struct { // MARKER: VerifyPhoneNumber
 }
 
 // IdentityDecision determines whether the applicant's identity is verified based on SSN, address, and phone checks.
-var IdentityDecision = define.Task{
+var IdentityDecision = define.Task{ // MARKER: IdentityDecision
 	Host: Hostname, Method: "POST", Route: ":428/identity-decision",
 	In: IdentityDecisionIn{}, Out: IdentityDecisionOut{},
 }
@@ -179,7 +183,7 @@ type IdentityDecisionOut struct { // MARKER: IdentityDecision
 }
 
 // RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgraph and adopts identityVerified.
-var RunIdentityVerification = define.Task{
+var RunIdentityVerification = define.Task{ // MARKER: RunIdentityVerification
 	Host: Hostname, Method: "POST", Route: ":428/run-identity-verification",
 	In: RunIdentityVerificationIn{}, Out: RunIdentityVerificationOut{},
 }
@@ -198,7 +202,7 @@ type RunIdentityVerificationOut struct { // MARKER: RunIdentityVerification
 }
 
 // RequestMoreInfo requests additional information for the credit review and increments the review attempt counter.
-var RequestMoreInfo = define.Task{
+var RequestMoreInfo = define.Task{ // MARKER: RequestMoreInfo
 	Host: Hostname, Method: "POST", Route: ":428/request-more-info",
 	In: RequestMoreInfoIn{}, Out: RequestMoreInfoOut{},
 }
@@ -214,7 +218,7 @@ type RequestMoreInfoOut struct { // MARKER: RequestMoreInfo
 }
 
 // ReviewCredit performs a manual review of borderline credit scores.
-var ReviewCredit = define.Task{
+var ReviewCredit = define.Task{ // MARKER: ReviewCredit
 	Host: Hostname, Method: "POST", Route: ":428/review-credit",
 	In: ReviewCreditIn{}, Out: ReviewCreditOut{},
 }
@@ -232,7 +236,7 @@ type ReviewCreditOut struct { // MARKER: ReviewCredit
 }
 
 // HandleCreditError handles a credit verification error by setting creditVerified to false.
-var HandleCreditError = define.Task{
+var HandleCreditError = define.Task{ // MARKER: HandleCreditError
 	Host: Hostname, Method: "POST", Route: ":428/handle-credit-error",
 	In: HandleCreditErrorIn{}, Out: HandleCreditErrorOut{},
 }
@@ -248,7 +252,7 @@ type HandleCreditErrorOut struct { // MARKER: HandleCreditError
 }
 
 // Decision determines whether to approve the credit application based on verification results.
-var Decision = define.Task{
+var Decision = define.Task{ // MARKER: Decision
 	Host: Hostname, Method: "POST", Route: ":428/decision",
 	In: DecisionIn{}, Out: DecisionOut{},
 }
@@ -266,7 +270,7 @@ type DecisionOut struct { // MARKER: Decision
 }
 
 // IdentityVerification defines the workflow graph for the identity verification process.
-var IdentityVerification = define.Workflow{
+var IdentityVerification = define.Workflow{ // MARKER: IdentityVerification
 	Host: Hostname, Method: "GET", Route: ":428/identity-verification",
 	In: IdentityVerificationIn{}, Out: IdentityVerificationOut{},
 }
@@ -285,7 +289,7 @@ type IdentityVerificationOut struct { // MARKER: IdentityVerification
 }
 
 // CreditApproval defines the workflow graph for the full credit approval process.
-var CreditApproval = define.Workflow{
+var CreditApproval = define.Workflow{ // MARKER: CreditApproval
 	Host: Hostname, Method: "GET", Route: ":428/credit-approval",
 	In: CreditApprovalIn{}, Out: CreditApprovalOut{},
 }

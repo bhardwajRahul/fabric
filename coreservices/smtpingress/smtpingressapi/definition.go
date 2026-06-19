@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "smtp.ingress.core"
 
@@ -33,7 +37,7 @@ const Version = 182
 const Description = `The SMTP ingress microservice listens for incoming emails and fires corresponding events.`
 
 // Port is the TCP port to listen to.
-var Port = define.Config{
+var Port = define.Config{ // MARKER: Port
 	Value:      int(0),
 	Default:    "25",
 	Validation: "int [1,65535]",
@@ -41,7 +45,7 @@ var Port = define.Config{
 }
 
 // Enabled determines whether the email server is started.
-var Enabled = define.Config{
+var Enabled = define.Config{ // MARKER: Enabled
 	Value:      bool(false),
 	Default:    "true",
 	Validation: "bool",
@@ -49,7 +53,7 @@ var Enabled = define.Config{
 }
 
 // MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.
-var MaxSize = define.Config{
+var MaxSize = define.Config{ // MARKER: MaxSize
 	Value:      int(0),
 	Default:    "10",
 	Validation: "int [0,1024]",
@@ -57,7 +61,7 @@ var MaxSize = define.Config{
 }
 
 // MaxClients controls how many client connections can be opened in parallel. Defaults to 128.
-var MaxClients = define.Config{
+var MaxClients = define.Config{ // MARKER: MaxClients
 	Value:      int(0),
 	Default:    "128",
 	Validation: "int [1,1024]",
@@ -65,7 +69,7 @@ var MaxClients = define.Config{
 }
 
 // Workers controls how many workers process incoming mail. Defaults to 8.
-var Workers = define.Config{
+var Workers = define.Config{ // MARKER: Workers
 	Value:      int(0),
 	Default:    "8",
 	Validation: "int [1,1024]",
@@ -73,7 +77,7 @@ var Workers = define.Config{
 }
 
 // OnIncomingEmail is triggered when a new email message is received.
-var OnIncomingEmail = define.OutboundEvent{
+var OnIncomingEmail = define.OutboundEvent{ // MARKER: OnIncomingEmail
 	Host: Hostname, Method: "POST", Route: ":417/on-incoming-email",
 	In: OnIncomingEmailIn{}, Out: OnIncomingEmailOut{},
 }

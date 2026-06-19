@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "metrics.core"
 
@@ -34,12 +38,12 @@ const Description = `The Metrics service is a core microservice that aggregates 
 
 // SecretKey must be provided with the request to collect the metrics.
 // This key is required except in local development and tests.
-var SecretKey = define.Config{
+var SecretKey = define.Config{ // MARKER: SecretKey
 	Value:  string(""),
 	Secret: true,
 }
 
 // Collect returns the latest aggregated metrics.
-var Collect = define.Web{
+var Collect = define.Web{ // MARKER: Collect
 	Host: Hostname, Method: "GET", Route: "/collect",
 }

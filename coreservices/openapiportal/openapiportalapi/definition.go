@@ -20,6 +20,10 @@ import (
 	"github.com/microbus-io/fabric/define"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "openapi.core"
 
@@ -35,11 +39,11 @@ plus per-service docs proxied from each microservice's :888/openapi.json. Endpoi
 (per-service) and the request's port (consumer-side).`
 
 // Document returns the OpenAPI 3.1 document as JSON. Without a hostname query arg, returns an aggregate covering every microservice on the bus. With ?hostname=<host>, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port.
-var Document = define.Web{
+var Document = define.Web{ // MARKER: Document
 	Host: Hostname, Method: "GET", Route: "//openapi.json:0",
 }
 
 // Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without ?hostname=<host>, lists every service. With ?hostname=<host>, shows that service's endpoints.
-var Explorer = define.Web{
+var Explorer = define.Web{ // MARKER: Explorer
 	Host: Hostname, Method: "GET", Route: "//openapi:0",
 }

@@ -6,11 +6,15 @@ import (
 	"time"
 )
 
+// HINT: This file is the single source of truth for the microservice's API. After editing it, run
+// cmd/genservice on the microservice's directory (the parent of this api package) to regenerate client.go,
+// intermediate.go, mock.go, mock_test.go, and manifest.yaml. Do not hand-edit those generated files.
+
 // Hostname is the default hostname of the microservice.
 const Hostname = "foreman.core"
 
 // Name is the decorative PascalCase name of the microservice.
-const Name = ""
+const Name = "Foreman"
 
 // Version is the major version of the microservice's public API.
 const Version = 52
@@ -19,34 +23,34 @@ const Version = 52
 const Description = `Foreman orchestrates agentic workflow execution.`
 
 // SQLDataSourceName is the connection string of the SQL database.
-var SQLDataSourceName = define.Config{
+var SQLDataSourceName = define.Config{ // MARKER: SQLDataSourceName
 	Value:  string(""),
 	Secret: true,
 }
 
 // Workers is the number of concurrent workers that process flow steps.
-var Workers = define.Config{
+var Workers = define.Config{ // MARKER: Workers
 	Value:      int(0),
 	Default:    "64",
 	Validation: "int [1,]",
 }
 
 // TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
-var TimeBudget = define.Config{
+var TimeBudget = define.Config{ // MARKER: TimeBudget
 	Value:      time.Duration(0),
 	Default:    "2m",
 	Validation: "dur [1s,15m]",
 }
 
 // DefaultPriority is the priority assigned to a flow when the caller does not specify one. Priority is an integer >= 1, lower numbers run first.
-var DefaultPriority = define.Config{
+var DefaultPriority = define.Config{ // MARKER: DefaultPriority
 	Value:      int(0),
 	Default:    "5",
 	Validation: "int [1,]",
 }
 
 // NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
-var NumShards = define.Config{
+var NumShards = define.Config{ // MARKER: NumShards
 	Value:      int(0),
 	Default:    "1",
 	Validation: "int [1,]",
@@ -54,14 +58,14 @@ var NumShards = define.Config{
 }
 
 // SQLConnectionPool is the number of database connections kept open per shard.
-var SQLConnectionPool = define.Config{
+var SQLConnectionPool = define.Config{ // MARKER: SQLConnectionPool
 	Value:      int(0),
 	Default:    "8",
 	Validation: "int [1,]",
 }
 
 // OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
-var OnFlowStopped = define.OutboundEvent{
+var OnFlowStopped = define.OutboundEvent{ // MARKER: OnFlowStopped
 	Host: Hostname, Method: "POST", Route: ":417/on-flow-terminated",
 	In: OnFlowStoppedIn{}, Out: OnFlowStoppedOut{},
 }
@@ -77,7 +81,7 @@ type OnFlowStoppedOut struct { // MARKER: OnFlowStopped
 }
 
 // Create creates a new flow for a workflow without starting it.
-var Create = define.Function{
+var Create = define.Function{ // MARKER: Create
 	Host: Hostname, Method: "ANY", Route: ":444/create",
 	In: CreateIn{}, Out: CreateOut{},
 }
@@ -95,7 +99,7 @@ type CreateOut struct { // MARKER: Create
 }
 
 // Start transitions a created flow to running and enqueues it for execution.
-var Start = define.Function{
+var Start = define.Function{ // MARKER: Start
 	Host: Hostname, Method: "ANY", Route: ":444/start",
 	In: StartIn{}, Out: StartOut{},
 }
@@ -110,7 +114,7 @@ type StartOut struct { // MARKER: Start
 }
 
 // Snapshot returns the current outcome of a flow.
-var Snapshot = define.Function{
+var Snapshot = define.Function{ // MARKER: Snapshot
 	Host: Hostname, Method: "GET", Route: ":444/snapshot",
 	In: SnapshotIn{}, Out: SnapshotOut{},
 }
@@ -126,7 +130,7 @@ type SnapshotOut struct { // MARKER: Snapshot
 }
 
 // Fingerprint returns a short opaque hash that changes when the flow's status, step count, or any step's updated_at changes — across the flow and any nested subgraph descendants.
-var Fingerprint = define.Function{
+var Fingerprint = define.Function{ // MARKER: Fingerprint
 	Host: Hostname, Method: "GET", Route: ":444/fingerprint",
 	In: FingerprintIn{}, Out: FingerprintOut{},
 }
@@ -143,7 +147,7 @@ type FingerprintOut struct { // MARKER: Fingerprint
 }
 
 // Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.
-var Resume = define.Function{
+var Resume = define.Function{ // MARKER: Resume
 	Host: Hostname, Method: "POST", Route: ":444/resume",
 	In: ResumeIn{}, Out: ResumeOut{},
 }
@@ -159,7 +163,7 @@ type ResumeOut struct { // MARKER: Resume
 }
 
 // ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.
-var ResumeBreak = define.Function{
+var ResumeBreak = define.Function{ // MARKER: ResumeBreak
 	Host: Hostname, Method: "POST", Route: ":444/resume-break",
 	In: ResumeBreakIn{}, Out: ResumeBreakOut{},
 }
@@ -175,7 +179,7 @@ type ResumeBreakOut struct { // MARKER: ResumeBreak
 }
 
 // Cancel cancels a flow that is not yet in a terminal status.
-var Cancel = define.Function{
+var Cancel = define.Function{ // MARKER: Cancel
 	Host: Hostname, Method: "POST", Route: ":444/cancel",
 	In: CancelIn{}, Out: CancelOut{},
 }
@@ -191,7 +195,7 @@ type CancelOut struct { // MARKER: Cancel
 }
 
 // Restart wipes everything past a flow's entry step and resets the entry with overrides.
-var Restart = define.Function{
+var Restart = define.Function{ // MARKER: Restart
 	Host: Hostname, Method: "POST", Route: ":444/restart",
 	In: RestartIn{}, Out: RestartOut{},
 }
@@ -207,7 +211,7 @@ type RestartOut struct { // MARKER: Restart
 }
 
 // RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-var RestartFrom = define.Function{
+var RestartFrom = define.Function{ // MARKER: RestartFrom
 	Host: Hostname, Method: "POST", Route: ":444/restart-from",
 	In: RestartFromIn{}, Out: RestartFromOut{},
 }
@@ -223,7 +227,7 @@ type RestartFromOut struct { // MARKER: RestartFrom
 }
 
 // History returns the step-by-step execution history of a flow.
-var History = define.Function{
+var History = define.Function{ // MARKER: History
 	Host: Hostname, Method: "GET", Route: ":444/history",
 	In: HistoryIn{}, Out: HistoryOut{},
 }
@@ -239,7 +243,7 @@ type HistoryOut struct { // MARKER: History
 }
 
 // Step returns the full detail of one execution step, including the state, changes and interrupt payload that History omits.
-var Step = define.Function{
+var Step = define.Function{ // MARKER: Step
 	Host: Hostname, Method: "GET", Route: ":444/step",
 	In: StepIn{}, Out: StepOut{},
 }
@@ -255,7 +259,7 @@ type StepOut struct { // MARKER: Step
 }
 
 // List queries flows by status or workflow URL. Set Query.Cursor to the previous call's NextCursor to paginate.
-var List = define.Function{
+var List = define.Function{ // MARKER: List
 	Host: Hostname, Method: "GET", Route: ":444/list",
 	In: ListIn{}, Out: ListOut{},
 }
@@ -274,7 +278,7 @@ type ListOut struct { // MARKER: List
 }
 
 // Delete removes a flow and its steps from the database. The flow must not be running. Subgraph and thread lineage references become dangling.
-var Delete = define.Function{
+var Delete = define.Function{ // MARKER: Delete
 	Host: Hostname, Method: "POST", Route: ":444/delete",
 	In: DeleteIn{}, Out: DeleteOut{},
 }
@@ -289,7 +293,7 @@ type DeleteOut struct { // MARKER: Delete
 }
 
 // Purge deletes flows matching the query, except those currently running. Capped at 10000 flows per call.
-var Purge = define.Function{
+var Purge = define.Function{ // MARKER: Purge
 	Host: Hostname, Method: "POST", Route: ":444/purge",
 	In: PurgeIn{}, Out: PurgeOut{},
 }
@@ -306,7 +310,7 @@ type PurgeOut struct { // MARKER: Purge
 }
 
 // ShardInfo returns per-shard health (latency, row counts, error) for every database shard.
-var ShardInfo = define.Function{
+var ShardInfo = define.Function{ // MARKER: ShardInfo
 	Host: Hostname, Method: "GET", Route: ":444/shard-info",
 	In: ShardInfoIn{}, Out: ShardInfoOut{},
 }
@@ -321,7 +325,7 @@ type ShardInfoOut struct { // MARKER: ShardInfo
 }
 
 // CreateTask creates a flow that executes a single task and then terminates, without starting it.
-var CreateTask = define.Function{
+var CreateTask = define.Function{ // MARKER: CreateTask
 	Host: Hostname, Method: "POST", Route: ":444/create-task",
 	In: CreateTaskIn{}, Out: CreateTaskOut{},
 }
@@ -340,7 +344,7 @@ type CreateTaskOut struct { // MARKER: CreateTask
 }
 
 // Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.
-var Await = define.Function{
+var Await = define.Function{ // MARKER: Await
 	Host: Hostname, Method: "POST", Route: ":444/wait-for-stop",
 	In: AwaitIn{}, Out: AwaitOut{},
 }
@@ -356,7 +360,7 @@ type AwaitOut struct { // MARKER: Await
 }
 
 // BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-var BreakBefore = define.Function{
+var BreakBefore = define.Function{ // MARKER: BreakBefore
 	Host: Hostname, Method: "POST", Route: ":444/break-before",
 	In: BreakBeforeIn{}, Out: BreakBeforeOut{},
 }
@@ -373,7 +377,7 @@ type BreakBeforeOut struct { // MARKER: BreakBefore
 }
 
 // Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
-var Run = define.Function{
+var Run = define.Function{ // MARKER: Run
 	Host: Hostname, Method: "POST", Route: ":444/run",
 	In: RunIn{}, Out: RunOut{},
 }
@@ -391,7 +395,7 @@ type RunOut struct { // MARKER: Run
 }
 
 // Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
-var Continue = define.Function{
+var Continue = define.Function{ // MARKER: Continue
 	Host: Hostname, Method: "POST", Route: ":444/continue",
 	In: ContinueIn{}, Out: ContinueOut{},
 }
@@ -409,7 +413,7 @@ type ContinueOut struct { // MARKER: Continue
 }
 
 // Signal delivers an opaque cross-replica coordination signal (op, payload) to the embedded engine. Excludes self-delivery; processes only signals originating from a peer foreman replica.
-var Signal = define.Function{
+var Signal = define.Function{ // MARKER: Signal
 	Host: Hostname, Method: "POST", Route: ":444/signal",
 	LoadBalancing: define.None,
 	In:            SignalIn{}, Out: SignalOut{},
@@ -426,6 +430,6 @@ type SignalOut struct { // MARKER: Signal
 }
 
 // HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.
-var HistoryMermaid = define.Web{
+var HistoryMermaid = define.Web{ // MARKER: HistoryMermaid
 	Host: Hostname, Method: "GET", Route: ":444/history-mermaid",
 }
