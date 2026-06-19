@@ -86,6 +86,17 @@ disturb. The `Def` routing struct and its `URL()` method are dropped (replaced b
 `Def` var block is dropped (route/method come from the manifest). Domain types declared in sibling files
 (`point.go`, `applicant.go`) are left untouched - only endpoints.go is rewritten.
 
+### Inbound event options are not migrated
+
+`define.InboundEvent` carries `RequiredClaims`, `TimeBudget`, and `LoadBalancing` (the consumer-side
+`NewHook(svc).WithOptions(...)` knobs). The 1.41.0 routine does **not** recover them: the manifest never recorded
+inbound-event options (its `inboundEvents` entries hold only `signature`/`description`/`package`), and they lived
+solely in the hand-written `NewHook(svc).WithOptions(...)` binding in `intermediate.go`, which the routine does
+not scan. No microservice in this repo ever set inbound options, so the sweep lost nothing. A downstream that
+relied on `WithOptions(sub.NoQueue()/sub.RequiredClaims(...))` on an inbound hook must re-add the equivalent
+`LoadBalancing`/`RequiredClaims` field to the generated `define.InboundEvent` literal after migrating - a manual
+step, called out here because a silently dropped `RequiredClaims` is a security regression.
+
 ### Inbound event Source
 
 The manifest's `inboundEvents.<name>.package` is the source **microservice** package path, not its api package.

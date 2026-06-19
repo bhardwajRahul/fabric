@@ -24,3 +24,5 @@ nats.creds
 /main/venv.py.core
 
 /_*.md
+# Throwaway service for exercising the add-* skills during the definition.go skills rewrite (delete when done)
+examples/temperature/

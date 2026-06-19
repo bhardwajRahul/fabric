@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"go/format"
 	"sort"
+	"strings"
 )
 
 // intermediateModel is the tree handed to intermediate.txt. Unlike client.go, intermediate.go lives in
@@ -162,6 +163,11 @@ func emitIntermediate(svc *service, pkg, apiPath, resourcesPath, header string, 
 	if hasEndpoints {
 		imports[impHTTP] = true
 		imports[impSub] = true
+	}
+	for _, iv := range m.InboundEvents {
+		if iv.HookOptions != "" {
+			imports[impSub] = true // Hook.WithOptions(sub.…) references the sub package
+		}
 	}
 	if len(m.Funcs) > 0 {
 		imports[impHTTPX] = true
@@ -339,14 +345,38 @@ func inboundView(svc *service, f feature, resolveSource func(string) (*service, 
 		return nil, "", fmt.Errorf("inbound event %q: source outbound event %s.%s not found", f.name, f.srcPkg, f.srcEvent)
 	}
 	return &featureView{
-		Name:       f.name,
-		Doc:        f.doc,
-		DocComment: docComment(f.doc),
-		SrcPkg:     f.srcPkg,
-		SrcEvent:   f.srcEvent,
-		apiPkg:     f.srcPkg, // inbound handler params reference the source api package's types
-		inFields:   srcSvc.fieldsOf(ev.in),
-		outFields:  srcSvc.fieldsOf(ev.out),
+		Name:        f.name,
+		Doc:         f.doc,
+		DocComment:  docComment(f.doc),
+		SrcPkg:      f.srcPkg,
+		SrcEvent:    f.srcEvent,
+		HookOptions: hookOptions(svc, f),
+		apiPkg:      f.srcPkg, // inbound handler params reference the source api package's types
+		inFields:    srcSvc.fieldsOf(ev.in),
+		outFields:   srcSvc.fieldsOf(ev.out),
 	}, srcPath, nil
+}
+
+// hookOptions renders the sub.Options for an inbound event's Hook.WithOptions call from its
+// RequiredClaims/TimeBudget/LoadBalancing fields, comma-joined, or "" when none are set.
+func hookOptions(svc *service, f feature) string {
+	var opts []string
+	if claims := attrString(f.attrs, "RequiredClaims"); claims != "" {
+		opts = append(opts, fmt.Sprintf("sub.RequiredClaims(`%s`)", claims))
+	}
+	if tb, ok := f.attrs["TimeBudget"]; ok {
+		opts = append(opts, fmt.Sprintf("sub.TimeBudget(%s)", exprSource(svc.fset, tb)))
+	}
+	switch q := loadBalancingValue(f.attrs["LoadBalancing"]); q {
+	case "none":
+		opts = append(opts, "sub.NoQueue()")
+	case "default":
+		opts = append(opts, "sub.DefaultQueue()")
+	case "":
+		// default queue, no option
+	default:
+		opts = append(opts, fmt.Sprintf("sub.Queue(%q)", q))
+	}
+	return strings.Join(opts, ", ")
 }
 

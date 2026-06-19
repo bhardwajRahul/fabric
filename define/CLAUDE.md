@@ -57,6 +57,15 @@ the `InboundEvent` var, consistent with how every other feature's handler name d
 is no separate `Handler` field. If a consumer sinks two same-named events from different sources, the
 package-level vars must already have distinct names, which yields distinct handler methods for free.
 
+`InboundEvent` also carries `RequiredClaims`, `TimeBudget`, and `LoadBalancing` - the consumer-side subscription
+options the previous hand-written `NewHook(svc).WithOptions(...)` binding supported. It has no `Host`/`Method`/
+`Route` of its own (those come from `Source`), so it is not a routable kind with a `URL()`; these three fields
+are the only consumer-tunable knobs. genservice renders them into the generated hook wiring as
+`NewHook(svc).WithOptions(sub.RequiredClaims(...), sub.TimeBudget(...), sub.NoQueue()/Queue(...)).OnX(svc.OnX)`,
+omitting `WithOptions` entirely when none are set. `LoadBalancing: define.None` is the load-bearing one: it makes
+every replica process the event (the cache-invalidation pattern), versus the default queue where one replica
+handles each delivery.
+
 ### Descriptions live in godoc, not a field
 
 There is no `Description` field on any type. The endpoint/feature description is the godoc on the var, which

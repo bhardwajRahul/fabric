@@ -134,6 +134,7 @@ type MyFunctionOut struct { // MARKER: MyFunction
 - `Host` is always `Hostname`. `Method` and `Route` come from Step 3. Set `In` and `Out` to the In/Out struct literals (`MyFunctionIn{}`, `MyFunctionOut{}`)
 - The In struct holds the input arguments excluding `ctx`; the Out struct holds the output arguments excluding `err`. Use PascalCase field names and camelCase `json` tags with `omitzero`
 - For a magic HTTP argument (`httpRequestBody`, `httpResponseBody`, `httpStatusCode`), set the field's `json` tag to `-`
+- If an In/Out field's type comes from another package (e.g. a `time.Time` field needs `"time"`), add that import to `definition.go`
 - Add the gating and routing fields only when needed:
   - `RequiredClaims: "roles.manager && level>2"` for the claims from Step 5 (omit when public)
   - `TimeBudget: 30 * time.Second` to cap the handler's duration (omit for the default; add the `time` import if used)
@@ -141,7 +142,7 @@ type MyFunctionOut struct { // MARKER: MyFunction
 
 #### Step 8: Implement the Logic in `service.go`
 
-Implement the handler in `service.go`. Complex types refer to their definition in `myserviceapi`, even if owned by a third-party. The handler's godoc is the same one-line description from Step 4.
+Implement the handler in `service.go`. Complex types refer to their definition in `myserviceapi`, even if owned by a third-party. The handler's godoc is the same one-line description from Step 4. Add imports for any packages the signature references that are not already imported (e.g. `"time"` for a `time.Time` argument).
 
 ```go
 // MyFunction does X.

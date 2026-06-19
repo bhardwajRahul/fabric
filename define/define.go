@@ -122,7 +122,10 @@ func (e OutboundEvent) URL() string { return joinHostAndPath(e.Host, e.Route) }
 // source microservice's OutboundEvent var, so a removed or renamed event is a compile error here.
 // The Service method that handles the event is named after the InboundEvent var.
 type InboundEvent struct {
-	Source OutboundEvent // the source microservice's OutboundEvent var
+	Source         OutboundEvent // the source microservice's OutboundEvent var
+	RequiredClaims string        // boolean expression over JWT claims; empty means open
+	TimeBudget     time.Duration // per-endpoint max duration; zero means the framework default
+	LoadBalancing  string        // "" (default), define.None, or a custom queue name
 }
 
 // Config is a runtime configuration property, sourced as a string then converted to Value's Go type.

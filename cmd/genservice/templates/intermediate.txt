@@ -90,7 +90,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 {{if .Doc}}		sub.Description(`{{.Doc}}`),
 {{end}}{{template "subopts" .}}		sub.Workflow({{$.APIPkg}}.{{.In}}{}, {{$.APIPkg}}.{{.Out}}{}),
 	)
-{{end}}{{range .InboundEvents}}	{{.SrcPkg}}.NewHook(svc).{{.SrcEvent}}(svc.{{.Name}}) // MARKER: {{.Name}}
+{{end}}{{range .InboundEvents}}	{{.SrcPkg}}.NewHook(svc){{if .HookOptions}}.WithOptions({{.HookOptions}}){{end}}.{{.SrcEvent}}(svc.{{.Name}}) // MARKER: {{.Name}}
 {{end}}{{range .Metrics}}	svc.{{if eq .Kind "counter"}}DescribeCounter{{else if eq .Kind "gauge"}}DescribeGauge{{else}}DescribeHistogram{{end}}("{{.OTelName}}", `{{.Doc}}`{{if eq .Kind "histogram"}}, {{.Buckets}}{{end}}) // MARKER: {{.Name}}
 {{end}}{{range .Tickers}}	svc.StartTicker("{{.Name}}", {{.Interval}}, svc.{{.Name}}) // MARKER: {{.Name}}
 {{end}}{{range .Configs}}	svc.DefineConfig( // MARKER: {{.Name}}

@@ -91,6 +91,7 @@ type featureView struct {
 	Out        string // Out struct type name
 	SrcPkg     string // InboundEvent only: source api package alias
 	SrcEvent   string // InboundEvent only: source outbound event name
+	HookOptions string // InboundEvent only: rendered sub.Options for Hook.WithOptions, or ""
 
 	// Endpoint subscription options (intermediate.go only).
 	ReqClaims  string // sub.RequiredClaims expression, or ""
