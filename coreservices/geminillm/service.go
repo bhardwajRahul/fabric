@@ -22,7 +22,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -32,6 +35,47 @@ import (
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 )
 
+// countInputTokens asks Gemini's countTokens endpoint for the exact input token count of a request, without
+// generating. It runs on a separate, free quota, so it works even while generation is rate-limited.
+func (svc *Service) countInputTokens(ctx context.Context, model string, reqBody geminiRequest) (int, error) {
+	ctReq := geminiCountTokensReq{
+		GenerateContentRequest: geminiCountInner{
+			Model:             "models/" + model,
+			Contents:          reqBody.Contents,
+			Tools:             reqBody.Tools,
+			SystemInstruction: reqBody.SystemInstruction,
+		},
+	}
+	body, err := json.Marshal(ctReq)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	apiURL := svc.CompletionURL() + "/" + model + ":countTokens?key=" + svc.APIKey()
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer httpResp.Body.Close()
+	respBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return 0, errors.New("countTokens %d: %s", httpResp.StatusCode, string(respBody))
+	}
+	var ct geminiCountTokensResp
+	err = json.Unmarshal(respBody, &ct)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return ct.TotalTokens, nil
+}
+
 var (
 	_ context.Context
 	_ http.Request
@@ -39,6 +83,21 @@ var (
 	_ *workflow.Flow
 	_ geminillmapi.Client
 )
+
+// errorDetailAttrs returns the raw upstream response as error attributes for caller introspection: the full headers
+// (minus the egress proxy's own Microbus-* additions) and the body truncated to 16KB.
+func errorDetailAttrs(h http.Header, body []byte) []any {
+	headers := map[string]string{}
+	for k, v := range h {
+		if !strings.HasPrefix(k, "Microbus-") {
+			headers[k] = strings.Join(v, ",")
+		}
+	}
+	if len(body) > 16*1024 {
+		body = body[:16*1024]
+	}
+	return []any{"headers", headers, "body", string(body)}
+}
 
 /*
 Service implements the gemini.llm.core microservice.
@@ -49,6 +108,8 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
+	rateMu       sync.Mutex
+	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
 }
 
 // OnStartup is called when the microservice is started up.
@@ -61,12 +122,38 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
+// rateLimitWait returns the time remaining until model's rate-limit window clears, or 0 if not currently limited.
+func (svc *Service) rateLimitWait(model string) time.Duration {
+	svc.rateMu.Lock()
+	defer svc.rateMu.Unlock()
+	wait := time.Until(svc.blockedUntil[model])
+	if wait <= 0 {
+		delete(svc.blockedUntil, model)
+		return 0
+	}
+	return wait
+}
+
+// blockModel records that model is rate-limited for the next d, so subsequent calls are preempted until it clears.
+func (svc *Service) blockModel(model string, d time.Duration) {
+	svc.rateMu.Lock()
+	defer svc.rateMu.Unlock()
+	if svc.blockedUntil == nil {
+		svc.blockedUntil = map[string]time.Time{}
+	}
+	svc.blockedUntil[model] = time.Now().Add(d)
+}
+
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
 func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
 		return "", nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
+	if wait := svc.rateLimitWait(model); wait > 0 {
+		return "", nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 
 	// Gemini has a dedicated `systemInstruction` request field; system role messages
@@ -220,7 +307,73 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	if httpResp.StatusCode != http.StatusOK {
-		return "", nil, "", llmapi.Usage{}, errors.New("Gemini API error %d: %s", httpResp.StatusCode, string(rawBody))
+		svc.LogWarn(ctx, "Gemini API error response",
+			"status", httpResp.StatusCode,
+			"headers", httpResp.Header,
+			"body", string(rawBody),
+		)
+		var apiErr struct {
+			Error struct {
+				Message string `json:"message"`
+				Details []struct {
+					Type       string `json:"@type"`
+					RetryDelay string `json:"retryDelay"` // google.rpc.RetryInfo
+					Violations []struct {
+						QuotaID    string `json:"quotaId"`
+						QuotaValue string `json:"quotaValue"`
+					} `json:"violations"` // google.rpc.QuotaFailure
+				} `json:"details"`
+			} `json:"error"`
+		}
+		json.Unmarshal(rawBody, &apiErr)
+		message := apiErr.Error.Message
+		if message == "" {
+			message = "Gemini API error"
+		}
+		// Parse only what the retry decision needs; the full body and headers are attached raw below.
+		var retryDelay, quotaID string
+		var quotaValue int64
+		for _, d := range apiErr.Error.Details {
+			switch {
+			case strings.HasSuffix(d.Type, "RetryInfo"):
+				retryDelay = d.RetryDelay
+			case strings.HasSuffix(d.Type, "QuotaFailure"):
+				for _, v := range d.Violations {
+					quotaID = v.QuotaID
+					if qv, convErr := strconv.ParseInt(v.QuotaValue, 10, 64); convErr == nil {
+						quotaValue = qv
+					}
+				}
+			}
+		}
+		props := []any{httpResp.StatusCode}
+		// retryAfter is the retry signal to ChatLoop; attached only for a retryable per-minute overflow (the request
+		// fits the quota, not a PerDay quota), with a 1s margin for retryDelay's truncation. A token spans at least
+		// one byte, so the marshaled request length is a hard ceiling on its token count: when even that ceiling fits
+		// the quota the request cannot be poison and we skip the countTokens round-trip. Otherwise ask countTokens for
+		// the exact count; if that call fails we cannot prove the request fits, so treat it as poison (fail closed).
+		poison := false
+		if quotaValue > 0 && int64(len(body)) >= quotaValue {
+			tokens, ctErr := svc.countInputTokens(ctx, model, reqBody)
+			if ctErr != nil {
+				svc.LogWarn(ctx, "Gemini countTokens failed; treating as non-retryable", "error", ctErr)
+				poison = true
+			} else {
+				poison = int64(tokens) > quotaValue
+			}
+		}
+		perDay := strings.Contains(quotaID, "PerDay")
+		if httpResp.StatusCode == http.StatusTooManyRequests && retryDelay != "" && !poison && !perDay {
+			retryAfter := retryDelay
+			if d, parseErr := time.ParseDuration(retryDelay); parseErr == nil {
+				wait := d + time.Second // 1s margin for retryDelay's truncation
+				retryAfter = wait.String()
+				svc.blockModel(model, wait)
+			}
+			props = append(props, "retryAfter", retryAfter)
+		}
+		props = append(props, errorDetailAttrs(httpResp.Header, rawBody)...)
+		return "", nil, "", llmapi.Usage{}, errors.New(message, props...)
 	}
 
 	var gemResp geminiResponse

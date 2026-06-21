@@ -78,3 +78,59 @@ Cache hits depend on the request bytes being identical across calls. Three thing
 - Adding the option speculatively is YAGNI - when a real use case emerges (deterministic-test cache bypass, very long history with a custom history breakpoint, per-tenant cache isolation), the option's shape will be informed by that workload rather than guessed.
 
 If a caller explicitly needs to bypass caching, the cleanest workaround today is to set `cache_control` to nil at the call site by patching `claudellm/service.go` - we'll add the option when there's actual demand.
+
+## Error Classification
+
+The provider-to-ChatLoop contract is a single attribute, **`retryAfter`**: an error that carries a `retryAfter`
+duration is retryable (and that is the wait); an error without one is permanent. ChatLoop holds no policy and never
+inspects the status code - the provider, which alone sees the status, body, and headers, makes the decision and
+expresses it as `retryAfter`. This mirrors the dwarf/foreman split where the task expresses backoff via
+`flow.Sleep`+`flow.Retry` and the engine just executes it. The upstream status code is left **authentic** (never
+remapped) - it is for HTTP semantics and observability, not the retry decision.
+
+On a non-OK response the provider parses Anthropic's `{error:{type,message}}` body and constitutes a `TracedError`
+via `errors.New`: the text is the body's `error.message`; the attributes are the authentic upstream status code,
+`type` (body `error.type`), `Request-Id` and `Traceresponse` headers, and the **entire `Anthropic-*` header family**
+(`HeaderAttrs`) - the organization id (`Anthropic-Organization-Id`, the per-org account identifier, returned on every
+response) plus every `Anthropic-Ratelimit-*` dimension. Capturing the full header set lets a caller of `Chat` make
+its own retry decision from the raw limit/remaining/reset values, not just the boolean `retryAfter`.
+
+`retryAfter` is set from the `Retry-After` header (delta-seconds). **Anthropic sends `Retry-After` exactly on the
+cases it wants retried** (429 `rate_limit_error`, 529 `overloaded_error`), and omits it on permanent failures - so
+keying `retryAfter` off that header needs no per-type allow-list and naturally classifies the permanent cases
+(billing `402`, oversized `413`, context-window `400`, auth `401/403`) as non-retryable.
+
+### Example: oversized request (live capture)
+
+Sending a prompt larger than the model's 200k-token context window. A clean permanent `400` with no `Retry-After`, so
+no `retryAfter` attribute is attached and ChatLoop will not retry.
+
+```
+status 400   (authentic, not remapped)
+headers:
+  Anthropic-Organization-Id: 17a4db89-fded-4b3d-a5e9-c1f8ec02d31a
+  Request-Id:                req_011CcFeQK8sU5EubttGUs31K
+  Traceresponse:             00-bd61476a8eb29f552e60cf107e235d45-042bf9271da17926-01
+  X-Should-Retry:            false      (Anthropic's own retryability hint; no Retry-After present)
+  Content-Type:              application/json
+body:
+  {"type":"error","error":{"type":"invalid_request_error",
+   "message":"prompt is too long: 200020 tokens > 200000 maximum"},
+   "request_id":"req_011CcFeQK8sU5EubttGUs31K"}
+```
+
+The limits are stated inline in the message (`200020 tokens > 200000 maximum`). A retryable error (e.g. a `429`)
+would instead carry a `Retry-After` header, which becomes the `retryAfter` attribute.
+
+## Rate-Limit Preemption
+
+The provider keeps an in-memory `map[model]blockedUntil` (mutex-guarded). On a `retryAfter`-bearing throttle it
+records `blockedUntil[model] = now + retryAfter`, and at the top of `Turn` it preempts a call to a still-blocked model
+with a synthetic `429` (carrying the remaining wait as `retryAfter`) *without* dialing Anthropic. This stops every
+in-flight caller from each eating its own real `429` before backing off.
+
+The gate lives in the provider, not llm.core, because the provider holds the API key - it unambiguously *is* one
+account and can gate before dialing, and a gate in `Turn` covers every caller (`Chat`, `CallLLM`, and direct
+`ForHost`), not just llm.core-routed traffic. It is keyed by **model** because Anthropic's limits are per-model; an
+account-wide gate would over-block sibling models. Only `retryAfter`-bearing errors arm it (poison/permanent never
+do). Per-replica, no cross-replica gossip.

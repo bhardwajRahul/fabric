@@ -25,6 +25,23 @@ type geminiRequest struct {
 	SystemInstruction *geminiContent   `json:"systemInstruction,omitzero"`
 }
 
+// geminiCountTokensReq wraps a generateContentRequest so countTokens counts the system instruction and tools, not
+// just contents.
+type geminiCountTokensReq struct {
+	GenerateContentRequest geminiCountInner `json:"generateContentRequest"`
+}
+
+type geminiCountInner struct {
+	Model             string          `json:"model"`
+	Contents          []geminiContent `json:"contents"`
+	Tools             []geminiToolDec `json:"tools,omitzero"`
+	SystemInstruction *geminiContent  `json:"systemInstruction,omitzero"`
+}
+
+type geminiCountTokensResp struct {
+	TotalTokens int `json:"totalTokens"`
+}
+
 type geminiGenConfig struct {
 	MaxOutputTokens int     `json:"maxOutputTokens,omitzero"`
 	Temperature     float64 `json:"temperature,omitzero"`

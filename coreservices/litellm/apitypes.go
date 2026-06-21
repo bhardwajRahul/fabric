@@ -24,6 +24,9 @@ type openaiRequest struct {
 	Tools       []openaiTool    `json:"tools,omitzero"`
 	MaxTokens   int             `json:"max_tokens,omitzero"`
 	Temperature float64         `json:"temperature,omitzero"`
+	// NumRetries is always sent as 0 (no omitzero) to disable LiteLLM's internal retries: its retry decision is
+	// status-code-only and cannot detect the poison case, and retries belong in exactly one place (CallLLM).
+	NumRetries int `json:"num_retries"`
 }
 
 type openaiMessage struct {

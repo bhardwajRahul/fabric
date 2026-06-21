@@ -41,3 +41,64 @@ emit it.
 `llm.core` interprets these — see `coreservices/llm/CLAUDE.md` "Stop-Reason Branching". An empty or
 unrecognized value reaches `llm.core` as `StopReasonUnknown` and surfaces as a `502` rather than as
 a silent completion.
+
+## Error Classification
+
+The provider-to-ChatLoop contract is a single attribute, **`retryAfter`**: present => retryable (and that is the
+wait), absent => permanent. ChatLoop holds no policy and never inspects the status code; the provider makes the call.
+The upstream status code is left **authentic** (never remapped) - it is for HTTP semantics and observability.
+
+On a non-OK response the provider parses OpenAI's `{error:{message,type,code,param}}` body and constitutes a
+`TracedError` via `errors.New`: the text is the body's `error.message`; the attributes are the authentic upstream
+status code, `type`, `code`, `param` (only when non-null), `organization` (extracted from the message with the regex
+`org-[A-Za-z0-9]+` - OpenAI puts the org id in the prose, not a header), `X-Request-Id`, and the **entire
+`X-Ratelimit-*` header family** (`HeaderAttrs`: limit/remaining/reset for both requests and tokens) so a caller of
+`Chat` can make its own retry decision from the raw values.
+
+**OpenAI disguises an unfixable request as a 429.** A request whose token count exceeds the entire per-minute token
+budget (TPM) comes back as `429` with `code:"rate_limit_exceeded"` - on the wire identical to a transient throttle,
+but it can never succeed by waiting. The provider classifies it by *not* attaching `retryAfter`:
+
+- A `429 rate_limit_exceeded` whose request fits the limit (no `Requested > Limit` in the message) is a genuine,
+  waitable throttle: `retryAfter` is set to the longest positive `X-Ratelimit-Reset-*` (tokens or requests), or a
+  60s fallback.
+- The poison case - `Requested > Limit` (regex `Limit (\d+), Requested (\d+)`), a single request larger than the
+  whole budget - and `insufficient_quota` (billing) get **no** `retryAfter`. ChatLoop will not retry them. The status
+  stays an authentic `429`; the `requested > limit` arithmetic in the message is the human-readable proof it is
+  permanent.
+
+### Example: request exceeds the per-minute token budget (live capture)
+
+A ~250k-token request against an account whose TPM limit is 30000. The request is larger than the entire minute's
+budget, so no wait can help: a `429` with no `retryAfter` attached.
+
+```
+status 429   (authentic; no retryAfter attached because Requested > Limit)
+headers (all captured as attributes):
+  X-Ratelimit-Limit-Tokens:     30000
+  X-Ratelimit-Remaining-Tokens: 30000
+  X-Ratelimit-Reset-Tokens:     0s
+  X-Ratelimit-Reset-Requests:   120ms
+  X-Request-Id:                 req_fca0e758794340b397e34649c09e3c41
+body:
+  {"error":{
+     "message":"Request too large for gpt-4o in organization org-QYrP4ECVZ7NglfryGTiPWUWE on tokens per min (TPM): Limit 30000, Requested 250011. The input or output tokens must be reduced in order to run successfully. ...",
+     "type":"tokens","param":null,"code":"rate_limit_exceeded"}}
+```
+
+A genuinely transient throttle (request fits the budget but the minute's quota is momentarily spent) arrives as the
+same `429`/`rate_limit_exceeded` but with `Requested <= Limit`; that case gets a `retryAfter` from the reset headers
+and ChatLoop retries it. (Not yet reproduced live - this account walls on the poison case first.)
+
+## Rate-Limit Preemption
+
+The provider keeps an in-memory `map[model]blockedUntil` (mutex-guarded). On a `retryAfter`-bearing throttle it
+records `blockedUntil[model] = now + retryAfter`, and at the top of `Turn` it preempts a call to a still-blocked model
+with a synthetic `429` (carrying the remaining wait as `retryAfter`) *without* dialing OpenAI. This stops every
+in-flight caller from each eating its own real `429` before backing off.
+
+The gate lives in the provider, not llm.core, because the provider holds the API key - it unambiguously *is* one
+account and can gate before dialing, and a gate in `Turn` covers every caller (`Chat`, `CallLLM`, and direct
+`ForHost`), not just llm.core-routed traffic. It is keyed by **model** because OpenAI's limits are per-model; an
+account-wide gate would over-block sibling models. Only `retryAfter`-bearing errors arm it (the poison case and
+`insufficient_quota` never do). Per-replica, no cross-replica gossip.

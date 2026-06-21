@@ -34,3 +34,31 @@ fidelity limit of the upstream proxy, not a bug here.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform
 interface across all provider microservices.
+
+### Internal retries are disabled (`num_retries: 0`)
+
+The request always sends `num_retries: 0` (the field has no `omitzero`, so the zero is on the wire). LiteLLM's own
+retry decision, `litellm._should_retry(status_code)`, mirrors the OpenAI SDK: it retries on the `x-should-retry: true`
+header, `408`, `409`, `429`, and `>= 500`, and declines on `x-should-retry: false`. It is **status-code-only** (plus
+that header) - it never inspects the body. So for upstreams that bury a permanent failure inside a `429` (OpenAI
+`insufficient_quota` / request-too-large, Gemini `RESOURCE_EXHAUSTED`), LiteLLM would retry the poison case until its
+count ran out, because only the body distinguishes it and LiteLLM doesn't read the body. (Anthropic behind LiteLLM is
+the exception: it sends `x-should-retry: false`, which LiteLLM honors.) Retries must live in exactly one place -
+`CallLLM`, driven by the `retryAfter` contract - so we force LiteLLM not to compound them. We set `0` explicitly
+rather than rely on a default because the proxy's router can be configured with retries, so the per-request `0` is the
+safe override.
+
+### Rate-limit handling: accept the poison risk (no per-upstream heuristic)
+
+LiteLLM fronts many upstream accounts behind one key/hostname, so the body-parsing poison heuristic the other three
+providers use is upstream-specific and not worth replicating here. Instead this provider treats **every `429` as
+retryable**: it attaches a `retryAfter` (from `Retry-After`, LiteLLM's forwarded `llm_provider-retry-after`, the
+OpenAI-style `X-Ratelimit-Reset-*`, or a 60s default - see `litellmRetryAfter`) and arms the same per-model
+preemption gate as the other providers. A genuine throttle (the common case) is therefore retried; a poison request
+(rare) is retried too, but **bounded** by `CallLLM`'s finite retry cap and surfaced via metrics, so an operator sees
+it and raises quota or shrinks the prompt. This is only safe because that cap is finite - it must never regress to an
+unbounded retry, or a poison request would loop forever.
+
+The gate is keyed by the `model` string (the value sent to the proxy). Non-429 errors carry no `retryAfter` and are
+permanent. Everything else (raw `body` truncated to 16KB + filtered `headers`) is attached for caller introspection,
+identical to the other providers.

@@ -22,6 +22,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -39,6 +43,42 @@ var (
 	_ litellmapi.Client
 )
 
+// litellmRetryAfter derives the wait to observe after a LiteLLM 429. It prefers an explicit Retry-After (delta-
+// seconds), then LiteLLM's forwarded upstream header, then the OpenAI-style reset durations, and finally a 60s
+// default so a throttle is always retryable.
+func litellmRetryAfter(h http.Header) string {
+	for _, k := range []string{"Retry-After", "llm_provider-retry-after"} {
+		if n, err := strconv.Atoi(h.Get(k)); err == nil && n >= 0 {
+			return (time.Duration(n) * time.Second).String()
+		}
+	}
+	best := time.Duration(0)
+	for _, k := range []string{"X-Ratelimit-Reset-Tokens", "X-Ratelimit-Reset-Requests"} {
+		if d, err := time.ParseDuration(h.Get(k)); err == nil && d > best {
+			best = d
+		}
+	}
+	if best > 0 {
+		return best.String()
+	}
+	return "60s"
+}
+
+// errorDetailAttrs returns the raw upstream response as error attributes for caller introspection: the full headers
+// (minus the egress proxy's own Microbus-* additions) and the body truncated to 16KB.
+func errorDetailAttrs(h http.Header, body []byte) []any {
+	headers := map[string]string{}
+	for k, v := range h {
+		if !strings.HasPrefix(k, "Microbus-") {
+			headers[k] = strings.Join(v, ",")
+		}
+	}
+	if len(body) > 16*1024 {
+		body = body[:16*1024]
+	}
+	return []any{"headers", headers, "body", string(body)}
+}
+
 /*
 Service implements the lite.llm.core microservice.
 
@@ -48,6 +88,8 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
+	rateMu       sync.Mutex
+	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
 }
 
 // OnStartup is called when the microservice is started up.
@@ -60,12 +102,38 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
+// rateLimitWait returns the time remaining until model's rate-limit window clears, or 0 if not currently limited.
+func (svc *Service) rateLimitWait(model string) time.Duration {
+	svc.rateMu.Lock()
+	defer svc.rateMu.Unlock()
+	wait := time.Until(svc.blockedUntil[model])
+	if wait <= 0 {
+		delete(svc.blockedUntil, model)
+		return 0
+	}
+	return wait
+}
+
+// blockModel records that model is rate-limited for the next d, so subsequent calls are preempted until it clears.
+func (svc *Service) blockModel(model string, d time.Duration) {
+	svc.rateMu.Lock()
+	defer svc.rateMu.Unlock()
+	if svc.blockedUntil == nil {
+		svc.blockedUntil = map[string]time.Time{}
+	}
+	svc.blockedUntil[model] = time.Now().Add(d)
+}
+
 /*
 Turn executes a single LLM turn through the LiteLLM proxy.
 */
 func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
 		return "", nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+	// Preempt while this model's account is in a known rate-limit window, without calling the proxy.
+	if wait := svc.rateLimitWait(model); wait > 0 {
+		return "", nil, llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 
 	// Convert messages
@@ -139,7 +207,34 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 	if httpResp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(httpResp.Body)
-		return "", nil, llmapi.Usage{}, errors.New("LiteLLM API error %d: %s", httpResp.StatusCode, string(respBody))
+		svc.LogWarn(ctx, "LiteLLM API error response",
+			"status", httpResp.StatusCode,
+			"headers", httpResp.Header,
+			"body", string(respBody),
+		)
+		var apiErr struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		json.Unmarshal(respBody, &apiErr)
+		message := apiErr.Error.Message
+		if message == "" {
+			message = "LiteLLM API error"
+		}
+		props := []any{httpResp.StatusCode}
+		// retryAfter is the retry signal to ChatLoop. LiteLLM's retry decision is status-code-only and cannot detect
+		// the poison case, so we treat any 429 as retryable and rely on CallLLM's bounded retry cap plus metrics to
+		// contain a permanently-too-large request (the litellm exception - no per-upstream poison heuristic here).
+		if httpResp.StatusCode == http.StatusTooManyRequests {
+			ra := litellmRetryAfter(httpResp.Header)
+			props = append(props, "retryAfter", ra)
+			if d, perr := time.ParseDuration(ra); perr == nil {
+				svc.blockModel(model, d)
+			}
+		}
+		props = append(props, errorDetailAttrs(httpResp.Header, respBody)...)
+		return "", nil, llmapi.Usage{}, errors.New(message, props...)
 	}
 
 	var oaiResp openaiResponse

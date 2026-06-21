@@ -64,3 +64,115 @@ unrecognized value reaches `llm.core` as `StopReasonUnknown` and surfaces as a `
 a silent completion. `MALFORMED_FUNCTION_CALL` deliberately falls into `Unknown` rather than being
 mapped to a completion or a refusal — a malformed call is a provider/data bug, not a routine
 outcome, and surfacing it lets the operator notice.
+
+## Error Classification
+
+The provider-to-ChatLoop contract is a single attribute, **`retryAfter`**: present => retryable (and that is the
+wait), absent => permanent. ChatLoop holds no policy and never inspects the status code; the provider makes the call.
+The upstream status code is left **authentic** (never remapped) - it is for HTTP semantics and observability.
+
+On a non-OK response the provider parses Gemini's `{error:{message,status,details[]}}` body and constitutes a
+`TracedError` via `errors.New`: the text is the body's `error.message`; the attributes are the authentic upstream
+status code, `status` (e.g. `RESOURCE_EXHAUSTED`), `quotaId` and `quotaValue` (from `details[].google.rpc.QuotaFailure`),
+`retryDelay` (the raw, second-truncated value from `details[].google.rpc.RetryInfo`), and `retryAfter` (the retry
+signal, only when retryable). Gemini returns **no rate-limit headers** - the wait and the quota detail live only in
+the body's `details[]` array, a heterogeneous list of typed objects keyed by `@type` (`google.rpc.Help`,
+`google.rpc.QuotaFailure`, `google.rpc.RetryInfo`).
+
+### Poison vs transient: the request's token count decides whether to attach retryAfter
+
+This is the hard case. **Gemini returns the same `429 RESOURCE_EXHAUSTED` whether the request is unfixable or merely
+transiently throttled**, and unlike OpenAI the body carries no requested-token count to compare against the limit. So
+the provider obtains the request's token count and compares it to `QuotaFailure.quotaValue`.
+
+**Cheap short-circuit first.** A token spans at least one byte, so the marshaled request's byte length is a hard
+ceiling on its token count (`tokens <= bytes`, true even for byte-level tokenizers - rune count is *not* a safe
+ceiling, since a rare multi-byte character can tokenize to several tokens). When that ceiling already fits the quota
+(`len(body) < quotaValue`), the request provably cannot be poison, so it is classified retryable without any further
+call. This covers the common case - most requests are far under a 1M-tokens/minute quota - and the byte length of the
+full request also folds in the system instruction and tools, so nothing sent is missed.
+
+**Exact count only when it might matter.** When the byte ceiling reaches the quota (a genuinely huge request, the only
+place poison is possible), the count comes from Gemini's **`countTokens` endpoint** (`countInputTokens`), which
+returns the exact input token count for the same request without generating. Exact (not a heuristic) because
+tokens-per-word varies too much for a never-retry decision: ~1.3 for English prose but 2-3 for code/JSON, higher for
+non-Latin scripts, dictionary varying by model. `countTokens` runs on a separate, free quota, so it still answers
+while generation is rate-limited, and it is wrapped in a `generateContentRequest` so the system instruction and tools
+are counted, not just `contents`.
+
+If `countTokens` itself fails, the provider does not estimate the count itself - it treats the request as
+non-retryable (fail closed). The byte ceiling already showed the request might exceed the quota, and the only unsafe
+mistake is retrying a permanently-too-large request forever, so when the exact count is unavailable we decline to
+retry rather than guess. The sound `bytes >= tokens` short-circuit is the only token arithmetic the provider does
+itself.
+
+The comparison:
+
+- count > quota (poison): a single request larger than the entire per-minute budget, can never succeed. **No**
+  `retryAfter`; ChatLoop will not retry.
+- a `quotaId` ending in `PerDay` (daily-quota exhaustion): a give-up, not a per-minute throttle. **No** `retryAfter`.
+- otherwise (count <= quota, per-minute quota): a genuine transient overflow - an earlier request in the same
+  minute filled the window. `retryAfter` is attached.
+
+Because Google returns `429` in both poison and transient cases, the authentic status is `429` either way; the only
+difference is whether `retryAfter` is present, and that verdict is ours, not Google's. The raw `quotaValue`,
+`quotaId`, and `retryDelay` are always attached so a caller of `Chat` can see the full picture regardless.
+
+### Why `retryAfter` adds a 1s margin
+
+`RetryInfo.retryDelay` is **truncated to whole seconds**. Verified against live responses: when the precise wait was
+`42.921954507s` (stated in the prose `message`), the structured `retryDelay` read `42s`; an earlier capture showed
+`1.466…s` reported as `1s`. Following the structured value as-is therefore retries up to ~1s early and risks
+immediately re-tripping the same 429. The provider parses `retryDelay` and adds a 1s margin before storing it as
+`retryAfter`. The structured field is used (not the precise prose value) because it is stable; the prose format is
+not a contract. The 1s margin is the cheap, robust correction for its truncation.
+
+### Example A: single oversized request (poison, no retryAfter)
+
+A ~1.5M-token request against the 1,000,000/min quota. The single request alone exceeds the whole budget, so no wait
+helps. `countTokens` returns ~1.5M > `quotaValue`, so **no** `retryAfter` is attached and ChatLoop will not retry.
+
+```
+status 429   (authentic; no retryAfter attached because countTokens > quotaValue)
+headers: (no rate-limit headers; X-Gemini-Service-Tier: standard only)
+body:
+  {"error":{"code":429,"status":"RESOURCE_EXHAUSTED",
+    "message":"You exceeded your current quota ... limit: 1000000, model: gemini-2.5-flash\nPlease retry in 1.466542669s.",
+    "details":[
+      {"@type":"type.googleapis.com/google.rpc.QuotaFailure",
+       "violations":[{"quotaId":"GenerateContentPaidTierInputTokensPerModelPerMinute","quotaValue":"1000000"}]},
+      {"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"1s"}]}}
+```
+
+### Example B: burst overflow (transient, retryAfter attached)
+
+Several ~360k-token requests back-to-back in the same minute. The first ones succeed; the overflowing one is rejected
+because they together exceed the window, even though no single request exceeds the quota. `countTokens` returns
+~360k <= `quotaValue`, so `retryAfter` is attached (raw `retryDelay` + 1s margin) and ChatLoop retries.
+
+```
+status 429   (authentic; retryAfter attached)
+body:
+  {"error":{"code":429,"status":"RESOURCE_EXHAUSTED",
+    "message":"You exceeded your current quota ... limit: 1000000, model: gemini-2.5-flash\nPlease retry in 42.921954507s.",
+    "details":[
+      {"@type":"type.googleapis.com/google.rpc.QuotaFailure",
+       "violations":[{"quotaId":"GenerateContentPaidTierInputTokensPerModelPerMinute","quotaValue":"1000000"}]},
+      {"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"42s"}]}}
+```
+
+A `quotaId` ending in `PerDay` (daily-quota exhaustion) should be treated as a give-up rather than retried; that
+case is not yet special-cased because the probes only reached the per-minute quota.
+
+## Rate-Limit Preemption
+
+The provider keeps an in-memory `map[model]blockedUntil` (mutex-guarded). On a `retryAfter`-bearing throttle it
+records `blockedUntil[model] = now + retryAfter`, and at the top of `Turn` it preempts a call to a still-blocked model
+with a synthetic `429` (carrying the remaining wait as `retryAfter`) *without* dialing Gemini. This stops every
+in-flight caller from each eating its own real `429` before backing off.
+
+The gate lives in the provider, not llm.core, because the provider holds the API key - it unambiguously *is* one
+account and can gate before dialing, and a gate in `Turn` covers every caller (`Chat`, `CallLLM`, and direct
+`ForHost`), not just llm.core-routed traffic. It is keyed by **model** because Gemini's quota is per-model
+(`quotaId` is `...PerModelPerMinute`); an account-wide gate would over-block sibling models. Only `retryAfter`-bearing
+errors arm it (poison and `PerDay` give-ups never do). Per-replica, no cross-replica gossip.
