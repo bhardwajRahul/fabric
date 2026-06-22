@@ -101,11 +101,12 @@ call without tools" path also runs through the same gate.
 ### Rate-limit handling (the `retryAfter` contract)
 
 A rate-limited provider error is identified by the **presence of a `retryAfter` attribute** on the
-error (a duration string), never by the `429` status code. This is deliberate: a `429` can also be a
-permanently-oversized "poison" request, so each provider classifies its own error (it alone sees the
-status, body, headers, and token count) and attaches `retryAfter` only on a genuine, transient
-throttle. Presence ⇒ retryable and the value is the wait; absence ⇒ permanent. This fails closed - an
-error nobody could classify simply has no `retryAfter` and is not retried.
+error (a duration string), never by the `429` status code. This is deliberate: a `429` can also report a
+request the provider will never accept (e.g. one whose token count permanently exceeds the model's limit),
+so each provider classifies its own error (it alone sees the status, body, headers, and token count) and
+attaches `retryAfter` only on a genuine, transient throttle. Presence ⇒ retryable and the value is the
+wait; absence ⇒ permanent. This fails closed - an error nobody could classify simply has no `retryAfter`
+and is not retried.
 
 **Short-term retry is the engine's, bounded by the task's time budget.** When `turn` returns a
 `retryAfter` error, `CallLLM` arms `flow.Retry` with the wait carried in the initial delay (multiplier

@@ -8,8 +8,8 @@ This microservice does not maintain a `PROMPTS.md`. Skip the prompts step when r
 
 The foreman is the orchestrator for agentic workflows in Microbus. It is a **thin Microbus adapter over the
 embedded [dwarf](https://github.com/microbus-io/dwarf) workflow engine** (`dwarf/engine`). The engine owns
-all orchestration logic — scheduling, execution, fan-out/fan-in, transitions, retries, subgraphs, breakers,
-backpressure, the SQL schema, metrics, and tracing. This service owns only the Microbus seam:
+all orchestration logic — scheduling, execution, fan-out/fan-in, transitions, retries, subgraphs, the SQL
+schema, metrics, and tracing. This service owns only the Microbus seam:
 
 - **Bus endpoints** delegate 1:1 to engine methods (`Create`, `Run`, `Resume`, `Cancel`, …). The service
   struct holds the engine as a member (`svc.engine`), built in `OnStartup`, drained in `OnShutdown`.
@@ -30,23 +30,20 @@ and the decisions that are non-obvious *because* the foreman is now a delegating
 
 ## Non-obvious decisions
 
-**The foreman does NOT classify task errors into engine dispositions.** `ExecuteTask` returns every transport
-error **undecorated** (`errors.Trace(err)`), which the engine treats as an ordinary failure (routed via
-`onError` or fails the step). It deliberately does *not* wrap `429` into `workflow.ErrRateLimited` (the
-adaptive valve) or `503 / 529` into `workflow.ErrUnavailable` (the breaker). Backpressure is
-owned by the layer that has the resource identity, not the engine: a task that wants to back off reads its own
-signal (e.g. an LLM provider's `retryAfter`) and arms `flow.Retry` itself (carrying the wait in Retry's
-`initialDelay`) - see `coreservices/llm` `CallLLM`. This is the first step of taking dwarf out of backpressure entirely (the engine
-still *contains* the valve/breaker machinery; the foreman just never triggers it, and a later dwarf change
-removes it). The status code is preserved on the error (a 429 stays a 429) - it is just no longer a control
-signal to the engine.
+**The foreman does NOT classify task errors.** `ExecuteTask` returns every transport error **undecorated**
+(`errors.Trace(err)`), which the engine treats as an ordinary failure - routed via the graph's `onError`
+transition if one exists, else it fails the step. There are no engine-side backpressure dispositions to wrap into:
+dwarf has no adaptive valve or circuit breaker (they were removed). Backpressure is owned by the layer that holds
+the resource identity, not the engine: a task that wants to back off reads its own signal (e.g. an LLM provider's
+`retryAfter`) and arms `flow.Retry` itself (carrying the wait in Retry's `initialDelay`) - see `coreservices/llm`
+`CallLLM`. The status code is preserved on the error (a 429 stays a 429) - it is just not a control signal.
 
 **The one exception: the foreman retries a `404` ack-timeout itself.** A `404` ack-timeout means *no
 microservice acked the task dispatch* - the task host is absent (a deploy gap, a not-yet-started replica), not a
 task that ran and returned `404`. Because the task body never executed, it could not arm its own `flow.Retry`,
 so the foreman arms it on the carrier (`isAckTimeout` gates on status `404` plus the connector's `"ack timeout"`
-message) and returns `nil`. The engine then re-dispatches with exponential backoff exactly as if a task had
-retried. **The retry horizon is the step's own time budget** - not a config. The engine bounds the dispatch ctx
+message) and returns `nil`. The engine then re-dispatches exactly as if a task had retried. **The retry horizon
+is the step's own time budget** - not a config. The engine bounds the dispatch ctx
 with the step's `TimeBudget` (foreman config, default 2m, capped 15m, or a task's shorter `sub.TimeBudget`);
 `ExecuteTask` reads it from `ctx.Deadline()` (not `frame.TimeBudget` - the engine sets a ctx deadline, not a
 frame header) and passes it as `flow.Retry`'s `giveUpAfter`, measured from the step's creation. So "how long to
@@ -62,16 +59,16 @@ and ack-timeout error text. For longer-than-budget tolerance, the *caller* owns 
 budget or its own loop) - the framework deliberately does not park work past the task's stated worth.
 
 **Cross-replica coordination rides one `Signal` multicast endpoint.** The engine's
-`SignalPeers(ctx, op, payload)` carries every kind of peer signal (work doorbell, valve-rate gossip,
-breaker trip, status-change wake) as a single opaque `(op, payload)` pair. `op` is an opaque routing key
-the engine parses on the receiving side via `DeliverSignal`; the foreman never branches on it, so a new
-signal kind needs zero adapter changes — one endpoint covers all of them.
+`SignalPeers(ctx, op, payload)` carries every kind of peer signal (the work doorbell and the status-change
+wake) as a single opaque `(op, payload)` pair. `op` is an opaque routing key the engine parses on the
+receiving side via `DeliverSignal`; the foreman never branches on it, so a new signal kind needs zero adapter
+changes — one endpoint covers all of them.
 
 **Self-delivery filter on inbound `Signal`: `FromHost==Hostname && FromID!=svc.ID`.** Microbus multicast
 echoes to the sender. The engine's contract is that a signal is applied *locally* before `SignalPeers` is
-called, so the originating replica must drop the echo or it double-applies (a re-trip would reset the
-breaker's accumulated backoff, a re-gossiped valve would distort the rate). The `FromHost==Hostname` half
-restricts processing to genuine foreman peers; the `FromID!=svc.ID` half excludes self. Both are required.
+called, so the originating replica must drop the echo or it double-applies (e.g. a doubled work doorbell or
+status-change wake). The `FromHost==Hostname` half restricts processing to genuine foreman peers; the
+`FromID!=svc.ID` half excludes self. Both are required.
 
 **Telemetry providers are set before `Startup` — and only there.** `SetLogger` / `SetMeterProvider` /
 `SetTracerProvider` are construction-time-only on the engine (it resolves them once at `Startup`; calling
@@ -80,8 +77,8 @@ them on a running engine returns an error). So `OnStartup` calls `eng.SetLogger(
 here can't fail, so the real error surfaces from `Startup`.) The foreman defines **no** microbus metric
 endpoints: the engine emits `dwarf_*` instruments and spans straight through the connector's OTEL pipeline.
 (The Grafana dashboard at `setup/grafana/dashboards/workflow-overview.json` reads the `dwarf_*` names. Note
-the metric label split: step-disposition keys by **`task_name`** (graph node), the adaptive/breaker metrics
-key by **`task_url`** (downstream endpoint).)
+the metric label split: step-disposition keys by **`task_name`** (graph node), while `dwarf_task_concurrency_running`
+keys by **`task_url`** (downstream endpoint).)
 
 **`StartupInTest` under the TESTING deployment, `Startup` otherwise.** The foreman runs under
 `app.RunInTest`, so it has no `*testing.T` to hand the engine's `RunInTest`. `StartupInTest(ctx, svc.Plane())`

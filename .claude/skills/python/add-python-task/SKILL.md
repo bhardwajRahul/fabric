@@ -90,7 +90,7 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 stri
     var out myserviceapi.MyTaskOut
     err = svc.venv.Await(ctx, callID, &out)
     if err != nil {
-        if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(math.MaxInt32, 0, 0, 0) {
+        if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(0, 1.0, 0, 0) {
             return 0, nil
         }
         flow.SetString("pyCallID", "") // clear on terminal error so downstream steps don't see it

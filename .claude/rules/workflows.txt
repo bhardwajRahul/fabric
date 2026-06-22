@@ -87,7 +87,7 @@ Task URLs in the graph are obtained from the generated API package constants (e.
 Control signals on `Flow`:
 
 - `flow.Goto(taskName)` - override transition routing to jump to a specific task node (its PascalCase node name, not its URL)
-- `flow.Retry(maxAttempts, initialDelay, multiplier, maxDelay) bool` - re-execute this task with exponential backoff; returns true while attempts remain, false once `maxAttempts` is reached. The single retry primitive: it carries no condition of its own, so the task writes the retryable predicate explicitly in the surrounding `if`. Immediate retry is zero delays; unlimited is `math.MaxInt32`. Timeout-only retry is `if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(...)` - both foreman-side `pub.Timeout` and subscriber-side handler timeouts surface as 408
+- `flow.Retry(initialDelay, delayMultiplier, maxIntervalDelay, giveUpAfter) bool` - re-execute this task with exponential backoff. The bound is **wall-clock, not a count**: returns true while the next attempt would still land within `giveUpAfter` of the step's creation, false once the horizon is reached (including when the next backoff delay alone would overshoot it, so a doomed wait is never parked before failing). The delay before attempt N is `min(initialDelay * delayMultiplier^N, maxIntervalDelay)`; immediate retry is a zero `initialDelay`, fixed interval is `delayMultiplier` 1.0, no per-interval cap is a zero `maxIntervalDelay`. Pass `giveUpAfter <= 0` for unlimited retry; to bound by count instead, pass `0` and gate on `flow.Attempt()`. The single retry primitive: it carries no condition of its own, so the task writes the retryable predicate explicitly in the surrounding `if`. Timeout-only retry is `if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(...)` - both foreman-side `pub.Timeout` and subscriber-side handler timeouts surface as 408
 - `flow.Sleep(duration)` - delay the next step by a duration
 - `flow.Interrupt(payload, &resume) (yield, err)` - park the step for external input (human-in-the-loop). First call returns `yield=true` and the task must `return nil` immediately; on re-entry after `Resume(flowKey, data)` returns `(false, nil)` with `data` unmarshaled into `&resume` so the task proceeds (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
 - `flow.Subgraph(workflowURL, in, &out) (yield, err)` - park the step and launch a child *workflow*. First call returns `yield=true` (task must `return nil`); on re-entry returns `(false, nil)` with the child's `final_state` unmarshaled into `&out` on success, or `(false, childErr)` on failure - the task adopts fields from `out` or branches on `err` (see [Subgraphs and Interrupts](#subgraphs-and-interrupts))
@@ -288,7 +288,7 @@ if yield {
 }
 if err != nil {
     // Child failed. The task may inspect err and retry, route, or propagate.
-    if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(3, time.Second, 2.0, 30*time.Second) {
+    if errors.StatusCode(err) == http.StatusRequestTimeout && flow.Retry(time.Second, 2.0, 30*time.Second, 5*time.Minute) {
         return nil      // re-arms a fresh child on re-dispatch
     }
     return errors.Trace(err)
@@ -578,8 +578,8 @@ func (svc *Service) PollJobStatus(ctx context.Context, flow *workflow.Flow, jobI
     }
     switch status {
     case "running":
-        // Not done yet - schedule another poll. Cap attempts to bound total wait.
-        if !flow.Retry(120, 30*time.Second, 1, 30*time.Second) { // 120 × 30s = 1h ceiling
+        // Not done yet - schedule another poll. The give-up horizon bounds total wait.
+        if !flow.Retry(30*time.Second, 1.0, 0, time.Hour) { // poll every 30s, give up after 1h
             return "", errors.New("job did not complete within poll budget")
         }
         return "", nil // Retry returned true; foreman will re-run this task after the delay.
