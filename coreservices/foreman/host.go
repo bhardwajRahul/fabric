@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -22,9 +23,13 @@ import (
 //   - FlowStopped - fire the OnFlowStopped outbound event to the notify host carried in the flow's baggage.
 //   - SignalPeers - multicast the opaque (op, payload) to peer replicas, excluding self.
 
-// ackTimeoutRetryMultiplier is the exponential growth factor between successive ack-timeout retries. The
-// initial delay, per-interval cap, and give-up horizon are operator configs; the growth factor is fixed.
-const ackTimeoutRetryMultiplier = 2.0
+// ackTimeoutRetryProbes is how many times a task dispatch that keeps hitting a 404 ack-timeout is re-probed
+// across the step's time budget: the re-probe interval is budget/ackTimeoutRetryProbes, fixed (not
+// exponential). A missing host is absent, not overloaded - probing is a cheap ack-timeout that runs no
+// handler - so there is nothing to back off from; what matters is detecting its return quickly and
+// uniformly. Deriving the interval from the budget keeps the cadence proportional to any horizon and needs
+// no operator config: the horizon is simply the task's own time budget.
+const ackTimeoutRetryProbes = 8
 
 // baggageNotifyHost is the baggage key under which resolveOptions stamps the caller's host when the
 // caller set FlowOptions.NotifyOnStop, so FlowStopped can deliver the OnFlowStopped event back to it.
@@ -60,11 +65,17 @@ func (svc *Service) LoadGraph(ctx context.Context, workflowURL string) (*workflo
 // the flow carrier to the task URL, and applies the task's returned flow back onto the carrier so the
 // engine sees the changes and any control signals (goto/retry/sleep/interrupt/subgraph) the task armed.
 // A transport error is returned undecorated, with one exception: a 404 ack-timeout (no microservice
-// hosting the task) arms flow.Retry on the carrier and returns nil, so the engine backs off and
-// re-dispatches until the AckTimeoutRetryGiveUpAfter horizon. Every other backoff (rate-limit,
-// availability) is owned by the task, which reads its own signal and arms flow.Retry. Implements
-// engine.Host.
+// hosting the task) arms flow.Retry on the carrier and returns nil, so the engine re-probes until the
+// step's time budget is spent. Every other backoff (rate-limit, availability) is owned by the task, which
+// reads its own signal and arms flow.Retry. Implements engine.Host.
 func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workflow.Flow) error {
+	// The step's time budget is the ack-timeout retry horizon. The engine bounded ctx with it (the dispatch
+	// deadline); read it here, before any work consumes the dispatch, as the full budget. (Not frame.TimeBudget:
+	// the engine sets a ctx deadline, not a frame header - that header only exists on the task handler's side.)
+	var retryHorizon time.Duration
+	if deadline, ok := ctx.Deadline(); ok {
+		retryHorizon = time.Until(deadline)
+	}
 	actorToken, err := svc.mintActorToken(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -89,10 +100,12 @@ func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workf
 	// The engine already bounded ctx with the step's time budget; svc.Request honors that deadline.
 	httpRes, err := svc.Request(ctx, opts...)
 	if err != nil {
-		// The task body never ran on an ack-timeout, so it cannot arm its own retry; the foreman arms it on
-		// the carrier (which carries the step's creation time) and returns nil. flow.Retry returns false once
-		// the horizon is exceeded, so a permanently-missing microservice fails the step instead of looping.
-		if isAckTimeout(err) && flow.Retry(svc.AckTimeoutRetryInitialDelay(), ackTimeoutRetryMultiplier, svc.AckTimeoutRetryMaxDelay(), svc.AckTimeoutRetryGiveUpAfter()) {
+		// The task body never ran on an ack-timeout, so it cannot arm its own retry; the foreman arms it on the
+		// carrier (which holds the step's creation time) and returns nil, re-probing at a fixed budget/N interval
+		// until the budget horizon is spent. flow.Retry returns false once the next probe would overshoot the
+		// horizon, so a permanently-missing microservice fails the step instead of looping.
+		if isAckTimeout(err) && retryHorizon > 0 &&
+			flow.Retry(retryHorizon/ackTimeoutRetryProbes, 1.0, 0, retryHorizon) {
 			return nil
 		}
 		return errors.Trace(err)

@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-06-21T19:17:49Z"
+  modifiedAt: "2026-06-22T03:43:56Z"
 
 configs:
   MaxToolRounds:
@@ -27,11 +27,6 @@ configs:
     description: MaxToolRounds is the maximum number of tool call round-trips per invocation.
     validation: int [1,50]
     default: 10
-  MaxRateLimitRetryBudget:
-    signature: MaxRateLimitRetryBudget() (value time.Duration)
-    description: MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.
-    validation: dur (0s,24h]
-    default: 10m
 
 metrics:
   LLMTokens:
@@ -43,7 +38,7 @@ metrics:
 functions:
   Chat:
     signature: Chat(provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage)
-    description: Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
+    description: Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
     method: POST
     route: :444/chat
   Turn:

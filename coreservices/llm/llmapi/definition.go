@@ -17,8 +17,6 @@ limitations under the License.
 package llmapi
 
 import (
-	"time"
-
 	"github.com/microbus-io/fabric/define"
 )
 
@@ -45,20 +43,13 @@ var MaxToolRounds = define.Config{ // MARKER: MaxToolRounds
 	Validation: "int [1,50]",
 }
 
-// MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.
-var MaxRateLimitRetryBudget = define.Config{ // MARKER: MaxRateLimitRetryBudget
-	Value:      time.Duration(0),
-	Default:    "10m",
-	Validation: "dur (0s,24h]",
-}
-
 // LLMTokens counts tokens consumed per LLM turn
 var LLMTokens = define.Metric{ // MARKER: LLMTokens
 	Kind: define.Counter, Value: int(0), Labels: []string{"provider", "model", "direction"},
 	OTelName: "microbus_llm_tokens_total",
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
+// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
 var Chat = define.Function{ // MARKER: Chat
 	Host: Hostname, Method: "POST", Route: ":444/chat",
 	In: ChatIn{}, Out: ChatOut{},

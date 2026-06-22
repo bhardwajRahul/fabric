@@ -325,9 +325,9 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 }
 
 // TestLLM_CallLLMRateLimitRetry verifies CallLLM's reactive backoff: a provider error carrying a retryAfter is
-// retried (the property survives the bus round-trip and drives flow.Retry), and once the MaxRateLimitRetryBudget
-// wall-clock horizon is exceeded the flow fails rather than looping forever. An error without a retryAfter is
-// permanent.
+// retried (the property survives the bus round-trip and drives flow.Retry), bounded by the task's time budget -
+// once the next wait would overshoot it the flow fails rather than looping forever. An error without a retryAfter
+// is permanent. The horizon is the foreman's TimeBudget (min 1s), set small here so the test resolves quickly.
 func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -335,23 +335,27 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 	svc := NewService()
 	providerMock := claudellm.NewMock()
 
+	// The CallLLM retry horizon is the task's time budget. Pin it to the 1s floor so the exhaust path resolves
+	// in ~1s instead of the production default.
+	fmn := foreman.NewService()
+	fmn.SetTimeBudget(time.Second)
+
 	tester := connector.New("tester.client")
 	foremanClient := foremanapi.NewClient(tester)
 	exec := llmapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
 
 	app := application.New()
-	app.Add(svc, providerMock, foreman.NewService(), tester)
+	app.Add(svc, providerMock, fmn, tester)
 	app.RunInTest(t)
 
 	t.Run("retries_then_succeeds", func(t *testing.T) {
 		assert := testarossa.For(t)
-		svc.SetMaxRateLimitRetryBudget(10 * time.Second)
 
 		callCount := 0
 		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
 			callCount++
 			if callCount == 1 {
-				return "", nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "300ms")
+				return "", nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "200ms")
 			}
 			return "Recovered after backoff", nil, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
@@ -367,8 +371,8 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 			callCount, 2,
 		)
 		// The retry must actually wait ~retryAfter before re-dispatching (guards against the engine dropping the
-		// delay - the wait is carried in flow.Retry's initialDelay precisely so it is honored on the released engine).
-		assert.True(elapsed >= 250*time.Millisecond, "retry should wait ~retryAfter (300ms), waited %v", elapsed)
+		// delay - the wait is carried in flow.Retry's initialDelay precisely so it is honored).
+		assert.True(elapsed >= 150*time.Millisecond, "retry should wait ~retryAfter (200ms), waited %v", elapsed)
 		if assert.Expect(len(out) >= 1, true) {
 			last := out[len(out)-1]
 			assert.Expect(last.Content, "Recovered after backoff")
@@ -377,29 +381,43 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 
 	t.Run("exhausts_and_fails", func(t *testing.T) {
 		assert := testarossa.For(t)
-		// A 300ms budget against a 1s retryAfter: the first attempt always retries (elapsed ~0 < budget), but the
-		// 1s wait alone blows the horizon, so the second attempt gives up. Deterministic without depending on a
-		// retry count.
-		svc.SetMaxRateLimitRetryBudget(300 * time.Millisecond)
-
+		// retryAfter (200ms) is well under the 1s budget, so the call retries repeatedly and then fails once the
+		// budget horizon is reached. It must have retried at least once before giving up.
 		callCount := 0
 		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
 			callCount++
-			return "", nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "1s")
+			return "", nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "200ms")
 		})
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
 		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
 		assert.Expect(status, workflow.StatusFailed)
-		// Initial attempt + one retry whose wait exceeds the budget = 2 calls, then the flow fails (it does not
-		// loop forever - the foreman no longer re-bounces the 429).
-		assert.Expect(callCount, 2)
+		assert.True(callCount >= 2, "expected at least one retry before giving up, got %d calls", callCount)
+	})
+
+	t.Run("retry_after_exceeds_budget_fails_fast", func(t *testing.T) {
+		assert := testarossa.For(t)
+		// retryAfter (5s) exceeds the 1s budget, so the very first wait would overshoot the horizon: flow.Retry
+		// gives up immediately rather than parking a doomed wait. One call, fast failure (no 5s park).
+		callCount := 0
+		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
+			callCount++
+			return "", nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "5s")
+		})
+		defer providerMock.MockTurn(nil)
+
+		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
+		started := time.Now()
+		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		elapsed := time.Since(started)
+		assert.Expect(status, workflow.StatusFailed)
+		assert.Expect(callCount, 1)
+		assert.True(elapsed < 2*time.Second, "should fail fast without parking the 5s retryAfter, took %v", elapsed)
 	})
 
 	t.Run("no_retry_after_is_permanent", func(t *testing.T) {
 		assert := testarossa.For(t)
-		svc.SetMaxRateLimitRetryBudget(10 * time.Second)
 
 		callCount := 0
 		providerMock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {

@@ -16,6 +16,12 @@ limitations under the License.
 
 package llmapi
 
+import (
+	"time"
+
+	"github.com/microbus-io/errors"
+)
+
 // LastAssistantMessage returns the Content of the last message in messages
 // whose role is "assistant", or "" if there is none.
 func LastAssistantMessage(messages []Message) string {
@@ -25,4 +31,25 @@ func LastAssistantMessage(messages []Message) string {
 		}
 	}
 	return ""
+}
+
+// RetryAfter reports whether err is a rate-limit error that can be retried after a delay, and if so the
+// delay the provider asked to wait. It is for a workflow that drives its own retry around Chat: retryable
+// true means the same call is worth repeating once wait has elapsed; false means the error is permanent
+// and must not be retried. The signal is a retryAfter attribute on the error, not the HTTP status - the
+// same 429 can also report a request the provider will never accept, so gating on the status alone would
+// retry calls that cannot succeed. Retrying is at the caller's discretion: cap the attempts and set an
+// overall give-up duration so a provider that stays throttled is not retried forever. A present but
+// unparseable delay reports (0, true) - retryable, with a wait of your choosing. Pair this with the
+// messages Chat returns on error to resume the conversation rather than restart it.
+func RetryAfter(err error) (wait time.Duration, retryable bool) {
+	ra, ok := errors.Convert(err).Properties["retryAfter"].(string)
+	if !ok || ra == "" {
+		return 0, false
+	}
+	d, parseErr := time.ParseDuration(ra)
+	if parseErr != nil || d < 0 {
+		return 0, true
+	}
+	return d, true
 }

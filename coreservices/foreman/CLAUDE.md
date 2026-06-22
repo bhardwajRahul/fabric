@@ -46,14 +46,20 @@ microservice acked the task dispatch* - the task host is absent (a deploy gap, a
 task that ran and returned `404`. Because the task body never executed, it could not arm its own `flow.Retry`,
 so the foreman arms it on the carrier (`isAckTimeout` gates on status `404` plus the connector's `"ack timeout"`
 message) and returns `nil`. The engine then re-dispatches with exponential backoff exactly as if a task had
-retried - the carrier already holds the step's creation time, so `flow.Retry`'s wall-clock `giveUpAfter` horizon
-applies. The horizon is the operator config `AckTimeoutRetryGiveUpAfter` (default 96h: long enough to ride a
-weekend deploy gap, short enough to eventually fail and surface a permanently-removed microservice rather than
-retry forever); `AckTimeoutRetryInitialDelay` (1m) and `AckTimeoutRetryMaxDelay` (10m) shape the interval, and
-the growth factor is the fixed `ackTimeoutRetryMultiplier` (2.0). This is the **only** adapter/engine-level
-retry; every other backoff is task-owned. It replaces the deleted breaker's missing-host handling, and the
-give-up is an ordinary step failure, so a recovery query/alert can find it by the failed status and ack-timeout
-error text.
+retried. **The retry horizon is the step's own time budget** - not a config. The engine bounds the dispatch ctx
+with the step's `TimeBudget` (foreman config, default 2m, capped 15m, or a task's shorter `sub.TimeBudget`);
+`ExecuteTask` reads it from `ctx.Deadline()` (not `frame.TimeBudget` - the engine sets a ctx deadline, not a
+frame header) and passes it as `flow.Retry`'s `giveUpAfter`, measured from the step's creation. So "how long to
+keep probing a missing host" rides on the same knob that says "how long is this task worth running," with **zero
+new configs** - and a task that declares a short `sub.TimeBudget` automatically gets a short ack-timeout horizon.
+The re-probe *cadence* is fixed: a missing host is absent, not overloaded (a probe is a cheap ack-timeout that
+runs no handler), so there is nothing to back off from - we want fast, uniform recovery detection. The interval
+is `budget / ackTimeoutRetryProbes` (const, 8), so ~8 evenly-spaced probes across the budget regardless of its
+length; `flow.Retry`'s next-delay give-up stops one probe short of overshooting. This is the **only**
+adapter/engine-level retry; every other backoff is task-owned. It replaces the deleted breaker's missing-host
+handling, and the give-up is an ordinary step failure, so a recovery query/alert can find it by the failed status
+and ack-timeout error text. For longer-than-budget tolerance, the *caller* owns the retry (re-run with a longer
+budget or its own loop) - the framework deliberately does not park work past the task's stated worth.
 
 **Cross-replica coordination rides one `Signal` multicast endpoint.** The engine's
 `SignalPeers(ctx, op, payload)` carries every kind of peer signal (work doorbell, valve-rate gossip,

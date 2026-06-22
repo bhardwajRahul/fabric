@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-21T19:52:46Z"
+  modifiedAt: "2026-06-22T03:34:02Z"
 
 configs:
   SQLDataSourceName:
@@ -38,21 +38,6 @@ configs:
     description: SQLConnectionPool is the number of database connections kept open per shard.
     validation: int [1,]
     default: 8
-  AckTimeoutRetryInitialDelay:
-    signature: AckTimeoutRetryInitialDelay() (value time.Duration)
-    description: AckTimeoutRetryInitialDelay is the first backoff delay when a task dispatch hits a 404 ack-timeout (no microservice is hosting the task); the delay grows exponentially on each subsequent ack-timeout.
-    validation: dur (0s,24h]
-    default: 1m
-  AckTimeoutRetryMaxDelay:
-    signature: AckTimeoutRetryMaxDelay() (value time.Duration)
-    description: AckTimeoutRetryMaxDelay caps the exponential backoff delay between ack-timeout retries of a task dispatch.
-    validation: dur (0s,24h]
-    default: 10m
-  AckTimeoutRetryGiveUpAfter:
-    signature: AckTimeoutRetryGiveUpAfter() (value time.Duration)
-    description: AckTimeoutRetryGiveUpAfter is the wall-clock horizon, measured from when the step was first created, after which the foreman stops retrying a task dispatch that keeps hitting a 404 ack-timeout (no microservice is hosting the task) and fails the step. Until then the dispatch is retried with exponential backoff.
-    validation: dur (0s,720h]
-    default: 96h
 
 outboundEvents:
   OnFlowStopped:

@@ -26,6 +26,7 @@ import (
 	"github.com/microbus-io/errors"
 
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
+	"github.com/microbus-io/fabric/frame"
 )
 
 var (
@@ -196,7 +197,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 		svc.logPrompt(ctx, currentMessages)
 		content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, tools, turnOpts)
 		if err != nil {
-			return nil, usage, errors.Trace(err)
+			return messagesOut, usage, errors.Trace(err)
 		}
 		svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
 		usage.Add(turnUsage)
@@ -205,7 +206,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 		// downstream as if it were end_turn.
 		err = stopReasonError(stopReason, provider, model)
 		if err != nil {
-			return nil, usage, errors.Trace(err)
+			return messagesOut, usage, errors.Trace(err)
 		}
 
 		// end_turn / stop_sequence / refusal: the model is done. Emit the assistant content
@@ -234,7 +235,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 		for _, tc := range toolCalls {
 			result, err := svc.executeTool(ctx, tc, tools)
 			if err != nil {
-				return nil, usage, errors.Trace(err)
+				return messagesOut, usage, errors.Trace(err)
 			}
 
 			toolResultMsg := llmapi.Message{
@@ -251,13 +252,13 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, mes
 	svc.logPrompt(ctx, currentMessages)
 	content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentMessages, nil, turnOpts)
 	if err != nil {
-		return nil, usage, errors.Trace(err)
+		return messagesOut, usage, errors.Trace(err)
 	}
 	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)
 	usage.Add(turnUsage)
 	err = stopReasonError(stopReason, provider, model)
 	if err != nil {
-		return nil, usage, errors.Trace(err)
+		return messagesOut, usage, errors.Trace(err)
 	}
 	if content != "" {
 		messagesOut = append(messagesOut, llmapi.Message{
@@ -320,17 +321,19 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, messages, tools, turnOpts)
 	if err != nil {
 		// A rate-limited error carries a retryAfter (a duration string); its presence is the retry signal, not the
-		// status code. Re-dispatch this step after exactly that wait, bounded by the MaxRateLimitRetryBudget
-		// wall-clock horizon so a misclassified-permanent or poison 429 cannot loop forever. Any error without a
-		// retryAfter is permanent and fails the step. The wait goes in Retry's initialDelay with multiplier 1.0 and
-		// no per-interval cap, so every attempt waits exactly retryAfter with no exponential growth on top (rate
-		// limits are a known-reset condition).
+		// status code. Re-dispatch this step after exactly that wait. The wait goes in Retry's initialDelay with
+		// multiplier 1.0 and no per-interval cap, so every attempt waits exactly retryAfter with no exponential
+		// growth on top (rate limits are a known-reset condition). Any error without a retryAfter is permanent and
+		// fails the step. The horizon is the task's own time budget (read from the inbound frame): keep retrying
+		// only as long as this CallLLM step is worth running, so a misclassified-permanent or poison 429 cannot
+		// loop forever. A caller needing longer-than-budget patience owns the retry itself (see Chat, which returns
+		// its accumulated messages on error so the caller can resume rather than restart).
 		if ra, ok := errors.Convert(err).Properties["retryAfter"].(string); ok && ra != "" {
 			d, parseErr := time.ParseDuration(ra)
 			if parseErr != nil || d <= 0 {
 				d = time.Minute // fall back when the provider sent a malformed or non-positive retryAfter
 			}
-			if flow.Retry(d, 1.0, 0, svc.MaxRateLimitRetryBudget()) {
+			if budget := frame.Of(ctx).TimeBudget(); budget > 0 && flow.Retry(d, 1.0, 0, budget) {
 				return "", nil, llmapi.Usage{}, nil
 			}
 		}

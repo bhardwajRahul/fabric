@@ -190,11 +190,9 @@ func TestForemanIntegration(t *testing.T) {
 	tester := connector.New("inttest.client")
 
 	fmn := NewService()
-	// Tighten the ack-timeout retry cadence and horizon so the give-up path resolves in ~1s instead of the
-	// production-default days.
-	fmn.SetAckTimeoutRetryInitialDelay(50 * time.Millisecond)
-	fmn.SetAckTimeoutRetryMaxDelay(100 * time.Millisecond)
-	fmn.SetAckTimeoutRetryGiveUpAfter(time.Second)
+	// The ack-timeout retry horizon is the task's time budget, and the re-probe interval is budget/N - so a
+	// small TimeBudget tightens the whole cadence. 1s budget => ~125ms probes, give-up in ~1s, no test seam.
+	fmn.SetTimeBudget(time.Second)
 
 	app := application.New()
 	app.Add(fmn, wf, tester)

@@ -97,3 +97,37 @@ branch on it through `stopReasonError`:
 The branching lives in `stopReasonError(stopReason, provider, model)` in `service.go` and is called
 from both the live `Chat` loop and `CallLLM`. The post-loop "exhausted tool rounds, one final
 call without tools" path also runs through the same gate.
+
+### Rate-limit handling (the `retryAfter` contract)
+
+A rate-limited provider error is identified by the **presence of a `retryAfter` attribute** on the
+error (a duration string), never by the `429` status code. This is deliberate: a `429` can also be a
+permanently-oversized "poison" request, so each provider classifies its own error (it alone sees the
+status, body, headers, and token count) and attaches `retryAfter` only on a genuine, transient
+throttle. Presence ⇒ retryable and the value is the wait; absence ⇒ permanent. This fails closed - an
+error nobody could classify simply has no `retryAfter` and is not retried.
+
+**Short-term retry is the engine's, bounded by the task's time budget.** When `turn` returns a
+`retryAfter` error, `CallLLM` arms `flow.Retry` with the wait carried in the initial delay (multiplier
+1.0, no cap - a rate limit is a known-reset condition, not something to exponentially back off). The
+horizon is `frame.Of(ctx).TimeBudget()` - the task's own time budget, read from the inbound frame, *not*
+a config. So a rate-limited turn rides out only as long as the step is worth running; `flow.Retry`'s
+next-delay give-up fails fast the moment a wait would overshoot the budget (e.g. a `retryAfter` longer
+than the remaining budget never parks). There is **no** rate-limit retry config - the budget is the one
+knob, and it is the same one that already says "how long is this task worth."
+
+**Long-term retry is the caller's.** A patient, no-HITL workload (e.g. async document extraction) that
+would rather finish late than fail wraps `Chat` in its own retry loop with whatever policy it likes. Two
+affordances make that cheap and correct: `Chat` returns the **messages accumulated before the failure**
+(so the caller resumes from them instead of restarting the conversation and re-paying for prior turns
+and tool calls), and `llmapi.RetryAfter(err) (wait, retryable)` is the typed accessor for the
+`retryAfter` signal (so the caller decides whether and how long to wait without spelunking the error's
+properties or trusting the `429` status). The caller owns the attempt cap; the framework supplies the
+facts.
+
+**Provider-side preemption gate.** Each provider microservice also keeps an in-memory
+`map[model]blockedUntil`: on a `retryAfter`-bearing throttle it records the block and, at the top of
+`Turn`, preempts with a synthetic `429` (carrying the remaining wait as `retryAfter`) without dialing
+the provider. It lives in the provider, not here, because the provider holds the API key (so it
+unambiguously is one account) and the gate then covers every caller, not just `llm.core`-routed traffic.
+Keyed by model, since rate limits are per-model.

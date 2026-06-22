@@ -295,7 +295,7 @@ func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) 
 	return flow.Subgraph(url, in, out)
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
+// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
 func (_c Client) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
@@ -312,7 +312,7 @@ func (_res *ChatResponse) Get() (messagesOut []Message, usage Usage, err error) 
 	return _d.MessagesOut, _d.Usage, _res.err
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer.
+// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
 func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}

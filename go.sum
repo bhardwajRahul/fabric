@@ -87,8 +87,8 @@ github.com/microbus-io/boolexp v1.1.1 h1:dknhuJntBqzIYo2oktJb6dX4PxRKohfoV2W/x9E
 github.com/microbus-io/boolexp v1.1.1/go.mod h1:5JCOR68h4U+O7RFNbjfvS+4GbkBHt3TaHDYYwnGaHKI=
 github.com/microbus-io/copyrighter v1.4.0 h1:EucSuHMyUO1fb+0eVOAz9ORpygTfaQxz/LK4jumciJ4=
 github.com/microbus-io/copyrighter v1.4.0/go.mod h1:zk1Tt0nD2cI3NA1i6SHOCRgj7n02TZLyq6uHAMqLmXs=
-github.com/microbus-io/dwarf v0.6.0 h1:M+Co8HjhAbvHtzrdchZI3DYlUwTIaWDWq+Rgeq4UzP8=
-github.com/microbus-io/dwarf v0.6.0/go.mod h1:9h2pe58a6pCdZHjEx5qJ6o4uAx4oUF/GYCsRolXfETQ=
+github.com/microbus-io/dwarf v0.6.3 h1:m7z57AUSRoI+VXjvlJ1ONxdUFb28q95/SYucwxejOQA=
+github.com/microbus-io/dwarf v0.6.3/go.mod h1:9h2pe58a6pCdZHjEx5qJ6o4uAx4oUF/GYCsRolXfETQ=
 github.com/microbus-io/errors v1.0.1 h1:pujosfRSEqSJi0gcx6d+A7Mf2RZr2vQVMSQz0pG+wkM=
 github.com/microbus-io/errors v1.0.1/go.mod h1:NZTmmm+wxKQ8JFCeOMWWj+oqGylYsMKmS1YXysHZASM=
 github.com/microbus-io/pyvenv v1.0.3 h1:cG2NCba0p073Y1yn6A5YEEnklAhJisaHvbe5qQB9pRw=
