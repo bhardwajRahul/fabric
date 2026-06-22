@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -107,7 +108,7 @@ func TestForemanIntegration(t *testing.T) {
 	ctx := context.Background()
 	const host = "inttest.flows"
 
-	var breakerAttempts atomic.Int32
+	var retryAttempts atomic.Int32
 
 	wf := connector.New(host).Init(func(c *connector.Connector) error {
 		registerLinear(c, host)
@@ -155,28 +156,48 @@ func TestForemanIntegration(t *testing.T) {
 			return nil
 		})
 
-		// Breaker: Bk -> END. The task returns 503 on its first dispatch and succeeds afterward, so the
-		// foreman classifies the failure as a breaker trip (ErrUnavailable), parks+probes, and recovers.
-		subscribeGraph(c, "BreakerGraph", ":428/breaker", func() *workflow.Graph {
-			g := workflow.NewGraph("Breaker")
-			g.SetEndpoint("Bk", host+":428/bk")
-			g.AddTransition("Bk", workflow.END)
+		// Task-owned retry: Rt -> END. The foreman no longer classifies errors into engine dispositions, so a
+		// task that wants to recover from a transient failure arms flow.Retry itself. The task "fails" on its
+		// first dispatch by arming a retry, then succeeds on re-dispatch.
+		subscribeGraph(c, "RetryGraph", ":428/retry", func() *workflow.Graph {
+			g := workflow.NewGraph("Retry")
+			g.SetEndpoint("Rt", host+":428/rt")
+			g.AddTransition("Rt", workflow.END)
 			return g
 		})
-		subscribeTask(c, "Bk", ":428/bk", func(f *workflow.Flow) error {
-			if breakerAttempts.Add(1) == 1 {
-				return errors.New("temporarily unavailable", http.StatusServiceUnavailable)
+		subscribeTask(c, "Rt", ":428/rt", func(f *workflow.Flow) error {
+			if retryAttempts.Add(1) == 1 {
+				f.Sleep(10 * time.Millisecond)
+				f.Retry(0, 1.0, 0, 0)
+				return nil
 			}
 			f.SetBool("served", true)
 			return nil
+		})
+
+		// Ack-timeout retry: Gone -> END, where Gone's endpoint is on a host no microservice serves, so the
+		// dispatch ack-times-out (404). The foreman arms the retry itself and re-dispatches with backoff until
+		// the give-up horizon, then fails the step.
+		subscribeGraph(c, "AbsentGraph", ":428/absent", func() *workflow.Graph {
+			g := workflow.NewGraph("Absent")
+			g.SetEndpoint("Gone", "absent.host:428/gone")
+			g.AddTransition("Gone", workflow.END)
+			return g
 		})
 		return nil
 	})
 
 	tester := connector.New("inttest.client")
 
+	fmn := NewService()
+	// Tighten the ack-timeout retry cadence and horizon so the give-up path resolves in ~1s instead of the
+	// production-default days.
+	fmn.SetAckTimeoutRetryInitialDelay(50 * time.Millisecond)
+	fmn.SetAckTimeoutRetryMaxDelay(100 * time.Millisecond)
+	fmn.SetAckTimeoutRetryGiveUpAfter(time.Second)
+
 	app := application.New()
-	app.Add(NewService(), wf, tester)
+	app.Add(fmn, wf, tester)
 	app.RunInTest(t)
 
 	client := foremanapi.NewClient(tester)
@@ -233,18 +254,50 @@ func TestForemanIntegration(t *testing.T) {
 		assert.Equal(42, int(ans))
 	})
 
-	t.Run("breaker_classification_and_recovery", func(t *testing.T) {
+	t.Run("task_owned_retry_recovers", func(t *testing.T) {
 		assert := testarossa.For(t)
-		out, err := client.Run(ctx, host+":428/breaker", nil, nil)
+		out, err := client.Run(ctx, host+":428/retry", nil, nil)
 		if !assert.NoError(err) {
 			return
 		}
-		// The first dispatch 503'd (breaker trip), the probe re-dispatched and succeeded: the flow recovers
-		// to completed rather than failing.
+		// The first dispatch armed flow.Retry itself; the re-dispatch succeeded, so the flow recovers to
+		// completed. The engine did no classification - retry is entirely the task's doing.
 		assert.Equal(workflow.StatusCompleted, out.Status)
 		served, _ := out.State["served"].(bool)
 		assert.True(served)
-		assert.True(breakerAttempts.Load() >= 2, "expected a retry after the 503 trip")
+		assert.True(retryAttempts.Load() >= 2, "expected the task's own retry to re-dispatch")
+	})
+
+	t.Run("ack_timeout_retries_then_gives_up", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flowKey, err := client.Create(ctx, host+":428/absent", map[string]any{}, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		err = client.Start(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		outcome, err := client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		// No microservice hosts the task, so every dispatch ack-times-out; the foreman retries with backoff
+		// until the give-up horizon and then fails the step (rather than looping forever).
+		assert.Equal(workflow.StatusFailed, outcome.Status)
+		// The horizon is wide enough that at least one retry was armed before giving up: the step's attempt
+		// counter advanced past the initial dispatch.
+		steps, err := client.History(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		maxAttempt := 0
+		for _, s := range steps {
+			if s.Attempt > maxAttempt {
+				maxAttempt = s.Attempt
+			}
+		}
+		assert.True(maxAttempt >= 1, "expected at least one ack-timeout retry, got max attempt %d", maxAttempt)
 	})
 }
 

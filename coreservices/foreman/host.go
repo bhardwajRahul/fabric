@@ -18,26 +18,18 @@ import (
 // This file implements the dwarf engine.Host interface for the Microbus transport. The engine owns the
 // orchestration; these four methods are the only seam to the bus:
 //   - LoadGraph   - GET the workflow graph over the bus.
-//   - ExecuteTask - mint the actor token from baggage, POST the flow to the task, classify the error.
+//   - ExecuteTask - mint the actor token from baggage, POST the flow to the task, retry on ack-timeout.
 //   - FlowStopped - fire the OnFlowStopped outbound event to the notify host carried in the flow's baggage.
 //   - SignalPeers - multicast the opaque (op, payload) to peer replicas, excluding self.
 
-// breaker cause labels handed to the engine on a breaker trip. Opaque to the engine (used only as a
-// metric label); defined here because error→cause classification is the host's responsibility.
-const (
-	breakerCauseAckTimeout  = "ack_timeout"
-	breakerCauseUnavailable = "unavailable"
-	breakerCauseOverloaded  = "overloaded"
+// ackTimeoutRetryMultiplier is the exponential growth factor between successive ack-timeout retries. The
+// initial delay, per-interval cap, and give-up horizon are operator configs; the growth factor is fixed.
+const ackTimeoutRetryMultiplier = 2.0
 
-	// statusOverloaded is the non-standard 529 "site overloaded" code (Cloudflare and some third-party
-	// APIs); net/http has no constant for it.
-	statusOverloaded = 529
-
-	// baggageNotifyHost is the baggage key under which resolveOptions stamps the caller's host when the
-	// caller set FlowOptions.NotifyOnStop, so FlowStopped can deliver the OnFlowStopped event back to it.
-	// It is foreman bookkeeping, not an actor claim (mintActorToken strips it before minting).
-	baggageNotifyHost = "notifyHost"
-)
+// baggageNotifyHost is the baggage key under which resolveOptions stamps the caller's host when the
+// caller set FlowOptions.NotifyOnStop, so FlowStopped can deliver the OnFlowStopped event back to it.
+// It is foreman bookkeeping, not an actor claim (mintActorToken strips it before minting).
+const baggageNotifyHost = "notifyHost"
 
 // LoadGraph fetches a workflow graph by issuing a GET to its URL over the bus and decoding the
 // {"graph": ...} wrapper the workflow endpoint serves. Implements engine.Host.
@@ -67,8 +59,11 @@ func (svc *Service) LoadGraph(ctx context.Context, workflowURL string) (*workflo
 // ExecuteTask dispatches one task over the bus: it mints an actor token from the flow's baggage, POSTs
 // the flow carrier to the task URL, and applies the task's returned flow back onto the carrier so the
 // engine sees the changes and any control signals (goto/retry/sleep/interrupt/subgraph) the task armed.
-// A transport error is classified into the engine's disposition wrappers (see classifyTaskError).
-// Implements engine.Host.
+// A transport error is returned undecorated, with one exception: a 404 ack-timeout (no microservice
+// hosting the task) arms flow.Retry on the carrier and returns nil, so the engine backs off and
+// re-dispatches until the AckTimeoutRetryGiveUpAfter horizon. Every other backoff (rate-limit,
+// availability) is owned by the task, which reads its own signal and arms flow.Retry. Implements
+// engine.Host.
 func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workflow.Flow) error {
 	actorToken, err := svc.mintActorToken(ctx)
 	if err != nil {
@@ -94,7 +89,13 @@ func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workf
 	// The engine already bounded ctx with the step's time budget; svc.Request honors that deadline.
 	httpRes, err := svc.Request(ctx, opts...)
 	if err != nil {
-		return classifyTaskError(err)
+		// The task body never ran on an ack-timeout, so it cannot arm its own retry; the foreman arms it on
+		// the carrier (which carries the step's creation time) and returns nil. flow.Retry returns false once
+		// the horizon is exceeded, so a permanently-missing microservice fails the step instead of looping.
+		if isAckTimeout(err) && flow.Retry(svc.AckTimeoutRetryInitialDelay(), ackTimeoutRetryMultiplier, svc.AckTimeoutRetryMaxDelay(), svc.AckTimeoutRetryGiveUpAfter()) {
+			return nil
+		}
+		return errors.Trace(err)
 	}
 	respBody, err := io.ReadAll(httpRes.Body)
 	if err != nil {
@@ -109,22 +110,12 @@ func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workf
 	return nil
 }
 
-// classifyTaskError maps a bus transport error to the engine's disposition wrappers. The engine never
-// inspects status codes itself; the host owns the mapping. A 429 engages backpressure (rate-cut + bounce);
-// a 404 ack-timeout / 503 unavailable / 529 overloaded trips the breaker (park + exponential probe). Any
-// other error is returned undecorated - an ordinary failure the engine routes via onError or fails.
-func classifyTaskError(err error) error {
-	switch {
-	case errors.StatusCode(err) == http.StatusTooManyRequests:
-		return workflow.ErrRateLimited(err, "")
-	case errors.StatusCode(err) == http.StatusNotFound && strings.HasPrefix(err.Error(), "ack timeout"):
-		return workflow.ErrUnavailable(err, breakerCauseAckTimeout)
-	case errors.StatusCode(err) == http.StatusServiceUnavailable:
-		return workflow.ErrUnavailable(err, breakerCauseUnavailable)
-	case errors.StatusCode(err) == statusOverloaded:
-		return workflow.ErrUnavailable(err, breakerCauseOverloaded)
-	}
-	return errors.Trace(err)
+
+// isAckTimeout reports whether err is a unicast ack-timeout: the 404 the connector raises when no
+// microservice acks the task dispatch (no responder), as distinct from a 404 returned by a task that
+// did run. The connector phrases the ack-timeout error as "ack timeout: <canonical>".
+func isAckTimeout(err error) bool {
+	return errors.StatusCode(err) == http.StatusNotFound && strings.Contains(err.Error(), "ack timeout")
 }
 
 // mintActorToken mints a fresh access token from the actor claims carried in the flow's baggage (captured

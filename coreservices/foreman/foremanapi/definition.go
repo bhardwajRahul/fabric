@@ -64,6 +64,27 @@ var SQLConnectionPool = define.Config{ // MARKER: SQLConnectionPool
 	Validation: "int [1,]",
 }
 
+// AckTimeoutRetryInitialDelay is the first backoff delay when a task dispatch hits a 404 ack-timeout (no microservice is hosting the task); the delay grows exponentially on each subsequent ack-timeout.
+var AckTimeoutRetryInitialDelay = define.Config{ // MARKER: AckTimeoutRetryInitialDelay
+	Value:      time.Duration(0),
+	Default:    "1m",
+	Validation: "dur (0s,24h]",
+}
+
+// AckTimeoutRetryMaxDelay caps the exponential backoff delay between ack-timeout retries of a task dispatch.
+var AckTimeoutRetryMaxDelay = define.Config{ // MARKER: AckTimeoutRetryMaxDelay
+	Value:      time.Duration(0),
+	Default:    "10m",
+	Validation: "dur (0s,24h]",
+}
+
+// AckTimeoutRetryGiveUpAfter is the wall-clock horizon, measured from when the step was first created, after which the foreman stops retrying a task dispatch that keeps hitting a 404 ack-timeout (no microservice is hosting the task) and fails the step. Until then the dispatch is retried with exponential backoff.
+var AckTimeoutRetryGiveUpAfter = define.Config{ // MARKER: AckTimeoutRetryGiveUpAfter
+	Value:      time.Duration(0),
+	Default:    "96h",
+	Validation: "dur (0s,720h]",
+}
+
 // OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
 var OnFlowStopped = define.OutboundEvent{ // MARKER: OnFlowStopped
 	Host: Hostname, Method: "POST", Route: ":417/on-flow-terminated",

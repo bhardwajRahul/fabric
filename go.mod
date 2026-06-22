@@ -11,7 +11,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/microbus-io/bespa v0.1.4
 	github.com/microbus-io/boolexp v1.1.1
-	github.com/microbus-io/dwarf v0.5.0
+	github.com/microbus-io/dwarf v0.6.0
 	github.com/microbus-io/errors v1.0.1
 	github.com/microbus-io/pyvenv v1.0.3
 	github.com/microbus-io/sequel v1.10.2
@@ -73,7 +73,6 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/microbus-io/copyrighter v1.4.0 // indirect
-	github.com/microbus-io/throttle v0.3.1 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect

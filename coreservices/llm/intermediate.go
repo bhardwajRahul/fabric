@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -137,6 +138,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.Description(`MaxToolRounds is the maximum number of tool call round-trips per invocation.`),
 		cfg.DefaultValue(`10`),
 		cfg.Validation(`int [1,50]`),
+	)
+	svc.DefineConfig( // MARKER: MaxRateLimitRetryBudget
+		"MaxRateLimitRetryBudget",
+		cfg.Description(`MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.`),
+		cfg.DefaultValue(`10m`),
+		cfg.Validation(`dur (0s,24h]`),
 	)
 
 	return svc
@@ -326,4 +333,16 @@ func (svc *Intermediate) MaxToolRounds() (value int) { // MARKER: MaxToolRounds
 // SetMaxToolRounds sets the value of the configuration property.
 func (svc *Intermediate) SetMaxToolRounds(value int) (err error) { // MARKER: MaxToolRounds
 	return svc.SetConfig("MaxToolRounds", strconv.Itoa(value))
+}
+
+// MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.
+func (svc *Intermediate) MaxRateLimitRetryBudget() (value time.Duration) { // MARKER: MaxRateLimitRetryBudget
+	_val := svc.Config("MaxRateLimitRetryBudget")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+// SetMaxRateLimitRetryBudget sets the value of the configuration property.
+func (svc *Intermediate) SetMaxRateLimitRetryBudget(value time.Duration) (err error) { // MARKER: MaxRateLimitRetryBudget
+	return svc.SetConfig("MaxRateLimitRetryBudget", value.String())
 }

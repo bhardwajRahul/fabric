@@ -23,9 +23,13 @@ my.service:
 foreman.core:
   Workers: 64
   # SQLConnectionPool: 8
+  # AckTimeoutRetryGiveUpAfter: 96h
+  # AckTimeoutRetryInitialDelay: 1m
+  # AckTimeoutRetryMaxDelay: 10m
 
 llm.core:
   # MaxToolRounds: 10
+  # MaxRateLimitRetryBudget: 10m
 
 http.ingress.core:
 #  Ports: 8080

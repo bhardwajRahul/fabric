@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-06-19T16:23:53Z"
+  modifiedAt: "2026-06-21T19:17:49Z"
 
 configs:
   MaxToolRounds:
@@ -27,6 +27,11 @@ configs:
     description: MaxToolRounds is the maximum number of tool call round-trips per invocation.
     validation: int [1,50]
     default: 10
+  MaxRateLimitRetryBudget:
+    signature: MaxRateLimitRetryBudget() (value time.Duration)
+    description: MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.
+    validation: dur (0s,24h]
+    default: 10m
 
 metrics:
   LLMTokens:

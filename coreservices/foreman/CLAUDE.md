@@ -14,8 +14,8 @@ backpressure, the SQL schema, metrics, and tracing. This service owns only the M
 - **Bus endpoints** delegate 1:1 to engine methods (`Create`, `Run`, `Resume`, `Cancel`, …). The service
   struct holds the engine as a member (`svc.engine`), built in `OnStartup`, drained in `OnShutdown`.
 - **`engine.Host` implementation** (`host.go`): `LoadGraph` (GET the graph over the bus), `ExecuteTask`
-  (mint the actor token from baggage, POST the flow to the task URL, classify the error into the engine's
-  backpressure/breaker wrappers), `FlowStopped` (fire `OnFlowStopped` to the notify host read from the flow's baggage), and
+  (mint the actor token from baggage, POST the flow to the task URL, return any transport error undecorated),
+  `FlowStopped` (fire `OnFlowStopped` to the notify host read from the flow's baggage), and
   `SignalPeers` (multicast the opaque `(op, payload)` to peer replicas via the single `Signal` endpoint).
 - **`Signal` inbound endpoint** filters self/foreign delivery, then hands `(op, payload)` to
   `engine.DeliverSignal`.
@@ -30,15 +30,30 @@ and the decisions that are non-obvious *because* the foreman is now a delegating
 
 ## Non-obvious decisions
 
-**Error classification is the host's job, not the engine's (`classifyTaskError` in `host.go`).** The engine
-never inspects a task's HTTP status code or error text — it only understands two opaque disposition
-wrappers. The foreman maps transport errors to them: `429 → workflow.ErrRateLimited` (rate-cut + bounce
-the step), and `404 "ack timeout…" / 503 / 529 → workflow.ErrUnavailable` (park the backlog + exponential
-probe), tagging the trip with an opaque `cause` label (`ack_timeout` / `unavailable` / `overloaded`) that
-the engine forwards only as a metric dimension. Any other error is returned **undecorated**, which the
-engine treats as an ordinary failure (routed via `onError` or failed). This keeps the engine
-transport-agnostic; the 429-vs-breaker distinction (rate-limited vs. can't-serve-right-now) and the `529`
-constant (`statusOverloaded` — net/http has none) live here because only the host knows the wire protocol.
+**The foreman does NOT classify task errors into engine dispositions.** `ExecuteTask` returns every transport
+error **undecorated** (`errors.Trace(err)`), which the engine treats as an ordinary failure (routed via
+`onError` or fails the step). It deliberately does *not* wrap `429` into `workflow.ErrRateLimited` (the
+adaptive valve) or `503 / 529` into `workflow.ErrUnavailable` (the breaker). Backpressure is
+owned by the layer that has the resource identity, not the engine: a task that wants to back off reads its own
+signal (e.g. an LLM provider's `retryAfter`) and arms `flow.Retry` itself (carrying the wait in Retry's
+`initialDelay`) - see `coreservices/llm` `CallLLM`. This is the first step of taking dwarf out of backpressure entirely (the engine
+still *contains* the valve/breaker machinery; the foreman just never triggers it, and a later dwarf change
+removes it). The status code is preserved on the error (a 429 stays a 429) - it is just no longer a control
+signal to the engine.
+
+**The one exception: the foreman retries a `404` ack-timeout itself.** A `404` ack-timeout means *no
+microservice acked the task dispatch* - the task host is absent (a deploy gap, a not-yet-started replica), not a
+task that ran and returned `404`. Because the task body never executed, it could not arm its own `flow.Retry`,
+so the foreman arms it on the carrier (`isAckTimeout` gates on status `404` plus the connector's `"ack timeout"`
+message) and returns `nil`. The engine then re-dispatches with exponential backoff exactly as if a task had
+retried - the carrier already holds the step's creation time, so `flow.Retry`'s wall-clock `giveUpAfter` horizon
+applies. The horizon is the operator config `AckTimeoutRetryGiveUpAfter` (default 96h: long enough to ride a
+weekend deploy gap, short enough to eventually fail and surface a permanently-removed microservice rather than
+retry forever); `AckTimeoutRetryInitialDelay` (1m) and `AckTimeoutRetryMaxDelay` (10m) shape the interval, and
+the growth factor is the fixed `ackTimeoutRetryMultiplier` (2.0). This is the **only** adapter/engine-level
+retry; every other backoff is task-owned. It replaces the deleted breaker's missing-host handling, and the
+give-up is an ordinary step failure, so a recovery query/alert can find it by the failed status and ack-timeout
+error text.
 
 **Cross-replica coordination rides one `Signal` multicast endpoint.** The engine's
 `SignalPeers(ctx, op, payload)` carries every kind of peer signal (work doorbell, valve-rate gossip,

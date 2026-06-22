@@ -17,6 +17,8 @@ limitations under the License.
 package llmapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/define"
 )
 
@@ -41,6 +43,13 @@ var MaxToolRounds = define.Config{ // MARKER: MaxToolRounds
 	Value:      int(0),
 	Default:    "10",
 	Validation: "int [1,50]",
+}
+
+// MaxRateLimitRetryBudget is the maximum total wall-clock time CallLLM keeps retrying a rate-limited LLM call (one whose error carries a retryAfter) before giving up.
+var MaxRateLimitRetryBudget = define.Config{ // MARKER: MaxRateLimitRetryBudget
+	Value:      time.Duration(0),
+	Default:    "10m",
+	Validation: "dur (0s,24h]",
 }
 
 // LLMTokens counts tokens consumed per LLM turn

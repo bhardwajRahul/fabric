@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/dwarf/workflow"
 	"github.com/microbus-io/errors"
@@ -318,6 +319,21 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	svc.logPrompt(ctx, messages)
 	content, toolCalls, stopReason, turnUsage, err := svc.turn(ctx, provider, model, messages, tools, turnOpts)
 	if err != nil {
+		// A rate-limited error carries a retryAfter (a duration string); its presence is the retry signal, not the
+		// status code. Re-dispatch this step after exactly that wait, bounded by the MaxRateLimitRetryBudget
+		// wall-clock horizon so a misclassified-permanent or poison 429 cannot loop forever. Any error without a
+		// retryAfter is permanent and fails the step. The wait goes in Retry's initialDelay with multiplier 1.0 and
+		// no per-interval cap, so every attempt waits exactly retryAfter with no exponential growth on top (rate
+		// limits are a known-reset condition).
+		if ra, ok := errors.Convert(err).Properties["retryAfter"].(string); ok && ra != "" {
+			d, parseErr := time.ParseDuration(ra)
+			if parseErr != nil || d <= 0 {
+				d = time.Minute // fall back when the provider sent a malformed or non-positive retryAfter
+			}
+			if flow.Retry(d, 1.0, 0, svc.MaxRateLimitRetryBudget()) {
+				return "", nil, llmapi.Usage{}, nil
+			}
+		}
 		return "", nil, llmapi.Usage{}, errors.Trace(err)
 	}
 	svc.logCompletion(ctx, provider, content, toolCalls, turnUsage)

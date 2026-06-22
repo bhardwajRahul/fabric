@@ -257,6 +257,24 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		cfg.DefaultValue(`8`),
 		cfg.Validation(`int [1,]`),
 	)
+	svc.DefineConfig( // MARKER: AckTimeoutRetryInitialDelay
+		"AckTimeoutRetryInitialDelay",
+		cfg.Description(`AckTimeoutRetryInitialDelay is the first backoff delay when a task dispatch hits a 404 ack-timeout (no microservice is hosting the task); the delay grows exponentially on each subsequent ack-timeout.`),
+		cfg.DefaultValue(`1m`),
+		cfg.Validation(`dur (0s,24h]`),
+	)
+	svc.DefineConfig( // MARKER: AckTimeoutRetryMaxDelay
+		"AckTimeoutRetryMaxDelay",
+		cfg.Description(`AckTimeoutRetryMaxDelay caps the exponential backoff delay between ack-timeout retries of a task dispatch.`),
+		cfg.DefaultValue(`10m`),
+		cfg.Validation(`dur (0s,24h]`),
+	)
+	svc.DefineConfig( // MARKER: AckTimeoutRetryGiveUpAfter
+		"AckTimeoutRetryGiveUpAfter",
+		cfg.Description(`AckTimeoutRetryGiveUpAfter is the wall-clock horizon, measured from when the step was first created, after which the foreman stops retrying a task dispatch that keeps hitting a 404 ack-timeout (no microservice is hosting the task) and fails the step. Until then the dispatch is retried with exponential backoff.`),
+		cfg.DefaultValue(`96h`),
+		cfg.Validation(`dur (0s,720h]`),
+	)
 
 	return svc
 }
@@ -593,4 +611,40 @@ func (svc *Intermediate) SQLConnectionPool() (value int) { // MARKER: SQLConnect
 // SetSQLConnectionPool sets the value of the configuration property.
 func (svc *Intermediate) SetSQLConnectionPool(value int) (err error) { // MARKER: SQLConnectionPool
 	return svc.SetConfig("SQLConnectionPool", strconv.Itoa(value))
+}
+
+// AckTimeoutRetryInitialDelay is the first backoff delay when a task dispatch hits a 404 ack-timeout (no microservice is hosting the task); the delay grows exponentially on each subsequent ack-timeout.
+func (svc *Intermediate) AckTimeoutRetryInitialDelay() (value time.Duration) { // MARKER: AckTimeoutRetryInitialDelay
+	_val := svc.Config("AckTimeoutRetryInitialDelay")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+// SetAckTimeoutRetryInitialDelay sets the value of the configuration property.
+func (svc *Intermediate) SetAckTimeoutRetryInitialDelay(value time.Duration) (err error) { // MARKER: AckTimeoutRetryInitialDelay
+	return svc.SetConfig("AckTimeoutRetryInitialDelay", value.String())
+}
+
+// AckTimeoutRetryMaxDelay caps the exponential backoff delay between ack-timeout retries of a task dispatch.
+func (svc *Intermediate) AckTimeoutRetryMaxDelay() (value time.Duration) { // MARKER: AckTimeoutRetryMaxDelay
+	_val := svc.Config("AckTimeoutRetryMaxDelay")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+// SetAckTimeoutRetryMaxDelay sets the value of the configuration property.
+func (svc *Intermediate) SetAckTimeoutRetryMaxDelay(value time.Duration) (err error) { // MARKER: AckTimeoutRetryMaxDelay
+	return svc.SetConfig("AckTimeoutRetryMaxDelay", value.String())
+}
+
+// AckTimeoutRetryGiveUpAfter is the wall-clock horizon, measured from when the step was first created, after which the foreman stops retrying a task dispatch that keeps hitting a 404 ack-timeout (no microservice is hosting the task) and fails the step. Until then the dispatch is retried with exponential backoff.
+func (svc *Intermediate) AckTimeoutRetryGiveUpAfter() (value time.Duration) { // MARKER: AckTimeoutRetryGiveUpAfter
+	_val := svc.Config("AckTimeoutRetryGiveUpAfter")
+	_dur, _ := time.ParseDuration(_val)
+	return _dur
+}
+
+// SetAckTimeoutRetryGiveUpAfter sets the value of the configuration property.
+func (svc *Intermediate) SetAckTimeoutRetryGiveUpAfter(value time.Duration) (err error) { // MARKER: AckTimeoutRetryGiveUpAfter
+	return svc.SetConfig("AckTimeoutRetryGiveUpAfter", value.String())
 }
