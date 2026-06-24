@@ -35,7 +35,7 @@ var Workers = define.Config{ // MARKER: Workers
 	Validation: "int [1,]",
 }
 
-// TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
+// TimeBudget is the default time budget for a single task step's execution, applied as the timeout on the task dispatch call. A flow may override it per-flow via FlowOptions.TimeBudget, up to a hard 15m ceiling; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
 var TimeBudget = define.Config{ // MARKER: TimeBudget
 	Value:      time.Duration(0),
 	Default:    "2m",

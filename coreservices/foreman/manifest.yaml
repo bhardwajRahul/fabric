@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-22T03:34:02Z"
+  modifiedAt: "2026-06-24T12:49:36Z"
 
 configs:
   SQLDataSourceName:
@@ -19,7 +19,7 @@ configs:
     default: 64
   TimeBudget:
     signature: TimeBudget() (value time.Duration)
-    description: TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
+    description: TimeBudget is the default time budget for a single task step's execution, applied as the timeout on the task dispatch call. A flow may override it per-flow via FlowOptions.TimeBudget, up to a hard 15m ceiling; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
     validation: dur [1s,15m]
     default: 2m
   DefaultPriority:

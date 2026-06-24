@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/microbus-io/dwarf/engine"
 	"github.com/microbus-io/dwarf/workflow"
@@ -92,11 +93,19 @@ func (svc *Service) OnChangedNumShards(ctx context.Context) (err error) { // MAR
 	return errors.Trace(svc.engine.SetNumShards(svc.NumShards()))
 }
 
-// resolveOptions injects the caller's actor claims as opaque baggage and defaults the fairness key to the
-// caller's tenant, so the engine carries the original caller's identity without knowing about frames.
-func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptions) *workflow.FlowOptions {
+// maxTimeBudget is the ceiling on a per-flow FlowOptions.TimeBudget, rejected (not clamped) at every
+// inbound flow-creating call.
+const maxTimeBudget = 15 * time.Minute
+
+// resolveOptions validates the caller's time budget, injects the caller's actor claims as opaque baggage,
+// and defaults the fairness key to the caller's tenant. Every inbound flow-creating endpoint
+// (Create/CreateTask/Run/Continue) routes through it.
+func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptions) (*workflow.FlowOptions, error) {
 	if opts == nil {
 		opts = &workflow.FlowOptions{}
+	}
+	if opts.TimeBudget > maxTimeBudget {
+		return nil, errors.New("time budget %s exceeds the maximum %s", opts.TimeBudget, maxTimeBudget, http.StatusBadRequest)
 	}
 	var claims map[string]any
 	frame.Of(ctx).ParseActor(&claims)
@@ -119,14 +128,18 @@ func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptio
 		bag[baggageNotifyHost] = frame.Of(ctx).FromHost()
 		opts.Baggage = bag
 	}
-	return opts
+	return opts, nil
 }
 
 /*
 Create creates a new flow for a workflow without starting it.
 */
 func (svc *Service) Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: Create
-	return svc.engine.Create(ctx, workflowURL, initialState, svc.resolveOptions(ctx, opts))
+	ro, err := svc.resolveOptions(ctx, opts)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return svc.engine.Create(ctx, workflowURL, initialState, ro)
 }
 
 /*
@@ -233,7 +246,11 @@ func (svc *Service) ShardInfo(ctx context.Context) (shards []foremanapi.ShardSum
 CreateTask creates a flow that executes a single task and then terminates, without starting it.
 */
 func (svc *Service) CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	return svc.engine.CreateTask(ctx, name, taskURL, initialState, svc.resolveOptions(ctx, opts))
+	ro, err := svc.resolveOptions(ctx, opts)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return svc.engine.CreateTask(ctx, name, taskURL, initialState, ro)
 }
 
 /*
@@ -254,9 +271,13 @@ func (svc *Service) BreakBefore(ctx context.Context, flowKey string, taskName st
 Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 */
 func (svc *Service) Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
+	ro, err := svc.resolveOptions(ctx, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	// engine.Run now returns the new flow's key first; the foreman's Run endpoint does not expose it
 	// (callers needing the key use Create+Start+Await), so discard it here.
-	_, outcome, err = svc.engine.Run(ctx, workflowURL, initialState, svc.resolveOptions(ctx, opts))
+	_, outcome, err = svc.engine.Run(ctx, workflowURL, initialState, ro)
 	return outcome, err
 }
 
@@ -265,7 +286,11 @@ Continue creates a new flow from the latest completed flow in a thread, merged w
 the graph's reducers.
 */
 func (svc *Service) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Continue
-	return svc.engine.Continue(ctx, threadKey, additionalState, svc.resolveOptions(ctx, opts))
+	ro, err := svc.resolveOptions(ctx, opts)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return svc.engine.Continue(ctx, threadKey, additionalState, ro)
 }
 
 /*

@@ -235,7 +235,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 	svc.DefineConfig( // MARKER: TimeBudget
 		"TimeBudget",
-		cfg.Description(`TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.`),
+		cfg.Description(`TimeBudget is the default time budget for a single task step's execution, applied as the timeout on the task dispatch call. A flow may override it per-flow via FlowOptions.TimeBudget, up to a hard 15m ceiling; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.`),
 		cfg.DefaultValue(`2m`),
 		cfg.Validation(`dur [1s,15m]`),
 	)
@@ -547,7 +547,7 @@ func (svc *Intermediate) SetWorkers(value int) (err error) { // MARKER: Workers
 	return svc.SetConfig("Workers", strconv.Itoa(value))
 }
 
-// TimeBudget is the hard ceiling on the execution time of any task step. It is applied as the timeout on the task dispatch call; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
+// TimeBudget is the default time budget for a single task step's execution, applied as the timeout on the task dispatch call. A flow may override it per-flow via FlowOptions.TimeBudget, up to a hard 15m ceiling; a task endpoint may declare a shorter budget of its own via sub.TimeBudget.
 func (svc *Intermediate) TimeBudget() (value time.Duration) { // MARKER: TimeBudget
 	_val := svc.Config("TimeBudget")
 	_dur, _ := time.ParseDuration(_val)
