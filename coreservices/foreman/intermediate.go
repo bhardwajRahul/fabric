@@ -38,6 +38,7 @@ type ToDo interface {
 	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                 // MARKER: Cancel
 	Restart(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                           // MARKER: Restart
 	RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                       // MARKER: RestartFrom
+	Recover(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                           // MARKER: Recover
 	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                  // MARKER: History
 	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
 	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
@@ -142,6 +143,12 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(foremanapi.RestartFrom.Method, foremanapi.RestartFrom.Route),
 		sub.Description(`RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.`),
 		sub.Function(foremanapi.RestartFromIn{}, foremanapi.RestartFromOut{}),
+	)
+	svc.Subscribe( // MARKER: Recover
+		"Recover", svc.doRecover,
+		sub.At(foremanapi.Recover.Method, foremanapi.Recover.Route),
+		sub.Description(`Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.`),
+		sub.Function(foremanapi.RecoverIn{}, foremanapi.RecoverOut{}),
 	)
 	svc.Subscribe( // MARKER: History
 		"History", svc.doHistory,
@@ -388,6 +395,17 @@ func (svc *Intermediate) doRestartFrom(w http.ResponseWriter, r *http.Request) (
 	var out foremanapi.RestartFromOut
 	err = marshalFunction(w, r, foremanapi.RestartFrom.Route, &in, &out, func(_ any, _ any) error {
 		err = svc.RestartFrom(r.Context(), in.StepKey, in.StateOverrides)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doRecover handles marshaling for Recover.
+func (svc *Intermediate) doRecover(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Recover
+	var in foremanapi.RecoverIn
+	var out foremanapi.RecoverOut
+	err = marshalFunction(w, r, foremanapi.Recover.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Recover(r.Context(), in.FlowKey, in.StateOverrides)
 		return err // No trace
 	})
 	return err // No trace

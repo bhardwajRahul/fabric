@@ -484,6 +484,38 @@ func (_c MulticastClient) RestartFrom(ctx context.Context, stepKey string, state
 	}
 }
 
+// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
+func (_c Client) Recover(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Recover
+	_in := RecoverIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := RecoverOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Recover.Method, Recover.Route, &_in, &_out)
+	return err // No trace
+}
+
+// RecoverResponse packs the response of Recover.
+type RecoverResponse multicastResponse // MARKER: Recover
+
+// Get unpacks the return arguments of Recover.
+func (_res *RecoverResponse) Get() (err error) { // MARKER: Recover
+	return _res.err
+}
+
+// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
+func (_c MulticastClient) Recover(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*RecoverResponse] { // MARKER: Recover
+	_in := RecoverIn{FlowKey: flowKey, StateOverrides: stateOverrides}
+	_out := RecoverOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Recover.Method, Recover.Route, &_in, &_out)
+	return func(yield func(*RecoverResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*RecoverResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
 // History returns the step-by-step execution history of a flow.
 func (_c Client) History(ctx context.Context, flowKey string) (steps []FlowStep, err error) { // MARKER: History
 	_in := HistoryIn{FlowKey: flowKey}

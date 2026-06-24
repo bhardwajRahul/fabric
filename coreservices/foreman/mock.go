@@ -24,6 +24,7 @@ type Mock struct {
 	mockCancel             func(ctx context.Context, flowKey string, reason string) (err error)                                                                   // MARKER: Cancel
 	mockRestart            func(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                              // MARKER: Restart
 	mockRestartFrom        func(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                              // MARKER: RestartFrom
+	mockRecover            func(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                              // MARKER: Recover
 	mockHistory            func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                     // MARKER: History
 	mockStep               func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
 	mockList               func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
@@ -183,6 +184,20 @@ func (svc *Mock) MockRestartFrom(handler func(ctx context.Context, stepKey strin
 func (svc *Mock) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
 	if svc.mockRestartFrom != nil {
 		err = svc.mockRestartFrom(ctx, stepKey, stateOverrides)
+	}
+	return errors.Trace(err)
+}
+
+// MockRecover sets up a mock handler for Recover.
+func (svc *Mock) MockRecover(handler func(ctx context.Context, flowKey string, stateOverrides any) (err error)) *Mock { // MARKER: Recover
+	svc.mockRecover = handler
+	return svc
+}
+
+// Recover executes the mock handler.
+func (svc *Mock) Recover(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Recover
+	if svc.mockRecover != nil {
+		err = svc.mockRecover(ctx, flowKey, stateOverrides)
 	}
 	return errors.Trace(err)
 }

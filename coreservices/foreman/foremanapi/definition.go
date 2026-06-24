@@ -226,6 +226,22 @@ type RestartFromIn struct { // MARKER: RestartFrom
 type RestartFromOut struct { // MARKER: RestartFrom
 }
 
+// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
+var Recover = define.Function{ // MARKER: Recover
+	Host: Hostname, Method: "POST", Route: ":444/recover",
+	In: RecoverIn{}, Out: RecoverOut{},
+}
+
+// RecoverIn are the input arguments of Recover.
+type RecoverIn struct { // MARKER: Recover
+	FlowKey        string `json:"flowKey,omitzero"`
+	StateOverrides any    `json:"stateOverrides,omitzero"`
+}
+
+// RecoverOut are the output arguments of Recover.
+type RecoverOut struct { // MARKER: Recover
+}
+
 // History returns the step-by-step execution history of a flow.
 var History = define.Function{ // MARKER: History
 	Host: Hostname, Method: "GET", Route: ":444/history",

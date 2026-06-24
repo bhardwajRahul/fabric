@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-24T12:49:36Z"
+  modifiedAt: "2026-06-24T14:35:17Z"
 
 configs:
   SQLDataSourceName:
@@ -92,6 +92,11 @@ functions:
     description: RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
     method: POST
     route: :444/restart-from
+  Recover:
+    signature: Recover(flowKey string, stateOverrides any)
+    description: Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
+    method: POST
+    route: :444/recover
   History:
     signature: History(flowKey string) (steps []FlowStep)
     description: History returns the step-by-step execution history of a flow.

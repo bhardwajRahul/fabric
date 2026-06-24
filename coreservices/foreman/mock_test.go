@@ -139,6 +139,18 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("recover", func(t *testing.T) { // MARKER: Recover
+		assert := testarossa.For(t)
+
+		mock.MockRecover(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
+			return
+		})
+		var flowKey string
+		var stateOverrides any
+		err := mock.Recover(ctx, flowKey, stateOverrides)
+		assert.NoError(err)
+	})
+
 	t.Run("history", func(t *testing.T) { // MARKER: History
 		assert := testarossa.For(t)
 

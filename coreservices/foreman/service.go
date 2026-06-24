@@ -200,6 +200,13 @@ func (svc *Service) RestartFrom(ctx context.Context, stepKey string, stateOverri
 }
 
 /*
+Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
+*/
+func (svc *Service) Recover(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Recover
+	return svc.engine.Recover(ctx, flowKey, stateOverrides)
+}
+
+/*
 History returns the step-by-step execution history of a flow.
 */
 func (svc *Service) History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error) { // MARKER: History
