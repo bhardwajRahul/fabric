@@ -449,3 +449,9 @@ type SignalOut struct { // MARKER: Signal
 var HistoryMermaid = define.Web{ // MARKER: HistoryMermaid
 	Host: Hostname, Method: "GET", Route: ":444/history-mermaid",
 }
+
+// AckTimeouts counts task dispatches that hit a 404 ack-timeout (no microservice acked the dispatch), keyed by the task endpoint and the outcome: "retry" when the foreman re-probed within the step's time budget, "giveup" when the budget horizon was spent and the step was failed. The "giveup" series is the alertable "a microservice is missing" signal. Named to parallel the framework's microbus_client_timeout_requests; the Prometheus exporter appends the _total suffix.
+var AckTimeouts = define.Metric{ // MARKER: AckTimeouts
+	Kind: define.Counter, Value: int(0), Labels: []string{"task_url", "outcome"},
+	OTelName: "microbus_foreman_timeout_requests",
+}

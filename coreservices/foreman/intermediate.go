@@ -229,7 +229,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`HistoryMermaid renders an HTML page with a Mermaid diagram of the flow's execution history.`),
 		sub.Web(),
 	)
-	svc.DefineConfig( // MARKER: SQLDataSourceName
+	svc.DescribeCounter("microbus_foreman_timeout_requests", `AckTimeouts counts task dispatches that hit a 404 ack-timeout (no microservice acked the dispatch), keyed by the task endpoint and the outcome: "retry" when the foreman re-probed within the step's time budget, "giveup" when the budget horizon was spent and the step was failed. The "giveup" series is the alertable "a microservice is missing" signal. Named to parallel the framework's microbus_client_timeout_requests; the Prometheus exporter appends the _total suffix.`) // MARKER: AckTimeouts
+	svc.DefineConfig(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 // MARKER: SQLDataSourceName
 		"SQLDataSourceName",
 		cfg.Description(`SQLDataSourceName is the connection string of the SQL database.`),
 		cfg.Secret(),
@@ -541,6 +542,14 @@ func (svc *Intermediate) doSignal(w http.ResponseWriter, r *http.Request) (err e
 		return err // No trace
 	})
 	return err // No trace
+}
+
+// AckTimeouts counts task dispatches that hit a 404 ack-timeout (no microservice acked the dispatch), keyed by the task endpoint and the outcome: "retry" when the foreman re-probed within the step's time budget, "giveup" when the budget horizon was spent and the step was failed. The "giveup" series is the alertable "a microservice is missing" signal. Named to parallel the framework's microbus_client_timeout_requests; the Prometheus exporter appends the _total suffix.
+func (svc *Intermediate) IncrementAckTimeouts(ctx context.Context, value int, task_url string, outcome string) (err error) { // MARKER: AckTimeouts
+	return svc.IncrementCounter(ctx, "microbus_foreman_timeout_requests", float64(value),
+		"task_url", task_url,
+		"outcome", outcome,
+	)
 }
 
 // SQLDataSourceName is the connection string of the SQL database.

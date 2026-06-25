@@ -74,11 +74,28 @@ status-change wake). The `FromHost==Hostname` half restricts processing to genui
 `SetTracerProvider` are construction-time-only on the engine (it resolves them once at `Startup`; calling
 them on a running engine returns an error). So `OnStartup` calls `eng.SetLogger(svc.Logger())` etc. *before*
 `eng.Startup(ctx)`. (The engine's config API is `Set*`, each returning an `error`; the pre-`Startup` sets
-here can't fail, so the real error surfaces from `Startup`.) The foreman defines **no** microbus metric
-endpoints: the engine emits `dwarf_*` instruments and spans straight through the connector's OTEL pipeline.
-(The Grafana dashboard at `setup/grafana/dashboards/workflow-overview.json` reads the `dwarf_*` names. Note
-the metric label split: step-disposition keys by **`task_name`** (graph node), while `dwarf_task_concurrency_running`
-keys by **`task_url`** (downstream endpoint).)
+here can't fail, so the real error surfaces from `Startup`.) The engine emits `dwarf_*` instruments and spans
+straight through the connector's OTEL pipeline. (The Grafana dashboard at
+`setup/grafana/dashboards/workflow-overview.json` reads the `dwarf_*` names. Note the metric label split:
+step-disposition keys by **`task_name`** (graph node), while `dwarf_task_concurrency_running` keys by
+**`task_url`** (downstream endpoint).)
+
+**The foreman emits exactly one microbus metric of its own: `AckTimeouts`** (OTel name
+`microbus_foreman_timeout_requests`; the Prometheus exporter appends `_total`, so it queries as
+`microbus_foreman_timeout_requests_total`, labeled `task_url`, `outcome`). It records the 404 ack-timeout path in
+`ExecuteTask` - `outcome="retry"` on each re-probe, `outcome="giveup"` when the horizon is spent and the step is
+failed (the alertable "a microservice is missing" signal). It lives here, not in the engine, because the engine is
+host-agnostic and never sees the ack-timeout: it only observes that a `flow.Retry` was armed (indistinguishable
+from a task-armed 429 retry) or that an error came back (indistinguishable from any other failure). General
+retry-dispatch churn, by contrast, *is* an engine signal - `dwarf_steps_executed_total{status="retried"}` - and
+needs no foreman metric. Label `task_url` matches the value dwarf uses for `dwarf_task_concurrency_running` (the
+dispatch URL `ExecuteTask` receives), so the two join on the same key.
+
+The name parallels the framework's own `microbus_client_timeout_requests`, which the connector already increments
+for *every* downstream timeout. We do not just filter that by `service="foreman.core"` because (a) it conflates the
+ack-timeout with the foreman's other downstream calls (token mint, graph load) and carries no `retry`/`giveup`
+split, and (b) the `service` label is the deploy-time hostname, so an alternative-hostname deployment would silently
+break a dashboard hard-coded to `foreman.core`. The dedicated metric is hostname-independent and pre-split.
 
 **`StartupInTest` under the TESTING deployment, `Startup` otherwise.** The foreman runs under
 `app.RunInTest`, so it has no `*testing.T` to hand the engine's `RunInTest`. `StartupInTest(ctx, svc.Plane())`

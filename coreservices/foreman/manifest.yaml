@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-24T14:35:17Z"
+  modifiedAt: "2026-06-25T11:31:39Z"
 
 configs:
   SQLDataSourceName:
@@ -38,6 +38,13 @@ configs:
     description: SQLConnectionPool is the number of database connections kept open per shard.
     validation: int [1,]
     default: 8
+
+metrics:
+  AckTimeouts:
+    signature: AckTimeouts(value int, task_url string, outcome string)
+    description: "AckTimeouts counts task dispatches that hit a 404 ack-timeout (no microservice acked the dispatch), keyed by the task endpoint and the outcome: \"retry\" when the foreman re-probed within the step's time budget, \"giveup\" when the budget horizon was spent and the step was failed. The \"giveup\" series is the alertable \"a microservice is missing\" signal. Named to parallel the framework's microbus_client_timeout_requests; the Prometheus exporter appends the _total suffix."
+    kind: counter
+    otelName: microbus_foreman_timeout_requests
 
 outboundEvents:
   OnFlowStopped:

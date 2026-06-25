@@ -103,10 +103,15 @@ func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workf
 		// The task body never ran on an ack-timeout, so it cannot arm its own retry; the foreman arms it on the
 		// carrier (which holds the step's creation time) and returns nil, re-probing at a fixed budget/N interval
 		// until the budget horizon is spent. flow.Retry returns false once the next probe would overshoot the
-		// horizon, so a permanently-missing microservice fails the step instead of looping.
-		if isAckTimeout(err) && retryHorizon > 0 &&
-			flow.Retry(retryHorizon/ackTimeoutRetryProbes, 1.0, 0, retryHorizon) {
-			return nil
+		// horizon, so a permanently-missing microservice fails the step instead of looping. The ack-timeout is
+		// recorded either way: "retry" while re-probing, "giveup" when the horizon is spent (the alertable
+		// "a microservice is missing" signal). The engine cannot emit this - it never sees the ack-timeout.
+		if isAckTimeout(err) {
+			if retryHorizon > 0 && flow.Retry(retryHorizon/ackTimeoutRetryProbes, 1.0, 0, retryHorizon) {
+				svc.IncrementAckTimeouts(ctx, 1, taskURL, "retry")
+				return nil
+			}
+			svc.IncrementAckTimeouts(ctx, 1, taskURL, "giveup")
 		}
 		return errors.Trace(err)
 	}
