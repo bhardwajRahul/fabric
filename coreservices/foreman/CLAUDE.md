@@ -58,6 +58,18 @@ handling, and the give-up is an ordinary step failure, so a recovery query/alert
 and ack-timeout error text. For longer-than-budget tolerance, the *caller* owns the retry (re-run with a longer
 budget or its own loop) - the framework deliberately does not park work past the task's stated worth.
 
+The retry horizon is the task's **time budget**, not a config and not a flow-wide deadline. A config was rejected
+because the real bound is *staleness* ("is this work still worth finishing?"), which the time budget already
+expresses, so reusing it means zero new knobs, per-task granularity (a short `sub.TimeBudget` yields a short
+horizon), and one unified rule for the 404 and 429 paths. A flow-wide deadline (a `FlowOption` "fail the whole flow
+after T") was rejected because under a wall-clock-since-created clock a HITL flow parked on an interrupt for days, or
+a legitimate long `flow.Sleep`, is indistinguishable from one stuck retrying - the engine cannot tell "still
+waiting" from "still failing." Splitting ownership sidesteps that: the engine owns the **short-term** retry (bounded
+by the per-task budget, which only counts a task that is actively trying), and the **caller** owns the long-term,
+staleness-aware retry (it alone knows whether the work is still relevant). The 429 path in `coreservices/llm`
+`CallLLM` resolves identically - same budget-as-horizon, caller-owned long retry via `Chat` returning its partial
+messages plus `llmapi.RetryAfter`.
+
 **Cross-replica coordination rides one `Signal` multicast endpoint.** The engine's
 `SignalPeers(ctx, op, payload)` carries every kind of peer signal (the work doorbell and the status-change
 wake) as a single opaque `(op, payload)` pair. `op` is an opaque routing key the engine parses on the
