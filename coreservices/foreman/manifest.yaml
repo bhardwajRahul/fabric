@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-25T11:31:39Z"
+  modifiedAt: "2026-06-26T00:45:44Z"
 
 configs:
   SQLDataSourceName:
@@ -134,11 +134,6 @@ functions:
     description: ShardInfo returns per-shard health (latency, row counts, error) for every database shard.
     method: GET
     route: :444/shard-info
-  CreateTask:
-    signature: CreateTask(name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string)
-    description: CreateTask creates a flow that executes a single task and then terminates, without starting it.
-    method: POST
-    route: :444/create-task
   Await:
     signature: Await(flowKey string) (outcome *workflow.FlowOutcome)
     description: Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.

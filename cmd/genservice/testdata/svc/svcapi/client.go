@@ -127,17 +127,15 @@ func (_c Executor) WithFlowOptions(flowOptions *workflow.FlowOptions) Executor {
 	return Executor{svc: _c.svc, host: _c.host, opts: _c.opts, inFlow: _c.inFlow, outFlow: _c.outFlow, runner: _c.runner, flowOptions: flowOptions}
 }
 
-// Subflow runs this microservice's tasks and workflows as isolated child flows from INSIDE a task body.
-// Unlike Executor (which carries a service.Publisher and is for tests), Subflow carries the calling
-// task's *workflow.Flow: each method parks the calling step and re-enters it when the child terminates,
-// returning (..., yield bool, err error).
-type Subflow struct {
+// Subgraph runs this microservice's workflows from inside a task body. Create it with
+// NewSubgraph(flow), then call the method named after the workflow you want to invoke.
+type Subgraph struct {
 	flow *workflow.Flow
 }
 
-// NewSubflow creates a subflow client bound to the calling task's flow carrier.
-func NewSubflow(flow *workflow.Flow) Subflow {
-	return Subflow{flow: flow}
+// NewSubgraph creates a subgraph client bound to the calling task's flow carrier.
+func NewSubgraph(flow *workflow.Flow) Subgraph {
+	return Subgraph{flow: flow}
 }
 
 // MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
@@ -332,13 +330,10 @@ func marshalWorkflow(ctx context.Context, runner WorkflowRunner, flowOptions *wo
 	return status, nil
 }
 
-// marshalSubflow runs a child flow via the flow carrier and returns the parker's yield.
-func marshalSubflow(flow *workflow.Flow, taskName, url string, in any, out any) (yield bool, err error) {
+// marshalSubgraph runs a child workflow via the flow carrier and returns the parker's yield.
+func marshalSubgraph(flow *workflow.Flow, url string, in any, out any) (yield bool, err error) {
 	if flow == nil {
-		return false, errors.New("Subflow requires a flow carrier (call from a task body)")
-	}
-	if taskName != "" {
-		return flow.Subtask(taskName, url, in, out)
+		return false, errors.New("Subgraph requires a flow carrier (call from a task body)")
 	}
 	return flow.Subgraph(url, in, out)
 }
@@ -532,31 +527,11 @@ func (_c Executor) ProcessStep(ctx context.Context, item string) (done bool, err
 	return out.Done, err // No trace
 }
 
-// ProcessStep is a workflow task that processes an item.
-func (_sf Subflow) ProcessStep(ctx context.Context, item string) (done bool, yield bool, err error) { // MARKER: ProcessStep
-	var out ProcessStepOut
-	yield, err = marshalSubflow(_sf.flow, "ProcessStep", ProcessStep.URL(), ProcessStepIn{Item: item}, &out)
-	if yield || err != nil {
-		return done, yield, err
-	}
-	return out.Done, false, nil
-}
-
 // ReviewStep is a workflow task whose output read-modify-writes the shared "count" state field.
 func (_c Executor) ReviewStep(ctx context.Context, count int) (countOut int, err error) { // MARKER: ReviewStep
 	var out ReviewStepOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ReviewStep.Method, ReviewStep.Route, ReviewStepIn{Count: count}, &out, _c.inFlow, _c.outFlow)
 	return out.CountOut, err // No trace
-}
-
-// ReviewStep is a workflow task whose output read-modify-writes the shared "count" state field.
-func (_sf Subflow) ReviewStep(ctx context.Context, count int) (countOut int, yield bool, err error) { // MARKER: ReviewStep
-	var out ReviewStepOut
-	yield, err = marshalSubflow(_sf.flow, "ReviewStep", ReviewStep.URL(), ReviewStepIn{Count: count}, &out)
-	if yield || err != nil {
-		return countOut, yield, err
-	}
-	return out.CountOut, false, nil
 }
 
 // MainFlow is the top-level workflow graph.
@@ -570,9 +545,9 @@ func (_c Executor) MainFlow(ctx context.Context, item string, pet Pet) (done boo
 }
 
 // MainFlow is the top-level workflow graph.
-func (_sf Subflow) MainFlow(ctx context.Context, item string, pet Pet) (done bool, since time.Time, yield bool, err error) { // MARKER: MainFlow
+func (_sg Subgraph) MainFlow(ctx context.Context, item string, pet Pet) (done bool, since time.Time, yield bool, err error) { // MARKER: MainFlow
 	var out MainFlowOut
-	yield, err = marshalSubflow(_sf.flow, "", MainFlow.URL(), MainFlowIn{Item: item, Pet: pet}, &out)
+	yield, err = marshalSubgraph(_sg.flow, MainFlow.URL(), MainFlowIn{Item: item, Pet: pet}, &out)
 	if yield || err != nil {
 		return done, since, yield, err
 	}

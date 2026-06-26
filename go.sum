@@ -91,6 +91,8 @@ github.com/microbus-io/dwarf v0.6.3 h1:m7z57AUSRoI+VXjvlJ1ONxdUFb28q95/SYucwxejO
 github.com/microbus-io/dwarf v0.6.3/go.mod h1:9h2pe58a6pCdZHjEx5qJ6o4uAx4oUF/GYCsRolXfETQ=
 github.com/microbus-io/dwarf v0.7.0 h1:z0TGxp15Vk0ooNbrehFoig4IRVBhVKI5b0864TrJyVw=
 github.com/microbus-io/dwarf v0.7.0/go.mod h1:9h2pe58a6pCdZHjEx5qJ6o4uAx4oUF/GYCsRolXfETQ=
+github.com/microbus-io/dwarf v0.7.1 h1:5UNp8MFPSjsPnj9+BudGAOLx2AOVEiWA8uqtdqYn5J4=
+github.com/microbus-io/dwarf v0.7.1/go.mod h1:9h2pe58a6pCdZHjEx5qJ6o4uAx4oUF/GYCsRolXfETQ=
 github.com/microbus-io/errors v1.0.1 h1:pujosfRSEqSJi0gcx6d+A7Mf2RZr2vQVMSQz0pG+wkM=
 github.com/microbus-io/errors v1.0.1/go.mod h1:NZTmmm+wxKQ8JFCeOMWWj+oqGylYsMKmS1YXysHZASM=
 github.com/microbus-io/pyvenv v1.0.3 h1:cG2NCba0p073Y1yn6A5YEEnklAhJisaHvbe5qQB9pRw=

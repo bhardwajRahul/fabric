@@ -31,7 +31,6 @@ type Mock struct {
 	mockDelete             func(ctx context.Context, flowKey string) (err error)                                                                                  // MARKER: Delete
 	mockPurge              func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                             // MARKER: Purge
 	mockShardInfo          func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                // MARKER: ShardInfo
-	mockCreateTask         func(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)       // MARKER: CreateTask
 	mockAwait              func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Await
 	mockBreakBefore        func(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                                   // MARKER: BreakBefore
 	mockRun                func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
@@ -284,20 +283,6 @@ func (svc *Mock) ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummar
 		shards, err = svc.mockShardInfo(ctx)
 	}
 	return shards, errors.Trace(err)
-}
-
-// MockCreateTask sets up a mock handler for CreateTask.
-func (svc *Mock) MockCreateTask(handler func(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)) *Mock { // MARKER: CreateTask
-	svc.mockCreateTask = handler
-	return svc
-}
-
-// CreateTask executes the mock handler.
-func (svc *Mock) CreateTask(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	if svc.mockCreateTask != nil {
-		flowKey, err = svc.mockCreateTask(ctx, name, taskURL, initialState, opts)
-	}
-	return flowKey, errors.Trace(err)
 }
 
 // MockAwait sets up a mock handler for Await.

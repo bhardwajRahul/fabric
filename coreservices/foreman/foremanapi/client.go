@@ -713,39 +713,6 @@ func (_c MulticastClient) ShardInfo(ctx context.Context) iter.Seq[*ShardInfoResp
 	}
 }
 
-// CreateTask creates a flow that executes a single task and then terminates, without starting it.
-func (_c Client) CreateTask(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	_in := CreateTaskIn{Name: name, TaskURL: taskURL, InitialState: initialState, Opts: opts}
-	_out := CreateTaskOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, CreateTask.Method, CreateTask.Route, &_in, &_out)
-	return _out.FlowKey, err // No trace
-}
-
-// CreateTaskResponse packs the response of CreateTask.
-type CreateTaskResponse multicastResponse // MARKER: CreateTask
-
-// Get unpacks the return arguments of CreateTask.
-func (_res *CreateTaskResponse) Get() (flowKey string, err error) { // MARKER: CreateTask
-	_d := _res.data.(*CreateTaskOut)
-	return _d.FlowKey, _res.err
-}
-
-// CreateTask creates a flow that executes a single task and then terminates, without starting it.
-func (_c MulticastClient) CreateTask(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) iter.Seq[*CreateTaskResponse] { // MARKER: CreateTask
-	_in := CreateTaskIn{Name: name, TaskURL: taskURL, InitialState: initialState, Opts: opts}
-	_out := CreateTaskOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, CreateTask.Method, CreateTask.Route, &_in, &_out)
-	return func(yield func(*CreateTaskResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*CreateTaskResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
 // Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.
 func (_c Client) Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Await
 	_in := AwaitIn{FlowKey: flowKey}

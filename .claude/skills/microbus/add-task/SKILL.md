@@ -163,10 +163,10 @@ func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 stri
 }
 ```
 
-To invoke another microservice's task as an isolated subtask from inside this task body, use the generated `Subflow` client of that microservice (only the explicit inputs cross in, only the explicit outputs cross back). Do not use its `Executor` from a task body - the `Executor` is test-only.
+To invoke another microservice's workflow as an isolated child flow (a subgraph) from inside this task body, use that microservice's generated `Subgraph` client (only the explicit inputs cross in, only the explicit outputs cross back). Do not use its `Executor` from a task body - the `Executor` is test-only.
 
 ```go
-output1, yield, err := otherapi.NewSubflow(flow).OtherTask(ctx, input1, input2)
+output1, yield, err := otherapi.NewSubgraph(flow).OtherWorkflow(ctx, input1, input2)
 if yield || err != nil {
 	return err
 }
@@ -185,7 +185,7 @@ Each records JSON null in the step's changes for dropped fields, so the cleanup 
 
 #### Step 9: Generate the Boilerplate
 
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subflow` methods), `intermediate.go` (the marshaler, `ToDo` entry, and subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler, `ToDo` entry, and subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .

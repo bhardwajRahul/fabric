@@ -3,7 +3,7 @@
 Generates a microservice's boilerplate from a single typed source of truth: the `*api/definition.go` file. From
 that one file genservice emits five artifacts:
 
-- `*api/client.go` - the client proxies (`Client`, `MulticastClient`, `Executor`, `Subflow`, `MulticastTrigger`,
+- `*api/client.go` - the client proxies (`Client`, `MulticastClient`, `Executor`, `Subgraph`, `MulticastTrigger`,
   `Hook`) and their marshaling helpers.
 - `intermediate.go` - the `ToDo` interface, `NewService`/`Init`/`NewIntermediate`, `Subscribe` wiring, `doXxx`
   marshaling, config/metric/ticker registration, and inbound hook wiring.
@@ -113,7 +113,8 @@ there only as its `OnChanged` callback, which carries no value type).
 ## Feature-selective emission, conditional imports, no var guards
 
 The client emits only the proxy types a microservice actually needs: no `MulticastTrigger` without outbound
-events, no `Executor`/`Subflow` without tasks or workflows, and only the `marshalXxx` helpers the emitted methods
+events, no `Executor` without tasks or workflows, no `Subgraph` without workflows (it carries only workflow
+methods - a bare task is not independently invocable), and only the `marshalXxx` helpers the emitted methods
 call. Imports are computed in Go from the feature mix (see `buildClientModel`) and emitted conditionally, so every
 import is referenced by real code. There is therefore no `var ( _ = pkg.Symbol )` guard block: such guards are
 only needed when the templates import a fixed superset, which this generator does not.

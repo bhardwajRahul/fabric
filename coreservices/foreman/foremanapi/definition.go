@@ -340,25 +340,6 @@ type ShardInfoOut struct { // MARKER: ShardInfo
 	Shards []ShardSummary `json:"shards,omitzero"`
 }
 
-// CreateTask creates a flow that executes a single task and then terminates, without starting it.
-var CreateTask = define.Function{ // MARKER: CreateTask
-	Host: Hostname, Method: "POST", Route: ":444/create-task",
-	In: CreateTaskIn{}, Out: CreateTaskOut{},
-}
-
-// CreateTaskIn are the input arguments of CreateTask.
-type CreateTaskIn struct { // MARKER: CreateTask
-	Name         string                `json:"name,omitzero"`
-	TaskURL      string                `json:"taskURL,omitzero"`
-	InitialState any                   `json:"initialState,omitzero"`
-	Opts         *workflow.FlowOptions `json:"opts,omitzero"`
-}
-
-// CreateTaskOut are the output arguments of CreateTask.
-type CreateTaskOut struct { // MARKER: CreateTask
-	FlowKey string `json:"flowKey,omitzero"`
-}
-
 // Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.
 var Await = define.Function{ // MARKER: Await
 	Host: Hostname, Method: "POST", Route: ":444/wait-for-stop",

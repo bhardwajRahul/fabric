@@ -29,30 +29,29 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)              // MARKER: Create
-	Start(ctx context.Context, flowKey string) (err error)                                                                                 // MARKER: Start
-	Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                               // MARKER: Snapshot
-	Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                        // MARKER: Fingerprint
-	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                                // MARKER: Resume
-	ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                       // MARKER: ResumeBreak
-	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                 // MARKER: Cancel
-	Restart(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                           // MARKER: Restart
-	RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                       // MARKER: RestartFrom
-	Recover(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                           // MARKER: Recover
-	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                  // MARKER: History
-	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
-	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
-	Delete(ctx context.Context, flowKey string) (err error)                                                                                // MARKER: Delete
-	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                            // MARKER: Purge
-	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                           // MARKER: ShardInfo
-	CreateTask(ctx context.Context, name string, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) // MARKER: CreateTask
-	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                  // MARKER: Await
-	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                            // MARKER: BreakBefore
-	Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error)  // MARKER: Run
-	Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)        // MARKER: Continue
-	Signal(ctx context.Context, op string, payload []byte) (err error)                                                                     // MARKER: Signal
-	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                     // MARKER: HistoryMermaid
-	OnChangedNumShards(ctx context.Context) (err error)                                                                                    // MARKER: NumShards
+	Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)             // MARKER: Create
+	Start(ctx context.Context, flowKey string) (err error)                                                                                // MARKER: Start
+	Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                              // MARKER: Snapshot
+	Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                       // MARKER: Fingerprint
+	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                               // MARKER: Resume
+	ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                      // MARKER: ResumeBreak
+	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                // MARKER: Cancel
+	Restart(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                          // MARKER: Restart
+	RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                      // MARKER: RestartFrom
+	Recover(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                          // MARKER: Recover
+	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                 // MARKER: History
+	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                      // MARKER: Step
+	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                      // MARKER: List
+	Delete(ctx context.Context, flowKey string) (err error)                                                                               // MARKER: Delete
+	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                           // MARKER: Purge
+	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                          // MARKER: ShardInfo
+	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                 // MARKER: Await
+	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                           // MARKER: BreakBefore
+	Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
+	Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)       // MARKER: Continue
+	Signal(ctx context.Context, op string, payload []byte) (err error)                                                                    // MARKER: Signal
+	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: HistoryMermaid
+	OnChangedNumShards(ctx context.Context) (err error)                                                                                   // MARKER: NumShards
 }
 
 // NewService creates a new instance of the microservice.
@@ -185,12 +184,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(foremanapi.ShardInfo.Method, foremanapi.ShardInfo.Route),
 		sub.Description(`ShardInfo returns per-shard health (latency, row counts, error) for every database shard.`),
 		sub.Function(foremanapi.ShardInfoIn{}, foremanapi.ShardInfoOut{}),
-	)
-	svc.Subscribe( // MARKER: CreateTask
-		"CreateTask", svc.doCreateTask,
-		sub.At(foremanapi.CreateTask.Method, foremanapi.CreateTask.Route),
-		sub.Description(`CreateTask creates a flow that executes a single task and then terminates, without starting it.`),
-		sub.Function(foremanapi.CreateTaskIn{}, foremanapi.CreateTaskOut{}),
 	)
 	svc.Subscribe( // MARKER: Await
 		"Await", svc.doAwait,
@@ -473,17 +466,6 @@ func (svc *Intermediate) doShardInfo(w http.ResponseWriter, r *http.Request) (er
 	var out foremanapi.ShardInfoOut
 	err = marshalFunction(w, r, foremanapi.ShardInfo.Route, &in, &out, func(_ any, _ any) error {
 		out.Shards, err = svc.ShardInfo(r.Context())
-		return err // No trace
-	})
-	return err // No trace
-}
-
-// doCreateTask handles marshaling for CreateTask.
-func (svc *Intermediate) doCreateTask(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: CreateTask
-	var in foremanapi.CreateTaskIn
-	var out foremanapi.CreateTaskOut
-	err = marshalFunction(w, r, foremanapi.CreateTask.Route, &in, &out, func(_ any, _ any) error {
-		out.FlowKey, err = svc.CreateTask(r.Context(), in.Name, in.TaskURL, in.InitialState, in.Opts)
 		return err // No trace
 	})
 	return err // No trace

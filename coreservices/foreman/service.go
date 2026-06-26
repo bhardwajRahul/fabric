@@ -99,7 +99,7 @@ const maxTimeBudget = 15 * time.Minute
 
 // resolveOptions validates the caller's time budget, injects the caller's actor claims as opaque baggage,
 // and defaults the fairness key to the caller's tenant. Every inbound flow-creating endpoint
-// (Create/CreateTask/Run/Continue) routes through it.
+// (Create/Run/Continue) routes through it.
 func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptions) (*workflow.FlowOptions, error) {
 	if opts == nil {
 		opts = &workflow.FlowOptions{}
@@ -247,17 +247,6 @@ ShardInfo returns per-shard health (latency, row counts, error) for every databa
 */
 func (svc *Service) ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error) { // MARKER: ShardInfo
 	return svc.engine.ShardInfo(ctx)
-}
-
-/*
-CreateTask creates a flow that executes a single task and then terminates, without starting it.
-*/
-func (svc *Service) CreateTask(ctx context.Context, name, taskURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: CreateTask
-	ro, err := svc.resolveOptions(ctx, opts)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	return svc.engine.CreateTask(ctx, name, taskURL, initialState, ro)
 }
 
 /*

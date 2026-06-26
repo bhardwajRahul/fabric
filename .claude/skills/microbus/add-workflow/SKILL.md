@@ -141,11 +141,11 @@ Pick the reducer by what the merge means, not by what the field is named. The de
 
 **Optionally annotate nodes with their business meaning.** `graph.Annotate("taskName", "short note")` adds a teal note beneath the node in the rendered Mermaid diagram, explaining what the step *does in business terms* (not how it's implemented). See the "Annotating Tasks" section of `.claude/rules/workflows.txt` for what makes a good annotation and what to skip.
 
-To embed this workflow as a subgraph from inside another task body, use the generated `Subflow` client (`otherapi.NewSubflow(flow).MyWorkflow(ctx, ...)`), never the `Executor` - the `Executor` is test-only.
+To embed this workflow as a subgraph from inside another task body, use the generated `Subgraph` client (`otherapi.NewSubgraph(flow).MyWorkflow(ctx, ...)`), never the `Executor` - the `Executor` is test-only.
 
 #### Step 7: Generate the Boilerplate
 
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subflow` methods), `intermediate.go` (the marshaler that validates the graph, the `ToDo` entry, and the subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler that validates the graph, the `ToDo` entry, and the subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .

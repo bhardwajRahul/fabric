@@ -76,7 +76,8 @@ func (m *clientModel) HasEvent() bool    { return len(m.OutboundEvents) > 0 }
 // NeedClient reports whether the Client/MulticastClient proxies are required (functions or web).
 func (m *clientModel) NeedClient() bool { return m.HasFunc() || m.HasWeb() }
 
-// NeedExecutor reports whether the Executor/Subflow proxies are required (tasks or workflows).
+// NeedExecutor reports whether the Executor proxy is required (tasks or workflows). The Subgraph proxy is
+// gated separately on HasWorkflow, since it carries only workflow methods (a task is not independently invocable).
 func (m *clientModel) NeedExecutor() bool { return m.HasTask() || m.HasWorkflow() }
 
 // NeedResponse reports whether multicastResponse and marshalPublish are required (functions or events).
