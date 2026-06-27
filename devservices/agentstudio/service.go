@@ -700,18 +700,22 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		}, r, "GET", resumeEmbedURL, nil),
 	)
 
-	restartEmbedURL := ""
-	if wf.StateOf(r).Get("restart") != "" {
+	// The flow-level fork re-runs the whole flow as a new self-contained flow by
+	// forking from its entry step (the original is immutable). The DAG's per-step
+	// fork affordance handles forking from any later step.
+	forkEmbedURL := ""
+	if wf.StateOf(r).Get("fork") != "" && len(steps) > 0 {
 		q := url.Values{
+			"step":  {steps[0].StepKey},
 			"flow":  {flowKey},
-			"_back": {"^?restart="},
+			"_back": {"^?fork="},
 		}
-		restartEmbedURL = "/restart-flow?" + q.Encode()
+		forkEmbedURL = "/fork-from-step?" + q.Encode()
 	}
-	restartModal := wf.Modal("restart").WithMinHeight("").Add(
+	forkModal := wf.Modal("fork").WithMinHeight("").Add(
 		wf.EmbedHandler(func(w http.ResponseWriter, r *http.Request) {
-			_ = svc.RestartFlow(w, r)
-		}, r, "GET", restartEmbedURL, nil),
+			_ = svc.ForkFromStep(w, r)
+		}, r, "GET", forkEmbedURL, nil),
 	)
 
 	// Render every status-dependent button unconditionally and gate visibility
@@ -743,10 +747,10 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		Add(wf.Icon("play_arrow"), "Continue").
 		HideIf(cancellable(currentStatus)).
 		RedrawIfChanged(r, "flowrefresh"))
-	appBar.AddRight(wf.ButtonText("restart").
-		WithHref("?restart=1").
-		Add(wf.Icon("restart_alt"), "Restart").
-		HideIf(!isRestartableStatus(currentStatus)).
+	appBar.AddRight(wf.ButtonText("fork").
+		WithHref("?fork=1").
+		Add(wf.Icon("fork_right"), "Fork").
+		HideIf(!isForkableStatus(currentStatus)).
 		RedrawIfChanged(r, "flowrefresh"))
 
 	page := wf.Page().Add(
@@ -756,7 +760,7 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		stepModal,
 		continueModal,
 		resumeModal,
-		restartModal,
+		forkModal,
 	)
 	return page.Draw(w, r)
 }
@@ -893,32 +897,32 @@ func (svc *Service) StepDetail(w http.ResponseWriter, r *http.Request) (err erro
 	}
 
 	appBar := wf.AppBar(step.TaskName).AddBottom(tabLabels)
-	if isRestartableStepStatus(step.Status) {
-		appBar.AddRight(wf.ButtonText("restart").
-			WithHref("?restart=1").
-			Add(wf.Icon("restart_alt"), "Restart"))
+	if isForkableStatus(step.Status) {
+		appBar.AddRight(wf.ButtonText("fork").
+			WithHref("?fork=1").
+			Add(wf.Icon("fork_right"), "Fork"))
 	}
 
 	parentFlowKey := strings.TrimSpace(r.URL.Query().Get("flow"))
-	restartEmbedURL := ""
-	if wf.StateOf(r).Get("restart") != "" {
+	forkEmbedURL := ""
+	if wf.StateOf(r).Get("fork") != "" {
 		q := url.Values{
 			"step":  {stepKey},
 			"flow":  {parentFlowKey},
-			"_back": {"^?restart="},
+			"_back": {"^?fork="},
 		}
-		restartEmbedURL = "/restart-from-step?" + q.Encode()
+		forkEmbedURL = "/fork-from-step?" + q.Encode()
 	}
-	restartModal := wf.Modal("restart").WithMinHeight("").Add(
+	forkModal := wf.Modal("fork").WithMinHeight("").Add(
 		wf.EmbedHandler(func(w http.ResponseWriter, r *http.Request) {
-			_ = svc.RestartFromStep(w, r)
-		}, r, "GET", restartEmbedURL, nil),
+			_ = svc.ForkFromStep(w, r)
+		}, r, "GET", forkEmbedURL, nil),
 	)
 
 	page := wf.Page().Add(
 		appBar,
 		tabBodies,
-		restartModal,
+		forkModal,
 	)
 	return page.Draw(w, r)
 }
@@ -966,9 +970,6 @@ func (svc *Service) RunWorkflow(w http.ResponseWriter, r *http.Request) (err err
 		} else {
 			flowKey, createErr := svc.foreman.Create(r.Context(), workflowURL, initialState, nil)
 			if createErr == nil {
-				createErr = svc.foreman.Start(r.Context(), flowKey)
-			}
-			if createErr == nil {
 				wf.Redirect(w, r, "~/"+Hostname+"/flows/"+url.PathEscape(flowKey))
 				return nil
 			}
@@ -990,10 +991,9 @@ func (svc *Service) RunWorkflow(w http.ResponseWriter, r *http.Request) (err err
 
 /*
 ContinueFlow renders a form to continue a completed flow's thread with
-additional state, calls foreman.Continue + Start, and redirects the parent
-page to the new flow's detail page. Any flowKey in the target thread is
-accepted; foreman.Continue resolves the thread and forks from the latest
-completed flow.
+additional state, calls foreman.Continue, and redirects the parent page to the
+new running flow's detail page. Any flowKey in the target thread is accepted;
+foreman.Continue resolves the thread from the latest completed flow.
 */
 func (svc *Service) ContinueFlow(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ContinueFlow
 	state := wf.StateOf(r)
@@ -1022,10 +1022,7 @@ func (svc *Service) ContinueFlow(w http.ResponseWriter, r *http.Request) (err er
 		if parseErr != nil {
 			errMsg = parseErr.Error()
 		} else {
-			newFlowKey, contErr := svc.foreman.Continue(r.Context(), threadKey, additionalState, nil)
-			if contErr == nil {
-				contErr = svc.foreman.Start(r.Context(), newFlowKey)
-			}
+			newFlowKey, contErr := svc.foreman.Continue(r.Context(), threadKey, additionalState)
 			if contErr == nil {
 				wf.Redirect(w, r, "~/"+Hostname+"/flows/"+url.PathEscape(newFlowKey))
 				return nil
@@ -1115,83 +1112,29 @@ const (
 )
 
 /*
-RestartFlow renders a form to restart a terminated flow from its entry step
-with optional state overrides, calls foreman.Restart, and redirects the parent
-page back to the same flow's detail page.
+ForkFromStep renders a form to fork a terminal flow from a specific recorded step
+with optional state overrides, calls foreman.Fork, and redirects the parent page
+to the newly forked flow's detail page. The original flow is never modified.
 */
-func (svc *Service) RestartFlow(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFlow
-	state := wf.StateOf(r)
-	flowKey := strings.TrimSpace(state.Get("flow"))
-	if flowKey == "" {
-		return errors.New("flow is required", http.StatusBadRequest)
-	}
-
-	stateField := wf.InputText("state", "").
-		WithRows(15).
-		WithWidth("100%").
-		WithTrimSpaces(false)
-
-	restartButton := wf.ButtonFilled("submit").Add("Restart")
-	cancelButton := wf.ButtonText("").WithHref("^?restart=").Add("Cancel")
-
-	form := wf.Form().Add(
-		wf.Field().AddLeft("State overrides").AddRight(stateField),
-		cancelButton,
-		restartButton,
-	)
-
-	var errMsg string
-	if form.ReadyToCommit(r) {
-		overrides, parseErr := parseStateRaw(stateField.Value(r))
-		if parseErr != nil {
-			errMsg = parseErr.Error()
-		} else {
-			restartErr := svc.foreman.Restart(r.Context(), flowKey, overrides)
-			if restartErr == nil {
-				wf.Redirect(w, r, "~/"+Hostname+"/flows/"+url.PathEscape(flowKey))
-				return nil
-			}
-			errMsg = restartErr.Error()
-		}
-	}
-
-	var errBanner any
-	if errMsg != "" {
-		errBanner = wf.TextStyle(errMsg).WithColorError()
-	}
-	page := wf.Page().Add(
-		wf.AppBar("Restart flow"),
-		errBanner,
-		form,
-	)
-	return page.Draw(w, r)
-}
-
-/*
-RestartFromStep renders a form to restart a flow from a specific step with
-optional state overrides, calls foreman.RestartFrom, and redirects the parent
-page back to the owning flow's detail page.
-*/
-func (svc *Service) RestartFromStep(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFromStep
+func (svc *Service) ForkFromStep(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ForkFromStep
 	state := wf.StateOf(r)
 	stepKey := strings.TrimSpace(state.Get("step"))
 	if stepKey == "" {
 		return errors.New("step is required", http.StatusBadRequest)
 	}
-	flowKey := strings.TrimSpace(state.Get("flow"))
 
 	stateField := wf.InputText("state", "").
 		WithRows(15).
 		WithWidth("100%").
 		WithTrimSpaces(false)
 
-	restartButton := wf.ButtonFilled("submit").Add("Restart")
-	cancelButton := wf.ButtonText("").WithHref("^?restart=").Add("Cancel")
+	forkButton := wf.ButtonFilled("submit").Add("Fork")
+	cancelButton := wf.ButtonText("").WithHref("^?fork=").Add("Cancel")
 
 	form := wf.Form().Add(
 		wf.Field().AddLeft("State overrides").AddRight(stateField),
 		cancelButton,
-		restartButton,
+		forkButton,
 	)
 
 	var errMsg string
@@ -1200,16 +1143,12 @@ func (svc *Service) RestartFromStep(w http.ResponseWriter, r *http.Request) (err
 		if parseErr != nil {
 			errMsg = parseErr.Error()
 		} else {
-			restartErr := svc.foreman.RestartFrom(r.Context(), stepKey, overrides)
-			if restartErr == nil {
-				if flowKey != "" {
-					wf.Redirect(w, r, "~/"+Hostname+"/flows/"+url.PathEscape(flowKey))
-				} else {
-					wf.Redirect(w, r, "~/"+Hostname+"/flows")
-				}
+			newFlowKey, forkErr := svc.foreman.Fork(r.Context(), stepKey, overrides)
+			if forkErr == nil {
+				wf.Redirect(w, r, "~/"+Hostname+"/flows/"+url.PathEscape(newFlowKey))
 				return nil
 			}
-			errMsg = restartErr.Error()
+			errMsg = forkErr.Error()
 		}
 	}
 
@@ -1218,7 +1157,7 @@ func (svc *Service) RestartFromStep(w http.ResponseWriter, r *http.Request) (err
 		errBanner = wf.TextStyle(errMsg).WithColorError()
 	}
 	page := wf.Page().Add(
-		wf.AppBar("Restart from step"),
+		wf.AppBar("Fork from step"),
 		errBanner,
 		form,
 	)

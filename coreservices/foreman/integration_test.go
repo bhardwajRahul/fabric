@@ -156,6 +156,55 @@ func TestForemanIntegration(t *testing.T) {
 			return nil
 		})
 
+		// Cancel-cascade: CancelParent's CP task subgraphs CancelChild, whose CI task parks via flow.Interrupt.
+		// Running the parent parks the whole tree at interrupted (the interrupt surfaces up the surgraph chain);
+		// cancelling the parent must then cascade cancellation into the live subgraph child. flow.Interrupt is
+		// the deterministic pause that lets the test cancel a flow with a genuinely in-flight subgraph.
+		subscribeGraph(c, "CancelParentGraph", ":428/cancel-parent", func() *workflow.Graph {
+			g := workflow.NewGraph("CancelParent")
+			g.SetEndpoint("CP", host+":428/cp")
+			g.AddTransition("CP", workflow.END)
+			return g
+		})
+		subscribeGraph(c, "CancelChildGraph", ":428/cancel-child", func() *workflow.Graph {
+			g := workflow.NewGraph("CancelChild")
+			g.SetEndpoint("CI", host+":428/ci")
+			g.AddTransition("CI", workflow.END)
+			return g
+		})
+		subscribeTask(c, "CP", ":428/cp", func(f *workflow.Flow) error {
+			var out map[string]any
+			yield, err := f.Subgraph(host+":428/cancel-child", nil, &out)
+			if yield || err != nil {
+				return err
+			}
+			return nil
+		})
+		subscribeTask(c, "CI", ":428/ci", func(f *workflow.Flow) error {
+			var resume map[string]any
+			f.Interrupt(map[string]any{"need": "info"}, &resume)
+			return nil
+		})
+
+		// Cancel a running flow: Sl -> SlDone -> END, where Sl arms an hour-long flow.Sleep. The sleep delays
+		// the successor step's not_before (SlDone stays pending for an hour), so the flow sits running rather
+		// than completing - a sleep is only dropped when its step transitions straight to END. Because Create
+		// auto-runs, the flow is running the moment Create returns; the hour-long delay guarantees it cannot
+		// reach a terminal state during the test, so Cancel is deterministic without a pause/sync handshake.
+		subscribeGraph(c, "SleepGraph", ":428/sleep", func() *workflow.Graph {
+			g := workflow.NewGraph("Sleep")
+			g.SetEndpoint("Sl", host+":428/sl")
+			g.SetEndpoint("SlDone", host+":428/sl-done")
+			g.AddTransition("Sl", "SlDone")
+			g.AddTransition("SlDone", workflow.END)
+			return g
+		})
+		subscribeTask(c, "Sl", ":428/sl", func(f *workflow.Flow) error {
+			f.Sleep(time.Hour)
+			return nil
+		})
+		subscribeTask(c, "SlDone", ":428/sl-done", func(f *workflow.Flow) error { return nil })
+
 		// Task-owned retry: Rt -> END. The foreman no longer classifies errors into engine dispositions, so a
 		// task that wants to recover from a transient failure arms flow.Retry itself. The task "fails" on its
 		// first dispatch by arming a retry, then succeeds on re-dispatch.
@@ -224,12 +273,10 @@ func TestForemanIntegration(t *testing.T) {
 
 	t.Run("interrupt_then_resume", func(t *testing.T) {
 		assert := testarossa.For(t)
-		// foreman.Run does not return the flow key; use Create+Start+Await so we have the key to Resume.
+		// foreman.Run does not return the flow key; use Create (which auto-runs) + Await so we have the key
+		// to Resume.
 		flowKey, err := client.Create(ctx, host+":428/interrupt", nil, nil)
 		if !assert.NoError(err) {
-			return
-		}
-		if !assert.NoError(client.Start(ctx, flowKey)) {
 			return
 		}
 		out, err := client.Await(ctx, flowKey)
@@ -252,6 +299,49 @@ func TestForemanIntegration(t *testing.T) {
 		assert.Equal(42, int(ans))
 	})
 
+	t.Run("cancel_running_flow", func(t *testing.T) {
+		assert := testarossa.For(t)
+		// The entry step sleeps an hour, so the auto-running flow stays running and Cancel is deterministic.
+		flowKey, err := client.Create(ctx, host+":428/sleep", nil, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		if !assert.NoError(client.Cancel(ctx, flowKey, "operator")) {
+			return
+		}
+		out, err := client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		assert.Equal(workflow.StatusCancelled, out.Status)
+		assert.Equal("operator", out.CancelReason)
+	})
+
+	t.Run("cancel_cascades_into_subgraph", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flowKey, err := client.Create(ctx, host+":428/cancel-parent", nil, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		// The interrupt raised inside the subgraph child surfaces up and parks the parent.
+		out, err := client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		if !assert.Equal(workflow.StatusInterrupted, out.Status) {
+			return
+		}
+		// Cancelling the parent cascades into the still-live subgraph child.
+		if !assert.NoError(client.Cancel(ctx, flowKey, "operator")) {
+			return
+		}
+		out, err = client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		assert.Equal(workflow.StatusCancelled, out.Status)
+	})
+
 	t.Run("task_owned_retry_recovers", func(t *testing.T) {
 		assert := testarossa.For(t)
 		out, err := client.Run(ctx, host+":428/retry", nil, nil)
@@ -269,10 +359,6 @@ func TestForemanIntegration(t *testing.T) {
 	t.Run("ack_timeout_retries_then_gives_up", func(t *testing.T) {
 		assert := testarossa.For(t)
 		flowKey, err := client.Create(ctx, host+":428/absent", map[string]any{}, nil)
-		if !assert.NoError(err) {
-			return
-		}
-		err = client.Start(ctx, flowKey)
 		if !assert.NoError(err) {
 			return
 		}

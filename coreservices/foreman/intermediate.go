@@ -30,15 +30,11 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)             // MARKER: Create
-	Start(ctx context.Context, flowKey string) (err error)                                                                                // MARKER: Start
 	Snapshot(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                              // MARKER: Snapshot
 	Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                       // MARKER: Fingerprint
 	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                               // MARKER: Resume
-	ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                      // MARKER: ResumeBreak
 	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                // MARKER: Cancel
-	Restart(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                          // MARKER: Restart
-	RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error)                                                      // MARKER: RestartFrom
-	Recover(ctx context.Context, flowKey string, stateOverrides any) (err error)                                                          // MARKER: Recover
+	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                          // MARKER: Fork
 	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                 // MARKER: History
 	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                      // MARKER: Step
 	List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                      // MARKER: List
@@ -46,9 +42,8 @@ type ToDo interface {
 	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                           // MARKER: Purge
 	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                          // MARKER: ShardInfo
 	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                 // MARKER: Await
-	BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error)                                           // MARKER: BreakBefore
 	Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
-	Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error)       // MARKER: Continue
+	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                   // MARKER: Continue
 	Signal(ctx context.Context, op string, payload []byte) (err error)                                                                    // MARKER: Signal
 	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: HistoryMermaid
 	OnChangedNumShards(ctx context.Context) (err error)                                                                                   // MARKER: NumShards
@@ -92,14 +87,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Create
 		"Create", svc.doCreate,
 		sub.At(foremanapi.Create.Method, foremanapi.Create.Route),
-		sub.Description(`Create creates a new flow for a workflow without starting it.`),
+		sub.Description(`Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.`),
 		sub.Function(foremanapi.CreateIn{}, foremanapi.CreateOut{}),
-	)
-	svc.Subscribe( // MARKER: Start
-		"Start", svc.doStart,
-		sub.At(foremanapi.Start.Method, foremanapi.Start.Route),
-		sub.Description(`Start transitions a created flow to running and enqueues it for execution.`),
-		sub.Function(foremanapi.StartIn{}, foremanapi.StartOut{}),
 	)
 	svc.Subscribe( // MARKER: Snapshot
 		"Snapshot", svc.doSnapshot,
@@ -116,14 +105,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Resume
 		"Resume", svc.doResume,
 		sub.At(foremanapi.Resume.Method, foremanapi.Resume.Route),
-		sub.Description(`Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.`),
+		sub.Description(`Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt.`),
 		sub.Function(foremanapi.ResumeIn{}, foremanapi.ResumeOut{}),
-	)
-	svc.Subscribe( // MARKER: ResumeBreak
-		"ResumeBreak", svc.doResumeBreak,
-		sub.At(foremanapi.ResumeBreak.Method, foremanapi.ResumeBreak.Route),
-		sub.Description(`ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.`),
-		sub.Function(foremanapi.ResumeBreakIn{}, foremanapi.ResumeBreakOut{}),
 	)
 	svc.Subscribe( // MARKER: Cancel
 		"Cancel", svc.doCancel,
@@ -131,23 +114,11 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Cancel cancels a flow that is not yet in a terminal status.`),
 		sub.Function(foremanapi.CancelIn{}, foremanapi.CancelOut{}),
 	)
-	svc.Subscribe( // MARKER: Restart
-		"Restart", svc.doRestart,
-		sub.At(foremanapi.Restart.Method, foremanapi.Restart.Route),
-		sub.Description(`Restart wipes everything past a flow's entry step and resets the entry with overrides.`),
-		sub.Function(foremanapi.RestartIn{}, foremanapi.RestartOut{}),
-	)
-	svc.Subscribe( // MARKER: RestartFrom
-		"RestartFrom", svc.doRestartFrom,
-		sub.At(foremanapi.RestartFrom.Method, foremanapi.RestartFrom.Route),
-		sub.Description(`RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.`),
-		sub.Function(foremanapi.RestartFromIn{}, foremanapi.RestartFromOut{}),
-	)
-	svc.Subscribe( // MARKER: Recover
-		"Recover", svc.doRecover,
-		sub.At(foremanapi.Recover.Method, foremanapi.Recover.Route),
-		sub.Description(`Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.`),
-		sub.Function(foremanapi.RecoverIn{}, foremanapi.RecoverOut{}),
+	svc.Subscribe( // MARKER: Fork
+		"Fork", svc.doFork,
+		sub.At(foremanapi.Fork.Method, foremanapi.Fork.Route),
+		sub.Description(`Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.`),
+		sub.Function(foremanapi.ForkIn{}, foremanapi.ForkOut{}),
 	)
 	svc.Subscribe( // MARKER: History
 		"History", svc.doHistory,
@@ -191,12 +162,6 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.`),
 		sub.Function(foremanapi.AwaitIn{}, foremanapi.AwaitOut{}),
 	)
-	svc.Subscribe( // MARKER: BreakBefore
-		"BreakBefore", svc.doBreakBefore,
-		sub.At(foremanapi.BreakBefore.Method, foremanapi.BreakBefore.Route),
-		sub.Description(`BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.`),
-		sub.Function(foremanapi.BreakBeforeIn{}, foremanapi.BreakBeforeOut{}),
-	)
 	svc.Subscribe( // MARKER: Run
 		"Run", svc.doRun,
 		sub.At(foremanapi.Run.Method, foremanapi.Run.Route),
@@ -206,7 +171,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Continue
 		"Continue", svc.doContinue,
 		sub.At(foremanapi.Continue.Method, foremanapi.Continue.Route),
-		sub.Description(`Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.`),
+		sub.Description(`Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.`),
 		sub.Function(foremanapi.ContinueIn{}, foremanapi.ContinueOut{}),
 	)
 	svc.Subscribe( // MARKER: Signal
@@ -306,17 +271,6 @@ func (svc *Intermediate) doCreate(w http.ResponseWriter, r *http.Request) (err e
 	return err // No trace
 }
 
-// doStart handles marshaling for Start.
-func (svc *Intermediate) doStart(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Start
-	var in foremanapi.StartIn
-	var out foremanapi.StartOut
-	err = marshalFunction(w, r, foremanapi.Start.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Start(r.Context(), in.FlowKey)
-		return err // No trace
-	})
-	return err // No trace
-}
-
 // doSnapshot handles marshaling for Snapshot.
 func (svc *Intermediate) doSnapshot(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Snapshot
 	var in foremanapi.SnapshotIn
@@ -350,17 +304,6 @@ func (svc *Intermediate) doResume(w http.ResponseWriter, r *http.Request) (err e
 	return err // No trace
 }
 
-// doResumeBreak handles marshaling for ResumeBreak.
-func (svc *Intermediate) doResumeBreak(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ResumeBreak
-	var in foremanapi.ResumeBreakIn
-	var out foremanapi.ResumeBreakOut
-	err = marshalFunction(w, r, foremanapi.ResumeBreak.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.ResumeBreak(r.Context(), in.FlowKey, in.StateOverrides)
-		return err // No trace
-	})
-	return err // No trace
-}
-
 // doCancel handles marshaling for Cancel.
 func (svc *Intermediate) doCancel(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Cancel
 	var in foremanapi.CancelIn
@@ -372,34 +315,12 @@ func (svc *Intermediate) doCancel(w http.ResponseWriter, r *http.Request) (err e
 	return err // No trace
 }
 
-// doRestart handles marshaling for Restart.
-func (svc *Intermediate) doRestart(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Restart
-	var in foremanapi.RestartIn
-	var out foremanapi.RestartOut
-	err = marshalFunction(w, r, foremanapi.Restart.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Restart(r.Context(), in.FlowKey, in.StateOverrides)
-		return err // No trace
-	})
-	return err // No trace
-}
-
-// doRestartFrom handles marshaling for RestartFrom.
-func (svc *Intermediate) doRestartFrom(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFrom
-	var in foremanapi.RestartFromIn
-	var out foremanapi.RestartFromOut
-	err = marshalFunction(w, r, foremanapi.RestartFrom.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.RestartFrom(r.Context(), in.StepKey, in.StateOverrides)
-		return err // No trace
-	})
-	return err // No trace
-}
-
-// doRecover handles marshaling for Recover.
-func (svc *Intermediate) doRecover(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Recover
-	var in foremanapi.RecoverIn
-	var out foremanapi.RecoverOut
-	err = marshalFunction(w, r, foremanapi.Recover.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.Recover(r.Context(), in.FlowKey, in.StateOverrides)
+// doFork handles marshaling for Fork.
+func (svc *Intermediate) doFork(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Fork
+	var in foremanapi.ForkIn
+	var out foremanapi.ForkOut
+	err = marshalFunction(w, r, foremanapi.Fork.Route, &in, &out, func(_ any, _ any) error {
+		out.NewFlowKey, err = svc.Fork(r.Context(), in.StepKey, in.StateOverrides)
 		return err // No trace
 	})
 	return err // No trace
@@ -482,17 +403,6 @@ func (svc *Intermediate) doAwait(w http.ResponseWriter, r *http.Request) (err er
 	return err // No trace
 }
 
-// doBreakBefore handles marshaling for BreakBefore.
-func (svc *Intermediate) doBreakBefore(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: BreakBefore
-	var in foremanapi.BreakBeforeIn
-	var out foremanapi.BreakBeforeOut
-	err = marshalFunction(w, r, foremanapi.BreakBefore.Route, &in, &out, func(_ any, _ any) error {
-		err = svc.BreakBefore(r.Context(), in.FlowKey, in.TaskName, in.Enabled)
-		return err // No trace
-	})
-	return err // No trace
-}
-
 // doRun handles marshaling for Run.
 func (svc *Intermediate) doRun(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Run
 	var in foremanapi.RunIn
@@ -509,7 +419,7 @@ func (svc *Intermediate) doContinue(w http.ResponseWriter, r *http.Request) (err
 	var in foremanapi.ContinueIn
 	var out foremanapi.ContinueOut
 	err = marshalFunction(w, r, foremanapi.Continue.Route, &in, &out, func(_ any, _ any) error {
-		out.NewFlowKey, err = svc.Continue(r.Context(), in.ThreadKey, in.AdditionalState, in.Opts)
+		out.NewFlowKey, err = svc.Continue(r.Context(), in.ThreadKey, in.AdditionalState)
 		return err // No trace
 	})
 	return err // No trace

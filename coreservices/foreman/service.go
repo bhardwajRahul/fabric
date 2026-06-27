@@ -132,7 +132,8 @@ func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptio
 }
 
 /*
-Create creates a new flow for a workflow without starting it.
+Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is
+no separate start step; Opts authors the flow's genesis policy.
 */
 func (svc *Service) Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: Create
 	ro, err := svc.resolveOptions(ctx, opts)
@@ -140,13 +141,6 @@ func (svc *Service) Create(ctx context.Context, workflowURL string, initialState
 		return "", errors.Trace(err)
 	}
 	return svc.engine.Create(ctx, workflowURL, initialState, ro)
-}
-
-/*
-Start transitions a created flow to running and enqueues it for execution.
-*/
-func (svc *Service) Start(ctx context.Context, flowKey string) (err error) { // MARKER: Start
-	return svc.engine.Start(ctx, flowKey)
 }
 
 /*
@@ -172,13 +166,6 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 }
 
 /*
-ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state.
-*/
-func (svc *Service) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: ResumeBreak
-	return svc.engine.ResumeBreak(ctx, flowKey, stateOverrides)
-}
-
-/*
 Cancel cancels a flow that is not yet in a terminal status.
 */
 func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
@@ -186,24 +173,13 @@ func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (
 }
 
 /*
-Restart wipes everything past a flow's entry step and resets the entry with overrides.
+Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and
+re-executes from that step with optional stateOverrides applied to it. The original flow is never modified.
 */
-func (svc *Service) Restart(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Restart
-	return svc.engine.Restart(ctx, flowKey, stateOverrides)
-}
-
-/*
-RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-*/
-func (svc *Service) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
-	return svc.engine.RestartFrom(ctx, stepKey, stateOverrides)
-}
-
-/*
-Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
-*/
-func (svc *Service) Recover(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Recover
-	return svc.engine.Recover(ctx, flowKey, stateOverrides)
+func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
+	// A fork inherits the origin flow's scheduling and baggage (so it re-runs as the original actor); it
+	// takes no options, so resolveOptions does not apply here.
+	return svc.engine.Fork(ctx, stepKey, stateOverrides)
 }
 
 /*
@@ -257,13 +233,6 @@ func (svc *Service) Await(ctx context.Context, flowKey string) (outcome *workflo
 }
 
 /*
-BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-*/
-func (svc *Service) BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error) { // MARKER: BreakBefore
-	return svc.engine.BreakBefore(ctx, flowKey, taskName, enabled)
-}
-
-/*
 Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 */
 func (svc *Service) Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
@@ -271,22 +240,19 @@ func (svc *Service) Run(ctx context.Context, workflowURL string, initialState an
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// engine.Run now returns the new flow's key first; the foreman's Run endpoint does not expose it
-	// (callers needing the key use Create+Start+Await), so discard it here.
+	// engine.Run returns the new flow's key first; the foreman's Run endpoint does not expose it (callers
+	// needing the key use Create+Await, since Create now auto-runs), so discard it here.
 	_, outcome, err = svc.engine.Run(ctx, workflowURL, initialState, ro)
 	return outcome, err
 }
 
 /*
-Continue creates a new flow from the latest completed flow in a thread, merged with additional state using
-the graph's reducers.
+Continue creates a new running flow from the latest completed flow in a thread, merged with additional
+state using the graph's reducers. The new flow inherits the thread's policy (scheduling/baggage/notify);
+it takes no options. A caller wanting explicit per-turn policy uses Create with Opts.ThreadKey instead.
 */
-func (svc *Service) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Continue
-	ro, err := svc.resolveOptions(ctx, opts)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	return svc.engine.Continue(ctx, threadKey, additionalState, ro)
+func (svc *Service) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
+	return svc.engine.Continue(ctx, threadKey, additionalState)
 }
 
 /*

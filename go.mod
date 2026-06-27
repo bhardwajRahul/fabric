@@ -2,6 +2,10 @@ module github.com/microbus-io/fabric
 
 go 1.26.3
 
+// Local dwarf checkout: carries the Fork operation that replaces Restart/RestartFrom/Recover/BreakBefore.
+// TODO: drop this replace and bump the require once dwarf is released with the change.
+replace github.com/microbus-io/dwarf => ../dwarf
+
 tool github.com/microbus-io/copyrighter
 
 require (
@@ -14,7 +18,7 @@ require (
 	github.com/microbus-io/dwarf v0.7.1
 	github.com/microbus-io/errors v1.0.1
 	github.com/microbus-io/pyvenv v1.0.3
-	github.com/microbus-io/sequel v1.10.2
+	github.com/microbus-io/sequel v1.10.4
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.8
 	github.com/nats-io/jwt/v2 v2.8.2
@@ -94,7 +98,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	modernc.org/libc v1.73.4 // indirect
+	modernc.org/libc v1.73.5 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.53.0 // indirect

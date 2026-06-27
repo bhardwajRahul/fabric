@@ -126,27 +126,15 @@ func TestAgentstudio_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("restart_flow", func(t *testing.T) { // MARKER: RestartFlow
+	t.Run("fork_from_step", func(t *testing.T) { // MARKER: ForkFromStep
 		assert := testarossa.For(t)
 
-		mock.MockRestartFlow(func(w http.ResponseWriter, r *http.Request) (err error) {
+		mock.MockForkFromStep(func(w http.ResponseWriter, r *http.Request) (err error) {
 			return nil
 		})
 		w := httpx.NewResponseRecorder()
 		r := httpx.MustNewRequest("GET", "/", nil)
-		err := mock.RestartFlow(w, r)
-		assert.NoError(err)
-	})
-
-	t.Run("restart_from_step", func(t *testing.T) { // MARKER: RestartFromStep
-		assert := testarossa.For(t)
-
-		mock.MockRestartFromStep(func(w http.ResponseWriter, r *http.Request) (err error) {
-			return nil
-		})
-		w := httpx.NewResponseRecorder()
-		r := httpx.MustNewRequest("GET", "/", nil)
-		err := mock.RestartFromStep(w, r)
+		err := mock.ForkFromStep(w, r)
 		assert.NoError(err)
 	})
 

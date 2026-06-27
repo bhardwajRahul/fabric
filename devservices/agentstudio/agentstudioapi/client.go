@@ -344,10 +344,10 @@ func (_c MulticastClient) ResumeFlow(ctx context.Context, method string, relativ
 	)
 }
 
-// RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.
-func (_c Client) RestartFlow(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: RestartFlow
+// ForkFromStep renders a form to fork a terminal flow from a specific recorded step into a new flow with optional state overrides.
+func (_c Client) ForkFromStep(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: ForkFromStep
 	if method == "" {
-		method = RestartFlow.Method
+		method = ForkFromStep.Method
 	}
 	if method == "ANY" {
 		method = "POST"
@@ -355,17 +355,17 @@ func (_c Client) RestartFlow(ctx context.Context, method string, relativeURL str
 	return _c.svc.Request(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RestartFlow.Route)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ForkFromStep.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),
 	)
 }
 
-// RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.
-func (_c MulticastClient) RestartFlow(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: RestartFlow
+// ForkFromStep renders a form to fork a terminal flow from a specific recorded step into a new flow with optional state overrides.
+func (_c MulticastClient) ForkFromStep(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: ForkFromStep
 	if method == "" {
-		method = RestartFlow.Method
+		method = ForkFromStep.Method
 	}
 	if method == "ANY" {
 		method = "POST"
@@ -373,43 +373,7 @@ func (_c MulticastClient) RestartFlow(ctx context.Context, method string, relati
 	return _c.svc.Publish(
 		ctx,
 		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RestartFlow.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-// RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.
-func (_c Client) RestartFromStep(ctx context.Context, method string, relativeURL string, body any) (res *http.Response, err error) { // MARKER: RestartFromStep
-	if method == "" {
-		method = RestartFromStep.Method
-	}
-	if method == "ANY" {
-		method = "POST"
-	}
-	return _c.svc.Request(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RestartFromStep.Route)),
-		pub.RelativeURL(relativeURL),
-		pub.Body(body),
-		pub.Options(_c.opts...),
-	)
-}
-
-// RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.
-func (_c MulticastClient) RestartFromStep(ctx context.Context, method string, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: RestartFromStep
-	if method == "" {
-		method = RestartFromStep.Method
-	}
-	if method == "ANY" {
-		method = "POST"
-	}
-	return _c.svc.Publish(
-		ctx,
-		pub.Method(method),
-		pub.URL(httpx.JoinHostAndPath(_c.host, RestartFromStep.Route)),
+		pub.URL(httpx.JoinHostAndPath(_c.host, ForkFromStep.Route)),
 		pub.RelativeURL(relativeURL),
 		pub.Body(body),
 		pub.Options(_c.opts...),

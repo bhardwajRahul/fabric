@@ -126,6 +126,28 @@ the original actor, even hours later. The `iss`/`idp` swap sets the minted token
 original identity provider, so the downstream authorizes against the right issuer. No claims → empty token →
 unauthenticated dispatch.
 
+**Only the genesis endpoints route through `resolveOptions`.** Policy (`FlowOptions`) is authored once at
+genesis - `Create` and `Run` - so only those two inject the caller's actor claims, notify host, and tenant
+fairness key into baggage. The derived operations take no options and inherit their source's policy:
+`Continue` inherits the thread's, `Fork` inherits the origin's. Their foreman handlers therefore delegate
+straight to the engine with no `resolveOptions` call - re-injecting the *current* caller's identity would
+be wrong, since a derived flow runs as the original actor (the inherited baggage already carries those
+claims). A new caller who wants their own identity/policy on a thread uses `Create` with
+`Opts.ThreadKey`, which is the explicit-policy path and does run through `resolveOptions`.
+
+**There is no `Start` endpoint; `Create` auto-runs.** The engine folds create-and-run into one
+transaction (dwarf v0.8.0), so the foreman exposes no `Start` and `Create`/`Continue`/`Fork` all return a
+flow that is already `running`. `Run` remains `Create` + `Await`. A deferred start is authored in the
+workflow itself - an entry task that calls `flow.Interrupt`, released by `Resume` - not via a foreman flag.
+
+**Terminal flows are immutable; the bus surface offers no in-place re-run.** A `completed`/`failed`/
+`cancelled` flow is frozen - the only operations on it are read (`Snapshot`/`History`) and removal
+(`Delete`/`Purge`). The old mutate-in-place endpoints (`Restart`/`RestartFrom`/`Recover`) and the
+breakpoint endpoints (`BreakBefore`/`ResumeBreak`) are gone with no replacement; recovery is `Fork`, which
+clones the chosen prefix into a *new* flow and never touches the original. The invariant itself is the
+engine's (its rationale lives in dwarf's `CLAUDE.md`); the adapter consequence is simply that no foreman
+endpoint can move a terminal flow off its frozen outcome.
+
 **Fairness key defaults to the caller's tenant (`resolveOptions`).** When the caller does not set an
 explicit `FairnessKey`, the foreman fills it with the frame's tenant id, so cross-tenant fairness works
 out of the box without the engine knowing what a tenant is.
@@ -135,7 +157,7 @@ out of the box without the engine knowing what a tenant is.
 under `baggageNotifyHost` ("notifyHost"); on stop the engine fires `FlowStopped(ctx, outcome)` with that
 baggage on the ctx, and `FlowStopped` reads the host back to `ForHost(...)` the `OnFlowStopped` event. The
 engine carries no delivery address (a hostname it would merely store and echo is exactly what baggage is
-for), which is why notification is a `Create`-time flag (`NotifyOnStop`) and not its own start endpoint.
+for), which is why notification is a `Create`-time flag (`NotifyOnStop`) and not its own endpoint.
 Because `mintActorToken` mints from *all* baggage keys, it deletes `baggageNotifyHost` first so the foreman
 bookkeeping never leaks into the minted token's claims.
 

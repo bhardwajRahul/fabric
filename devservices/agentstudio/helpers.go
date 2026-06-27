@@ -42,21 +42,11 @@ func isLiveStatus(status string) bool {
 	return false
 }
 
-// isRestartableStatus reports whether a flow's outcome status accepts
-// foreman.Restart.
-func isRestartableStatus(status string) bool {
+// isForkableStatus reports whether a terminal status accepts foreman.Fork.
+// interrupted is excluded: it is not terminal and is recovered via Resume, not Fork.
+func isForkableStatus(status string) bool {
 	switch status {
-	case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled, workflow.StatusInterrupted:
-		return true
-	}
-	return false
-}
-
-// isRestartableStepStatus reports whether a step's status accepts
-// foreman.RestartFrom.
-func isRestartableStepStatus(status string) bool {
-	switch status {
-	case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled, workflow.StatusInterrupted:
+	case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled:
 		return true
 	}
 	return false

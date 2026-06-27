@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-26T00:45:44Z"
+  modifiedAt: "2026-06-27T22:42:05Z"
 
 configs:
   SQLDataSourceName:
@@ -56,14 +56,9 @@ outboundEvents:
 functions:
   Create:
     signature: Create(workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string)
-    description: Create creates a new flow for a workflow without starting it.
+    description: Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
     method: ANY
     route: :444/create
-  Start:
-    signature: Start(flowKey string)
-    description: Start transitions a created flow to running and enqueues it for execution.
-    method: ANY
-    route: :444/start
   Snapshot:
     signature: Snapshot(flowKey string) (outcome *workflow.FlowOutcome)
     description: Snapshot returns the current outcome of a flow.
@@ -76,34 +71,19 @@ functions:
     route: :444/fingerprint
   Resume:
     signature: Resume(flowKey string, resumeData any)
-    description: Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.
+    description: Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt.
     method: POST
     route: :444/resume
-  ResumeBreak:
-    signature: ResumeBreak(flowKey string, stateOverrides any)
-    description: ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.
-    method: POST
-    route: :444/resume-break
   Cancel:
     signature: Cancel(flowKey string, reason string)
     description: Cancel cancels a flow that is not yet in a terminal status.
     method: POST
     route: :444/cancel
-  Restart:
-    signature: Restart(flowKey string, stateOverrides any)
-    description: Restart wipes everything past a flow's entry step and resets the entry with overrides.
+  Fork:
+    signature: Fork(stepKey string, stateOverrides any) (newFlowKey string)
+    description: Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
     method: POST
-    route: :444/restart
-  RestartFrom:
-    signature: RestartFrom(stepKey string, stateOverrides any)
-    description: RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-    method: POST
-    route: :444/restart-from
-  Recover:
-    signature: Recover(flowKey string, stateOverrides any)
-    description: Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
-    method: POST
-    route: :444/recover
+    route: :444/fork
   History:
     signature: History(flowKey string) (steps []FlowStep)
     description: History returns the step-by-step execution history of a flow.
@@ -139,19 +119,14 @@ functions:
     description: Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.
     method: POST
     route: :444/wait-for-stop
-  BreakBefore:
-    signature: BreakBefore(flowKey string, taskName string, enabled bool)
-    description: BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-    method: POST
-    route: :444/break-before
   Run:
     signature: Run(workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome)
     description: Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
     method: POST
     route: :444/run
   Continue:
-    signature: Continue(threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string)
-    description: Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
+    signature: Continue(threadKey string, additionalState any) (newFlowKey string)
+    description: Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
     method: POST
     route: :444/continue
   Signal:

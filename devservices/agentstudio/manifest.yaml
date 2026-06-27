@@ -5,7 +5,7 @@ general:
   hostname: agentstudio.dev
   description: AgentStudio is a developer console for inspecting flows running under the Foreman.
   package: github.com/microbus-io/fabric/devservices/agentstudio
-  modifiedAt: "2026-06-19T00:03:27Z"
+  modifiedAt: "2026-06-27T14:36:29Z"
 
 webs:
   ListFlows:
@@ -40,14 +40,10 @@ webs:
     description: ResumeFlow renders a form to resume an interrupted flow with a resume payload.
     method: ANY
     route: /resume-flow
-  RestartFlow:
-    description: RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.
+  ForkFromStep:
+    description: ForkFromStep renders a form to fork a terminal flow from a specific recorded step into a new flow with optional state overrides.
     method: ANY
-    route: /restart-flow
-  RestartFromStep:
-    description: RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.
-    method: ANY
-    route: /restart-from-step
+    route: /fork-from-step
   PollFlow:
     description: PollFlow returns a JSON status payload driving the FlowDetail live-update progress bar.
     method: GET

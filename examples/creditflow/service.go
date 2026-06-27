@@ -281,15 +281,11 @@ type demoResult struct {
 	mermaid string
 }
 
-// runWorkflow creates, starts, awaits, and fetches the history of a credit approval workflow.
+// runWorkflow creates-and-runs, awaits, and fetches the history of a credit approval workflow.
 func (svc *Service) runWorkflow(ctx context.Context, foremanClient foremanapi.Client, initialState creditflowapi.CreditApprovalIn) (flowKey string, result demoResult, err error) {
 	flowKey, err = foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), initialState, nil)
 	if err != nil {
 		return "", result, errors.Trace(err)
-	}
-	err = foremanClient.Start(ctx, flowKey)
-	if err != nil {
-		return flowKey, result, errors.Trace(err)
 	}
 	outcome, err := foremanClient.AwaitAndParse(ctx, flowKey, &result.out)
 

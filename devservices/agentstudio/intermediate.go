@@ -23,20 +23,19 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	ListFlows(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: ListFlows
-	FlowDetail(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: FlowDetail
-	StepDetail(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: StepDetail
-	ListWorkflows(w http.ResponseWriter, r *http.Request) (err error)   // MARKER: ListWorkflows
-	WorkflowDetail(w http.ResponseWriter, r *http.Request) (err error)  // MARKER: WorkflowDetail
-	RunWorkflow(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: RunWorkflow
-	ContinueFlow(w http.ResponseWriter, r *http.Request) (err error)    // MARKER: ContinueFlow
-	ResumeFlow(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: ResumeFlow
-	RestartFlow(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: RestartFlow
-	RestartFromStep(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RestartFromStep
-	PollFlow(w http.ResponseWriter, r *http.Request) (err error)        // MARKER: PollFlow
-	TaskDetail(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: TaskDetail
-	Dashboard(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: Dashboard
-	Assets(w http.ResponseWriter, r *http.Request) (err error)          // MARKER: Assets
+	ListFlows(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: ListFlows
+	FlowDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: FlowDetail
+	StepDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: StepDetail
+	ListWorkflows(w http.ResponseWriter, r *http.Request) (err error)  // MARKER: ListWorkflows
+	WorkflowDetail(w http.ResponseWriter, r *http.Request) (err error) // MARKER: WorkflowDetail
+	RunWorkflow(w http.ResponseWriter, r *http.Request) (err error)    // MARKER: RunWorkflow
+	ContinueFlow(w http.ResponseWriter, r *http.Request) (err error)   // MARKER: ContinueFlow
+	ResumeFlow(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: ResumeFlow
+	ForkFromStep(w http.ResponseWriter, r *http.Request) (err error)   // MARKER: ForkFromStep
+	PollFlow(w http.ResponseWriter, r *http.Request) (err error)       // MARKER: PollFlow
+	TaskDetail(w http.ResponseWriter, r *http.Request) (err error)     // MARKER: TaskDetail
+	Dashboard(w http.ResponseWriter, r *http.Request) (err error)      // MARKER: Dashboard
+	Assets(w http.ResponseWriter, r *http.Request) (err error)         // MARKER: Assets
 }
 
 // NewService creates a new instance of the microservice.
@@ -122,16 +121,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`ResumeFlow renders a form to resume an interrupted flow with a resume payload.`),
 		sub.Web(),
 	)
-	svc.Subscribe( // MARKER: RestartFlow
-		"RestartFlow", svc.RestartFlow,
-		sub.At(agentstudioapi.RestartFlow.Method, agentstudioapi.RestartFlow.Route),
-		sub.Description(`RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.`),
-		sub.Web(),
-	)
-	svc.Subscribe( // MARKER: RestartFromStep
-		"RestartFromStep", svc.RestartFromStep,
-		sub.At(agentstudioapi.RestartFromStep.Method, agentstudioapi.RestartFromStep.Route),
-		sub.Description(`RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.`),
+	svc.Subscribe( // MARKER: ForkFromStep
+		"ForkFromStep", svc.ForkFromStep,
+		sub.At(agentstudioapi.ForkFromStep.Method, agentstudioapi.ForkFromStep.Route),
+		sub.Description(`ForkFromStep renders a form to fork a terminal flow from a specific recorded step into a new flow with optional state overrides.`),
 		sub.Web(),
 	)
 	svc.Subscribe( // MARKER: PollFlow

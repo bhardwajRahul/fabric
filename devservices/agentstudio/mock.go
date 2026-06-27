@@ -13,20 +13,19 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockListFlows       func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ListFlows
-	mockFlowDetail      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: FlowDetail
-	mockStepDetail      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: StepDetail
-	mockListWorkflows   func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ListWorkflows
-	mockWorkflowDetail  func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: WorkflowDetail
-	mockRunWorkflow     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RunWorkflow
-	mockContinueFlow    func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ContinueFlow
-	mockResumeFlow      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ResumeFlow
-	mockRestartFlow     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RestartFlow
-	mockRestartFromStep func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RestartFromStep
-	mockPollFlow        func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: PollFlow
-	mockTaskDetail      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: TaskDetail
-	mockDashboard       func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Dashboard
-	mockAssets          func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Assets
+	mockListFlows      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ListFlows
+	mockFlowDetail     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: FlowDetail
+	mockStepDetail     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: StepDetail
+	mockListWorkflows  func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ListWorkflows
+	mockWorkflowDetail func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: WorkflowDetail
+	mockRunWorkflow    func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: RunWorkflow
+	mockContinueFlow   func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ContinueFlow
+	mockResumeFlow     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ResumeFlow
+	mockForkFromStep   func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: ForkFromStep
+	mockPollFlow       func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: PollFlow
+	mockTaskDetail     func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: TaskDetail
+	mockDashboard      func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Dashboard
+	mockAssets         func(w http.ResponseWriter, r *http.Request) (err error) // MARKER: Assets
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -162,30 +161,16 @@ func (svc *Mock) ResumeFlow(w http.ResponseWriter, r *http.Request) (err error) 
 	return errors.Trace(err)
 }
 
-// MockRestartFlow sets up a mock handler for RestartFlow.
-func (svc *Mock) MockRestartFlow(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: RestartFlow
-	svc.mockRestartFlow = handler
+// MockForkFromStep sets up a mock handler for ForkFromStep.
+func (svc *Mock) MockForkFromStep(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: ForkFromStep
+	svc.mockForkFromStep = handler
 	return svc
 }
 
-// RestartFlow executes the mock handler.
-func (svc *Mock) RestartFlow(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFlow
-	if svc.mockRestartFlow != nil {
-		err = svc.mockRestartFlow(w, r)
-	}
-	return errors.Trace(err)
-}
-
-// MockRestartFromStep sets up a mock handler for RestartFromStep.
-func (svc *Mock) MockRestartFromStep(handler func(w http.ResponseWriter, r *http.Request) (err error)) *Mock { // MARKER: RestartFromStep
-	svc.mockRestartFromStep = handler
-	return svc
-}
-
-// RestartFromStep executes the mock handler.
-func (svc *Mock) RestartFromStep(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RestartFromStep
-	if svc.mockRestartFromStep != nil {
-		err = svc.mockRestartFromStep(w, r)
+// ForkFromStep executes the mock handler.
+func (svc *Mock) ForkFromStep(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: ForkFromStep
+	if svc.mockForkFromStep != nil {
+		err = svc.mockForkFromStep(w, r)
 	}
 	return errors.Trace(err)
 }

@@ -46,17 +46,6 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("start", func(t *testing.T) { // MARKER: Start
-		assert := testarossa.For(t)
-
-		mock.MockStart(func(ctx context.Context, flowKey string) (err error) {
-			return
-		})
-		var flowKey string
-		err := mock.Start(ctx, flowKey)
-		assert.NoError(err)
-	})
-
 	t.Run("snapshot", func(t *testing.T) { // MARKER: Snapshot
 		assert := testarossa.For(t)
 
@@ -91,18 +80,6 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("resume_break", func(t *testing.T) { // MARKER: ResumeBreak
-		assert := testarossa.For(t)
-
-		mock.MockResumeBreak(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
-			return
-		})
-		var flowKey string
-		var stateOverrides any
-		err := mock.ResumeBreak(ctx, flowKey, stateOverrides)
-		assert.NoError(err)
-	})
-
 	t.Run("cancel", func(t *testing.T) { // MARKER: Cancel
 		assert := testarossa.For(t)
 
@@ -115,39 +92,15 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("restart", func(t *testing.T) { // MARKER: Restart
+	t.Run("fork", func(t *testing.T) { // MARKER: Fork
 		assert := testarossa.For(t)
 
-		mock.MockRestart(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
-			return
-		})
-		var flowKey string
-		var stateOverrides any
-		err := mock.Restart(ctx, flowKey, stateOverrides)
-		assert.NoError(err)
-	})
-
-	t.Run("restart_from", func(t *testing.T) { // MARKER: RestartFrom
-		assert := testarossa.For(t)
-
-		mock.MockRestartFrom(func(ctx context.Context, stepKey string, stateOverrides any) (err error) {
+		mock.MockFork(func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) {
 			return
 		})
 		var stepKey string
 		var stateOverrides any
-		err := mock.RestartFrom(ctx, stepKey, stateOverrides)
-		assert.NoError(err)
-	})
-
-	t.Run("recover", func(t *testing.T) { // MARKER: Recover
-		assert := testarossa.For(t)
-
-		mock.MockRecover(func(ctx context.Context, flowKey string, stateOverrides any) (err error) {
-			return
-		})
-		var flowKey string
-		var stateOverrides any
-		err := mock.Recover(ctx, flowKey, stateOverrides)
+		_, err := mock.Fork(ctx, stepKey, stateOverrides)
 		assert.NoError(err)
 	})
 
@@ -227,19 +180,6 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("break_before", func(t *testing.T) { // MARKER: BreakBefore
-		assert := testarossa.For(t)
-
-		mock.MockBreakBefore(func(ctx context.Context, flowKey string, taskName string, enabled bool) (err error) {
-			return
-		})
-		var flowKey string
-		var taskName string
-		var enabled bool
-		err := mock.BreakBefore(ctx, flowKey, taskName, enabled)
-		assert.NoError(err)
-	})
-
 	t.Run("run", func(t *testing.T) { // MARKER: Run
 		assert := testarossa.For(t)
 
@@ -256,13 +196,12 @@ func TestForeman_Mock(t *testing.T) {
 	t.Run("continue", func(t *testing.T) { // MARKER: Continue
 		assert := testarossa.For(t)
 
-		mock.MockContinue(func(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) {
+		mock.MockContinue(func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) {
 			return
 		})
 		var threadKey string
 		var additionalState any
-		var opts *workflow.FlowOptions
-		_, err := mock.Continue(ctx, threadKey, additionalState, opts)
+		_, err := mock.Continue(ctx, threadKey, additionalState)
 		assert.NoError(err)
 	})
 

@@ -66,9 +66,12 @@ page's state at render time, so `HideIfEq` immediately resolves the progress wid
 `Tag.When(false)` empty placeholder. No spurious first poll and no transient flicker on
 already-finished flows.
 
-**Restart path.** Bringing a terminal flow back to life via the Restart button is a full
-navigation, not a partial redraw, so the fresh server-side render rebuilds the page from scratch
-with `flowstopped` unset and the bar live again — no explicit un-hide path needed.
+**Fork path.** A terminal flow is immutable, so recovery is a Fork: the Fork button (flow-level,
+forking from the entry step) and the per-step Fork affordance both call `foreman.Fork`, which spawns a
+new running flow and redirects to that new flow's detail page. The redirect is a full navigation, not a
+partial redraw, so the fresh server-side render builds the new flow's page from scratch with
+`flowstopped` unset and the bar live again, with no explicit un-hide path needed. The original flow's
+page is never mutated.
 
 **Bespa swap mechanics, briefly.** `page_applyRedrawnElements` swaps elements by `data-id`. A
 hidden widget still emits `<span class="Empty" data-id="X">` (see `widget/tag.go` `Tag.When(false)`),

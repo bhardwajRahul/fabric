@@ -17,7 +17,7 @@ const Hostname = "foreman.core"
 const Name = "Foreman"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 52
+const Version = 54
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `Foreman orchestrates agentic workflow execution.`
@@ -80,7 +80,7 @@ type OnFlowStoppedIn struct { // MARKER: OnFlowStopped
 type OnFlowStoppedOut struct { // MARKER: OnFlowStopped
 }
 
-// Create creates a new flow for a workflow without starting it.
+// Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
 var Create = define.Function{ // MARKER: Create
 	Host: Hostname, Method: "ANY", Route: ":444/create",
 	In: CreateIn{}, Out: CreateOut{},
@@ -96,21 +96,6 @@ type CreateIn struct { // MARKER: Create
 // CreateOut are the output arguments of Create.
 type CreateOut struct { // MARKER: Create
 	FlowKey string `json:"flowKey,omitzero"`
-}
-
-// Start transitions a created flow to running and enqueues it for execution.
-var Start = define.Function{ // MARKER: Start
-	Host: Hostname, Method: "ANY", Route: ":444/start",
-	In: StartIn{}, Out: StartOut{},
-}
-
-// StartIn are the input arguments of Start.
-type StartIn struct { // MARKER: Start
-	FlowKey string `json:"flowKey,omitzero"`
-}
-
-// StartOut are the output arguments of Start.
-type StartOut struct { // MARKER: Start
 }
 
 // Snapshot returns the current outcome of a flow.
@@ -146,7 +131,7 @@ type FingerprintOut struct { // MARKER: Fingerprint
 	Status      string `json:"status,omitzero"`
 }
 
-// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.
+// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt.
 var Resume = define.Function{ // MARKER: Resume
 	Host: Hostname, Method: "POST", Route: ":444/resume",
 	In: ResumeIn{}, Out: ResumeOut{},
@@ -160,22 +145,6 @@ type ResumeIn struct { // MARKER: Resume
 
 // ResumeOut are the output arguments of Resume.
 type ResumeOut struct { // MARKER: Resume
-}
-
-// ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.
-var ResumeBreak = define.Function{ // MARKER: ResumeBreak
-	Host: Hostname, Method: "POST", Route: ":444/resume-break",
-	In: ResumeBreakIn{}, Out: ResumeBreakOut{},
-}
-
-// ResumeBreakIn are the input arguments of ResumeBreak.
-type ResumeBreakIn struct { // MARKER: ResumeBreak
-	FlowKey        string `json:"flowKey,omitzero"`
-	StateOverrides any    `json:"stateOverrides,omitzero"`
-}
-
-// ResumeBreakOut are the output arguments of ResumeBreak.
-type ResumeBreakOut struct { // MARKER: ResumeBreak
 }
 
 // Cancel cancels a flow that is not yet in a terminal status.
@@ -194,52 +163,21 @@ type CancelIn struct { // MARKER: Cancel
 type CancelOut struct { // MARKER: Cancel
 }
 
-// Restart wipes everything past a flow's entry step and resets the entry with overrides.
-var Restart = define.Function{ // MARKER: Restart
-	Host: Hostname, Method: "POST", Route: ":444/restart",
-	In: RestartIn{}, Out: RestartOut{},
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+var Fork = define.Function{ // MARKER: Fork
+	Host: Hostname, Method: "POST", Route: ":444/fork",
+	In: ForkIn{}, Out: ForkOut{},
 }
 
-// RestartIn are the input arguments of Restart.
-type RestartIn struct { // MARKER: Restart
-	FlowKey        string `json:"flowKey,omitzero"`
-	StateOverrides any    `json:"stateOverrides,omitzero"`
-}
-
-// RestartOut are the output arguments of Restart.
-type RestartOut struct { // MARKER: Restart
-}
-
-// RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-var RestartFrom = define.Function{ // MARKER: RestartFrom
-	Host: Hostname, Method: "POST", Route: ":444/restart-from",
-	In: RestartFromIn{}, Out: RestartFromOut{},
-}
-
-// RestartFromIn are the input arguments of RestartFrom.
-type RestartFromIn struct { // MARKER: RestartFrom
+// ForkIn are the input arguments of Fork.
+type ForkIn struct { // MARKER: Fork
 	StepKey        string `json:"stepKey,omitzero"`
 	StateOverrides any    `json:"stateOverrides,omitzero"`
 }
 
-// RestartFromOut are the output arguments of RestartFrom.
-type RestartFromOut struct { // MARKER: RestartFrom
-}
-
-// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
-var Recover = define.Function{ // MARKER: Recover
-	Host: Hostname, Method: "POST", Route: ":444/recover",
-	In: RecoverIn{}, Out: RecoverOut{},
-}
-
-// RecoverIn are the input arguments of Recover.
-type RecoverIn struct { // MARKER: Recover
-	FlowKey        string `json:"flowKey,omitzero"`
-	StateOverrides any    `json:"stateOverrides,omitzero"`
-}
-
-// RecoverOut are the output arguments of Recover.
-type RecoverOut struct { // MARKER: Recover
+// ForkOut are the output arguments of Fork.
+type ForkOut struct { // MARKER: Fork
+	NewFlowKey string `json:"newFlowKey,omitzero"`
 }
 
 // History returns the step-by-step execution history of a flow.
@@ -356,23 +294,6 @@ type AwaitOut struct { // MARKER: Await
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
-// BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-var BreakBefore = define.Function{ // MARKER: BreakBefore
-	Host: Hostname, Method: "POST", Route: ":444/break-before",
-	In: BreakBeforeIn{}, Out: BreakBeforeOut{},
-}
-
-// BreakBeforeIn are the input arguments of BreakBefore.
-type BreakBeforeIn struct { // MARKER: BreakBefore
-	FlowKey  string `json:"flowKey,omitzero"`
-	TaskName string `json:"taskName,omitzero"`
-	Enabled  bool   `json:"enabled,omitzero"`
-}
-
-// BreakBeforeOut are the output arguments of BreakBefore.
-type BreakBeforeOut struct { // MARKER: BreakBefore
-}
-
 // Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 var Run = define.Function{ // MARKER: Run
 	Host: Hostname, Method: "POST", Route: ":444/run",
@@ -391,7 +312,7 @@ type RunOut struct { // MARKER: Run
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
-// Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
 var Continue = define.Function{ // MARKER: Continue
 	Host: Hostname, Method: "POST", Route: ":444/continue",
 	In: ContinueIn{}, Out: ContinueOut{},
@@ -399,9 +320,8 @@ var Continue = define.Function{ // MARKER: Continue
 
 // ContinueIn are the input arguments of Continue.
 type ContinueIn struct { // MARKER: Continue
-	ThreadKey       string                `json:"threadKey,omitzero"`
-	AdditionalState any                   `json:"additionalState,omitzero"`
-	Opts            *workflow.FlowOptions `json:"opts,omitzero"`
+	ThreadKey       string `json:"threadKey,omitzero"`
+	AdditionalState any    `json:"additionalState,omitzero"`
 }
 
 // ContinueOut are the output arguments of Continue.

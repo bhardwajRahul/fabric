@@ -762,106 +762,6 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 		}
 	})
 
-	t.Run("breakpoint", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		foremanClient := foremanapi.NewClient(tester)
-
-		// Create the flow
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant: creditflowapi.Applicant{
-				ApplicantName: "Frank",
-				SSN:           "123-45-6789",
-				Address:       "123 Main St",
-				Phone:         "555-123-4567",
-				Employers:     []string{"Acme Corp"},
-				CreditScore:   750,
-			},
-		}, nil)
-
-		assert.NoError(err)
-
-		// Set a breakpoint on the ReviewCredit task (runs after fan-in, before Decision)
-		err = foremanClient.BreakBefore(ctx, flowKey, "ReviewCredit", true)
-		assert.NoError(err)
-
-		// Start the flow
-		err = foremanClient.Start(ctx, flowKey)
-		assert.NoError(err)
-
-		// Wait for the flow to hit the breakpoint (interrupted status)
-		outcome, err := foremanClient.Await(ctx, flowKey)
-
-		status, state := outcomeStatusState(outcome)
-		assert.Expect(
-			err, nil,
-			status, workflow.StatusInterrupted,
-			state["creditVerified"], true, // The flow should be paused before Decision, so creditVerified should be set from prior steps
-		)
-
-		// Resume the flow past the breakpoint
-		err = foremanClient.ResumeBreak(ctx, flowKey, nil)
-		assert.NoError(err)
-
-		// Wait for completion
-		outcome, err = foremanClient.Await(ctx, flowKey)
-
-		status, state = outcomeStatusState(outcome)
-		assert.Expect(
-			err, nil,
-			status, workflow.StatusCompleted,
-			state["approved"], true,
-		)
-	})
-
-	t.Run("cancel_with_subgraph", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		foremanClient := foremanapi.NewClient(tester)
-
-		// Create the parent flow and set a breakpoint on IdentityDecision
-		// (a task inside the identity-verification subgraph).
-		// Breakpoints are copied from parent to child on subgraph creation.
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant: creditflowapi.Applicant{
-				ApplicantName: "Grace",
-				SSN:           "123-45-6789",
-				Address:       "123 Main St",
-				Phone:         "555-123-4567",
-				Employers:     []string{"Acme Corp"},
-				CreditScore:   750,
-			},
-		}, nil)
-
-		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowKey, "IdentityDecision", true)
-		assert.NoError(err)
-
-		// Start the parent flow
-		err = foremanClient.Start(ctx, flowKey)
-		assert.NoError(err)
-
-		// The subgraph breakpoint propagates up - the parent flow becomes interrupted
-		outcome, err := foremanClient.Await(ctx, flowKey)
-
-		status, _ := outcomeStatusState(outcome)
-		if !assert.Expect(err, nil, status, workflow.StatusInterrupted) {
-			return
-		}
-
-		// Cancel the parent flow - cancellation cascades to the subgraph
-		err = foremanClient.Cancel(ctx, flowKey, "")
-		assert.NoError(err)
-
-		// Verify the parent is cancelled
-		outcome, err = foremanClient.Await(ctx, flowKey)
-
-		parentStatus, _ := outcomeStatusState(outcome)
-		assert.Expect(
-			err, nil,
-			parentStatus, workflow.StatusCancelled,
-		)
-	})
 }
 
 func TestCreditFlow_NotifyOnStop(t *testing.T) {
@@ -929,40 +829,10 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
 		}, &workflow.FlowOptions{NotifyOnStop: true})
-
-		assert.NoError(err)
-		err = foremanClient.Start(ctx, flowKey)
 		assert.NoError(err)
 
 		n := waitForNotification(assert, flowKey, workflow.StatusCompleted)
 		assert.Expect(n.status, workflow.StatusCompleted)
-		assert.NotNil(n.snapshot)
-	})
-
-	t.Run("cancelled", func(t *testing.T) {
-		assert := testarossa.For(t)
-
-		// Use a breakpoint to pause the flow, then cancel it
-		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
-			Applicant: goodApplicant,
-		}, &workflow.FlowOptions{NotifyOnStop: true})
-
-		assert.NoError(err)
-		err = foremanClient.BreakBefore(ctx, flowKey, "ReviewCredit", true)
-		assert.NoError(err)
-
-		err = foremanClient.Start(ctx, flowKey)
-		assert.NoError(err)
-
-		// Wait for breakpoint interrupt notification
-		waitForNotification(assert, flowKey, workflow.StatusInterrupted)
-
-		// Cancel the flow
-		err = foremanClient.Cancel(ctx, flowKey, "")
-		assert.NoError(err)
-
-		n := waitForNotification(assert, flowKey, workflow.StatusCancelled)
-		assert.Expect(n.status, workflow.StatusCancelled)
 		assert.NotNil(n.snapshot)
 	})
 }

@@ -193,7 +193,7 @@ func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in an
 	return nil
 }
 
-// Create creates a new flow for a workflow without starting it.
+// Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
 func (_c Client) Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: Create
 	_in := CreateIn{WorkflowURL: workflowURL, InitialState: initialState, Opts: opts}
 	_out := CreateOut{}
@@ -210,7 +210,7 @@ func (_res *CreateResponse) Get() (flowKey string, err error) { // MARKER: Creat
 	return _d.FlowKey, _res.err
 }
 
-// Create creates a new flow for a workflow without starting it.
+// Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
 func (_c MulticastClient) Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) iter.Seq[*CreateResponse] { // MARKER: Create
 	_in := CreateIn{WorkflowURL: workflowURL, InitialState: initialState, Opts: opts}
 	_out := CreateOut{}
@@ -220,38 +220,6 @@ func (_c MulticastClient) Create(ctx context.Context, workflowURL string, initia
 			_clone := _out
 			_r.data = &_clone
 			if !yield((*CreateResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-// Start transitions a created flow to running and enqueues it for execution.
-func (_c Client) Start(ctx context.Context, flowKey string) (err error) { // MARKER: Start
-	_in := StartIn{FlowKey: flowKey}
-	_out := StartOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Start.Method, Start.Route, &_in, &_out)
-	return err // No trace
-}
-
-// StartResponse packs the response of Start.
-type StartResponse multicastResponse // MARKER: Start
-
-// Get unpacks the return arguments of Start.
-func (_res *StartResponse) Get() (err error) { // MARKER: Start
-	return _res.err
-}
-
-// Start transitions a created flow to running and enqueues it for execution.
-func (_c MulticastClient) Start(ctx context.Context, flowKey string) iter.Seq[*StartResponse] { // MARKER: Start
-	_in := StartIn{FlowKey: flowKey}
-	_out := StartOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Start.Method, Start.Route, &_in, &_out)
-	return func(yield func(*StartResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*StartResponse)(_r)) {
 				return
 			}
 		}
@@ -324,7 +292,7 @@ func (_c MulticastClient) Fingerprint(ctx context.Context, flowKey string) iter.
 	}
 }
 
-// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.
+// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt.
 func (_c Client) Resume(ctx context.Context, flowKey string, resumeData any) (err error) { // MARKER: Resume
 	_in := ResumeIn{FlowKey: flowKey, ResumeData: resumeData}
 	_out := ResumeOut{}
@@ -340,7 +308,7 @@ func (_res *ResumeResponse) Get() (err error) { // MARKER: Resume
 	return _res.err
 }
 
-// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt. Fails with 409 if the flow is paused at a breakpoint rather than an interrupt.
+// Resume continues an interrupted flow, delivering resumeData to the task that armed flow.Interrupt.
 func (_c MulticastClient) Resume(ctx context.Context, flowKey string, resumeData any) iter.Seq[*ResumeResponse] { // MARKER: Resume
 	_in := ResumeIn{FlowKey: flowKey, ResumeData: resumeData}
 	_out := ResumeOut{}
@@ -350,38 +318,6 @@ func (_c MulticastClient) Resume(ctx context.Context, flowKey string, resumeData
 			_clone := _out
 			_r.data = &_clone
 			if !yield((*ResumeResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-// ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.
-func (_c Client) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: ResumeBreak
-	_in := ResumeBreakIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := ResumeBreakOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, ResumeBreak.Method, ResumeBreak.Route, &_in, &_out)
-	return err // No trace
-}
-
-// ResumeBreakResponse packs the response of ResumeBreak.
-type ResumeBreakResponse multicastResponse // MARKER: ResumeBreak
-
-// Get unpacks the return arguments of ResumeBreak.
-func (_res *ResumeBreakResponse) Get() (err error) { // MARKER: ResumeBreak
-	return _res.err
-}
-
-// ResumeBreak continues a flow paused at a breakpoint, merging stateOverrides into the leaf step's input state so the about-to-run task observes them. Fails with 409 if the flow is paused at an interrupt rather than a breakpoint.
-func (_c MulticastClient) ResumeBreak(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*ResumeBreakResponse] { // MARKER: ResumeBreak
-	_in := ResumeBreakIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := ResumeBreakOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, ResumeBreak.Method, ResumeBreak.Route, &_in, &_out)
-	return func(yield func(*ResumeBreakResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*ResumeBreakResponse)(_r)) {
 				return
 			}
 		}
@@ -420,96 +356,33 @@ func (_c MulticastClient) Cancel(ctx context.Context, flowKey string, reason str
 	}
 }
 
-// Restart wipes everything past a flow's entry step and resets the entry with overrides.
-func (_c Client) Restart(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Restart
-	_in := RestartIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := RestartOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Restart.Method, Restart.Route, &_in, &_out)
-	return err // No trace
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+func (_c Client) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
+	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
+	_out := ForkOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
+	return _out.NewFlowKey, err // No trace
 }
 
-// RestartResponse packs the response of Restart.
-type RestartResponse multicastResponse // MARKER: Restart
+// ForkResponse packs the response of Fork.
+type ForkResponse multicastResponse // MARKER: Fork
 
-// Get unpacks the return arguments of Restart.
-func (_res *RestartResponse) Get() (err error) { // MARKER: Restart
-	return _res.err
+// Get unpacks the return arguments of Fork.
+func (_res *ForkResponse) Get() (newFlowKey string, err error) { // MARKER: Fork
+	_d := _res.data.(*ForkOut)
+	return _d.NewFlowKey, _res.err
 }
 
-// Restart wipes everything past a flow's entry step and resets the entry with overrides.
-func (_c MulticastClient) Restart(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*RestartResponse] { // MARKER: Restart
-	_in := RestartIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := RestartOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Restart.Method, Restart.Route, &_in, &_out)
-	return func(yield func(*RestartResponse) bool) {
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrides any) iter.Seq[*ForkResponse] { // MARKER: Fork
+	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
+	_out := ForkOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Fork.Method, Fork.Route, &_in, &_out)
+	return func(yield func(*ForkResponse) bool) {
 		for _r := range _queue {
 			_clone := _out
 			_r.data = &_clone
-			if !yield((*RestartResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-// RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-func (_c Client) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) (err error) { // MARKER: RestartFrom
-	_in := RestartFromIn{StepKey: stepKey, StateOverrides: stateOverrides}
-	_out := RestartFromOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, RestartFrom.Method, RestartFrom.Route, &_in, &_out)
-	return err // No trace
-}
-
-// RestartFromResponse packs the response of RestartFrom.
-type RestartFromResponse multicastResponse // MARKER: RestartFrom
-
-// Get unpacks the return arguments of RestartFrom.
-func (_res *RestartFromResponse) Get() (err error) { // MARKER: RestartFrom
-	return _res.err
-}
-
-// RestartFrom sweeps the DAG subtree below a chosen step and resets that step with overrides.
-func (_c MulticastClient) RestartFrom(ctx context.Context, stepKey string, stateOverrides any) iter.Seq[*RestartFromResponse] { // MARKER: RestartFrom
-	_in := RestartFromIn{StepKey: stepKey, StateOverrides: stateOverrides}
-	_out := RestartFromOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, RestartFrom.Method, RestartFrom.Route, &_in, &_out)
-	return func(yield func(*RestartFromResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*RestartFromResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
-func (_c Client) Recover(ctx context.Context, flowKey string, stateOverrides any) (err error) { // MARKER: Recover
-	_in := RecoverIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := RecoverOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Recover.Method, Recover.Route, &_in, &_out)
-	return err // No trace
-}
-
-// RecoverResponse packs the response of Recover.
-type RecoverResponse multicastResponse // MARKER: Recover
-
-// Get unpacks the return arguments of Recover.
-func (_res *RecoverResponse) Get() (err error) { // MARKER: Recover
-	return _res.err
-}
-
-// Recover restarts every failed step of a failed flow, re-running the unhandled failures in one pass.
-func (_c MulticastClient) Recover(ctx context.Context, flowKey string, stateOverrides any) iter.Seq[*RecoverResponse] { // MARKER: Recover
-	_in := RecoverIn{FlowKey: flowKey, StateOverrides: stateOverrides}
-	_out := RecoverOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Recover.Method, Recover.Route, &_in, &_out)
-	return func(yield func(*RecoverResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*RecoverResponse)(_r)) {
+			if !yield((*ForkResponse)(_r)) {
 				return
 			}
 		}
@@ -746,38 +619,6 @@ func (_c MulticastClient) Await(ctx context.Context, flowKey string) iter.Seq[*A
 	}
 }
 
-// BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-func (_c Client) BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) (err error) { // MARKER: BreakBefore
-	_in := BreakBeforeIn{FlowKey: flowKey, TaskName: taskName, Enabled: enabled}
-	_out := BreakBeforeOut{}
-	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, BreakBefore.Method, BreakBefore.Route, &_in, &_out)
-	return err // No trace
-}
-
-// BreakBeforeResponse packs the response of BreakBefore.
-type BreakBeforeResponse multicastResponse // MARKER: BreakBefore
-
-// Get unpacks the return arguments of BreakBefore.
-func (_res *BreakBeforeResponse) Get() (err error) { // MARKER: BreakBefore
-	return _res.err
-}
-
-// BreakBefore sets or clears a breakpoint that pauses execution before the named task runs.
-func (_c MulticastClient) BreakBefore(ctx context.Context, flowKey string, taskName string, enabled bool) iter.Seq[*BreakBeforeResponse] { // MARKER: BreakBefore
-	_in := BreakBeforeIn{FlowKey: flowKey, TaskName: taskName, Enabled: enabled}
-	_out := BreakBeforeOut{}
-	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, BreakBefore.Method, BreakBefore.Route, &_in, &_out)
-	return func(yield func(*BreakBeforeResponse) bool) {
-		for _r := range _queue {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*BreakBeforeResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
 // Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 func (_c Client) Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
 	_in := RunIn{WorkflowURL: workflowURL, InitialState: initialState, Opts: opts}
@@ -811,9 +652,9 @@ func (_c MulticastClient) Run(ctx context.Context, workflowURL string, initialSt
 	}
 }
 
-// Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
-func (_c Client) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) (newFlowKey string, err error) { // MARKER: Continue
-	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState, Opts: opts}
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+func (_c Client) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
+	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
 	_out := ContinueOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Continue.Method, Continue.Route, &_in, &_out)
 	return _out.NewFlowKey, err // No trace
@@ -828,9 +669,9 @@ func (_res *ContinueResponse) Get() (newFlowKey string, err error) { // MARKER: 
 	return _d.NewFlowKey, _res.err
 }
 
-// Continue creates a new flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and is returned in created status.
-func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additionalState any, opts *workflow.FlowOptions) iter.Seq[*ContinueResponse] { // MARKER: Continue
-	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState, Opts: opts}
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additionalState any) iter.Seq[*ContinueResponse] { // MARKER: Continue
+	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
 	_out := ContinueOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Continue.Method, Continue.Route, &_in, &_out)
 	return func(yield func(*ContinueResponse) bool) {

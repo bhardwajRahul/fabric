@@ -45,7 +45,7 @@ Tasks are registered on port `:428` by default.
 
 A workflow graph endpoint returns a `*workflow.Graph` that defines the structure of a workflow - its tasks, transitions, and merge strategies. The graph is fetched once when a flow is created and stored with it.
 
-**Naming convention: graph names and task (node) names are PascalCase** (`CreditApproval`, `VerifyCredit`) - they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs the nodes resolve to (`myserviceapi.VerifyCredit.URL()`) and the camelCase state field names (`creditVerified`). `SetEndpoint(name, url)` registers a node under a PascalCase name that resolves to the task's URL; every transition, `SetFanIn`, `flow.Goto`, and `BreakBefore` then refers to that PascalCase node name, never the URL.
+**Naming convention: graph names and task (node) names are PascalCase** (`CreditApproval`, `VerifyCredit`) - they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs the nodes resolve to (`myserviceapi.VerifyCredit.URL()`) and the camelCase state field names (`creditVerified`). `SetEndpoint(name, url)` registers a node under a PascalCase name that resolves to the task's URL; every transition, `SetFanIn`, and `flow.Goto` then refers to that PascalCase node name, never the URL.
 
 ```go
 import "github.com/microbus-io/dwarf/workflow"
@@ -580,9 +580,9 @@ A separate "kick off the job" task should run before the polling task in the gra
 
 ## Running Workflows
 
-**Boundary rule.** A workflow microservice exposes its graph(s) and tasks, nothing else. Do not wrap the foreman in pass-through endpoints like `RunMyWorkflow`, `StartMyWorkflow`, `CancelMyWorkflow`, `MyWorkflowStatus`, etc. - they add a hop, hide foreman options (`FlowOptions`, breakpoints, notify-hostname) behind a narrower surface, and pull the foreman into the microservice's call graph for no benefit. Two consequences follow:
+**Boundary rule.** A workflow microservice exposes its graph(s) and tasks, nothing else. Do not wrap the foreman in pass-through endpoints like `RunMyWorkflow`, `StartMyWorkflow`, `CancelMyWorkflow`, `MyWorkflowStatus`, etc. - they add a hop, hide foreman options (`FlowOptions`, notify-hostname) behind a narrower surface, and pull the foreman into the microservice's call graph for no benefit. Two consequences follow:
 
-- **To launch a workflow, the upstream caller talks to the foreman directly** via `foremanapi.NewClient(svc).Run(...)` (or `Create + Start + Await`). The workflow's microservice is not in the launch path.
+- **To launch a workflow, the upstream caller talks to the foreman directly** via `foremanapi.NewClient(svc).Run(...)` (or `Create` + `Await`; `Create` auto-runs). The workflow's microservice is not in the launch path.
 - **To call another unit of work from inside a task body, use a subgraph** - `otherapi.NewSubgraph(flow).OtherWorkflow(ctx, args...)` (embeds a whole workflow as a child flow), or the raw `flow.Subgraph` for dynamic dispatch. A bare task is not independently invocable from a task body; to run one unit of work in isolation, declare a one-node workflow and subgraph it. Do **not** call `foremanapi.NewClient(svc).Run`, nor the **test-only** `Executor`, from a task body: that spawns a separate flow (or a foreman-coupled call) and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation. (The `Executor` carries a `service.Publisher` and exists only to drive endpoints from tests.)
 
 The Foreman core service orchestrates workflow execution. Use `foremanapi.NewClient(svc)` to interact with it:
@@ -590,16 +590,15 @@ The Foreman core service orchestrates workflow execution. Use `foremanapi.NewCli
 ```go
 import "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 
-// Run a workflow synchronously (create + start + await). Returns a *workflow.FlowOutcome with
+// Run a workflow synchronously (create-and-run + await). Returns a *workflow.FlowOutcome with
 // Status, State, plus the populated side-channel for terminal/parked statuses (Error when
 // Status="failed", InterruptPayload when Status="interrupted", CancelReason when Status="cancelled").
 // The Go-level err is for transport/foreman/timeout failures only; a workflow that fails surfaces
 // as outcome.Status == "failed" with outcome.Error populated.
 outcome, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
 
-// Fine-grained control
+// Fine-grained control: Create auto-runs and returns the running flow's key; there is no separate Start.
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
-err = foremanapi.NewClient(svc).Start(ctx, flowID)
 outcome, err = foremanapi.NewClient(svc).Await(ctx, flowID)
 
 // Inspect a running flow
@@ -611,11 +610,10 @@ err = foremanapi.NewClient(svc).Cancel(ctx, flowID, "user requested")
 // Resume an interrupted flow with new data
 err = foremanapi.NewClient(svc).Resume(ctx, flowID, resumeData)
 
-// Continue a thread with new input (multi-turn pattern)
-// The threadKey can be any flowKey belonging to the thread; Continue finds the latest completed flow.
-// The final argument is *workflow.FlowOptions; pass nil for defaults.
-newFlowID, err := foremanapi.NewClient(svc).Continue(ctx, threadKey, additionalState, nil)
-err = foremanapi.NewClient(svc).Start(ctx, newFlowID)
+// Continue a thread with new input (multi-turn pattern). Returns a running flow.
+// The threadKey can be any flowKey belonging to the thread; Continue finds the latest completed flow and
+// inherits the thread's policy. It takes no options - use Create with Opts.ThreadKey to set policy explicitly.
+newFlowID, err := foremanapi.NewClient(svc).Continue(ctx, threadKey, additionalState)
 ```
 
 For typed workflow invocation in tests, use the generated `Executor` with a `WorkflowRunner`:
@@ -637,15 +635,15 @@ opts := &workflow.FlowOptions{
     Priority:       1,        // explicit priority is >= 1, lower runs first; 0 = unset -> the foreman DefaultPriority config
     FairnessKey:    "tenant-42", // "" -> derived from the tid/tenant actor claim, else the "" bucket
     FairnessWeight: 2.0,      // relative dispatch share of the fairness key; 0 -> 1
-    StartAt:        time.Now().Add(10 * time.Minute), // entry step's not_before; zero/past = run as soon as started
+    ThreadKey:      "",       // a flowKey in an existing thread to join; "" starts a fresh thread
 }
 outcome, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState, opts)
 ```
 
-`Priority`, `FairnessKey`, and `FairnessWeight` are immutable for the life of the flow and are inherited unchanged by `Continue` and subgraphs (and preserved in place by `Restart`/`RestartFrom`). The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
+`FlowOptions` authors a flow's policy **once at genesis** (`Create`/`Run`). Derived operations inherit it and take no options: `Continue` inherits the **thread's** policy, `Fork` inherits the **origin's**, and subgraphs inherit the **parent's** - choosing a derived operation *is* choosing "inherit." `Create` with `Opts.ThreadKey` is the explicit-policy escape hatch: join an existing thread while setting policy yourself. The foreman owns all defaulting; pass `nil` (or leave a field zero) to take the default. The `DefaultPriority` config on `foreman.core` sets the priority assigned when the caller specifies none.
 
-`StartAt` sets the entry step's `not_before` and is honored by `Create`, `Run`, and `Continue`; subgraphs do not inherit it. The flow can still be created and started immediately, but no worker will pick up its entry step before `StartAt`. A `Run` call blocks across the delay, so callers wanting fire-and-forget delayed execution should use `Create` + `Start` and walk away.
+There is no time-delayed start option. For a deferred start, give the workflow an entry task that calls `flow.Interrupt`; the flow rests as `interrupted` until a `Resume` releases it (the event trigger). `flow.Sleep` inside a task is the in-flow wait.
 
 The generated per-workflow `Executor` methods keep their minimal signatures. To run a *typed* workflow with options in a test, attach them once with the `WithFlowOptions` builder:
 
@@ -681,10 +679,9 @@ To receive an event when a flow stops (completed, failed, cancelled, or interrup
 hostname is passed), then subscribe to the `OnFlowStopped` event:
 
 ```go
-// Opt in at Create, then Start normally.
+// Opt in at Create (which auto-runs).
 flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState,
 	&workflow.FlowOptions{NotifyOnStop: true})
-err = foremanapi.NewClient(svc).Start(ctx, flowID)
 
 // Subscribe to notifications
 foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(
@@ -698,10 +695,8 @@ foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(
 
 ## Debugging Workflows
 
-- `foremanapi.NewClient(svc).BreakBefore(ctx, flowID, taskName, true)` - pause before a task executes
 - `foremanapi.NewClient(svc).History(ctx, flowID)` - step-by-step execution trace with state snapshots and nested subgraph history
-- `foremanapi.NewClient(svc).Restart(ctx, flowKey, stateOverrides)` - re-run a terminated flow from its entry step with modified state
-- `foremanapi.NewClient(svc).RestartFrom(ctx, stepKey, stateOverrides)` - rewind the DAG subtree below a chosen step and re-run from there with modified state
+- `foremanapi.NewClient(svc).Fork(ctx, stepKey, stateOverrides)` - clone a terminal flow's prefix up to the chosen step into a new self-contained flow and re-run from there with modified state, inheriting the origin's scheduling/baggage. The original flow is immutable; Fork never mutates it. A terminal flow is recovered only by forking, not by an in-place restart.
 
 ## Mocking Workflows
 

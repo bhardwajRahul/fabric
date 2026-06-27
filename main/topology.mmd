@@ -7,10 +7,10 @@ graph LR
 
     configurator.core[Configurator<br>configurator.core]
     http.egress.core[HTTPEgress<br>http.egress.core] --- http.egress.core.cloud@{shape: cloud, label: "various"}
-    foreman.core[foreman<br>foreman.core] --->|danger| access.token.core[accesstoken<br>access.token.core]
+    foreman.core[Foreman<br>foreman.core] --->|danger| access.token.core[AccessToken<br>access.token.core]
     foreman.core --- foreman.core.db[(SQL)]
     http.ingress.core[HTTPIngress<br>http.ingress.core] --->|danger| access.token.core
-    http.ingress.core --->|danger| bearer.token.core[bearertoken<br>bearer.token.core]
+    http.ingress.core --->|danger| bearer.token.core[BearerToken<br>bearer.token.core]
     llm.core[LLM<br>llm.core]
     chatgpt.llm.core[ChatGPTLLM<br>chatgpt.llm.core] ---> http.egress.core
     chatgpt.llm.core --- chatgpt.llm.core.cloud@{shape: cloud, label: "api.openai.com"}
@@ -22,13 +22,13 @@ graph LR
     lite.llm.core --- lite.llm.core.cloud@{shape: cloud, label: "localhost"}
     mcp.core[MCPPortal<br>mcp.core] ---> openapi.core[OpenAPIPortal<br>openapi.core]
     metrics.core[Metrics<br>metrics.core]
-    agentstudio.dev[agentstudio<br>agentstudio.dev] ---> foreman.core
+    agentstudio.dev[AgentStudio<br>agentstudio.dev] ---> foreman.core
     browser.example[Browser<br>browser.example] ---> http.egress.core
     browser.example --- browser.example.cloud@{shape: cloud, label: "various"}
     calculator.example[Calculator<br>calculator.example]
     chatbox.example[Chatbox<br>chatbox.example] ---> llm.core
     creditflow.example[CreditFlow<br>creditflow.example] ---> foreman.core
-    embedder.example[embedder<br>embedder.example] --- embedder.example.py[[Py]]
+    embedder.example[Embedder<br>embedder.example] --- embedder.example.py[[Py]]
     eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
     hello.example[Hello<br>hello.example] ---> calculator.example
     helloworld.example[HelloWorld<br>helloworld.example]

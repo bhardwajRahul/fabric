@@ -15,7 +15,7 @@ const Hostname = "agentstudio.dev"
 const Name = "AgentStudio"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 7
+const Version = 8
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `AgentStudio is a developer console for inspecting flows running under the Foreman.`
@@ -60,14 +60,9 @@ var ResumeFlow = define.Web{ // MARKER: ResumeFlow
 	Host: Hostname, Method: "ANY", Route: "/resume-flow",
 }
 
-// RestartFlow renders a form to restart a terminated flow from its entry step with optional state overrides.
-var RestartFlow = define.Web{ // MARKER: RestartFlow
-	Host: Hostname, Method: "ANY", Route: "/restart-flow",
-}
-
-// RestartFromStep renders a form to restart a flow from a specific step with optional state overrides.
-var RestartFromStep = define.Web{ // MARKER: RestartFromStep
-	Host: Hostname, Method: "ANY", Route: "/restart-from-step",
+// ForkFromStep renders a form to fork a terminal flow from a specific recorded step into a new flow with optional state overrides.
+var ForkFromStep = define.Web{ // MARKER: ForkFromStep
+	Host: Hostname, Method: "ANY", Route: "/fork-from-step",
 }
 
 // PollFlow returns a JSON status payload driving the FlowDetail live-update progress bar.
