@@ -505,6 +505,10 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		wf.StateOf(r).Del("cancel")
 	}
 
+	// Capture the poll baseline before reading the snapshot/history that render the
+	// graph, so `since` can never be newer than the rendered state.
+	initialToken, _, _ := svc.foreman.Fingerprint(r.Context(), flowKey)
+
 	outcome, err := svc.foreman.Snapshot(r.Context(), flowKey)
 	if err != nil {
 		return errors.Trace(err)
@@ -561,7 +565,6 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 	if !isLiveStatus(statusOf(outcome)) {
 		wf.StateOf(r).Set("flowstopped", "1")
 	}
-	initialToken, _, _ := svc.foreman.Fingerprint(r.Context(), flowKey)
 	pollURL := svc.ExternalizeURL(r.Context(), "/poll-flow") +
 		"?flow=" + url.QueryEscape(flowKey) +
 		"&since=" + url.QueryEscape(initialToken)

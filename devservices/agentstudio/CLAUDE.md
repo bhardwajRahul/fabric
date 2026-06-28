@@ -49,6 +49,18 @@ alter the rendered graph — most notably `cohort_arrivals` increments, which do
 `updated_at`. Idle ticks sleep `pollFlowTick` (250ms) between snapshots and bail immediately on
 `r.Context().Done()` when the browser tab closes.
 
+**Baseline ordering invariant.** `FlowDetail` captures the `since` baseline (a `Fingerprint`
+call) *before* the `Snapshot`/`History` reads that render the graph — not after. The render and the
+baseline are two separate reads of a live flow, so if the flow completes between them and the
+baseline is taken last, the first `PollFlow` finds its fingerprint already equal to `since`, never
+appends `flowrefresh`, and the graph is left frozen on the last-rendered (often a `pending` step)
+state until a manual refresh. Taking the baseline first guarantees `since` is never newer than the
+rendered graph: a stale render always differs from the next poll, so `flowrefresh` fires and the
+diagram converges. The cost is a possible harmless redundant redraw when the flow finishes inside
+the tiny `Fingerprint`→`History` window (the graph is already current; it just repaints once). This
+is why forking from a near-terminal step used to stick — the short remaining run finished before the
+late baseline was read — while forking the entry step did not.
+
 **Two state vars, two redraw scopes.** The action URL returned to the client carries two
 independent pieces:
 
