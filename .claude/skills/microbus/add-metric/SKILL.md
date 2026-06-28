@@ -58,6 +58,8 @@ The OpenTelemetry name of the metric:
 
 For example, `myapplication_my_metric_units`.
 
+Do **not** add a `_total` suffix to a counter's OpenTelemetry name. `_total` is a Prometheus naming convention, not an OpenTelemetry one.
+
 #### Step 6: Declare the Metric in `definition.go`
 
 Append the `define.Metric` var to `myserviceapi/definition.go`. The godoc is the metric's description.

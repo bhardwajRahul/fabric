@@ -131,8 +131,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.`),
 		sub.Workflow(llmapi.ChatLoopIn{}, llmapi.ChatLoopOut{}),
 	)
-	svc.DescribeCounter("microbus_llm_tokens_total", `LLMTokens counts tokens consumed per LLM turn`) // MARKER: LLMTokens
-	svc.DefineConfig(                                                                                 // MARKER: MaxToolRounds
+	svc.DescribeCounter("microbus_llm_tokens", `LLMTokens counts tokens consumed per LLM turn`)                                                                                                             // MARKER: LLMTokens
+	svc.DescribeCounter("microbus_llm_tool_calls", `ToolCalls counts tool invocations from the chat loop, labeled by the tool's URL, its feature type (function/web/workflow), and the outcome (ok/error)`) // MARKER: ToolCalls
+	svc.DefineConfig(                                                                                                                                                                                       // MARKER: MaxToolRounds
 		"MaxToolRounds",
 		cfg.Description(`MaxToolRounds is the maximum number of tool call round-trips per invocation.`),
 		cfg.DefaultValue(`10`),
@@ -309,10 +310,19 @@ func (svc *Intermediate) doChatLoop(w http.ResponseWriter, r *http.Request) (err
 
 // LLMTokens counts tokens consumed per LLM turn
 func (svc *Intermediate) IncrementLLMTokens(ctx context.Context, value int, provider string, model string, direction string) (err error) { // MARKER: LLMTokens
-	return svc.IncrementCounter(ctx, "microbus_llm_tokens_total", float64(value),
+	return svc.IncrementCounter(ctx, "microbus_llm_tokens", float64(value),
 		"provider", provider,
 		"model", model,
 		"direction", direction,
+	)
+}
+
+// ToolCalls counts tool invocations from the chat loop, labeled by the tool's URL, its feature type (function/web/workflow), and the outcome (ok/error)
+func (svc *Intermediate) IncrementToolCalls(ctx context.Context, value int, tool_url string, tool_type string, outcome string) (err error) { // MARKER: ToolCalls
+	return svc.IncrementCounter(ctx, "microbus_llm_tool_calls", float64(value),
+		"tool_url", tool_url,
+		"tool_type", tool_type,
+		"outcome", outcome,
 	)
 }
 

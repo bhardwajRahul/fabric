@@ -42,7 +42,7 @@ var (
 )
 
 // TestForeman_StartsEngine confirms the service builds and starts the embedded dwarf engine under the
-// TESTING deployment (the StartupInTest(plane) path), and that Shutdown drains it cleanly via t.Cleanup.
+// TESTING deployment (the SetInTest(plane) + Startup path), and that Shutdown drains it cleanly via t.Cleanup.
 func TestForeman_StartsEngine(t *testing.T) {
 	assert := testarossa.For(t)
 
@@ -54,6 +54,6 @@ func TestForeman_StartsEngine(t *testing.T) {
 	)
 	app.RunInTest(t)
 
-	// If OnStartup's engine wiring (build + StartupInTest) failed, RunInTest would have failed the test.
+	// If OnStartup's engine wiring (build + SetInTest + Startup) failed, RunInTest would have failed the test.
 	assert.NotNil(svc.engine)
 }

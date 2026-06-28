@@ -61,14 +61,14 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) {
 	eng.SetTracerProvider(svc.TracerProvider())
 	svc.engine = eng
 
-	// The foreman runs under app.RunInTest in the TESTING deployment, so it has no *testing.T to hand
-	// the engine's RunInTest. StartupInTest conveys "use isolated throwaway databases" down to sequel,
-	// keyed by the plane the test app shares across all replicas.
 	if svc.Deployment() == connector.TESTING {
-		err = eng.StartupInTest(ctx, svc.Plane())
-	} else {
-		err = eng.Startup(ctx)
+		// Use the Microbus plane so a multi-replica shared-state fixture resolves to the same throwaway databases.
+		err = eng.SetInTest(svc.Plane())
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
+	err = eng.Startup(ctx)
 	return errors.Trace(err)
 }
 

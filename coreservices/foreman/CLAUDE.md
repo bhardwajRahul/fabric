@@ -109,11 +109,13 @@ ack-timeout with the foreman's other downstream calls (token mint, graph load) a
 split, and (b) the `service` label is the deploy-time hostname, so an alternative-hostname deployment would silently
 break a dashboard hard-coded to `foreman.core`. The dedicated metric is hostname-independent and pre-split.
 
-**`StartupInTest` under the TESTING deployment, `Startup` otherwise.** The foreman runs under
-`app.RunInTest`, so it has no `*testing.T` to hand the engine's `RunInTest`. `StartupInTest(ctx, svc.Plane())`
-is the `*testing.T`-free path: it opens isolated throwaway databases keyed by the Microbus **plane**, which
-every replica in a test app shares — so a multi-replica shared-state fixture resolves to the same isolated
-DBs. The resolved DSN is used only as a base; the engine creates the throwaway databases off it.
+**`SetInTest(plane)` + `Startup` under the TESTING deployment, plain `Startup` otherwise.** The foreman runs
+under `app.RunInTest`, so it has no `*testing.T` to hand the engine's `RunInTest`. `eng.SetInTest(name)` is
+the `*testing.T`-free hook: it keys the engine's isolated, auto-dropped test databases by `name`, and the
+following `Startup` opens them. The foreman passes the Microbus **plane**, which every replica in a test app
+shares — so a multi-replica shared-state fixture resolves to the same throwaway DBs. (`SetInTest` is exactly
+what the engine's `RunInTest(t)` calls with `t.Name()`; the foreman just supplies a plane instead of a test
+name.) The resolved DSN is used only as a base; the engine creates the throwaway databases off it.
 
 **DSN resolution is per deployment.** `LOCAL` with no configured DSN falls back to
 `file:shard_%d.local.sqlite` (one SQLite file per shard); PROD/LAB use the `SQLDataSourceName` secret. The

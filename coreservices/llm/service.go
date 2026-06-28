@@ -477,11 +477,13 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow) (err e
 		var out map[string]any
 		yield, err := flow.Subgraph(def.URL, inputState, &out)
 		if err != nil {
+			svc.IncrementToolCalls(ctx, 1, def.URL, def.Type, "error")
 			return errors.Trace(err)
 		}
 		if yield {
-			return nil // parked, child workflow running
+			return nil // parked, child workflow running; counted on re-entry
 		}
+		svc.IncrementToolCalls(ctx, 1, def.URL, def.Type, "ok")
 		// Re-entry: the child's final_state is the tool result. `messages` has reducer ReducerAppend,
 		// so contribute only the new tool_result delta.
 		childOutput := out

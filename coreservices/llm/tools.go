@@ -328,6 +328,11 @@ func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools [
 		return nil, errors.New("tool not found: %s", tc.Name)
 	}
 
+	// Count this invocation regardless of the dispatch path; outcome is flipped to "error" on any failure,
+	// including the soft failures (transport error, >=400 status) that this function folds into the tool result.
+	outcome := "ok"
+	defer func() { svc.IncrementToolCalls(ctx, 1, def.URL, def.Type, outcome) }()
+
 	// Ensure the URL has a scheme
 	toolURL := def.URL
 	if !strings.Contains(toolURL, "://") {
@@ -350,12 +355,14 @@ func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools [
 	)
 	if err != nil {
 		// Return the error as a tool result rather than failing the whole chat
+		outcome = "error"
 		errResult, _ := json.Marshal(map[string]string{"error": err.Error()})
 		return errResult, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
+		outcome = "error"
 		body, _ := io.ReadAll(resp.Body)
 		errResult, _ := json.Marshal(map[string]string{"error": string(body)})
 		return errResult, nil
@@ -363,6 +370,7 @@ func (svc *Service) executeTool(ctx context.Context, tc llmapi.ToolCall, tools [
 
 	result, err := io.ReadAll(resp.Body)
 	if err != nil {
+		outcome = "error"
 		return nil, errors.Trace(err)
 	}
 	return result, nil

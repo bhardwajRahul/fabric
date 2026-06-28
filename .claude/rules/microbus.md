@@ -188,7 +188,10 @@ applicable, a `signature`. The YAML is self-describing; the non-obvious decode r
   `str <regexp>`, `bool`, `int [0,60]`, `float [0.0,1.0)`, `dur (0s,24h]`, `set Red|Green|Blue`, `url`, `email`,
   `json`. Range brackets: `[` inclusive, `(` exclusive; omit a bound for open-ended (`int [1,]`, `dur [,24h]`).
 - **`metrics`**: `kind` is `counter`/`gauge`/`histogram`; `buckets` are histogram boundaries; `otelName` is the
-  OpenTelemetry name; `observable` metrics are measured just-in-time.
+  OpenTelemetry name; `observable` metrics are measured just-in-time. The `otelName` of a counter carries **no**
+  `_total` suffix - that suffix is a Prometheus convention the scrape exporter appends at the `/metrics` boundary
+  (de-duplicating if already present), whereas the OTLP push path uses the name verbatim; so a counter named
+  `app_requests` is queried in Prometheus as `app_requests_total`.
 - **`tickers`**: `interval` is the duration between iterations.
 - **`inboundEvents`**: `package` is the import path of the event-source microservice.
 

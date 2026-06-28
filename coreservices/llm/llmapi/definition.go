@@ -31,7 +31,7 @@ const Hostname = "llm.core"
 const Name = "LLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 12
+const Version = 13
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
@@ -46,7 +46,13 @@ var MaxToolRounds = define.Config{ // MARKER: MaxToolRounds
 // LLMTokens counts tokens consumed per LLM turn
 var LLMTokens = define.Metric{ // MARKER: LLMTokens
 	Kind: define.Counter, Value: int(0), Labels: []string{"provider", "model", "direction"},
-	OTelName: "microbus_llm_tokens_total",
+	OTelName: "microbus_llm_tokens",
+}
+
+// ToolCalls counts tool invocations from the chat loop, labeled by the tool's URL, its feature type (function/web/workflow), and the outcome (ok/error)
+var ToolCalls = define.Metric{ // MARKER: ToolCalls
+	Kind: define.Counter, Value: int(0), Labels: []string{"tool_url", "tool_type", "outcome"},
+	OTelName: "microbus_llm_tool_calls",
 }
 
 // Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.

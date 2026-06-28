@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-06-22T03:43:56Z"
+  modifiedAt: "2026-06-27T23:43:10Z"
 
 configs:
   MaxToolRounds:
@@ -33,7 +33,12 @@ metrics:
     signature: LLMTokens(value int, provider string, model string, direction string)
     description: LLMTokens counts tokens consumed per LLM turn
     kind: counter
-    otelName: microbus_llm_tokens_total
+    otelName: microbus_llm_tokens
+  ToolCalls:
+    signature: ToolCalls(value int, tool_url string, tool_type string, outcome string)
+    description: ToolCalls counts tool invocations from the chat loop, labeled by the tool's URL, its feature type (function/web/workflow), and the outcome (ok/error)
+    kind: counter
+    otelName: microbus_llm_tool_calls
 
 functions:
   Chat:

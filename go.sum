@@ -87,12 +87,14 @@ github.com/microbus-io/boolexp v1.1.1 h1:dknhuJntBqzIYo2oktJb6dX4PxRKohfoV2W/x9E
 github.com/microbus-io/boolexp v1.1.1/go.mod h1:5JCOR68h4U+O7RFNbjfvS+4GbkBHt3TaHDYYwnGaHKI=
 github.com/microbus-io/copyrighter v1.4.0 h1:EucSuHMyUO1fb+0eVOAz9ORpygTfaQxz/LK4jumciJ4=
 github.com/microbus-io/copyrighter v1.4.0/go.mod h1:zk1Tt0nD2cI3NA1i6SHOCRgj7n02TZLyq6uHAMqLmXs=
+github.com/microbus-io/dwarf v0.8.2 h1:MXG7iY724j1tCqqI+oYk1vfJp8pS0PGYiq1+vbrXrnI=
+github.com/microbus-io/dwarf v0.8.2/go.mod h1:m8EndwB8SsAOCBNpGj3RRrwUWGH3oGyeToI8a2o9HHI=
 github.com/microbus-io/errors v1.0.1 h1:pujosfRSEqSJi0gcx6d+A7Mf2RZr2vQVMSQz0pG+wkM=
 github.com/microbus-io/errors v1.0.1/go.mod h1:NZTmmm+wxKQ8JFCeOMWWj+oqGylYsMKmS1YXysHZASM=
 github.com/microbus-io/pyvenv v1.0.3 h1:cG2NCba0p073Y1yn6A5YEEnklAhJisaHvbe5qQB9pRw=
 github.com/microbus-io/pyvenv v1.0.3/go.mod h1:V9nonAtqy+vkhZd3DSYyenJmvdsrf/YHJegc6kFkbQo=
-github.com/microbus-io/sequel v1.10.4 h1:b2+Gx2TnZUl3WAZ8EKyC3Snijcs6l1SEDy3/N5ZUJ3U=
-github.com/microbus-io/sequel v1.10.4/go.mod h1:uRHsZ2rPPrPDTCOHjDevDs59bu+MLWyyMBycRe9Rxy0=
+github.com/microbus-io/sequel v1.10.5 h1:LgRxg/9YY/51nYEyWpl4jKKw1yb1gqgpOSjI6gviUd4=
+github.com/microbus-io/sequel v1.10.5/go.mod h1:uRHsZ2rPPrPDTCOHjDevDs59bu+MLWyyMBycRe9Rxy0=
 github.com/microbus-io/testarossa v0.7.3 h1:CsLpfjFG1/+rl0FqT1jJpjBiXZBydEe7CZOnQWbob9A=
 github.com/microbus-io/testarossa v0.7.3/go.mod h1:VNzOPk+3EQSXb4bmV7ZXC1wOAOPKock3H/eYJqxUqBg=
 github.com/minio/highwayhash v1.0.4 h1:asJizugGgchQod2ja9NJlGOWq4s7KsAWr5XUc9Clgl4=
@@ -129,8 +131,8 @@ github.com/prometheus/common v0.69.0 h1:OA85nJQS/T/MaYh/Q2CcgDKSGWqNIgrBDvDH85Cu
 github.com/prometheus/common v0.69.0/go.mod h1:ZzL3f6u94qUxh9p+tJTrF+FvBS1XXbbRAZCQkytAL0Y=
 github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEoIwkU+A6qos=
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
-github.com/prometheus/procfs v0.20.1 h1:XwbrGOIplXW/AU3YhIhLODXMJYyC1isLFfYCsTEycfc=
-github.com/prometheus/procfs v0.20.1/go.mod h1:o9EMBZGRyvDrSPH1RqdxhojkuXstoe4UlK79eF5TGGo=
+github.com/prometheus/procfs v0.21.0 h1:Qh/e6TlBjZf+XLLqNCqFGmCU6Kj/2Bu7kj3oAc0UnXc=
+github.com/prometheus/procfs v0.21.0/go.mod h1:aB55Cww9pdSJVHk0hUf0inxWyyjPogFIjmHKYgMKmtY=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
