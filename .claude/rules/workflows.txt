@@ -106,7 +106,6 @@ Control signals on `Flow`:
 - `SetFanIn(name)` - mark a node (by PascalCase name) as the fan-in nexus where parallel branches converge. Mandatory whenever the graph fans out: every fan-out source (a node with 2+ normal outgoing transitions, or any `forEach` transition) must converge on a `SetFanIn` node, otherwise `Validate` rejects the graph (see [Fan-Out and Fan-In](#fan-out-and-fan-in)). `Switch` transitions do **not** count as fan-out and need no `SetFanIn`
 - `AddTransitionOnError(from, to)` - transition taken when the source task returns an error (see [Error Transitions](#error-transitions))
 - `SetReducer(field, reducer)` - attach a fan-in merge strategy to a state field (mandatory whenever a fan-in field needs anything other than last-write-wins; see Reducers below)
-- `Annotate(taskName, note)` - attach a short note that renders beneath the node in the Mermaid diagram (see [Annotating Tasks](#annotating-tasks) below)
 - `workflow.END` - pseudo-node indicating workflow termination
 
 **Reducers** control how state fields are merged at fan-in points. Every field that needs anything other than last-write-wins must be wired explicitly with `graph.SetReducer(field, reducer)` at graph-build time. Fields without a registered reducer use `Replace` (last write wins). State field names carry no hidden semantics - name them naturally (e.g. `messages`, `total`, `tags`) and attach the reducer separately.
@@ -246,7 +245,7 @@ Prefer in this order:
 2. **`AddTransitionWhen`** when the source genuinely **does** fan out under multiple matching conditions, or when one of the siblings is unconditional and represents a "do this in addition to" branch. `When` predicates are evaluated independently and any number of them can match - that's the right semantic for parallel work, the wrong one for routing. If you're writing two `AddTransitionWhen` calls whose predicates are intended to be mutually exclusive (`x>0` and `x<=0`), convert them to `Switch` so the validator enforces what you meant; non-exclusive `When` predicates are a footgun (both fire, you suddenly need `SetFanIn`).
 3. **`AddTransitionGoto`** only for runtime control-flow decisions the task body makes - loop-back from a fan-in node, "ask for more input then retry", LLM tool loops. `Goto` is invisible to the graph's structural rules (no lineage push/pop), so reach for it only when the branching condition is not a function of state that the graph could evaluate.
 
-In short: `Switch` is the new default for branching. Use `When` only for genuine fan-out, `Goto` only when the task body must decide at runtime.
+In short: `Switch` is the default for branching. Use `When` only for genuine fan-out, `Goto` only when the task body must decide at runtime.
 
 ## Error Transitions
 
@@ -324,7 +323,7 @@ if yield {
 
 **A step parks at most once per dispatch, interrupt XOR subgraph, never both and never two of the same kind.** Sequential side-trips are sequential tasks in the graph, not multiple parks in one task. The guard fires in two places: the `Flow` rejects a second park synchronously with an error from the parker; the foreman re-checks the returned flow after the task returns (trust boundary for a bypassed parker).
 
-**No auto-merge.** The child's `final_state` is returned to the calling task as `out`, not merged into the parent's state. This is the "scope state at the subgraph boundary" payoff: the parent picks fields explicitly with `flow.Set`, `flow.Transform`, or just plain Go code over `out`. Adapter tasks upstream or downstream of the subgraph are no longer required for the common case - the task itself does the reshape.
+**No auto-merge.** The child's `final_state` is returned to the calling task as `out`, not merged into the parent's state. This is the "scope state at the subgraph boundary" payoff: the parent picks fields explicitly with `flow.Set`, `flow.Transform`, or just plain Go code over `out`. The calling task does the reshape itself, so the common case needs no adapter task upstream or downstream of the subgraph.
 
 **Interrupts propagate up through the subgraph chain to the root flow.** A child subgraph can call `flow.Interrupt`; the foreman walks the surgraph chain up to the root, the external awaiter of the root flow sees the interrupt with the child's payload, and `Resume` propagates back down to the leaf. The parent's surgraph step stays parked across the whole interrupt/resume cycle; the parent task does **not** re-run for it. This is orthogonal to `subgraph_done` (interrupt rides the step status; `subgraph_done` flips only on terminal completion or failure).
 
@@ -482,29 +481,17 @@ bare name and subsequent ones get `_2`, `_3`, ... suffixes in argument order.
 
 ### Notes
 
-- **The `messages` boundary field.** Pre-v1.37.0 the field was named `listMessages` and the `list*`
-  prefix wired the reducer; v1.37.0 renamed it to `messages` with an explicit `SetReducer` inside
-  the subgraph. Parents that maintained a `listMessages` field need a one-time rename or a tiny
-  upstream task that calls `flow.Transform("messages", "listMessages")` (see "State Transformation
-  Around a Subgraph" above). The parent itself normally needs no reducer on `messages` - the
-  subgraph is the only contributor, so last-write-wins is correct. Only when the parent has
-  multiple branches that *also* write to `messages` and converge on a fan-in does the parent need
-  `graph.SetReducer("messages", workflow.ReducerAppend)`.
+- **The `messages` boundary field.** The conversation crosses the subgraph boundary as a field
+  named `messages`, with its `Append` reducer wired by an explicit `SetReducer` inside the subgraph.
+  The parent itself normally needs no reducer on `messages` - the subgraph is the only contributor,
+  so last-write-wins is correct. Only when the parent has multiple branches that *also* write to
+  `messages` and converge on a fan-in does the parent need
+  `graph.SetReducer("messages", workflow.ReducerAppend)`. If the parent carries the conversation
+  under a different field name, reshape it in an upstream task with
+  `flow.Transform("messages", "yourField")` (see "State Transformation Around a Subgraph" above).
 - **Mocking.** Mock the underlying provider's `Turn` (`claudellm.NewMock().MockTurn(handler)`,
   etc.) rather than mocking `ChatLoop` itself - the loop logic, tool dispatch, and usage
   aggregation stay real, and the test exercises the same code path as production.
-
-## Annotating Tasks
-
-`graph.Annotate(taskName, "short note")` attaches a note that renders as small teal text directly beneath the node in the Mermaid diagram. Use it to describe the **business meaning** of the step - what role it plays in the workflow's story - not what it does technically. The task name and the diagram already convey the implementation; the annotation is what makes the diagram readable as a business process to a non-engineer (or future-you six months later).
-
-Examples:
-
-- `"primes the conversation with the customer's question"`
-- `"decides if the model is done or needs more tools"`
-- `"records the approved amount and notifies the customer"`
-
-Skip annotations that restate the task name, describe diagram shape ("fan-out", "subgraph", "switch"), or list arguments. Annotations may be up to 30 words and wrap, so multi-sentence is fine when the meaning warrants it. Pass `""` to clear an existing annotation; re-annotating replaces.
 
 ## Best Practices
 

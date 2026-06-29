@@ -111,7 +111,8 @@ func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err 
 	graph.SetEndpoint("TaskB", myserviceapi.TaskB.URL())
 	graph.SetEndpoint("TaskC", myserviceapi.TaskC.URL())
 	// graph.AddTransition("TaskA", "TaskB")
-	// graph.AddTransitionWhen("TaskB", workflow.END, "done == true")
+	// graph.AddTransitionSwitch("TaskB", "TaskC", "score >= 50") // first-match-wins routing; end with a "true" arm for the default
+	// graph.AddTransitionSwitch("TaskB", workflow.END, "true")
 	// graph.AddTransitionGoto("TaskB", "TaskC")
 	return graph, nil
 }
@@ -137,9 +138,7 @@ graph.SetReducer("notes",    workflow.ReducerConcat) // join string deltas
 
 Pick the reducer by what the merge means, not by what the field is named. The default `Replace` is correct when only one branch ever writes the field.
 
-**Prefer `AddTransitionWhen` for routing the graph knows about; reserve `AddTransitionGoto` for runtime loops the task body decides.** A `When` transition is part of the static graph - the validator sees it, the Mermaid diagram renders it as a labeled branch, and lineage scoping handles it like any other fan-out. A `Goto` is an out-of-band edge that's only taken when the task calls `flow.Goto`. The canonical use for `Goto` is a fan-in node looping back ("ask for more info, retry the review"); for any branch a `When` expression can evaluate, prefer `When`.
-
-**Optionally annotate nodes with their business meaning.** `graph.Annotate("taskName", "short note")` adds a teal note beneath the node in the rendered Mermaid diagram, explaining what the step *does in business terms* (not how it's implemented). See the "Annotating Tasks" section of `.claude/rules/workflows.txt` for what makes a good annotation and what to skip.
+**Prefer `AddTransitionSwitch` > `AddTransitionWhen` > `AddTransitionGoto` for branching.** `AddTransitionSwitch` is the default for any routing where exactly one branch should run: siblings are first-match-wins in declaration order (use `when="true"` as the last arm for a default), the validator enforces mutual exclusivity, and no `SetFanIn` is needed because only one branch ever fires. Drop to `AddTransitionWhen` only when the source genuinely fans out under multiple independent predicates that may all match - that's parallel work, not routing, and it needs a matching `SetFanIn`. Two `When` predicates meant to be mutually exclusive (`x>0` and `x<=0`) should be a `Switch` so the validator enforces it. Reserve `AddTransitionGoto` for runtime control-flow the task body decides via `flow.Goto`, the canonical case being a fan-in node looping back ("ask for more info, retry the review"). The "Switch Transitions" and "When to choose Switch vs. When vs. Goto" sections in `.claude/rules/workflows.txt` carry the full rules.
 
 To embed this workflow as a subgraph from inside another task body, use the generated `Subgraph` client (`otherapi.NewSubgraph(flow).MyWorkflow(ctx, ...)`), never the `Executor` - the `Executor` is test-only.
 
