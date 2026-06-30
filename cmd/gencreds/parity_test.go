@@ -136,11 +136,11 @@ func TestScan_AllRealServices(t *testing.T) {
 }
 
 // allServiceDirs returns absolute paths to every service directory in
-// the repo's coreservices/ and examples/ trees. Skips testdata.
+// the repo's coreservices/ and exampleservices/ trees. Skips testdata.
 func allServiceDirs(t *testing.T) []string {
 	t.Helper()
 	var dirs []string
-	for _, sub := range []string{"coreservices", "examples"} {
+	for _, sub := range []string{"coreservices", "exampleservices"} {
 		root := repoPath(t, sub)
 		entries, err := os.ReadDir(root)
 		if err != nil {

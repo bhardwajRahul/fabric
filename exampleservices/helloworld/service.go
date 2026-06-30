@@ -1,0 +1,62 @@
+/*
+Copyright (c) 2023-2026 Microbus LLC and various contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package helloworld
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/microbus-io/errors"
+
+	"github.com/microbus-io/fabric/exampleservices/helloworld/helloworldapi"
+)
+
+var (
+	_ context.Context
+	_ *http.Request
+	_ time.Duration
+	_ *errors.TracedError
+	_ *helloworldapi.Client
+)
+
+/*
+Service implements the helloworld.example microservice.
+
+The HelloWorld microservice demonstrates the classic minimalist example.
+*/
+type Service struct {
+	*Intermediate // IMPORTANT: Do not remove
+}
+
+// OnStartup is called when the microservice is started up.
+func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	return nil
+}
+
+// OnShutdown is called when the microservice is shut down.
+func (svc *Service) OnShutdown(ctx context.Context) (err error) {
+	return nil
+}
+
+/*
+HelloWorld prints the classic greeting.
+*/
+func (svc *Service) HelloWorld(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: HelloWorld
+	w.Write([]byte("Hello, World!"))
+	return nil
+}

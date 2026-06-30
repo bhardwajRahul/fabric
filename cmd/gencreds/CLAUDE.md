@@ -224,7 +224,7 @@ It complements three other testing layers in this package:
   a scanner change is intentional. Review the diff in `git status`
   and commit. Without `-update`, drift fails the test.
 - **Smoke test across real services** (`parity_test.go` §
-  `TestScan_AllRealServices`) - every `coreservices/*` and `examples/*`
+  `TestScan_AllRealServices`) - every `coreservices/*` and `exampleservices/*`
   service must scan successfully, produce a non-empty rule set, and
   fit the budget.
 

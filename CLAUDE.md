@@ -4,7 +4,7 @@ This repository is the **Microbus framework** itself - the foundation that downs
 
 1. **Framework packages** - `connector/`, `service/`, `application/`, `transport/`, `frame/`, `httpx/`, `pub/`, `sub/`, `cfg/`, `env/`, `lru/`, `dlru/`, `mem/`, `openapi/`, `trc/`, `utils/`, `setup/`, `workflow/`. These are library code consumed by every Microbus application. Changes here affect all downstream projects.
 
-2. **Microservices built with the framework** - `coreservices/` and `examples/` contain microservices that follow the same conventions as any downstream application. When working in these directories, follow the patterns and skills described in `.claude/rules/microbus.md`.
+2. **Microservices built with the framework** - `coreservices/` and `exampleservices/` contain microservices that follow the same conventions as any downstream application. When working in these directories, follow the patterns and skills described in `.claude/rules/microbus.md`.
 
 ## Working on framework packages
 
@@ -12,9 +12,9 @@ This repository is the **Microbus framework** itself - the foundation that downs
 - **`connector/`** is the backbone - it implements the messaging bus, subscriptions, lifecycle, and configuration machinery that every microservice relies on.
 - **`service/`** builds on `connector/` to provide the higher-level `Service` base type with convenience methods (`LogInfo`, `DistribCache`, `Now`, etc.).
 - **`application/`** handles microservice orchestration, startup/shutdown sequencing, and the test harness (`RunInTest`).
-- **Tests** for framework packages are standard Go unit tests (`go test ./connector/...`), not the microservice integration test pattern used in `coreservices/` and `examples/`.
+- **Tests** for framework packages are standard Go unit tests (`go test ./connector/...`), not the microservice integration test pattern used in `coreservices/` and `exampleservices/`.
 
-## Working on coreservices/ and examples/
+## Working on coreservices/ and exampleservices/
 
 These directories contain microservices built using the framework. Treat them the same way you would treat microservices in a downstream application project:
 

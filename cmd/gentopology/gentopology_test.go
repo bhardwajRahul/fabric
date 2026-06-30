@@ -118,7 +118,7 @@ func TestRun_CheckMode_Clean(t *testing.T) {
 // TestDetectCloud_IgnoresCommentURLs verifies that URLs appearing only
 // in comments (the Apache license URL in the copyright header is the
 // canonical case) do not get reported as outbound dependencies. This
-// regression is what made httpegress and examples/browser show
+// regression is what made httpegress and exampleservices/browser show
 // "www.apache.org" as their cloud target despite never calling Apache.
 func TestDetectCloud_IgnoresCommentURLs(t *testing.T) {
 	t.Parallel()

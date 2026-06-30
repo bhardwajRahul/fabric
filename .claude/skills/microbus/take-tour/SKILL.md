@@ -28,12 +28,12 @@ Download the latest examples from Github.
 
 ```shell
 git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
-rm -rf examples
-cp -r temp-clone/examples .
+rm -rf exampleservices
+cp -r temp-clone/exampleservices .
 rm -rf temp-clone  
 ```
 
-The example files reference `github.com/microbus-io/fabric/examples/...` internally. Replace all those references with the local module path.
+The example files reference `github.com/microbus-io/fabric/exampleservices/...` internally. Replace all those references with the local module path.
 
 #### Step 2: Extend Main App
 
@@ -64,22 +64,22 @@ app.Add(
 )
 ```
 
-Add the appropriate imports too, again, replace all references to `github.com/microbus-io/fabric/examples/...` with the local module path.
+Add the appropriate imports too, again, replace all references to `github.com/microbus-io/fabric/exampleservices/...` with the local module path.
 
 ```go
 import (
-	"github.com/microbus-io/fabric/examples/browser"
-	"github.com/microbus-io/fabric/examples/petstore"
-	"github.com/microbus-io/fabric/examples/calculator"
-	"github.com/microbus-io/fabric/examples/chatbox"
-	"github.com/microbus-io/fabric/examples/creditflow"
-	"github.com/microbus-io/fabric/examples/yellowpages"
-	"github.com/microbus-io/fabric/examples/eventsink"
-	"github.com/microbus-io/fabric/examples/eventsource"
-	"github.com/microbus-io/fabric/examples/hello"
-	"github.com/microbus-io/fabric/examples/helloworld"
-	"github.com/microbus-io/fabric/examples/login"
-	"github.com/microbus-io/fabric/examples/messaging"
+	"github.com/microbus-io/fabric/exampleservices/browser"
+	"github.com/microbus-io/fabric/exampleservices/petstore"
+	"github.com/microbus-io/fabric/exampleservices/calculator"
+	"github.com/microbus-io/fabric/exampleservices/chatbox"
+	"github.com/microbus-io/fabric/exampleservices/creditflow"
+	"github.com/microbus-io/fabric/exampleservices/yellowpages"
+	"github.com/microbus-io/fabric/exampleservices/eventsink"
+	"github.com/microbus-io/fabric/exampleservices/eventsource"
+	"github.com/microbus-io/fabric/exampleservices/hello"
+	"github.com/microbus-io/fabric/exampleservices/helloworld"
+	"github.com/microbus-io/fabric/exampleservices/login"
+	"github.com/microbus-io/fabric/exampleservices/messaging"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/llm"
 	"github.com/microbus-io/fabric/coreservices/claudellm"

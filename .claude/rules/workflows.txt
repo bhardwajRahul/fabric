@@ -209,7 +209,7 @@ absent (or whatever the branch wrote) past the join.
 
 To reuse one task at two graph positions across a fan-in boundary (for example, fan in and then loop back), register
 the same task URL under two distinct names with `AddTask`; each name is a separate node with its own lineage scope. See
-`examples/creditflow/service.go` for a worked graph that combines fan-out/fan-in, `forEach`, subgraphs, goto loops, and
+`exampleservices/creditflow/service.go` for a worked graph that combines fan-out/fan-in, `forEach`, subgraphs, goto loops, and
 error transitions.
 
 ## Switch Transitions

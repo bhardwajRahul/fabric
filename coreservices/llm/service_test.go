@@ -47,8 +47,8 @@ import (
 	"github.com/microbus-io/fabric/coreservices/geminillm/geminillmapi"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
-	"github.com/microbus-io/fabric/examples/calculator"
-	"github.com/microbus-io/fabric/examples/calculator/calculatorapi"
+	"github.com/microbus-io/fabric/exampleservices/calculator"
+	"github.com/microbus-io/fabric/exampleservices/calculator/calculatorapi"
 )
 
 var (
