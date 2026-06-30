@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: TRIGGER when user asks to initialize, set up, or bootstrap a Microbus project. Creates main/main.go, config files, agent files, .gitignore, VS Code launch config, and authentication scaffolding.
+description: TRIGGER when user asks to initialize, set up, or bootstrap a Microbus project. Scaffolds main/main.go, config files, agent files, .gitignore, VS Code launch config, Claude Code permissions, and the token-signing key.
 ---
 
 **CRITICAL**: Do NOT explore or analyze the project unless explicitly instructed to do so. The instructions in this skill are self-contained.
@@ -12,14 +12,10 @@ Copy this checklist and track your progress:
 ```
 Initialize a project to use Microbus:
 - [ ] Step 1: Check if a Microbus project
-- [ ] Step 2: Prepare main package
-- [ ] Step 3: Prepare agent files
-- [ ] Step 4: Prepare config files
-- [ ] Step 5: Prepare env files
-- [ ] Step 6: Prepare git ignore
-- [ ] Step 7: Prepare VS Code launch
-- [ ] Step 8: Prepare Claude Code permissions
-- [ ] Step 9: Prepare authentication
+- [ ] Step 2: Download agent rules and skills
+- [ ] Step 3: Scaffold the project
+- [ ] Step 4: Verify the build
+- [ ] Step 5: Offer the tour
 ```
 
 #### Step 1: Check if a Microbus Project
@@ -28,145 +24,37 @@ If `go.mod` does not exist in the project directory, this is not a Go project. E
 
 If `go.mod` does not include a reference to `github.com/microbus-io/fabric`, this is not a Microbus project. Exit this workflow.
 
-#### Step 2: Prepare Main Package
+Note whether `main/main.go` already exists. If it does not, this is a **new install** - remember this for Step 5.
 
-Create the `main` directory in the root of the project if one does not exist.
+#### Step 2: Download Agent Rules and Skills
 
-```shell
-mkdir -p main
-```
-
-Create `main/main.go` the content of the template `main.go` located in the directory of this skill..
-If the file already exists, do not update it.
-
-Create `main/env.yaml` with the following verbatim.
-If the file already exists, prepend the content to the existing file unless already there.
-
-```yaml
-MICROBUS_DEPLOYMENT: LOCAL
-```
-
-#### Step 3: Prepare Agent Files
-
-Create `CLAUDE.md` at the root of the project with the following content.
-If the file already exists, prepend the content to the existing file unless it is already there.
-
-```md
-**CRITICAL**: This project uses the Microbus framework. Read all `.md` files in `.claude/rules/` before starting any task.
-```
-
-#### Step 4: Prepare Config Files
-
-Create `config.yaml` at the root of the project with the following content verbatim.
-If the file already exists, do not update it.
-
-```yaml
-all:
-  Example: value
-
-myservice.hostname:
-  Example: value
-```
-
-Create `config.local.yaml` at the root of the project with the following content verbatim.
-If the file already exists, do not update it.
-
-```yaml
-all:
-  ExampleSecret: secret value
-
-myservice.hostname:
-  ExampleSecret: secret value
-```
-
-#### Step 5: Prepare Env Files
-
-Create `env.yaml` and `env.local.yaml` at the root of the project the content of the template `env.yaml` located in the directory of this skill. If the files already exist, do not overwrite them.
-
-#### Step 6: Prepare Git Ignore
-
-Create `.gitignore` at the root of the project with the following content. If the file already exists, append the content to the existing file unless already there.
-
-```gitignore
-# Microbus
-*.local.*
-/main/main
-/main/__debug_bin*
-.DS_Store
-```
-
-#### Step 7: Prepare VS Code Launch
-
-Create `.vscode/launch.json` relative to the root of the project with the following content. If the file already exists, add the `Main` configuration to the existing file instead unless already there.
-
-```json
-{
-	// Use IntelliSense to learn about possible attributes.
-	// Hover to view descriptions of existing attributes.
-	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-	"version": "0.2.0",
-	"configurations": [
-		{
-			"name": "Main",
-			"type": "go",
-			"request": "launch",
-			"mode": "auto",
-			"program": "${workspaceFolder}/main",
-			"cwd": "${workspaceFolder}/main"
-		},
-	]
-}
-```
-
-#### Step 8: Prepare Claude Code Permissions
-
-Create `.claude/settings.json` relative to the root of the project with the following content. If the file already exists, merge the entries below into the existing `permissions.allow` array unless already there.
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(go run github.com/microbus-io/fabric/cmd/:*)",
-      "Bash(go vet:*)",
-      "Bash(go test:*)",
-      "Bash(go build:*)",
-      "Bash(go mod:*)",
-      "Bash(mkdir:*)",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep"
-    ]
-  }
-}
-```
-
-This auto-approves the Bash commands invoked by the `housekeeping` and `regenerate-boilerplate` skills, so an agent following them does not get prompted for each invocation. The file is project-shared and should be checked into git.
-
-**NOTE**: Writing `.claude/settings.json` adds permission allow-rules, which some harness safety modes
-classify as a self-modification and may block on the first attempt even though this skill instructs it.
-If the write is denied, surface the proposed contents to the user and ask them to approve it (or have
-them create the file), rather than trying to work around the denial. This step is a convenience to
-reduce permission prompts and is safe to skip if the user declines.
-
-#### Step 9: Prepare Authentication
-
-**IMPORTANT**: Read `.claude/rules/auth.txt` for authentication conventions before proceeding with this step.
-
-Generate an Ed25519 key and set it in `config.local.yaml` for the `PrivateKey` config of the `bearer.token.core` microservice.
+Copy the agent rules and skills from the pinned Microbus version already in the Go module cache. This is version-matched to `go.mod` and needs no network access. The module cache is read-only, so make the copies writable.
 
 ```shell
-openssl genpkey -algorithm Ed25519 -out private.pem
+src="$(go list -m -f '{{.Dir}}' github.com/microbus-io/fabric)"
+mkdir -p .claude
+cp -R "$src/.claude/rules" "$src/.claude/skills" .claude/
+chmod -R u+w .claude/rules .claude/skills
 ```
 
-```yaml
-bearer.token.core:
-  PrivateKey: MC4CAQAwBQYDK2VwBCIEILioh4C097ydAtppNWBMxO1hkewbzzmbGs1z7n9+OHnp
-```
+#### Step 3: Scaffold the Project
 
-After copying the base64 body of the key into `config.local.yaml`, delete `private.pem`. The canonical key lives in `config.local.yaml` (git-ignored); the `.pem` file is a throwaway intermediate. Do not leave it in the project root: it is the token-mint signing root, and anyone who reads it can mint access tokens with arbitrary claims.
+Run `geninit` to scaffold the project. It is idempotent: it creates `main/main.go`, `main/env.yaml`, `CLAUDE.md`, `config.yaml`, `config.local.yaml`, `env.yaml`, `env.local.yaml`, `.gitignore`, `.vscode/launch.json`, and `.claude/settings.json`, and generates a fresh Ed25519 token-signing key for `bearer.token.core` in `config.local.yaml`. Existing files are left intact.
 
 ```shell
-rm private.pem
+go run github.com/microbus-io/fabric/cmd/geninit
 ```
+
+`.claude/settings.json` auto-approves the Bash commands invoked by the `housekeeping` and `regenerate-boilerplate` skills, so an agent following them is not prompted for each invocation. The file is project-shared and should be checked into git.
+
+#### Step 4: Verify the Build
+
+Confirm the scaffolded project compiles.
+
+```shell
+go vet ./main/...
+```
+
+#### Step 5: Offer the Tour
+
+If this is a **new install** (from Step 1), tell the user the project is ready and offer to take the agent-guided tour, which runs the bundled example microservices. If they accept, follow the `take-tour` skill. If this is not a new install, skip this step.

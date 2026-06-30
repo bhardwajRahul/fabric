@@ -10,6 +10,7 @@ import (
 	"github.com/microbus-io/fabric/coreservices/accesstoken"
 	"github.com/microbus-io/fabric/coreservices/bearertoken"
 	"github.com/microbus-io/fabric/coreservices/configurator"
+	"github.com/microbus-io/fabric/coreservices/foreman"
 	"github.com/microbus-io/fabric/coreservices/httpegress"
 	"github.com/microbus-io/fabric/coreservices/httpingress"
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
@@ -42,6 +43,7 @@ func main() {
 			})
 			return nil
 		}),
+		foreman.NewService(),
 		// metrics.NewService(),
 	)
 	app.Add(

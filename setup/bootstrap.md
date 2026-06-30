@@ -48,17 +48,18 @@ go get github.com/microbus-io/fabric
 
 #### Step 5: Download Agent Rules and Skills
 
-Download the latest coding agent rules and skills from Github.
+Copy the coding agent rules and skills from the pinned Microbus version already in the Go module cache (from Step 4). This is version-matched to `go.mod` and needs no network access. The module cache is read-only, so make the copies writable.
 
 ```shell
-git clone --depth 1 https://github.com/microbus-io/fabric temp-clone
-cp -r temp-clone/.claude .
-rm -rf temp-clone
+src="$(go list -m -f '{{.Dir}}' github.com/microbus-io/fabric)"
+mkdir -p .claude
+cp -R "$src/.claude/rules" "$src/.claude/skills" .claude/
+chmod -R u+w .claude/rules .claude/skills
 ```
 
 #### Step 6: Init the Project
 
-Follow the `init-project` skill to initialize the project structure.
+Follow the `init-project` skill to scaffold the project structure, verify the build, and offer the tour.
 
 #### Step 7: Tidy up
 
