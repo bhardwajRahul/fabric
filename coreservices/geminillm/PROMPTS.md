@@ -15,12 +15,12 @@ Expose one endpoint:
    - `tool` messages: map to role `"user"` with a single `functionResponse` part, carrying the tool name (from `ToolCallID`) and the result as `map[string]any` (attempt JSON unmarshal; fall back to `{"result": content}`).
    - Default: pass role through with a text part.
 2. Convert `[]llmapi.Tool` to a `[]geminiToolDec` with a single entry containing all function declarations (name, description, parameters as `json.RawMessage`).
-3. POST to `svc.CompletionURL() + "/" + model + ":generateContent?key=" + svc.APIKey()`.
+3. POST to `svc.ModelsURL() + "/" + model + ":generateContent?key=" + svc.APIKey()`.
 4. On non-200 status, return an error with the status code and response body.
 5. Parse the first candidate's content parts: accumulate `text` parts, convert `functionCall` parts to `llmapi.ToolCall` (using the function name as both `ID` and `Name`).
 
 ### Config Properties
 
-- `CompletionURL` - Gemini models endpoint base URL (model and `:generateContent` appended per request), default `https://generativelanguage.googleapis.com/v1beta/models`, validated as URL.
+- `ModelsURL` - Gemini models endpoint base URL (model and action `:generateContent`/`:countTokens` appended per request), default `https://generativelanguage.googleapis.com/v1beta/models`, validated as URL.
 - `APIKey` - Google API key, `secret: true`.
 - `Model` - Gemini model identifier, default `gemini-2.0-flash`.

@@ -19,12 +19,12 @@ general:
   hostname: gemini.llm.core
   description: The Gemini LLM provider microservice implements the Turn endpoint for the Google Gemini API.
   package: github.com/microbus-io/fabric/coreservices/geminillm
-  modifiedAt: "2026-06-18T23:21:29Z"
+  modifiedAt: "2026-07-01T02:20:27Z"
 
 configs:
-  CompletionURL:
-    signature: CompletionURL() (value string)
-    description: CompletionURL is the base URL of the Gemini models endpoint; the model and generateContent action are appended per request.
+  ModelsURL:
+    signature: ModelsURL() (value string)
+    description: ModelsURL is the base URL of the Gemini models endpoint; the model and action (generateContent, countTokens) are appended per request.
     validation: url
     default: https://generativelanguage.googleapis.com/v1beta/models
   APIKey:

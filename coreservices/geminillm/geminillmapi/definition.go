@@ -32,13 +32,13 @@ const Hostname = "gemini.llm.core"
 const Name = "GeminiLLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 6
+const Version = 7
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The Gemini LLM provider microservice implements the Turn endpoint for the Google Gemini API.`
 
-// CompletionURL is the base URL of the Gemini models endpoint; the model and generateContent action are appended per request.
-var CompletionURL = define.Config{ // MARKER: CompletionURL
+// ModelsURL is the base URL of the Gemini models endpoint; the model and action (generateContent, countTokens) are appended per request.
+var ModelsURL = define.Config{ // MARKER: ModelsURL
 	Value:      string(""),
 	Default:    "https://generativelanguage.googleapis.com/v1beta/models",
 	Validation: "url",

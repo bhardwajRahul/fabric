@@ -50,7 +50,7 @@ func (svc *Service) countInputTokens(ctx context.Context, model string, reqBody 
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	apiURL := svc.CompletionURL() + "/" + model + ":countTokens?key=" + svc.APIKey()
+	apiURL := svc.ModelsURL() + "/" + model + ":countTokens?key=" + svc.APIKey()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -289,7 +289,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
-	apiURL := svc.CompletionURL() + "/" + model + ":generateContent?key=" + svc.APIKey()
+	apiURL := svc.ModelsURL() + "/" + model + ":generateContent?key=" + svc.APIKey()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)

@@ -87,9 +87,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the Gemini provider.`),
 		sub.Function(geminillmapi.TurnIn{}, geminillmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: CompletionURL
-		"CompletionURL",
-		cfg.Description(`CompletionURL is the base URL of the Gemini models endpoint; the model and generateContent action are appended per request.`),
+	svc.DefineConfig( // MARKER: ModelsURL
+		"ModelsURL",
+		cfg.Description(`ModelsURL is the base URL of the Gemini models endpoint; the model and action (generateContent, countTokens) are appended per request.`),
 		cfg.DefaultValue(`https://generativelanguage.googleapis.com/v1beta/models`),
 		cfg.Validation(`url`),
 	)
@@ -140,14 +140,14 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	return err // No trace
 }
 
-// CompletionURL is the base URL of the Gemini models endpoint; the model and generateContent action are appended per request.
-func (svc *Intermediate) CompletionURL() (value string) { // MARKER: CompletionURL
-	return svc.Config("CompletionURL")
+// ModelsURL is the base URL of the Gemini models endpoint; the model and action (generateContent, countTokens) are appended per request.
+func (svc *Intermediate) ModelsURL() (value string) { // MARKER: ModelsURL
+	return svc.Config("ModelsURL")
 }
 
-// SetCompletionURL sets the value of the configuration property.
-func (svc *Intermediate) SetCompletionURL(value string) (err error) { // MARKER: CompletionURL
-	return svc.SetConfig("CompletionURL", value)
+// SetModelsURL sets the value of the configuration property.
+func (svc *Intermediate) SetModelsURL(value string) (err error) { // MARKER: ModelsURL
+	return svc.SetConfig("ModelsURL", value)
 }
 
 // APIKey is the API key for the Gemini API.
