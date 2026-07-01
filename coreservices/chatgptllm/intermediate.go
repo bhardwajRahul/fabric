@@ -87,10 +87,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the ChatGPT provider.`),
 		sub.Function(chatgptllmapi.TurnIn{}, chatgptllmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: CompletionURL
-		"CompletionURL",
-		cfg.Description(`CompletionURL is the URL of the OpenAI chat completions endpoint.`),
-		cfg.DefaultValue(`https://api.openai.com/v1/chat/completions`),
+	svc.DefineConfig( // MARKER: ResponsesURL
+		"ResponsesURL",
+		cfg.Description(`ResponsesURL is the URL of the OpenAI responses endpoint.`),
+		cfg.DefaultValue(`https://api.openai.com/v1/responses`),
 		cfg.Validation(`url`),
 	)
 	svc.DefineConfig( // MARKER: APIKey
@@ -140,14 +140,14 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	return err // No trace
 }
 
-// CompletionURL is the URL of the OpenAI chat completions endpoint.
-func (svc *Intermediate) CompletionURL() (value string) { // MARKER: CompletionURL
-	return svc.Config("CompletionURL")
+// ResponsesURL is the URL of the OpenAI responses endpoint.
+func (svc *Intermediate) ResponsesURL() (value string) { // MARKER: ResponsesURL
+	return svc.Config("ResponsesURL")
 }
 
-// SetCompletionURL sets the value of the configuration property.
-func (svc *Intermediate) SetCompletionURL(value string) (err error) { // MARKER: CompletionURL
-	return svc.SetConfig("CompletionURL", value)
+// SetResponsesURL sets the value of the configuration property.
+func (svc *Intermediate) SetResponsesURL(value string) (err error) { // MARKER: ResponsesURL
+	return svc.SetConfig("ResponsesURL", value)
 }
 
 // APIKey is the API key for the OpenAI API.

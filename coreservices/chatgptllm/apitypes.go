@@ -18,56 +18,71 @@ package chatgptllm
 
 import "encoding/json"
 
+// openaiRequest is the body of a POST to the OpenAI Responses API (/v1/responses).
 type openaiRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openaiMessage `json:"messages"`
-	Tools       []openaiTool    `json:"tools,omitzero"`
-	MaxTokens   int             `json:"max_tokens,omitzero"`
-	Temperature float64         `json:"temperature,omitzero"`
+	Model           string            `json:"model"`
+	Input           []openaiInputItem `json:"input"`
+	Instructions    string            `json:"instructions,omitzero"`
+	Tools           []openaiTool      `json:"tools,omitzero"`
+	MaxOutputTokens int               `json:"max_output_tokens,omitzero"`
+	Temperature     float64           `json:"temperature,omitzero"`
 }
 
-type openaiMessage struct {
-	Role       string           `json:"role"`
-	Content    string           `json:"content,omitzero"`
-	ToolCalls  []openaiToolCall `json:"tool_calls,omitzero"`
-	ToolCallID string           `json:"tool_call_id,omitzero"`
+// openaiInputItem is one item in the Responses request input array. The Responses API represents an
+// assistant tool call and its result as distinct items (function_call, function_call_output), rather
+// than as tool_calls/tool_call_id fields on chat messages.
+type openaiInputItem struct {
+	Type    string          `json:"type"`               // message, function_call, function_call_output
+	Role    string          `json:"role,omitzero"`      // message items only
+	Content []openaiContent `json:"content,omitzero"`   // message items only
+	CallID  string          `json:"call_id,omitzero"`   // function_call, function_call_output
+	Name    string          `json:"name,omitzero"`      // function_call
+	Args    string          `json:"arguments,omitzero"` // function_call
+	Output  string          `json:"output,omitzero"`    // function_call_output
+}
+
+// openaiContent is a typed content part of a message item. Input text uses input_text; assistant text
+// echoed back uses output_text.
+type openaiContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 type openaiTool struct {
-	Type     string         `json:"type"`
-	Function openaiFunction `json:"function"`
-}
-
-type openaiFunction struct {
+	Type        string          `json:"type"` // function
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitzero"`
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
-type openaiToolCall struct {
-	ID       string         `json:"id"`
-	Type     string         `json:"type"`
-	Function openaiCallFunc `json:"function"`
-}
-
-type openaiCallFunc struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
+// openaiResponse is the body of a Responses API completion.
 type openaiResponse struct {
-	Choices []struct {
-		Message      openaiMessage `json:"message"`
-		FinishReason string        `json:"finish_reason"`
-	} `json:"choices"`
+	Output            []openaiOutputItem `json:"output"`
+	Status            string             `json:"status"` // completed, incomplete
+	IncompleteDetails struct {
+		Reason string `json:"reason"`
+	} `json:"incomplete_details"`
 	Model string      `json:"model"`
 	Usage openaiUsage `json:"usage"`
 }
 
+// openaiOutputItem is one item in the Responses output array. Text lives in message items (content
+// parts of type output_text); tool calls are function_call items correlated by call_id.
+type openaiOutputItem struct {
+	Type    string          `json:"type"` // message, function_call, reasoning
+	Content []openaiContent `json:"content,omitzero"`
+	CallID  string          `json:"call_id,omitzero"`
+	Name    string          `json:"name,omitzero"`
+	Args    string          `json:"arguments,omitzero"`
+}
+
 type openaiUsage struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	PromptTokensDetails struct {
+	InputTokens        int `json:"input_tokens"`
+	OutputTokens       int `json:"output_tokens"`
+	InputTokensDetails struct {
 		CachedTokens int `json:"cached_tokens"`
-	} `json:"prompt_tokens_details"`
+	} `json:"input_tokens_details"`
+	OutputTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"output_tokens_details"`
 }

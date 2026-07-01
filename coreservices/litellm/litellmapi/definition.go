@@ -32,15 +32,15 @@ const Hostname = "lite.llm.core"
 const Name = "LiteLLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 1
+const Version = 2
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
-const Description = `The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Chat Completions wire format.`
+const Description = `The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Responses wire format.`
 
-// CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
-var CompletionURL = define.Config{ // MARKER: CompletionURL
+// ResponsesURL is the URL of the LiteLLM proxy responses endpoint.
+var ResponsesURL = define.Config{ // MARKER: ResponsesURL
 	Value:      string(""),
-	Default:    "http://localhost:4000/v1/chat/completions",
+	Default:    "http://localhost:4000/v1/responses",
 	Validation: "url",
 }
 
@@ -66,7 +66,8 @@ type TurnIn struct { // MARKER: Turn
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content   string            `json:"content,omitzero"`
-	ToolCalls []llmapi.ToolCall `json:"toolCalls,omitzero"`
-	Usage     llmapi.Usage      `json:"usage,omitzero"`
+	Content    string            `json:"content,omitzero"`
+	ToolCalls  []llmapi.ToolCall `json:"toolCalls,omitzero"`
+	StopReason string            `json:"stopReason,omitzero"`
+	Usage      llmapi.Usage      `json:"usage,omitzero"`
 }

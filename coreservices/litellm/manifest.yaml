@@ -17,16 +17,16 @@
 general:
   name: LiteLLM
   hostname: lite.llm.core
-  description: The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Chat Completions wire format.
+  description: The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Responses wire format.
   package: github.com/microbus-io/fabric/coreservices/litellm
-  modifiedAt: "2026-06-18T23:21:29Z"
+  modifiedAt: "2026-07-01T02:14:58Z"
 
 configs:
-  CompletionURL:
-    signature: CompletionURL() (value string)
-    description: CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
+  ResponsesURL:
+    signature: ResponsesURL() (value string)
+    description: ResponsesURL is the URL of the LiteLLM proxy responses endpoint.
     validation: url
-    default: http://localhost:4000/v1/chat/completions
+    default: http://localhost:4000/v1/responses
   APIKey:
     signature: APIKey() (value string)
     description: APIKey is the virtual key for the LiteLLM proxy.
@@ -34,7 +34,7 @@ configs:
 
 functions:
   Turn:
-    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage)
+    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage)
     description: Turn executes a single LLM turn through the LiteLLM proxy.
     method: POST
     route: :444/turn

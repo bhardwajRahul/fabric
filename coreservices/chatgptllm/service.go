@@ -80,7 +80,7 @@ var (
 /*
 Service implements the chatgpt.llm.core microservice.
 
-The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Chat Completions API.
+The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Responses API.
 */
 type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
@@ -134,53 +134,71 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 
-	// Convert messages
-	oaiMsgs := make([]openaiMessage, 0, len(messages))
+	// Convert messages to Responses input items. System messages fold into the top-level instructions;
+	// an assistant tool call and its result become distinct function_call / function_call_output items.
+	var instructions string
+	oaiInput := make([]openaiInputItem, 0, len(messages))
 	for _, msg := range messages {
-		oaiMsg := openaiMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-		}
-		if msg.Role == "assistant" && msg.ToolCalls != "" {
-			var tcs []llmapi.ToolCall
-			json.Unmarshal([]byte(msg.ToolCalls), &tcs)
-			for _, tc := range tcs {
-				oaiMsg.ToolCalls = append(oaiMsg.ToolCalls, openaiToolCall{
-					ID:   tc.ID,
-					Type: "function",
-					Function: openaiCallFunc{
-						Name:      tc.Name,
-						Arguments: string(tc.Arguments),
-					},
+		switch msg.Role {
+		case "system":
+			if instructions != "" {
+				instructions += "\n\n"
+			}
+			instructions += msg.Content
+		case "tool":
+			oaiInput = append(oaiInput, openaiInputItem{
+				Type:   "function_call_output",
+				CallID: msg.ToolCallID,
+				Output: msg.Content,
+			})
+		case "assistant":
+			if msg.Content != "" {
+				oaiInput = append(oaiInput, openaiInputItem{
+					Type:    "message",
+					Role:    "assistant",
+					Content: []openaiContent{{Type: "output_text", Text: msg.Content}},
 				})
 			}
+			if msg.ToolCalls != "" {
+				var tcs []llmapi.ToolCall
+				json.Unmarshal([]byte(msg.ToolCalls), &tcs)
+				for _, tc := range tcs {
+					oaiInput = append(oaiInput, openaiInputItem{
+						Type:   "function_call",
+						CallID: tc.ID,
+						Name:   tc.Name,
+						Args:   string(tc.Arguments),
+					})
+				}
+			}
+		default:
+			oaiInput = append(oaiInput, openaiInputItem{
+				Type:    "message",
+				Role:    msg.Role,
+				Content: []openaiContent{{Type: "input_text", Text: msg.Content}},
+			})
 		}
-		if msg.Role == "tool" {
-			oaiMsg.ToolCallID = msg.ToolCallID
-		}
-		oaiMsgs = append(oaiMsgs, oaiMsg)
 	}
 
-	// Convert tools
+	// Convert tools. Responses uses a flat function shape (no {type,function:{...}} wrapper).
 	var oaiTools []openaiTool
 	for _, t := range tools {
 		oaiTools = append(oaiTools, openaiTool{
-			Type: "function",
-			Function: openaiFunction{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  t.InputSchema,
-			},
+			Type:        "function",
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  t.InputSchema,
 		})
 	}
 
 	reqBody := openaiRequest{
-		Model:    model,
-		Messages: oaiMsgs,
-		Tools:    oaiTools,
+		Model:        model,
+		Input:        oaiInput,
+		Instructions: instructions,
+		Tools:        oaiTools,
 	}
 	if options != nil {
-		reqBody.MaxTokens = options.MaxTokens
+		reqBody.MaxOutputTokens = options.MaxTokens
 		reqBody.Temperature = options.Temperature
 	}
 
@@ -189,7 +207,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
-	apiURL := svc.CompletionURL()
+	apiURL := svc.ResponsesURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
@@ -256,66 +274,80 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
-	if len(oaiResp.Choices) > 0 {
-		choice := oaiResp.Choices[0].Message
-		content = choice.Content
-		for _, tc := range choice.ToolCalls {
+	// Walk the output items: text lives in message items (output_text content parts), tool calls are
+	// function_call items correlated by call_id.
+	var textParts []string
+	for _, item := range oaiResp.Output {
+		switch item.Type {
+		case "message":
+			for _, part := range item.Content {
+				if part.Type == "output_text" {
+					textParts = append(textParts, part.Text)
+				}
+			}
+		case "function_call":
 			toolCalls = append(toolCalls, llmapi.ToolCall{
-				ID:        tc.ID,
-				Name:      tc.Function.Name,
-				Arguments: json.RawMessage(tc.Function.Arguments),
+				ID:        item.CallID,
+				Name:      item.Name,
+				Arguments: json.RawMessage(item.Args),
 			})
 		}
-		stopReason = mapFinishReason(oaiResp.Choices[0].FinishReason)
 	}
+	content = strings.Join(textParts, "")
+	stopReason = mapStopReason(oaiResp.Status, oaiResp.IncompleteDetails.Reason, len(toolCalls) > 0)
 
 	// No content and no tool calls is the smoking-gun shape behind downstream "LLM returned no
-	// final assistant content" errors - typically an empty choices array from a content-filter
-	// prompt block, which otherwise surfaces only as an opaque unknown-stop-reason 502. Logged at
+	// final assistant content" errors - typically an incomplete response from a content-filter
+	// block, which otherwise surfaces only as an opaque unknown-stop-reason 502. Logged at
 	// debug with the raw body so the cause is visible under MICROBUS_LOG_DEBUG=1.
 	if content == "" && len(toolCalls) == 0 {
-		finishReason := ""
-		if len(oaiResp.Choices) > 0 {
-			finishReason = oaiResp.Choices[0].FinishReason
-		}
 		svc.LogDebug(ctx, "OpenAI returned no content and no tool calls",
 			"model", model,
-			"finishReason", finishReason,
+			"status", oaiResp.Status,
+			"incompleteReason", oaiResp.IncompleteDetails.Reason,
 			"stopReason", stopReason,
 			"rawBody", string(rawBody),
 		)
 	}
 
-	cachedTokens := oaiResp.Usage.PromptTokensDetails.CachedTokens
+	cachedTokens := oaiResp.Usage.InputTokensDetails.CachedTokens
 	usage = llmapi.Usage{
-		InputTokens:     oaiResp.Usage.PromptTokens - cachedTokens,
-		OutputTokens:    oaiResp.Usage.CompletionTokens,
+		InputTokens:     oaiResp.Usage.InputTokens - cachedTokens,
+		OutputTokens:    oaiResp.Usage.OutputTokens,
+		ThinkingTokens:  oaiResp.Usage.OutputTokensDetails.ReasoningTokens,
 		CacheReadTokens: cachedTokens,
 		Model:           oaiResp.Model,
 		Turns:           1,
 	}
 	if usage.InputTokens < 0 {
-		usage.InputTokens = oaiResp.Usage.PromptTokens
+		usage.InputTokens = oaiResp.Usage.InputTokens
 		usage.CacheReadTokens = 0
 	}
 
 	return content, toolCalls, stopReason, usage, nil
 }
 
-// mapFinishReason translates OpenAI's finish_reason field to the normalized llmapi value.
-// The OpenAI Chat Completions API documents stop, tool_calls, length, content_filter, and
-// function_call (legacy alias for tool_calls). An empty or unrecognized value is reported
-// as Unknown so callers surface it instead of treating it as a completion.
-func mapFinishReason(s string) string {
-	switch s {
-	case "stop":
+// mapStopReason derives the normalized llmapi stop reason from the Responses API result. The
+// Responses API has no single finish_reason: a completed turn that emitted function_call items is a
+// tool-use turn, an otherwise-completed turn is an end-turn, and an incomplete turn carries its cause
+// in incomplete_details.reason (max_output_tokens, content_filter). Anything else is reported as
+// Unknown so callers surface it instead of treating it as a completion.
+func mapStopReason(status, incompleteReason string, hasToolCalls bool) string {
+	switch status {
+	case "completed":
+		if hasToolCalls {
+			return llmapi.StopReasonToolUse
+		}
 		return llmapi.StopReasonEndTurn
-	case "tool_calls", "function_call":
-		return llmapi.StopReasonToolUse
-	case "length":
-		return llmapi.StopReasonMaxTokens
-	case "content_filter":
-		return llmapi.StopReasonRefusal
+	case "incomplete":
+		switch incompleteReason {
+		case "max_output_tokens":
+			return llmapi.StopReasonMaxTokens
+		case "content_filter":
+			return llmapi.StopReasonRefusal
+		default:
+			return llmapi.StopReasonUnknown
+		}
 	default:
 		return llmapi.StopReasonUnknown
 	}

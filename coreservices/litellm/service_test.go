@@ -82,9 +82,9 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 
 		httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
-			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
+			if strings.Contains(req.URL.String(), "/v1/responses") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Hello from LiteLLM!"}}],"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":5}}`))
+				w.Write([]byte(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello from LiteLLM!"}]}],"status":"completed","model":"gpt-4o","usage":{"input_tokens":10,"output_tokens":5}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -93,10 +93,11 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		content, toolCalls, usage, err := client.Turn(ctx, "gpt-4o", messages, nil, nil)
+		content, toolCalls, stopReason, usage, err := client.Turn(ctx, "gpt-4o", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(content, "Hello from LiteLLM!")
 			assert.Expect(len(toolCalls), 0)
+			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.Expect(usage.OutputTokens, 5)
 			assert.Expect(usage.Turns, 1)
 		}
@@ -107,9 +108,9 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 
 		httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
-			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
+			if strings.Contains(req.URL.String(), "/v1/responses") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}}]}}],"model":"gpt-4o","usage":{"prompt_tokens":15,"completion_tokens":8}}`))
+				w.Write([]byte(`{"output":[{"type":"function_call","call_id":"call_1","name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}],"status":"completed","model":"gpt-4o","usage":{"input_tokens":15,"output_tokens":8}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -118,10 +119,11 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 		defer httpEgressMock.MockMakeRequest(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 10 - 3?"}}
-		_, toolCalls, _, err := client.Turn(ctx, "gpt-4o", messages, nil, nil)
+		_, toolCalls, stopReason, _, err := client.Turn(ctx, "gpt-4o", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(toolCalls), 1)
 			assert.Expect(toolCalls[0].Name, "Arithmetic")
+			assert.Expect(stopReason, llmapi.StopReasonToolUse)
 		}
 	})
 }

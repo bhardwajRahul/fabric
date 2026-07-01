@@ -1,42 +1,63 @@
 ## Design Rationale
 
-This microservice implements the `Turn` endpoint for the ChatGPT LLM provider. It translates between the Microbus LLM message format and the OpenAI Chat Completions API format, handling tool_calls on assistant messages and tool_call_id on tool result messages.
+This microservice implements the `Turn` endpoint for the ChatGPT LLM provider. It translates between the Microbus LLM message format and the OpenAI Responses API (`/v1/responses`) format.
+
+### Why the Responses API
+
+The provider targets the Responses API rather than the older Chat Completions API. The two are wire-incompatible in three
+places that the translation layer bridges, all internal to this microservice - the `Turn` contract (the `llmapi` types
+crossing the bus) is unchanged, so nothing downstream is affected:
+
+- **Conversation shape.** Chat Completions carries everything in a flat `messages` array where an assistant tool call is a
+  `tool_calls` field and its result is a `role:"tool"` message keyed by `tool_call_id`. Responses uses an `input` array of
+  typed items: a text turn is a `message` item (with `content` parts of type `input_text` for user text, `output_text` for
+  assistant text echoed back), a tool call is a `function_call` item, and a tool result is a `function_call_output` item.
+  Calls and results are correlated by `call_id` rather than by message adjacency. The Microbus `Message` list is flattened
+  into these items in `Turn`: a `system` message folds into the top-level `instructions` string, an `assistant` message
+  with `ToolCalls` expands into one `function_call` item per call, and a `tool` message becomes a `function_call_output`.
+- **Tools.** Responses drops the `{type:"function", function:{...}}` wrapper - the function's `name`, `description`, and
+  `parameters` sit flat on the tool object.
+- **Response walk.** There are no `choices`; the response is an `output` array of typed items. Text is gathered from
+  `output_text` content parts of `message` items and joined; tool calls are read from `function_call` items (their `call_id`
+  becomes `ToolCall.ID`). `reasoning` items are ignored.
+
+`max_tokens` is renamed `max_output_tokens`.
 
 The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"gpt-5.4-mini"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `mini` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
 
-`Turn` populates `llmapi.Usage` from the OpenAI `usage` block. OpenAI reports `prompt_tokens` and `completion_tokens` plus `prompt_tokens_details.cached_tokens`. We map the cached portion to `CacheReadTokens` and report the remainder as `InputTokens`. OpenAI does not expose write counts so `CacheWriteTokens` is left at zero.
+`Turn` populates `llmapi.Usage` from the Responses `usage` block. Responses reports `input_tokens` and `output_tokens` plus `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens`. The cached portion maps to `CacheReadTokens` with the remainder reported as `InputTokens`; `reasoning_tokens` maps to `ThinkingTokens` (the reasoning subset of `OutputTokens`, populated for GPT-5-class reasoning models and zero otherwise). Responses does not expose write counts so `CacheWriteTokens` is left at zero.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
 
 ## Empty Response Diagnostics
 
 When a turn returns no text and no tool calls, the provider emits a `Debug` log with the model,
-finishReason, normalized stopReason, and the raw response body (enable via `MICROBUS_LOG_DEBUG=1`).
-The common cause is OpenAI returning HTTP 200 with an empty `choices` array - a prompt-level
-content-filter block. Without this, the empty response falls through to `stopReason == ""`
-(`StopReasonUnknown`) and surfaces only as an opaque `502 unknown stop reason` at `llm.core`,
-masking the real cause. The raw body is the load-bearing field: a content-filter block carries its
-reason there. This mirrors the same diagnostic in the Gemini provider so the three providers behave
-alike on the no-content shape. The response body is read into a buffer (`io.ReadAll`) before
-decoding so it is available to log.
+response `status`, `incomplete_details.reason`, normalized stopReason, and the raw response body
+(enable via `MICROBUS_LOG_DEBUG=1`). The common cause is an `incomplete` response with a
+content-filter reason, or a completed turn whose `output` array carried only a `reasoning` item.
+Without this, the empty response falls through to `stopReason == ""` (`StopReasonUnknown`) and
+surfaces only as an opaque `502 unknown stop reason` at `llm.core`, masking the real cause. The raw
+body is the load-bearing field. This mirrors the same diagnostic in the Gemini provider so the three
+providers behave alike on the no-content shape. The response body is read into a buffer (`io.ReadAll`)
+before decoding so it is available to log.
 
 ## Stop-Reason Mapping
 
-`Turn` returns a normalized `stopReason` (constants in `llmapi/stopreason.go`). `mapFinishReason`
-in `service.go` translates OpenAI's `finish_reason` field:
+`Turn` returns a normalized `stopReason` (constants in `llmapi/stopreason.go`). The Responses API has
+no single `finish_reason` field, so `mapStopReason` in `service.go` derives it from the top-level
+`status`, `incomplete_details.reason`, and whether any `function_call` items were emitted:
 
-| OpenAI                        | Normalized                  |
-|-------------------------------|-----------------------------|
-| `stop`                        | `StopReasonEndTurn`         |
-| `tool_calls` / `function_call`| `StopReasonToolUse`         |
-| `length`                      | `StopReasonMaxTokens`       |
-| `content_filter`              | `StopReasonRefusal`         |
-| `""` / anything else          | `StopReasonUnknown`         |
+| Responses `status` / `incomplete_details.reason` | Normalized            |
+|--------------------------------------------------|-----------------------|
+| `completed` with `function_call` items           | `StopReasonToolUse`   |
+| `completed`, no tool calls                        | `StopReasonEndTurn`   |
+| `incomplete` / `max_output_tokens`               | `StopReasonMaxTokens` |
+| `incomplete` / `content_filter`                   | `StopReasonRefusal`   |
+| anything else                                     | `StopReasonUnknown`   |
 
-OpenAI doesn't carry a separate `stop_sequence` finish reason — both natural end and hitting a
-configured stop string surface as `stop`, so both map to `StopReasonEndTurn`. `function_call` is
-the legacy alias for `tool_calls`; we map it to the same value for the older models that still
-emit it.
+Tool use is inferred from the presence of `function_call` items on an otherwise-completed turn rather
+than from a distinct status. Responses has no separate `stop_sequence` reason - a natural end and a
+configured stop string both surface as `completed`, so both map to `StopReasonEndTurn`.
 
 `llm.core` interprets these — see `coreservices/llm/CLAUDE.md` "Stop-Reason Branching". An empty or
 unrecognized value reaches `llm.core` as `StopReasonUnknown` and surfaces as a `502` rather than as

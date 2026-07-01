@@ -43,7 +43,7 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) // MARKER: Turn
+	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 }
 
 // NewService creates a new instance of the microservice.
@@ -87,10 +87,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn through the LiteLLM proxy.`),
 		sub.Function(litellmapi.TurnIn{}, litellmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: CompletionURL
-		"CompletionURL",
-		cfg.Description(`CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.`),
-		cfg.DefaultValue(`http://localhost:4000/v1/chat/completions`),
+	svc.DefineConfig( // MARKER: ResponsesURL
+		"ResponsesURL",
+		cfg.Description(`ResponsesURL is the URL of the LiteLLM proxy responses endpoint.`),
+		cfg.DefaultValue(`http://localhost:4000/v1/responses`),
 		cfg.Validation(`url`),
 	)
 	svc.DefineConfig( // MARKER: APIKey
@@ -134,20 +134,20 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in litellmapi.TurnIn
 	var out litellmapi.TurnOut
 	err = marshalFunction(w, r, litellmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Content, out.ToolCalls, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
+		out.Content, out.ToolCalls, out.StopReason, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace
 }
 
-// CompletionURL is the URL of the LiteLLM proxy chat completions endpoint.
-func (svc *Intermediate) CompletionURL() (value string) { // MARKER: CompletionURL
-	return svc.Config("CompletionURL")
+// ResponsesURL is the URL of the LiteLLM proxy responses endpoint.
+func (svc *Intermediate) ResponsesURL() (value string) { // MARKER: ResponsesURL
+	return svc.Config("ResponsesURL")
 }
 
-// SetCompletionURL sets the value of the configuration property.
-func (svc *Intermediate) SetCompletionURL(value string) (err error) { // MARKER: CompletionURL
-	return svc.SetConfig("CompletionURL", value)
+// SetResponsesURL sets the value of the configuration property.
+func (svc *Intermediate) SetResponsesURL(value string) (err error) { // MARKER: ResponsesURL
+	return svc.SetConfig("ResponsesURL", value)
 }
 
 // APIKey is the virtual key for the LiteLLM proxy.

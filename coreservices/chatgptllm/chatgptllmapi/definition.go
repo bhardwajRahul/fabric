@@ -32,15 +32,15 @@ const Hostname = "chatgpt.llm.core"
 const Name = "ChatGPTLLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 4
+const Version = 5
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
-const Description = `The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Chat Completions API.`
+const Description = `The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Responses API.`
 
-// CompletionURL is the URL of the OpenAI chat completions endpoint.
-var CompletionURL = define.Config{ // MARKER: CompletionURL
+// ResponsesURL is the URL of the OpenAI responses endpoint.
+var ResponsesURL = define.Config{ // MARKER: ResponsesURL
 	Value:      string(""),
-	Default:    "https://api.openai.com/v1/chat/completions",
+	Default:    "https://api.openai.com/v1/responses",
 	Validation: "url",
 }
 

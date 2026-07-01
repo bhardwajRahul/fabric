@@ -148,20 +148,20 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 }
 
 // Turn executes a single LLM turn through the LiteLLM proxy.
-func (_c Client) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+func (_c Client) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
-	return _out.Content, _out.ToolCalls, _out.Usage, err // No trace
+	return _out.Content, _out.ToolCalls, _out.StopReason, _out.Usage, err // No trace
 }
 
 // TurnResponse packs the response of Turn.
 type TurnResponse multicastResponse // MARKER: Turn
 
 // Get unpacks the return arguments of Turn.
-func (_res *TurnResponse) Get() (content string, toolCalls []llmapi.ToolCall, usage llmapi.Usage, err error) { // MARKER: Turn
+func (_res *TurnResponse) Get() (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	_d := _res.data.(*TurnOut)
-	return _d.Content, _d.ToolCalls, _d.Usage, _res.err
+	return _d.Content, _d.ToolCalls, _d.StopReason, _d.Usage, _res.err
 }
 
 // Turn executes a single LLM turn through the LiteLLM proxy.

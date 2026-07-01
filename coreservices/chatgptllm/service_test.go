@@ -19,6 +19,7 @@ package chatgptllm
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -82,9 +83,9 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 
 		httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
-			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
+			if strings.Contains(req.URL.String(), "/v1/responses") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Hello from OpenAI!"},"finish_reason":"stop"}],"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":5}}`))
+				w.Write([]byte(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello from OpenAI!"}]}],"status":"completed","model":"gpt-4o","usage":{"input_tokens":10,"output_tokens":5}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -108,9 +109,9 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 
 		httpEgressMock.MockMakeRequest(func(w http.ResponseWriter, r *http.Request) (err error) {
 			req, _ := http.ReadRequest(bufio.NewReader(r.Body))
-			if strings.Contains(req.URL.String(), "/v1/chat/completions") {
+			if strings.Contains(req.URL.String(), "/v1/responses") {
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}}]},"finish_reason":"tool_calls"}],"model":"gpt-4o","usage":{"prompt_tokens":15,"completion_tokens":8}}`))
+				w.Write([]byte(`{"output":[{"type":"function_call","call_id":"call_1","name":"Arithmetic","arguments":"{\"x\":10,\"op\":\"-\",\"y\":3}"}],"status":"completed","model":"gpt-4o","usage":{"input_tokens":15,"output_tokens":8}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
 			}
@@ -126,4 +127,85 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
 		}
 	})
+}
+
+// TestChatGPTLLM_RealTurn exercises the real OpenAI Responses API end-to-end through the live HTTP
+// egress proxy. It is skipped by default; drop an API key into realAPIKey and remove the skip to run
+// it against production.
+func TestChatGPTLLM_RealTurn(t *testing.T) {
+	const realAPIKey = ""
+	if realAPIKey == "" {
+		t.Skip("set realAPIKey to run against the live OpenAI Responses API")
+	}
+	const realModel = "gpt-4o-mini"
+
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := chatgptllmapi.NewClient(tester)
+
+	app := application.New()
+	app.Add(svc, httpegress.NewService(), tester)
+	app.RunInTest(t)
+
+	svc.SetAPIKey(realAPIKey)
+
+	t.Run("text_response", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		messages := []llmapi.Message{
+			{Role: "system", Content: "You are a terse assistant. Answer in one word."},
+			{Role: "user", Content: "What is the capital of France?"},
+		}
+		content, toolCalls, stopReason, usage, err := client.Turn(ctx, realModel, messages, nil, nil)
+		if assert.NoError(err) {
+			assert.True(strings.Contains(strings.ToLower(content), "paris"))
+			assert.Expect(len(toolCalls), 0)
+			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
+			assert.True(usage.InputTokens > 0)
+			assert.True(usage.OutputTokens > 0)
+			assert.Expect(usage.Turns, 1)
+		}
+	})
+
+	t.Run("tool_calling", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		tools := []llmapi.Tool{{
+			Name:        "Arithmetic",
+			Description: "Computes the result of an arithmetic operation.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
+		}}
+		messages := []llmapi.Message{{Role: "user", Content: "Use the Arithmetic tool to compute 10 - 3."}}
+		content, toolCalls, stopReason, _, err := client.Turn(ctx, realModel, messages, tools, nil)
+		if assert.NoError(err) {
+			assert.Expect(stopReason, llmapi.StopReasonToolUse)
+			if assert.True(len(toolCalls) > 0) {
+				assert.Expect(toolCalls[0].Name, "Arithmetic")
+			}
+
+			// Round-trip the tool result back to confirm function_call / function_call_output items
+			// are threaded through correctly.
+			messages = append(messages,
+				llmapi.Message{Role: "assistant", Content: content, ToolCalls: toolCallsJSON(t, toolCalls)},
+				llmapi.Message{Role: "tool", ToolCallID: toolCalls[0].ID, Content: `{"result":7}`},
+			)
+			content, _, stopReason, _, err = client.Turn(ctx, realModel, messages, tools, nil)
+			if assert.NoError(err) {
+				assert.Expect(stopReason, llmapi.StopReasonEndTurn)
+				assert.True(strings.Contains(content, "7"))
+			}
+		}
+	})
+}
+
+// toolCallsJSON serializes tool calls the way llm.core persists them on an assistant message.
+func toolCallsJSON(t *testing.T, toolCalls []llmapi.ToolCall) string {
+	b, err := json.Marshal(toolCalls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

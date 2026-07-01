@@ -1,21 +1,35 @@
 ## Design Rationale
 
 This microservice implements the `Turn` endpoint for a [LiteLLM](https://docs.litellm.ai) proxy. LiteLLM
-exposes the OpenAI Chat Completions wire format regardless of the backend model it routes to, so this
-provider is intentionally a near-clone of `chatgptllm`: the request/response structs in `apitypes.go` keep
-their `openai*` names because the bytes on the wire genuinely are OpenAI's schema, not a LiteLLM-specific one.
-Keeping the names identical documents that fact and keeps the two providers easy to diff.
+exposes the OpenAI Responses wire format (`/v1/responses`) regardless of the backend model it routes to - it
+bridges `/chat/completions` internally for providers that lack native Responses support - so this provider is
+intentionally a near-clone of `chatgptllm`: the request/response structs in `apitypes.go` keep their `openai*`
+names because the bytes on the wire genuinely are OpenAI's schema, not a LiteLLM-specific one. Keeping the names
+identical documents that fact and keeps the two providers easy to diff.
+
+The `Turn` output shape must match the contract `llm.core` dispatches against: `llm.core` calls providers via
+`llmapi.NewClient(svc).ForHost(provider).Turn(...)`, which deserializes the provider's response into
+`llmapi.TurnOut` - including `stopReason`. A provider that omits `stopReason` returns it as `""`, which `llm.core`
+reads as `StopReasonUnknown` and surfaces as a `502` on every turn. So this provider returns the full
+`(content, toolCalls, stopReason, usage)` tuple exactly like `chatgptllm`. The only intended differences from
+`chatgptllm` are the LiteLLM-specific `num_retries` field, the localhost default, and the absence of the
+empty-response debug diagnostic.
+
+`mapStopReason` derives the normalized reason from the Responses `status`, `incomplete_details.reason`, and whether
+any `function_call` items were emitted (`completed` + tool calls -> `StopReasonToolUse`; `completed` alone ->
+`StopReasonEndTurn`; `incomplete` / `max_output_tokens` -> `StopReasonMaxTokens`; `incomplete` / `content_filter` ->
+`StopReasonRefusal`; anything else -> `StopReasonUnknown`). It is identical to the `chatgptllm` mapping.
 
 `llm.core` does not maintain a provider registry - it routes by hostname (`ForHost(provider)`). This provider
 is reachable as `lite.llm.core`; nothing in `llm.core` needed to change to add it.
 
-### Why the default `CompletionURL` is `http://localhost:4000/v1/chat/completions`
+### Why the default `ResponsesURL` is `http://localhost:4000/v1/responses`
 
 The other three providers point at a fixed vendor URL (`api.openai.com`, `api.anthropic.com`,
 `generativelanguage.googleapis.com`). LiteLLM has no canonical public endpoint - it is a self-hosted proxy.
 `http://localhost:4000` is LiteLLM's own documented default proxy address, so it is the only sensible default;
-operators running the proxy elsewhere set `CompletionURL` outright (the whole URL, not a base + suffix, per the
-`CompletionURL` convention shared by all four providers).
+operators running the proxy elsewhere set `ResponsesURL` outright (the whole URL, not a base + suffix, per the
+full-URL config convention shared by all four providers).
 
 ### No typed model constants
 
@@ -26,11 +40,12 @@ passthrough string; callers pass whatever the proxy is configured to accept.
 
 ### Token usage mapping
 
-`Turn` maps the OpenAI `usage` block the same way `chatgptllm` does: `prompt_tokens` minus
-`prompt_tokens_details.cached_tokens` to `InputTokens`, the cached portion to `CacheReadTokens`,
-`completion_tokens` to `OutputTokens`, no write count. LiteLLM normalizes most backends into this shape, but for
-non-OpenAI backends some fields (notably cached-token details) may be absent and surface as zero. This is a
-fidelity limit of the upstream proxy, not a bug here.
+`Turn` maps the Responses `usage` block the same way `chatgptllm` does: `input_tokens` minus
+`input_tokens_details.cached_tokens` to `InputTokens`, the cached portion to `CacheReadTokens`,
+`output_tokens` to `OutputTokens`, `output_tokens_details.reasoning_tokens` to `ThinkingTokens`, no write count.
+LiteLLM normalizes most backends into this shape, but for non-OpenAI backends some fields (notably cached- and
+reasoning-token details) may be absent and surface as zero. This is a fidelity limit of the upstream proxy, not a
+bug here.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform
 interface across all provider microservices.
