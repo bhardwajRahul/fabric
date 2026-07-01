@@ -102,7 +102,7 @@ func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 			assert := testarossa.For(t)
 
 			messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-			result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+			result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 			assert.Expect(
 				result, expectedResult,
 				usage.Turns, 1,
@@ -142,7 +142,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of France? Answer in one word."}}
-		result, _, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -153,7 +153,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of Japan? Answer in one word."}}
-		result, _, err := client.Chat(ctx, geminillmapi.Hostname, geminillmapi.ModelGemini20Flash, messages, nil, nil)
+		result, _, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-3.5-flash", messages, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -164,7 +164,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is the capital of Italy? Answer in one word."}}
-		result, _, err := client.Chat(ctx, chatgptllmapi.Hostname, chatgptllmapi.ModelGPT4o, messages, nil, nil)
+		result, _, err := client.Chat(ctx, chatgptllmapi.Hostname, "gpt-5.4-mini", messages, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -175,7 +175,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 		messages := []llmapi.Message{{Role: "user", Content: "What is 6 times 7? Use the calculator tool."}}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, _, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, tools, nil)
+		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, tools, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -207,7 +207,7 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result), 1)
 			assert.Expect(result[0].Role, "assistant")
@@ -235,7 +235,7 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, tools, nil)
+		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]
@@ -271,7 +271,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
@@ -309,7 +309,7 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		// so we pass the calculator's canonical URL and let InitChat fetch the schema.
 		toolURLs := []string{calculatorapi.Arithmetic.URL()}
 		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, toolURLs, nil)
+		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, toolURLs, nil)
 		assert.Expect(
 			err, nil,
 			status, workflow.StatusCompleted,
@@ -363,7 +363,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
 		started := time.Now()
-		out, _, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		out, _, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		elapsed := time.Since(started)
 		assert.Expect(
 			err, nil,
@@ -391,7 +391,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		assert.Expect(status, workflow.StatusFailed)
 		assert.True(callCount >= 2, "expected at least one retry before giving up, got %d calls", callCount)
 	})
@@ -409,7 +409,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
 		started := time.Now()
-		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		elapsed := time.Since(started)
 		assert.Expect(status, workflow.StatusFailed)
 		assert.Expect(callCount, 1)
@@ -427,7 +427,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 		defer providerMock.MockTurn(nil)
 
 		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, claudellmapi.ModelHaiku45, messages, nil, nil)
+		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", messages, nil, nil)
 		assert.Expect(status, workflow.StatusFailed)
 		// No retryAfter => permanent => a single attempt, no retries.
 		assert.Expect(callCount, 1)
@@ -477,9 +477,9 @@ func TestLLM_ErrorProbe(t *testing.T) {
 		name, host, model, key string
 		promptUnits            int
 	}{
-		{"claude", claudellmapi.Hostname, claudellmapi.ModelHaiku45, claudeKey, 50_000},
+		{"claude", claudellmapi.Hostname, "claude-haiku-4-5", claudeKey, 50_000},
 		{"gemini", geminillmapi.Hostname, "gemini-2.5-flash", geminiKey, 300_000},
-		{"chatgpt", chatgptllmapi.Hostname, chatgptllmapi.ModelGPT4o, chatgptKey, 50_000},
+		{"chatgpt", chatgptllmapi.Hostname, "gpt-5.4-mini", chatgptKey, 50_000},
 	}
 
 	for _, p := range providers {

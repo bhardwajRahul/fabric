@@ -2,7 +2,7 @@
 
 This microservice implements the `Turn` endpoint for the ChatGPT LLM provider. It translates between the Microbus LLM message format and the OpenAI Chat Completions API format, handling tool_calls on assistant messages and tool_call_id on tool result messages.
 
-The `model` argument is required per call (no `Model` config); use the typed constants in `chatgptllmapi` (e.g. `chatgptllmapi.ModelGPT4o`) for compile-time checking.
+The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"gpt-5.4-mini"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `mini` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
 
 `Turn` populates `llmapi.Usage` from the OpenAI `usage` block. OpenAI reports `prompt_tokens` and `completion_tokens` plus `prompt_tokens_details.cached_tokens`. We map the cached portion to `CacheReadTokens` and report the remainder as `InputTokens`. OpenAI does not expose write counts so `CacheWriteTokens` is left at zero.
 

@@ -2,7 +2,7 @@
 
 This microservice implements the `Turn` endpoint for the Claude (Anthropic) LLM provider. It translates between the Microbus LLM message format and the Claude Messages API format, handling system messages, tool_use/tool_result content blocks, and error parsing.
 
-The `model` argument is required per call (no `Model` config); use the typed constants in `claudellmapi` (e.g. `claudellmapi.ModelHaiku45`) for compile-time checking.
+The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"claude-haiku-4-5"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `opus` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
 
 `Turn` populates `llmapi.Usage` with input/output token counts, cache read/write tokens (from Claude's `cache_read_input_tokens` and `cache_creation_input_tokens` fields), the model identifier echoed by the response, and `Turns: 1`. `llm.core` aggregates these across turns and emits the `LLMTokens` metric.
 

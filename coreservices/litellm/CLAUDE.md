@@ -19,10 +19,10 @@ operators running the proxy elsewhere set `CompletionURL` outright (the whole UR
 
 ### No typed model constants
 
-`chatgptllm` ships `ModelGPT4o` etc. in its api package. This provider deliberately does not: the valid model
-strings are whatever the operator put in the LiteLLM proxy's `model_list`, so a hard-coded catalog here would be
-wrong for most deployments. `model` is a passthrough string; callers pass whatever the proxy is configured to
-accept.
+No provider ships a typed model catalog anymore (model IDs rotate too fast to maintain, and removing stale consts
+breaks downstream). For LiteLLM the point is sharper still: the valid model strings are whatever the operator put in
+the proxy's `model_list`, so even a current catalog here would be wrong for most deployments. `model` is a
+passthrough string; callers pass whatever the proxy is configured to accept.
 
 ### Token usage mapping
 

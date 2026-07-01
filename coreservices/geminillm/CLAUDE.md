@@ -2,7 +2,7 @@
 
 This microservice implements the `Turn` endpoint for the Google Gemini LLM provider. It translates between the Microbus LLM message format and the Gemini generateContent API format, handling functionCall/functionResponse parts and role mapping (assistant→model).
 
-The `model` argument is required per call (no `Model` config); use the typed constants in `geminillmapi` (e.g. `geminillmapi.ModelGemini20Flash`) for compile-time checking.
+The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"gemini-3.5-flash"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `flash` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
 
 `Turn` populates `llmapi.Usage` from the Gemini `usageMetadata` block. Gemini reports `promptTokenCount`, `candidatesTokenCount`, `cachedContentTokenCount`, and (on 2.5 thinking models) `thoughtsTokenCount`. We map the cached portion to `CacheReadTokens` and report the remainder as `InputTokens`; `OutputTokens` is `candidatesTokenCount + thoughtsTokenCount` (so it reflects total billed completion, the cross-provider invariant for `llmapi.Usage`) and `ThinkingTokens` breaks out the thoughts portion for observability. Gemini does not expose write counts so `CacheWriteTokens` is left at zero.
 
