@@ -17,12 +17,12 @@ Expose one endpoint:
    - All other roles: emit as-is with JSON-encoded string content.
 3. Convert `[]llmapi.Tool` to `[]claudeTool` (name, description, input_schema as `json.RawMessage`).
 4. Build a `claudeRequest` with `model`, `max_tokens: 4096`, `messages`, `tools`, and `system`.
-5. POST to `svc.CompletionURL()` via `httpegressapi.NewClient(svc).Do(ctx, req)` with headers `Content-Type: application/json`, `x-api-key`, and `anthropic-version: 2023-06-01`.
+5. POST to `svc.MessagesURL()` via `httpegressapi.NewClient(svc).Do(ctx, req)` with headers `Content-Type: application/json`, `x-api-key`, and `anthropic-version: 2023-06-01`.
 6. On non-200 status, attempt to parse the error envelope (`error.type`, `error.message`, `request_id`) and return a structured error with the HTTP status code attached.
 7. Parse the `claudeResponse` content blocks: accumulate `text` blocks into `completion.Content`, convert `tool_use` blocks to `llmapi.ToolCall` entries.
 
 ### Config Properties
 
-- `CompletionURL` - Claude messages completion endpoint URL, default `https://api.anthropic.com/v1/messages`, validated as URL.
+- `MessagesURL` - Claude messages endpoint URL, default `https://api.anthropic.com/v1/messages`, validated as URL.
 - `APIKey` - Anthropic API key, `secret: true`.
 - `Model` - Claude model identifier, default `claude-haiku-4-5`.

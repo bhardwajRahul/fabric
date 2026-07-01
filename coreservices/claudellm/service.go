@@ -258,7 +258,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	}
 
 	// Build the HTTP request to the Claude API
-	apiURL := svc.CompletionURL()
+	apiURL := svc.MessagesURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
 		return "", nil, "", llmapi.Usage{}, errors.Trace(err)

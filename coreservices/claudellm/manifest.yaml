@@ -19,12 +19,12 @@ general:
   hostname: claude.llm.core
   description: The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.
   package: github.com/microbus-io/fabric/coreservices/claudellm
-  modifiedAt: "2026-06-18T23:21:29Z"
+  modifiedAt: "2026-07-01T02:18:07Z"
 
 configs:
-  CompletionURL:
-    signature: CompletionURL() (value string)
-    description: CompletionURL is the URL of the Claude messages completion endpoint.
+  MessagesURL:
+    signature: MessagesURL() (value string)
+    description: MessagesURL is the URL of the Claude messages endpoint.
     validation: url
     default: https://api.anthropic.com/v1/messages
   APIKey:

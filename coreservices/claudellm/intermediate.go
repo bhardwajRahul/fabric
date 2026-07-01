@@ -87,9 +87,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the Claude provider.`),
 		sub.Function(claudellmapi.TurnIn{}, claudellmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: CompletionURL
-		"CompletionURL",
-		cfg.Description(`CompletionURL is the URL of the Claude messages completion endpoint.`),
+	svc.DefineConfig( // MARKER: MessagesURL
+		"MessagesURL",
+		cfg.Description(`MessagesURL is the URL of the Claude messages endpoint.`),
 		cfg.DefaultValue(`https://api.anthropic.com/v1/messages`),
 		cfg.Validation(`url`),
 	)
@@ -140,14 +140,14 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	return err // No trace
 }
 
-// CompletionURL is the URL of the Claude messages completion endpoint.
-func (svc *Intermediate) CompletionURL() (value string) { // MARKER: CompletionURL
-	return svc.Config("CompletionURL")
+// MessagesURL is the URL of the Claude messages endpoint.
+func (svc *Intermediate) MessagesURL() (value string) { // MARKER: MessagesURL
+	return svc.Config("MessagesURL")
 }
 
-// SetCompletionURL sets the value of the configuration property.
-func (svc *Intermediate) SetCompletionURL(value string) (err error) { // MARKER: CompletionURL
-	return svc.SetConfig("CompletionURL", value)
+// SetMessagesURL sets the value of the configuration property.
+func (svc *Intermediate) SetMessagesURL(value string) (err error) { // MARKER: MessagesURL
+	return svc.SetConfig("MessagesURL", value)
 }
 
 // APIKey is the API key for the Claude API.

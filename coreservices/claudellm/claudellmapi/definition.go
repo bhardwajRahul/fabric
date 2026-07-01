@@ -32,13 +32,13 @@ const Hostname = "claude.llm.core"
 const Name = "ClaudeLLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 4
+const Version = 5
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.`
 
-// CompletionURL is the URL of the Claude messages completion endpoint.
-var CompletionURL = define.Config{ // MARKER: CompletionURL
+// MessagesURL is the URL of the Claude messages endpoint.
+var MessagesURL = define.Config{ // MARKER: MessagesURL
 	Value:      string(""),
 	Default:    "https://api.anthropic.com/v1/messages",
 	Validation: "url",
