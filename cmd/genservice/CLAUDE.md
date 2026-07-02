@@ -10,10 +10,12 @@ that one file genservice emits five artifacts:
 - `mock.go` + `mock_test.go` - the mockable `Mock` and a structural smoke test.
 - `manifest.yaml` - the derived navigational view of what the microservice exposes.
 
-Beyond those five fully-generated artifacts, genservice performs two *in-place* edits of hand-written
-code: it syncs the godoc of each `*Service` handler method to its feature's description (see Syncing
-handler godoc below), and it scaffolds a placeholder test in `service_test.go` for any feature that does
-not yet have one (see Scaffolding feature tests below).
+Beyond those five fully-generated artifacts, genservice edits two hand-written files in place. In
+`service.go` it syncs the godoc of each existing `*Service` handler to its feature's description and
+scaffolds a placeholder handler for any feature that has none (see Syncing handler godoc and Scaffolding
+handlers below). In `service_test.go` it scaffolds a placeholder test for any feature that has none (see
+Scaffolding feature tests below). All three edits are append-or-sync only: a hand-written body is never
+rewritten.
 
 genservice is the sole generator of a microservice's boilerplate. The housekeeping skill runs it; every
 microservice authors a `definition.go` and genservice produces everything else.
@@ -282,6 +284,30 @@ is deliberately narrow.
   change, so an already-synced directory produces nothing and `-check` does not flag it. Generated files (the
   `Code generated ... DO NOT EDIT` marker) and `_test.go` files are skipped.
 
+## Scaffolding handlers
+
+Every feature that has a `*Service` method (functions, web handlers, tasks, workflows, inbound events, tickers, and
+the `OnObserve`/`OnChanged` callbacks of observable metrics and callback configs - an outbound event has none)
+starts as a compiling stub, so the agent fills in a body rather than authoring a signature by hand. `emitServiceCode`
+combines this with the godoc sync, because both edit `service.go` and two separate outputs for one file would
+clobber each other: it runs `emitServiceDocs`, then appends stubs on top of the already-synced bytes, and returns a
+single `service.go` output.
+
+- **Signature and godoc are projected from definition.go, so they cannot drift.** `buildHandlerStub` reuses the same
+  field qualification as the mock (`standardMock`, so a domain type is written `svcapi.T` in the service package),
+  and the godoc is `handlerDocs`' entry for that handler - the identical value the sync path would enforce. Web and
+  workflow signatures are fixed shapes (`w, r` / the graph builder). Imports the signature needs (`context`,
+  `net/http`, the `workflow` package for a task's `flow` or a workflow's graph, `time`, the api or source package
+  for a domain field) are resolved via `mockAliases` + `addResolved` and merged into `service.go`'s import block by
+  the shared `appendGoDecls`.
+- **The body is a TODO plus a naked return; a workflow gets a `NewGraph` starter** that returns an empty graph,
+  which fails `graph.Validate()` at run time until the agent defines it - a loud "not implemented" for the one kind
+  where a silent zero return would look valid.
+- **Append-only, keyed by method existence.** `existingServiceMethods` scans every hand-written `.go` file for
+  `*Service` methods; a feature whose handler is defined anywhere is skipped, so a fully implemented microservice
+  regenerates to no change and `-check` stays stable. A feature's handler is stubbed exactly once, then owned by the
+  agent.
+
 ## Scaffolding feature tests
 
 Every feature kind has a recommended integration-test shape (the `add-*` skills describe it). `emitServiceTests`
@@ -289,11 +315,17 @@ generates that placeholder into `service_test.go` so a feature always starts wit
 depending on a human to paste the pattern. This is the second in-place edit of hand-written code, and like the
 godoc sync it is deliberately narrow: it only ever *appends* what is missing.
 
-- **Append-only, keyed by marker.** A feature is considered covered once a `// MARKER: <Feature>` comment appears on
-  a test in the file (the same marker the skills place on the test function). `emitServiceTests` renders a scaffold
-  only for features whose marker is absent, so a hand-filled test is never rewritten and a re-run is a no-op. It
-  returns an `output` only when it added something, so `-check` does not flag an already-covered directory. This
-  mirrors the "only changed files are emitted" rule of the godoc sync.
+- **Append-only, keyed by function name.** A feature is considered covered once a function of its test's name
+  (`Test<Name>_<Suffix>`) exists in any of the microservice's `_test.go` files (`existingTestFuncs`), the exact
+  parallel of `existingServiceMethods` on the handler side - both delegate to one `scanFuncDecls` that walks every
+  hand-written file, so a handler or test split across several files is still found and never duplicated.
+  `emitServiceTests` renders a scaffold only for features whose test function is absent (appending it to
+  `service_test.go`), so a hand-filled test is never rewritten and a re-run is a no-op. It
+  returns an `output` only when it added something, so `-check` does not flag an already-covered directory. The
+  scaffold still carries a `// MARKER: <Feature>` comment, but for feature-code navigation (`grep "MARKER: X"`), not
+  for coverage detection. The trade-off versus keying on the marker: renaming a generated test away from the
+  convention yields one redundant empty scaffold on the next run (a different name, so never a duplicate-symbol
+  error), which the handler side cannot suffer because a method name is fixed by the `ToDo` interface.
 - **Which kinds.** Functions, web handlers, tasks, workflows, inbound and outbound events, and tickers always get a
   scaffold; a config only when it is a `Callback` and a metric only when it is `Observable` - matching the kinds
   that have a `*Service` method to exercise. The test function name is `Test<Name>_<Suffix>` using the decorative
@@ -306,8 +338,8 @@ godoc sync it is deliberately narrow: it only ever *appends* what is missing.
   HINT (a few skill scaffolds omit these and would not compile as-is - the generated form always includes them).
   Imports are computed from the compiling part only (e.g. a workflow scaffold pulls in `foreman`/`foremanapi`,
   everything else stays in the comment).
-- **Create vs. append.** When `service_test.go` is absent, `newTestFile` writes a fresh file (package clause, the
-  computed imports, the scaffolds) and gofmts it. When it exists, `mergeTestFile` appends the new functions and
+- **Create vs. append.** When `service_test.go` is absent, `createGoFile` writes a fresh file (package clause, the
+  computed imports, the scaffolds) and gofmts it. When it exists, `appendGoDecls` appends the new functions and
   adds only the imports the file lacks, inserting them into the existing import block; the final `format.Source`
   sorts them into place without disturbing the file's other imports or hand-written code (gofmt operates on source
   text, so comments survive). The `svc`/`configonly` goldens pin the create path; `servicetest_test.go` pins the
@@ -317,8 +349,9 @@ godoc sync it is deliberately narrow: it only ever *appends* what is missing.
 
 - `*api/clientext.go` - hand-written client extensions that cannot be derived from `definition.go`. Never read or
   written.
-- `service.go` handler *bodies* and `OnStartup`/`OnShutdown` - the hand-written half of the microservice. Handler
-  godoc is the sole exception (see Syncing handler godoc).
+- `service.go` handler *bodies* and `OnStartup`/`OnShutdown` - the hand-written half of the microservice. genservice
+  syncs a handler's godoc and appends a stub for a missing handler, but never touches an existing handler's body
+  (see Syncing handler godoc and Scaffolding handlers).
 - `service_test.go` test *bodies* - once a feature has a `// MARKER` test, it is never rewritten; genservice only
   appends stubs for features that lack one (see Scaffolding feature tests).
 - Anything outside the api package and the service directory.

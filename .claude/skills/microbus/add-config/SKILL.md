@@ -19,8 +19,8 @@ Creating or modifying a configuration property:
 - [ ] Step 2: Determine the type
 - [ ] Step 3: Determine the properties
 - [ ] Step 4: Declare the config in definition.go
-- [ ] Step 5: Implement the callback
-- [ ] Step 6: Generate the boilerplate
+- [ ] Step 5: Generate the boilerplate
+- [ ] Step 6: Implement the callback
 - [ ] Step 7: Use the config
 - [ ] Step 8: Test the callback
 - [ ] Step 9: Add to config file
@@ -103,29 +103,21 @@ var Retry = define.Config{ // MARKER: Retry
 - Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `<name>api/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema_description:"..."` tags if the type also feeds an endpoint's OpenAPI schema
 - The generated getter returns the typed value; a missing or malformed stored value yields the type's zero value
 
-#### Step 5: Implement the Callback
+#### Step 5: Generate the Boilerplate
 
-Skip this step if the config does not have a callback.
-
-Define the callback in `service.go`. The generator adds it to the `ToDo` interface and wires the change dispatcher; you only write the handler.
-
-```go
-// OnChangedMyConfig is called when the MyConfig config property changes.
-func (svc *Service) OnChangedMyConfig(ctx context.Context) (err error) { // MARKER: MyConfig
-	// Implement handling of the new value here
-	return nil
-}
-```
-
-#### Step 6: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `intermediate.go` (the getter, setter, validation, and change dispatcher), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `intermediate.go` (the getter, setter, validation, and change dispatcher), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
 Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 6: Implement the Callback
+
+Skip this step if the config does not have a callback.
+
+For a config with a callback, the previous step generated a placeholder `func (svc *Service) OnChangedMyConfig(ctx context.Context) (err error)` in `service.go`, tagged `// MARKER: MyConfig` and holding a `// TODO` body. Fill in that body to handle the new value; leave the generated signature and godoc as they are.
 
 #### Step 7: Use the Config
 

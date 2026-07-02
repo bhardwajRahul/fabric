@@ -1,0 +1,9 @@
+{{range .Stubs}}{{.Godoc}}func (svc *Service) {{.FuncName}}({{.Params}}) ({{.Results}}) { // MARKER: {{.Marker}}
+{{if eq .Kind "Workflow"}}	// TODO: Define the {{.Name}} workflow graph
+	graph = workflow.NewGraph("{{.Name}}")
+	return
+{{else}}	// TODO: Implement {{.Name}}
+	return
+{{end}}}
+
+{{end}}

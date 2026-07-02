@@ -127,7 +127,7 @@ type OnMyEventOut struct { // MARKER: OnMyEvent
 
 #### Step 7: Generate the Boilerplate
 
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `MulticastTrigger`, the `Hook`, and the response wrapper for `OnMyEvent`) and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `MulticastTrigger`, the `Hook`, and the response wrapper for `OnMyEvent`) and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder test in `service_test.go` for the event, ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .

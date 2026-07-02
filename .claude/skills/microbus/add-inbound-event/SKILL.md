@@ -21,8 +21,8 @@ Creating or modifying an inbound event sink:
 - [ ] Step 2: Locate the source outbound event and determine the signature
 - [ ] Step 3: Determine a description
 - [ ] Step 4: Declare the inbound event in definition.go
-- [ ] Step 5: Implement the sink in service.go
-- [ ] Step 6: Generate the boilerplate
+- [ ] Step 5: Generate the boilerplate
+- [ ] Step 6: Implement the sink in service.go
 - [ ] Step 7: Test the inbound event sink
 - [ ] Step 8: Housekeeping
 ```
@@ -67,27 +67,19 @@ var OnMyEvent = define.InboundEvent{ // MARKER: OnMyEvent
   - `RequiredClaims: "roles.user"` to process the event only when its carried actor satisfies the expression; omit to accept all
   - `TimeBudget: 30 * time.Second` to cap the handler's duration; add the `"time"` import if used
 
-#### Step 5: Implement the Sink in `service.go`
+#### Step 5: Generate the Boilerplate
 
-Implement the handler in `service.go`. Its signature is the source event's signature, with complex types referenced through the source api package. Add the source api package import if not already present.
-
-```go
-// OnMyEvent is triggered when X.
-func (svc *Service) OnMyEvent(ctx context.Context, input1 string, input2 eventsourceapi.ThirdPartyStruct) (output1 map[string]eventsourceapi.MyStruct, err error) { // MARKER: OnMyEvent
-	// Implement logic here...
-	return
-}
-```
-
-#### Step 6: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `intermediate.go` (the hook wiring and `ToDo` entry), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `intermediate.go` (the hook wiring and `ToDo` entry), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
 Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 6: Implement the Sink in `service.go`
+
+The previous step generated a placeholder sink handler `func (svc *Service) OnMyEvent(...)` in `service.go`, with its signature (the source event's signature, complex types referenced through the source api package) and godoc projected from `definition.go`, tagged `// MARKER: OnMyEvent` and holding a `// TODO` body. Fill in that body; leave the generated signature and godoc as they are. Add imports for any packages the body references that are not already present.
 
 #### Step 7: Test the Inbound Event Sink
 

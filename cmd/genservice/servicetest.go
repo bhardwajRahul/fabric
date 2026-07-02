@@ -25,7 +25,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 )
 
@@ -39,8 +38,8 @@ type serviceTestModel struct {
 // read it) and lists the paths the compiling part of the scaffold references.
 type scaffoldView struct {
 	Kind     string // function | web | task | workflow | inbound | outbound | ticker | config | metric
-	FuncName string // full test function name, e.g. TestMyService_MyFunction
-	Marker   string // the feature name, matched against // MARKER: comments already in the file
+	FuncName string // full test function name, e.g. TestMyService_MyFunction; also the coverage key
+	Marker   string // the feature name, emitted as the // MARKER comment for feature-code navigation
 	APIPkg   string // this service's api package alias, e.g. myserviceapi
 	SrcPkg   string // inbound only: the source event's api package alias
 	Handler  string // the method the HINT block invokes, e.g. MyFunction, SetMyConfig, OnObserveMyMetric
@@ -48,15 +47,11 @@ type scaffoldView struct {
 	imports []string
 }
 
-// markerRe matches a // MARKER: Name comment, the tag the add-* skills place on every feature's test
-// function. A feature whose marker is already present in service_test.go is considered covered.
-var markerRe = regexp.MustCompile(`//\s*MARKER:\s*(\w+)`)
-
 // emitServiceTests generates a placeholder test in service_test.go for each feature that does not yet
 // have one, matching the per-kind pattern the add-* skills describe. Existing tests are never rewritten:
-// a feature is skipped once its // MARKER comment appears in the file, so hand-filled tests and re-runs
-// are left untouched. It returns a single output for service_test.go when scaffolds were added, or nil
-// when every feature is already covered (so -check does not flag an up-to-date directory).
+// a feature is skipped once a function of its test's name (Test<Name>_<Suffix>) exists, so hand-filled
+// tests and re-runs are left untouched. It returns a single output for service_test.go when scaffolds were
+// added, or nil when every feature is already covered (so -check does not flag an up-to-date directory).
 func emitServiceTests(dir, pkg string, svc *service, apiPath string) ([]output, error) {
 	views, err := testScaffoldViews(svc, apiPath)
 	if err != nil {
@@ -69,14 +64,14 @@ func emitServiceTests(dir, pkg string, svc *service, apiPath string) ([]output, 
 	orig, readErr := os.ReadFile(testPath)
 	exists := readErr == nil
 
-	covered := map[string]bool{}
-	if exists {
-		covered = coveredMarkers(orig)
+	existing, err := existingTestFuncs(dir)
+	if err != nil {
+		return nil, err
 	}
 	var missing []scaffoldView
 	needed := map[string]bool{}
 	for _, v := range views {
-		if covered[v.Marker] {
+		if existing[v.FuncName] {
 			continue
 		}
 		missing = append(missing, v)
@@ -94,9 +89,9 @@ func emitServiceTests(dir, pkg string, svc *service, apiPath string) ([]output, 
 	}
 	var src []byte
 	if exists {
-		src, err = mergeTestFile(orig, needed, funcs)
+		src, err = appendGoDecls(orig, needed, funcs)
 	} else {
-		src, err = newTestFile(pkg, needed, funcs)
+		src, err = createGoFile(pkg, needed, funcs)
 	}
 	if err != nil {
 		return nil, err
@@ -164,13 +159,12 @@ func testFuncName(svc *service, suffix string) string {
 	return "Test" + svc.name + "_" + suffix
 }
 
-// coveredMarkers returns the set of feature markers already present on a test function in the file.
-func coveredMarkers(src []byte) map[string]bool {
-	m := map[string]bool{}
-	for _, mt := range markerRe.FindAllSubmatch(src, -1) {
-		m[string(mt[1])] = true
-	}
-	return m
+// existingTestFuncs returns the set of top-level test function names defined across all of the
+// microservice's hand-written _test.go files, so a feature whose test already exists (in any file) is not
+// scaffolded again. This mirrors existingServiceMethods on the handler side, keying coverage on the
+// function name rather than on the // MARKER comment.
+func existingTestFuncs(dir string) (map[string]bool, error) {
+	return scanFuncDecls(dir, true, false)
 }
 
 // renderTestScaffolds runs the missing scaffolds through service_test.txt. The result is gofmt-normalized
@@ -184,9 +178,9 @@ func renderTestScaffolds(views []scaffoldView) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// newTestFile assembles a fresh service_test.go from the package clause, the needed imports, and the
-// rendered scaffolds, then gofmts the whole thing.
-func newTestFile(pkg string, needed map[string]bool, funcs []byte) ([]byte, error) {
+// createGoFile assembles a fresh source file from the package clause, the needed imports, and the
+// rendered declarations, then gofmts the whole thing. Used when service_test.go does not yet exist.
+func createGoFile(pkg string, needed map[string]bool, decls []byte) ([]byte, error) {
 	set := splitImports(needed)
 	var b bytes.Buffer
 	b.WriteString("package ")
@@ -198,15 +192,16 @@ func newTestFile(pkg string, needed map[string]bool, funcs []byte) ([]byte, erro
 	}
 	writeImportLines(&b, set.Ext)
 	b.WriteString(")\n\n")
-	b.Write(funcs)
+	b.Write(decls)
 	return format.Source(b.Bytes())
 }
 
 // mergeTestFile appends the rendered scaffolds to an existing service_test.go and adds any imports they
 // reference that the file does not already have. The added imports go into the existing import block; the
 // final gofmt sorts them into their group without disturbing the file's other imports or hand-written
-// code. gofmt operates on source text (not an AST reprint), so comments are preserved.
-func mergeTestFile(orig []byte, needed map[string]bool, funcs []byte) ([]byte, error) {
+// code. gofmt operates on source text (not an AST reprint), so comments are preserved. Shared by the
+// service_test.go and service.go emitters.
+func appendGoDecls(orig []byte, needed map[string]bool, decls []byte) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "", orig, parser.ParseComments)
 	if err != nil {
@@ -250,7 +245,7 @@ func mergeTestFile(orig []byte, needed map[string]bool, funcs []byte) ([]byte, e
 		}
 	}
 	out = append(out, '\n', '\n')
-	out = append(out, funcs...)
+	out = append(out, decls...)
 	return format.Source(out)
 }
 

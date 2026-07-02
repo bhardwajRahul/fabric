@@ -49,8 +49,8 @@ Run the `add-function` skill, with these overrides applied as you reach each of 
   }
   ```
 
-- **Step 8 (Implement the Logic in service.go)**: skip. Step 4 below replaces it.
-- **Step 9 (Generate the Boilerplate)**: run normally. `genservice` emits the `sub.Manual()` and `sub.Tag("python")` wiring into the generated `intermediate.go`.
+- **Step 8 (Generate the Boilerplate)**: run normally. `genservice` emits the `sub.Manual()` and `sub.Tag("python")` wiring into the generated `intermediate.go`, and scaffolds the handler stub in `service.go` and the test in `service_test.go`.
+- **Step 9 (Implement the Logic in service.go)**: skip. Step 4 below replaces the generated stub's body.
 - **Step 10 (Test the Function)**: run normally, then add a one-line opt-in HINT immediately after the `app.RunInTest(t)` line so a future reader can switch the test from mock-only to real-Python without hunting through docs:
 
   ```go

@@ -196,11 +196,11 @@ func emitAllService(dir, apiDir, now string) ([]output, error) {
 		{mockTestPath, mockTestSrc},
 		{manifestPath, manifestSrc},
 	}
-	docOuts, err := emitServiceDocs(dir, svc)
+	codeOuts, err := emitServiceCode(dir, svc, apiPath, resolveSource)
 	if err != nil {
 		return nil, err
 	}
-	outs = append(outs, docOuts...)
+	outs = append(outs, codeOuts...)
 	testOuts, err := emitServiceTests(dir, pkg, svc, apiPath)
 	if err != nil {
 		return nil, err

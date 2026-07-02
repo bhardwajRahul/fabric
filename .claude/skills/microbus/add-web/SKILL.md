@@ -20,8 +20,8 @@ Creating or modifying a web endpoint:
 - [ ] Step 3: Determine a description
 - [ ] Step 4: Determine the required claims
 - [ ] Step 5: Declare the endpoint in definition.go
-- [ ] Step 6: Implement the logic in service.go
-- [ ] Step 7: Generate the boilerplate
+- [ ] Step 6: Generate the boilerplate
+- [ ] Step 7: Implement the logic in service.go
 - [ ] Step 8: Test the handler
 - [ ] Step 9: Housekeeping
 ```
@@ -69,21 +69,9 @@ var MyWeb = define.Web{ // MARKER: MyWeb
   - `TimeBudget: 30 * time.Second` to cap the handler's duration (omit for the default; add the `"time"` import if used)
   - `LoadBalancing: define.None` to multicast to all replicas, or `LoadBalancing: "my-queue"` for a named queue; omit for the default hostname queue
 
-#### Step 6: Implement the Logic in `service.go`
+#### Step 6: Generate the Boilerplate
 
-Implement the web handler in `service.go`. Use `r.PathValue("argName")` to obtain path argument values by name, if needed.
-
-```go
-// MyWeb does X.
-func (svc *Service) MyWeb(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MyWeb
-	// Implement logic here...
-	return nil
-}
-```
-
-#### Step 7: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .
@@ -95,6 +83,10 @@ The generated client method's arity depends on the method, which matters when wr
 - `ANY`: `MyWeb(ctx, method string, relativeURL string, body any)`
 
 Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 7: Implement the Logic in `service.go`
+
+The previous step generated a placeholder web handler `func (svc *Service) MyWeb(w http.ResponseWriter, r *http.Request) (err error)` in `service.go`, tagged `// MARKER: MyWeb` and holding a `// TODO` body. Fill in that body; leave the generated signature and godoc as they are. Use `r.PathValue("argName")` to obtain path argument values by name, if needed.
 
 #### Step 8: Test the Handler
 

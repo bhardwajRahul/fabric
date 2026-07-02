@@ -83,18 +83,15 @@ var MyMetric = define.Metric{ // MARKER: MyMetric
 
 The generated recorder is `Increment<Name>(ctx, value, labels...)` for a counter and `Record<Name>(ctx, value, labels...)` for a gauge or histogram.
 
-If the metric is **observable just in time**, implement the observe callback in `service.go`. The generator adds it to the `ToDo` interface and wires it into the observe pass; you only write the handler, which records the current value.
+If the metric is **observable just in time**, the boilerplate generator (Step 8) creates a placeholder `OnObserveMyMetric` handler in `service.go`, tagged `// MARKER: MyMetric` and holding a `// TODO` body. Fill in that body to record the current value, for example:
 
 ```go
-// OnObserveMyMetric records the current value of MyMetric.
-func (svc *Service) OnObserveMyMetric(ctx context.Context) (err error) { // MARKER: MyMetric
-	v, err := svc.calculateMyMetric()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = svc.RecordMyMetric(ctx, v, "ok")
+v, err := svc.calculateMyMetric()
+if err != nil {
 	return errors.Trace(err)
 }
+err = svc.RecordMyMetric(ctx, v, "ok")
+return errors.Trace(err)
 ```
 
 Otherwise, call the recorder from the place in `service.go` where the event occurs.
@@ -105,7 +102,7 @@ svc.IncrementMyMetric(ctx, 1, "ok")
 
 #### Step 8: Generate the Boilerplate
 
-From the microservice's directory, run the generator. It regenerates `intermediate.go` (the recorder, the `Describe*` registration, and the observe dispatcher), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `intermediate.go` (the recorder, the `Describe*` registration, and the observe dispatcher), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .

@@ -22,8 +22,8 @@ Creating or modifying a functional endpoint:
 - [ ] Step 5: Determine the required claims
 - [ ] Step 6: Define complex types
 - [ ] Step 7: Declare the endpoint in definition.go
-- [ ] Step 8: Implement the logic in service.go
-- [ ] Step 9: Generate the boilerplate
+- [ ] Step 8: Generate the boilerplate
+- [ ] Step 9: Implement the logic in service.go
 - [ ] Step 10: Test the function
 - [ ] Step 11: Housekeeping
 ```
@@ -140,27 +140,19 @@ type MyFunctionOut struct { // MARKER: MyFunction
   - `TimeBudget: 30 * time.Second` to cap the handler's duration (omit for the default; add the `time` import if used)
   - `LoadBalancing: define.None` to multicast to all replicas, or `LoadBalancing: "my-queue"` for a named queue; omit for the default hostname queue (load-balanced among peers)
 
-#### Step 8: Implement the Logic in `service.go`
+#### Step 8: Generate the Boilerplate
 
-Implement the handler in `service.go`. Complex types refer to their definition in `myserviceapi`, even if owned by a third-party. The handler's godoc is the same one-line description from Step 4. Add imports for any packages the signature references that are not already imported (e.g. `"time"` for a `time.Time` argument).
-
-```go
-// MyFunction does X.
-func (svc *Service) MyFunction(ctx context.Context, input1 string, input2 myserviceapi.ThirdPartyStruct) (output1 map[string]myserviceapi.MyStruct, err error) { // MARKER: MyFunction
-	// Implement logic here...
-	return
-}
-```
-
-#### Step 9: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
 Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 9: Implement the Logic in `service.go`
+
+The previous step generated a placeholder handler `func (svc *Service) MyFunction(...)` in `service.go`, with the signature and godoc projected from `definition.go`, tagged `// MARKER: MyFunction` and holding a `// TODO: Implement MyFunction` body. Replace that body with the handler's logic. Leave the generated signature and godoc as they are: they are the contract from `definition.go`, so if the signature is wrong, fix `definition.go` and regenerate rather than editing `service.go`. Complex types refer to their definition in `myserviceapi`. Add imports for any packages the body references that are not already imported (e.g. `"time"` for a `time.Time` value).
 
 #### Step 10: Test the Function
 

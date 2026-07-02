@@ -22,8 +22,8 @@ Creating or modifying a workflow graph:
 - [ ] Step 3: Determine the route
 - [ ] Step 4: Determine a description
 - [ ] Step 5: Declare the workflow in definition.go
-- [ ] Step 6: Implement the graph builder in service.go
-- [ ] Step 7: Generate the boilerplate
+- [ ] Step 6: Generate the boilerplate
+- [ ] Step 7: Implement the graph builder in service.go
 - [ ] Step 8: Test the workflow
 - [ ] Step 9: Housekeeping
 ```
@@ -97,9 +97,26 @@ type MyWorkflowOut struct { // MARKER: MyWorkflow
 - If an In/Out field's type comes from another package (e.g. a `time.Time` field needs `"time"`), add that import to `definition.go`
 - Add `RequiredClaims: "..."` only when the workflow must be gated; omit when open
 
-#### Step 6: Implement the Graph Builder in `service.go`
+#### Step 6: Generate the Boilerplate
 
-Implement the workflow graph builder in `service.go`. It has the fixed signature `MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error)`. Use the `workflow.NewGraph` builder API to construct the graph. Reference task endpoints from this or other microservices using their `URL()` method.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler that validates the graph, the `ToDo` entry, and the subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
+
+```shell
+go run github.com/microbus-io/fabric/cmd/genservice .
+```
+
+Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
+
+```shell
+go mod tidy
+go vet ./...
+```
+
+Run `go mod tidy` first: the workflow test imports the foreman, which pulls transitive dependencies (the dwarf engine, sequel, throttle) that may not yet be in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
+
+#### Step 7: Implement the Graph Builder in `service.go`
+
+The previous step generated a placeholder graph builder `func (svc *Service) MyWorkflow(ctx context.Context) (graph *workflow.Graph, err error)` in `service.go`, tagged `// MARKER: MyWorkflow`, with a `graph = workflow.NewGraph("MyWorkflow")` starter that returns an empty graph (which fails validation until you define it). Build out the graph with the `workflow.NewGraph` builder API, referencing task endpoints from this or other microservices by their `URL()` method. Leave the generated godoc as it is.
 
 Each node in the graph carries both a short **name** (used in transitions) and a **URL** (used to dispatch the task at runtime). Register nodes with `graph.SetEndpoint("Name", taskURL)`, then write transitions in terms of names. Use **PascalCase** node names matching the task endpoint (e.g. `"TaskA"` for `TaskA`) - they are graph-topology identifiers, kept visually distinct from the lowercased dispatch URLs and the camelCase state field names. The graph display name passed to `NewGraph` is PascalCase too (conventionally the workflow's own name). Child workflows are not graph nodes; they are launched dynamically from a task body via `flow.Subgraph(childWorkflow.URL(), input)` - see the "Subgraphs and Interrupts" section in `.claude/rules/workflows.txt`.
 
@@ -141,23 +158,6 @@ Pick the reducer by what the merge means, not by what the field is named. The de
 **Prefer `AddTransitionSwitch` > `AddTransitionWhen` > `AddTransitionGoto` for branching.** `AddTransitionSwitch` is the default for any routing where exactly one branch should run: siblings are first-match-wins in declaration order (use `when="true"` as the last arm for a default), the validator enforces mutual exclusivity, and no `SetFanIn` is needed because only one branch ever fires. Drop to `AddTransitionWhen` only when the source genuinely fans out under multiple independent predicates that may all match - that's parallel work, not routing, and it needs a matching `SetFanIn`. Two `When` predicates meant to be mutually exclusive (`x>0` and `x<=0`) should be a `Switch` so the validator enforces it. Reserve `AddTransitionGoto` for runtime control-flow the task body decides via `flow.Goto`, the canonical case being a fan-in node looping back ("ask for more info, retry the review"). The "Switch Transitions" and "When to choose Switch vs. When vs. Goto" sections in `.claude/rules/workflows.txt` carry the full rules.
 
 To embed this workflow as a subgraph from inside another task body, use the generated `Subgraph` client (`otherapi.NewSubgraph(flow).MyWorkflow(ctx, ...)`), never the `Executor` - the `Executor` is test-only.
-
-#### Step 7: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler that validates the graph, the `ToDo` entry, and the subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
-
-```shell
-go run github.com/microbus-io/fabric/cmd/genservice .
-```
-
-Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
-
-```shell
-go mod tidy
-go vet ./...
-```
-
-Run `go mod tidy` first: the workflow test imports the foreman, which pulls transitive dependencies (the dwarf engine, sequel, throttle) that may not yet be in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
 
 #### Step 8: Test the Workflow
 

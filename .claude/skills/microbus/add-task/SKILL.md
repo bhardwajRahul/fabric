@@ -24,8 +24,8 @@ Creating or modifying a task endpoint:
 - [ ] Step 5: Determine the required claims
 - [ ] Step 6: Define complex types
 - [ ] Step 7: Declare the task in definition.go
-- [ ] Step 8: Implement the logic in service.go
-- [ ] Step 9: Generate the boilerplate
+- [ ] Step 8: Generate the boilerplate
+- [ ] Step 9: Implement the logic in service.go
 - [ ] Step 10: Test the task
 - [ ] Step 11: Housekeeping
 ```
@@ -149,19 +149,28 @@ type MyTaskOut struct { // MARKER: MyTask
   - `RequiredClaims: "roles.manager && level>2"` for the claims from Step 5 (omit when open)
   - `TimeBudget: 5 * time.Minute` if the task has a known runtime ceiling shorter than the foreman default (2m, hard ceiling 15m); add the `"time"` import. For work that does not fit within 15m, use the Interrupt-and-Resume or Polling-with-Retry patterns from `.claude/rules/workflows.txt`
 
-#### Step 8: Implement the Logic in `service.go`
+#### Step 8: Generate the Boilerplate
 
-Implement the task in `service.go`. Complex types refer to their definition in `myserviceapi`, even if owned by a third-party.
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler, `ToDo` entry, and subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
+
+```shell
+go run github.com/microbus-io/fabric/cmd/genservice .
+```
+
+Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
+
+```shell
+go mod tidy
+go vet ./...
+```
+
+Run `go mod tidy` first: a task that introduces a new import (a downstream client, or the foreman for subflows and workflow tests) can pull transitive dependencies that are not yet in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
+
+#### Step 9: Implement the Logic in `service.go`
+
+The previous step generated a placeholder task `func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, ...)` in `service.go`, with the signature and godoc projected from `definition.go`, tagged `// MARKER: MyTask` and holding a `// TODO` body. Fill in that body; leave the generated signature and godoc as they are. Complex types refer to their definition in `myserviceapi`.
 
 The task receives state fields as input arguments and returns state fields as output. It also has access to `flow` for control operations (`flow.Goto()`, `flow.Interrupt()`, `flow.Subgraph()`, `flow.Retry()`, `flow.Sleep()`) and for field-based state access (`flow.GetString()`, `flow.Set()`) when needed. `Interrupt` and `Subgraph` both park the step and return `(data, yield, err)`; the task must `return nil` when `yield` is true and may read `data` / branch on `err` once it resolves (see "Subgraphs and Interrupts" in `.claude/rules/workflows.txt`).
-
-```go
-// MyTask does X.
-func (svc *Service) MyTask(ctx context.Context, flow *workflow.Flow, input1 string, input2 float64) (output1 bool, err error) { // MARKER: MyTask
-	// Implement logic here...
-	return
-}
-```
 
 To invoke another microservice's workflow as an isolated child flow (a subgraph) from inside this task body, use that microservice's generated `Subgraph` client (only the explicit inputs cross in, only the explicit outputs cross back). Do not use its `Executor` from a task body - the `Executor` is test-only.
 
@@ -182,23 +191,6 @@ if yield || err != nil {
 - `flow.Transform("newKey", "oldKey", ...)` - clear all state, then re-introduce the listed fields under new names. Doubles as a "keep these" primitive when called with `("name", "name")` pairs.
 
 Each records JSON null in the step's changes for dropped fields, so the cleanup is preserved in the audit trail; downstream merged state is absent the field (Replace reducer) or sees no contribution (Add/Append/Union/Merge/And/Or/Concat short-circuit to their identity when a branch's value is JSON null).
-
-#### Step 9: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go` (the `Executor` and `Subgraph` methods), `intermediate.go` (the marshaler, `ToDo` entry, and subscription), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
-
-```shell
-go run github.com/microbus-io/fabric/cmd/genservice .
-```
-
-Then, from the project root, bring the module's dependencies up to date and verify the microservice compiles:
-
-```shell
-go mod tidy
-go vet ./...
-```
-
-Run `go mod tidy` first: a task that introduces a new import (a downstream client, or the foreman for subflows and workflow tests) can pull transitive dependencies that are not yet in `go.sum`, which makes `go vet` fail with `missing go.sum entry` until the module is tidied.
 
 #### Step 10: Test the Task
 

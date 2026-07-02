@@ -17,8 +17,8 @@ Copy this checklist and track your progress:
 Creating or modifying a ticker:
 - [ ] Step 1: Read local CLAUDE.md file
 - [ ] Step 2: Declare the ticker in definition.go
-- [ ] Step 3: Implement the handler in service.go
-- [ ] Step 4: Generate the boilerplate
+- [ ] Step 3: Generate the boilerplate
+- [ ] Step 4: Implement the handler in service.go
 - [ ] Step 5: Test the handler
 - [ ] Step 6: Housekeeping
 ```
@@ -38,27 +38,19 @@ var MyTicker = define.Ticker{ // MARKER: MyTicker
 }
 ```
 
-#### Step 3: Implement the Handler in `service.go`
+#### Step 3: Generate the Boilerplate
 
-Implement the ticker handler in `service.go`.
-
-```go
-// MyTicker does X.
-func (svc *Service) MyTicker(ctx context.Context) (err error) { // MARKER: MyTicker
-	// Implement logic here...
-	return nil
-}
-```
-
-#### Step 4: Generate the Boilerplate
-
-From the microservice's directory, run the generator. It regenerates `intermediate.go` (the `ToDo` entry and `StartTicker` wiring), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`.
+From the microservice's directory, run the generator. It regenerates `intermediate.go` (the `ToDo` entry and `StartTicker` wiring), `mock.go`, `mock_test.go`, and `manifest.yaml` from the updated `definition.go`. It also scaffolds a placeholder handler in `service.go` and a placeholder test in `service_test.go` for any new feature that lacks one, each ready for you to fill in.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .
 ```
 
 Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 4: Implement the Handler in `service.go`
+
+The previous step generated a placeholder ticker handler `func (svc *Service) MyTicker(ctx context.Context) (err error)` in `service.go`, tagged `// MARKER: MyTicker` and holding a `// TODO` body. Fill in that body; leave the generated signature and godoc as they are.
 
 #### Step 5: Test the Handler
 
