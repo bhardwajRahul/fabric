@@ -1,0 +1,329 @@
+{{range .Scaffolds}}{{if eq .Kind "function"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+	client := {{.APIPkg}}.NewClient(tester)
+	_ = client
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			out, err := client.{{.Handler}}(ctx, in)
+			assert.Expect(
+				out, expectedOut,
+				err, nil,
+			)
+		})
+	*/
+}
+
+{{else if eq .Kind "web"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+	client := {{.APIPkg}}.NewClient(tester)
+	_ = client
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			res, err := client.{{.Handler}}(ctx, "GET", "", nil)
+			if assert.NoError(err) {
+				assert.Expect(res.StatusCode, http.StatusOK)
+			}
+		})
+	*/
+}
+
+{{else if eq .Kind "task"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester
+	tester := connector.New("tester.client")
+	exec := {{.APIPkg}}.NewExecutor(tester)
+	_ = exec
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern.
+		Use WithOutputFlow to also verify control signals (Goto, Retry, Interrupt, Sleep) if applicable.
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			out, err := exec.{{.Handler}}(ctx, in)
+			if assert.NoError(err) {
+				assert.Expect(out, expectedOut)
+			}
+		})
+	*/
+}
+
+{{else if eq .Kind "workflow"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("tester.client")
+	foremanClient := foremanapi.NewClient(tester)
+	exec := {{.APIPkg}}.NewExecutor(tester).WithWorkflowRunner(foremanClient)
+	_ = exec
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		foreman.NewService(),
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			out, status, err := exec.{{.Handler}}(ctx, in)
+			assert.Expect(
+				err, nil,
+				status, workflow.StatusCompleted,
+				out, expectedOut,
+			)
+		})
+	*/
+}
+
+{{else if eq .Kind "inbound"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("tester.client")
+	trigger := {{.SrcPkg}}.NewMulticastTrigger(tester)
+	_ = trigger
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			for e := range trigger.{{.Handler}}(ctx, in) {
+				out, err := e.Get()
+				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
+					assert.Expect(
+						out, expectedOut,
+						err, nil,
+					)
+				}
+			}
+		})
+	*/
+}
+
+{{else if eq .Kind "outbound"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("tester.client")
+	trigger := {{.APIPkg}}.NewMulticastTrigger(tester)
+	hook := {{.APIPkg}}.NewHook(tester)
+	_ = trigger
+	_ = hook
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern.
+		Enter distinct alphanumeric queue names in sub.Queue when hooking multiple times to simulate multiple clients.
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			unsub, err := hook.WithOptions(sub.Queue("UniqueQueueName")).{{.Handler}}(
+				func(ctx context.Context, in string) (out string, err error) {
+					// Implement event sink here...
+					return out, err
+				},
+			)
+			if assert.NoError(err) {
+				defer unsub()
+			}
+			for e := range trigger.{{.Handler}}(ctx, in) {
+				if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
+					out, err := e.Get()
+					assert.Expect(
+						out, expectedOut,
+						err, nil,
+					)
+				}
+			}
+		})
+	*/
+}
+
+{{else if eq .Kind "ticker"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.{{.Handler}}(ctx)
+			assert.NoError(err)
+		})
+	*/
+}
+
+{{else if eq .Kind "config"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.{{.Handler}}(newValue)
+			assert.NoError(err)
+		})
+	*/
+}
+
+{{else if eq .Kind "metric"}}func {{.FuncName}}(t *testing.T) { // MARKER: {{.Marker}}
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.{{.Handler}}(ctx)
+			assert.NoError(err)
+		})
+	*/
+}
+
+{{end}}{{end}}

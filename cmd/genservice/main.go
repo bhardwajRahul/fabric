@@ -200,7 +200,12 @@ func emitAllService(dir, apiDir, now string) ([]output, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(outs, docOuts...), nil
+	outs = append(outs, docOuts...)
+	testOuts, err := emitServiceTests(dir, pkg, svc, apiPath)
+	if err != nil {
+		return nil, err
+	}
+	return append(outs, testOuts...), nil
 }
 
 func fileExists(p string) bool {

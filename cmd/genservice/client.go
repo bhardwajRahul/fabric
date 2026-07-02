@@ -28,23 +28,26 @@ import (
 
 // Import paths the generated client may reference.
 const (
-	impContext    = "context"
-	impJSON       = "encoding/json"
-	impIter       = "iter"
-	impHTTP       = "net/http"
-	impReflect    = "reflect"
-	impStrconv    = "strconv"
-	impTesting    = "testing"
-	impWorkflow   = "github.com/microbus-io/dwarf/workflow"
-	impErrors     = "github.com/microbus-io/errors"
-	impTestarossa = "github.com/microbus-io/testarossa"
-	impCfg        = "github.com/microbus-io/fabric/cfg"
-	impConnector  = "github.com/microbus-io/fabric/connector"
-	impHTTPX      = "github.com/microbus-io/fabric/httpx"
-	impPub        = "github.com/microbus-io/fabric/pub"
-	impService    = "github.com/microbus-io/fabric/service"
-	impSub        = "github.com/microbus-io/fabric/sub"
-	impUtils      = "github.com/microbus-io/fabric/utils"
+	impContext     = "context"
+	impJSON        = "encoding/json"
+	impIter        = "iter"
+	impHTTP        = "net/http"
+	impReflect     = "reflect"
+	impStrconv     = "strconv"
+	impTesting     = "testing"
+	impWorkflow    = "github.com/microbus-io/dwarf/workflow"
+	impErrors      = "github.com/microbus-io/errors"
+	impTestarossa  = "github.com/microbus-io/testarossa"
+	impCfg         = "github.com/microbus-io/fabric/cfg"
+	impConnector   = "github.com/microbus-io/fabric/connector"
+	impHTTPX       = "github.com/microbus-io/fabric/httpx"
+	impPub         = "github.com/microbus-io/fabric/pub"
+	impService     = "github.com/microbus-io/fabric/service"
+	impSub         = "github.com/microbus-io/fabric/sub"
+	impUtils       = "github.com/microbus-io/fabric/utils"
+	impApplication = "github.com/microbus-io/fabric/application"
+	impForeman     = "github.com/microbus-io/fabric/coreservices/foreman"
+	impForemanAPI  = "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 )
 
 // clientModel is the in-memory tree handed to client.txt: the package, computed imports, var guards,
@@ -85,13 +88,13 @@ func (m *clientModel) NeedResponse() bool { return m.HasFunc() || m.HasEvent() }
 
 // featureView is one feature with the fragments the templates interpolate into method bodies.
 type featureView struct {
-	Name       string
-	Doc        string // raw godoc text, or "" when undocumented
-	DocComment string // "// ...\n" lines, or "" when undocumented
-	In         string // In struct type name
-	Out        string // Out struct type name
-	SrcPkg     string // InboundEvent only: source api package alias
-	SrcEvent   string // InboundEvent only: source outbound event name
+	Name        string
+	Doc         string // raw godoc text, or "" when undocumented
+	DocComment  string // "// ...\n" lines, or "" when undocumented
+	In          string // In struct type name
+	Out         string // Out struct type name
+	SrcPkg      string // InboundEvent only: source api package alias
+	SrcEvent    string // InboundEvent only: source outbound event name
 	HookOptions string // InboundEvent only: rendered sub.Options for Hook.WithOptions, or ""
 
 	// Endpoint subscription options (intermediate.go only).

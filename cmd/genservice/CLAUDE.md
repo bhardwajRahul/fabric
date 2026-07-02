@@ -10,9 +10,10 @@ that one file genservice emits five artifacts:
 - `mock.go` + `mock_test.go` - the mockable `Mock` and a structural smoke test.
 - `manifest.yaml` - the derived navigational view of what the microservice exposes.
 
-Beyond those five fully-generated artifacts, genservice also performs one *in-place* edit of hand-written
+Beyond those five fully-generated artifacts, genservice performs two *in-place* edits of hand-written
 code: it syncs the godoc of each `*Service` handler method to its feature's description (see Syncing
-handler godoc below).
+handler godoc below), and it scaffolds a placeholder test in `service_test.go` for any feature that does
+not yet have one (see Scaffolding feature tests below).
 
 genservice is the sole generator of a microservice's boilerplate. The housekeeping skill runs it; every
 microservice authors a `definition.go` and genservice produces everything else.
@@ -281,12 +282,45 @@ is deliberately narrow.
   change, so an already-synced directory produces nothing and `-check` does not flag it. Generated files (the
   `Code generated ... DO NOT EDIT` marker) and `_test.go` files are skipped.
 
+## Scaffolding feature tests
+
+Every feature kind has a recommended integration-test shape (the `add-*` skills describe it). `emitServiceTests`
+generates that placeholder into `service_test.go` so a feature always starts with a compiling test stub, rather than
+depending on a human to paste the pattern. This is the second in-place edit of hand-written code, and like the
+godoc sync it is deliberately narrow: it only ever *appends* what is missing.
+
+- **Append-only, keyed by marker.** A feature is considered covered once a `// MARKER: <Feature>` comment appears on
+  a test in the file (the same marker the skills place on the test function). `emitServiceTests` renders a scaffold
+  only for features whose marker is absent, so a hand-filled test is never rewritten and a re-run is a no-op. It
+  returns an `output` only when it added something, so `-check` does not flag an already-covered directory. This
+  mirrors the "only changed files are emitted" rule of the godoc sync.
+- **Which kinds.** Functions, web handlers, tasks, workflows, inbound and outbound events, and tickers always get a
+  scaffold; a config only when it is a `Callback` and a metric only when it is `Observable` - matching the kinds
+  that have a `*Service` method to exercise. The test function name is `Test<Name>_<Suffix>` using the decorative
+  `Name` const (so it reads as a human following the skill would author), with the `OnChanged`/`OnObserve` prefix
+  for callback configs and observable metrics; the marker is always the bare feature name.
+- **The scaffold compiles; the assertions are commented.** Each scaffold emits the setup a human would write (the
+  tester/client/executor for that kind, `app.Add`, `RunInTest`) and a `/* */` HINT block holding the `t.Run`
+  pattern as pseudo-code. Only the setup is live Go, so the stub compiles and passes immediately; the per-kind
+  templates therefore add `_ = client` / `_ = exec` style blank references for identifiers used only inside the
+  HINT (a few skill scaffolds omit these and would not compile as-is - the generated form always includes them).
+  Imports are computed from the compiling part only (e.g. a workflow scaffold pulls in `foreman`/`foremanapi`,
+  everything else stays in the comment).
+- **Create vs. append.** When `service_test.go` is absent, `newTestFile` writes a fresh file (package clause, the
+  computed imports, the scaffolds) and gofmts it. When it exists, `mergeTestFile` appends the new functions and
+  adds only the imports the file lacks, inserting them into the existing import block; the final `format.Source`
+  sorts them into place without disturbing the file's other imports or hand-written code (gofmt operates on source
+  text, so comments survive). The `svc`/`configonly` goldens pin the create path; `servicetest_test.go` pins the
+  marker detection, kind selection, and the append/import-merge path.
+
 ## What genservice does not touch
 
 - `*api/clientext.go` - hand-written client extensions that cannot be derived from `definition.go`. Never read or
   written.
 - `service.go` handler *bodies* and `OnStartup`/`OnShutdown` - the hand-written half of the microservice. Handler
   godoc is the sole exception (see Syncing handler godoc).
+- `service_test.go` test *bodies* - once a feature has a `// MARKER` test, it is never rewritten; genservice only
+  appends stubs for features that lack one (see Scaffolding feature tests).
 - Anything outside the api package and the service directory.
 
 ## Known limitations

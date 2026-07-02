@@ -173,3 +173,40 @@ func TestWeather_AskAgent(t *testing.T) { // MARKER: AskAgent
 		assert.True(slices.Contains(offeredTools, weatherapi.Forecast.URL()))
 	})
 }
+
+func TestWeather_Answer(t *testing.T) { // MARKER: Answer
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester
+	tester := connector.New("tester.client")
+	exec := weatherapi.NewExecutor(tester)
+	_ = exec
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern.
+		Use WithOutputFlow to also verify control signals (Goto, Retry, Interrupt, Sleep) if applicable.
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			out, err := exec.Answer(ctx, in)
+			if assert.NoError(err) {
+				assert.Expect(out, expectedOut)
+			}
+		})
+	*/
+}
