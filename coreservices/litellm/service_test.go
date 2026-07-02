@@ -92,7 +92,7 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, stopReason, usage, err := client.Turn(ctx, "gpt-4o", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from LiteLLM!")
@@ -118,7 +118,7 @@ func TestLiteLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 10 - 3?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 10 - 3?").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "gpt-4o", items, nil, nil)
 		if assert.NoError(err) {
 			calls := llmapi.PendingToolCalls(out)

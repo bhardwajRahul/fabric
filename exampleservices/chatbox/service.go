@@ -79,7 +79,7 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	usage = llmapi.Usage{Model: model, Turns: 1}
 
 	reply := func(text, stop string) ([]llmapi.Item, string, llmapi.Usage, error) {
-		return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", text)), stop, usage, nil
+		return []llmapi.Item{llmapi.NewMessage("assistant", text).AsItem()}, stop, usage, nil
 	}
 
 	if len(items) == 0 {
@@ -122,10 +122,10 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 
 			if calcTool != nil {
 				args, _ := json.Marshal(map[string]any{"x": x, "op": op, "y": y})
-				return llmapi.AppendItems(nil,
-					llmapi.NewMessage("assistant", fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y)),
-					llmapi.ToolCall{ID: "chatbox_1", Name: calcTool.Name, Arguments: args},
-				), llmapi.StopReasonToolUse, usage, nil
+				return []llmapi.Item{
+					llmapi.NewMessage("assistant", fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y)).AsItem(),
+					llmapi.ToolCall{ID: "chatbox_1", Name: calcTool.Name, Arguments: args}.AsItem(),
+				}, llmapi.StopReasonToolUse, usage, nil
 			}
 
 			// No calculator tool - do the math ourselves
@@ -183,7 +183,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 	}
 
 	// Call the LLM service's Chat endpoint with the calculator as a tool.
-	items := llmapi.AppendItems(nil, llmapi.NewMessage("user", userMessage))
+	items := []llmapi.Item{llmapi.NewMessage("user", userMessage).AsItem()}
 	tools := []string{calculatorapi.Arithmetic.URL()}
 	result, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)
 	if err != nil {

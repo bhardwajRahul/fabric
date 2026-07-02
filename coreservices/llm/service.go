@@ -237,8 +237,8 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 				return itemsOut, usage, errors.Trace(err)
 			}
 			resultItem := llmapi.NewToolResult(tc.ID, string(result))
-			itemsOut = llmapi.AppendItems(itemsOut, resultItem)
-			currentItems = llmapi.AppendItems(currentItems, resultItem)
+			itemsOut = append(itemsOut, resultItem.AsItem())
+			currentItems = append(currentItems, resultItem.AsItem())
 		}
 	}
 
@@ -297,7 +297,7 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	// conversation copy. On the first call (FirstLLM) there are none.
 	convo := items
 	for _, tr := range toolResults {
-		convo = llmapi.AppendItems(convo, tr)
+		convo = append(convo, tr.AsItem())
 	}
 
 	// Read tool schemas

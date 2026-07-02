@@ -81,7 +81,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("math_with_tool", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 6 times 7?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7?").AsItem()}
 		tools := []llmapi.Tool{{Name: "Arithmetic", Description: "Calculator", InputSchema: json.RawMessage(`{}`)}}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, tools, nil)
 		if assert.NoError(err) {
@@ -94,7 +94,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("math_without_tool", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 6 times 7?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7?").AsItem()}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(llmapi.LastAssistantMessage(out), "42")
@@ -104,7 +104,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("no_match", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello there"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello there").AsItem()}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(llmapi.LastAssistantMessage(out), "don't understand")
@@ -114,7 +114,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("tool_result", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewToolResult("chatbox_1", `{"result":42}`))
+		items := []llmapi.Item{llmapi.NewToolResult("chatbox_1", `{"result":42}`).AsItem()}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(llmapi.LastAssistantMessage(out), "42")
@@ -133,7 +133,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("division_by_zero", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 5 divided by 0?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 5 divided by 0?").AsItem()}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(llmapi.LastAssistantMessage(out), "zero")
@@ -143,7 +143,7 @@ func TestChatbox_Turn(t *testing.T) { // MARKER: Turn
 	t.Run("unknown_role", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("system", "You are a bot."))
+		items := []llmapi.Item{llmapi.NewMessage("system", "You are a bot.").AsItem()}
 		out, _, _, err := client.Turn(ctx, "chatbox-default", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Contains(llmapi.LastAssistantMessage(out), "don't understand")
@@ -218,7 +218,7 @@ func TestChatbox_EndToEnd(t *testing.T) {
 
 	t.Run("chat_with_calculator", func(t *testing.T) {
 		assert := testarossa.For(t)
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 6 times 7?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7?").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, _, err := client.Chat(ctx, chatboxapi.Hostname, "chatbox-default", items, tools, nil)
 		if assert.NoError(err) {

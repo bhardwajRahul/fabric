@@ -30,3 +30,8 @@ type Reasoning struct {
 	Signature        string   `json:"signature,omitzero" jsonschema_description:"Signature is an opaque token authenticating this item for replay (Anthropic thinking signature, Gemini thought signature)"`
 	EncryptedContent string   `json:"encryptedContent,omitzero" jsonschema_description:"EncryptedContent is the opaque encrypted reasoning payload for replay (OpenAI encrypted_content, Anthropic redacted_thinking data)"`
 }
+
+// AsItem wraps the reasoning as an Item, for building a conversation slice.
+func (r Reasoning) AsItem() Item {
+	return Item{Reasoning: &r}
+}

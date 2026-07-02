@@ -61,38 +61,3 @@ func (it Item) Type() ItemType {
 	}
 	return t
 }
-
-// AppendItems appends parts to items, wrapping each part in an Item. Each part is one of *Message,
-// *ToolCall, *ToolResult, or *Reasoning (the value forms are accepted too); nil pointers and any other
-// type are skipped. Pass nil as items to start a new slice.
-func AppendItems(items []Item, parts ...any) []Item {
-	for _, p := range parts {
-		switch v := p.(type) {
-		case *Message:
-			if v != nil {
-				items = append(items, Item{Message: v})
-			}
-		case Message:
-			items = append(items, Item{Message: &v})
-		case *ToolCall:
-			if v != nil {
-				items = append(items, Item{ToolCall: v})
-			}
-		case ToolCall:
-			items = append(items, Item{ToolCall: &v})
-		case *ToolResult:
-			if v != nil {
-				items = append(items, Item{ToolResult: v})
-			}
-		case ToolResult:
-			items = append(items, Item{ToolResult: &v})
-		case *Reasoning:
-			if v != nil {
-				items = append(items, Item{Reasoning: v})
-			}
-		case Reasoning:
-			items = append(items, Item{Reasoning: &v})
-		}
-	}
-	return items
-}

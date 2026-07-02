@@ -101,7 +101,7 @@ func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+			items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 			result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 			assert.Expect(
 				result, expectedResult,
@@ -141,7 +141,7 @@ func TestLLM_ChatLive(t *testing.T) {
 	t.Run("text_only_claude", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is the capital of France? Answer in one word."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of France? Answer in one word.").AsItem()}
 		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
@@ -152,7 +152,7 @@ func TestLLM_ChatLive(t *testing.T) {
 	t.Run("text_only_gemini", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is the capital of Japan? Answer in one word."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of Japan? Answer in one word.").AsItem()}
 		result, _, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-3.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
@@ -163,7 +163,7 @@ func TestLLM_ChatLive(t *testing.T) {
 	t.Run("text_only_chatgpt", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is the capital of Italy? Answer in one word."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of Italy? Answer in one word.").AsItem()}
 		result, _, err := client.Chat(ctx, chatgptllmapi.Hostname, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
@@ -173,7 +173,7 @@ func TestLLM_ChatLive(t *testing.T) {
 
 	t.Run("with_tools", func(t *testing.T) {
 		assert := testarossa.For(t)
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 6 times 7? Use the calculator tool."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7? Use the calculator tool.").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
 		if assert.NoError(err) {
@@ -202,11 +202,11 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 		assert := testarossa.For(t)
 
 		providerMock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
-			return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "Hello from mocked provider!")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+			return []llmapi.Item{llmapi.NewMessage("assistant", "Hello from mocked provider!").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			// Chat returns the full conversation: the input user message plus the assistant reply.
@@ -226,17 +226,17 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 		providerMock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
 			callCount++
 			if callCount == 1 {
-				return llmapi.AppendItems(nil, llmapi.ToolCall{
+				return []llmapi.Item{llmapi.ToolCall{
 					ID:        "call_1",
 					Name:      "Arithmetic",
 					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
-				}), llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+				}.AsItem()}, llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 			}
-			return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "3 + 5 = 8")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
+			return []llmapi.Item{llmapi.NewMessage("assistant", "3 + 5 = 8").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 3 + 5?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 3 + 5?").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
 		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
 		if assert.NoError(err) {
@@ -269,11 +269,11 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		assert := testarossa.For(t)
 
 		providerMock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
-			return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "Hello from the workflow!")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+			return []llmapi.Item{llmapi.NewMessage("assistant", "Hello from the workflow!").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		assert.Expect(
 			err, nil,
@@ -297,21 +297,21 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 			callCount++
 			if callCount == 1 {
 				// First turn: ask for a tool call.
-				return llmapi.AppendItems(nil, llmapi.ToolCall{
+				return []llmapi.Item{llmapi.ToolCall{
 					ID:        "call_1",
 					Name:      "Arithmetic",
 					Arguments: json.RawMessage(`{"x":3,"op":"+","y":5}`),
-				}), llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+				}.AsItem()}, llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 			}
 			// Second turn (after fan-in at nextLLM): finalize.
-			return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "3 + 5 = 8")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
+			return []llmapi.Item{llmapi.NewMessage("assistant", "3 + 5 = 8").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 15, OutputTokens: 8, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
 		// ChatLoop's InitChat resolves URLs to tool schemas via the host's OpenAPI document,
 		// so we pass the calculator's canonical URL and let InitChat fetch the schema.
 		toolURLs := []string{calculatorapi.Arithmetic.URL()}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 3 + 5?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 3 + 5?").AsItem()}
 		out, usage, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, toolURLs, nil)
 		assert.Expect(
 			err, nil,
@@ -336,18 +336,18 @@ func TestLLM_ChatLoop(t *testing.T) { // MARKER: ChatLoop
 		providerMock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
 			if len(tools) == 0 {
 				toollessCalls++
-				return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "Final answer after limit")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 3, Model: model, Turns: 1}, nil
+				return []llmapi.Item{llmapi.NewMessage("assistant", "Final answer after limit").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 3, Model: model, Turns: 1}, nil
 			}
-			return llmapi.AppendItems(nil, llmapi.ToolCall{
+			return []llmapi.Item{llmapi.ToolCall{
 				ID:        "call_x",
 				Name:      "Arithmetic",
 				Arguments: json.RawMessage(`{"x":1,"op":"+","y":1}`),
-			}), llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
+			}.AsItem()}, llmapi.StopReasonToolUse, llmapi.Usage{InputTokens: 10, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
 		toolURLs := []string{calculatorapi.Arithmetic.URL()}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Keep calling tools"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Keep calling tools").AsItem()}
 		opts := &llmapi.ChatOptions{MaxToolRounds: 1}
 		out, _, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, toolURLs, opts)
 		assert.Expect(
@@ -399,11 +399,11 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 			if callCount == 1 {
 				return nil, "", llmapi.Usage{}, errors.New("rate limited", http.StatusTooManyRequests, "retryAfter", "200ms")
 			}
-			return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", "Recovered after backoff")), llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
+			return []llmapi.Item{llmapi.NewMessage("assistant", "Recovered after backoff").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{InputTokens: 5, OutputTokens: 5, Model: model, Turns: 1}, nil
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		started := time.Now()
 		out, _, status, err := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		elapsed := time.Since(started)
@@ -432,7 +432,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		assert.Expect(status, workflow.StatusFailed)
 		assert.True(callCount >= 2, "expected at least one retry before giving up, got %d calls", callCount)
@@ -449,7 +449,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		started := time.Now()
 		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		elapsed := time.Since(started)
@@ -468,7 +468,7 @@ func TestLLM_CallLLMRateLimitRetry(t *testing.T) {
 		})
 		defer providerMock.MockTurn(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		_, _, status, _ := exec.ChatLoop(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		assert.Expect(status, workflow.StatusFailed)
 		// No retryAfter => permanent => a single attempt, no retries.
@@ -529,10 +529,10 @@ func TestLLM_ErrorProbe(t *testing.T) {
 			if p.key == "" {
 				t.Skipf("no API key pasted for %s", p.name)
 			}
-			items := llmapi.AppendItems(nil,
-				llmapi.NewMessage("system", prompt(p.promptUnits)),
-				llmapi.NewMessage("user", "Summarize the above in one word."),
-			)
+			items := []llmapi.Item{
+				llmapi.NewMessage("system", prompt(p.promptUnits)).AsItem(),
+				llmapi.NewMessage("user", "Summarize the above in one word.").AsItem(),
+			}
 			_, usage, err := client.Chat(ctx, p.host, p.model, items, nil, nil)
 			if err == nil {
 				t.Logf("[%s] unexpected success; usage=%+v", p.name, usage)
@@ -579,10 +579,10 @@ func TestLLM_ErrorProbeGeminiBurst(t *testing.T) {
 	burstPrompt := strings.Repeat("word word word word ", 90_000)
 
 	for i := 1; i <= 3; i++ {
-		items := llmapi.AppendItems(nil,
-			llmapi.NewMessage("system", burstPrompt),
-			llmapi.NewMessage("user", "Summarize the above in one word."),
-		)
+		items := []llmapi.Item{
+			llmapi.NewMessage("system", burstPrompt).AsItem(),
+			llmapi.NewMessage("user", "Summarize the above in one word.").AsItem(),
+		}
 		_, usage, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-2.5-flash", items, nil, nil)
 		if err == nil {
 			t.Logf("\n===== request %d: SUCCESS =====\nusage=%+v", i, usage)

@@ -94,7 +94,7 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, stopReason, usage, err := client.Turn(ctx, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from Claude!")
@@ -121,7 +121,7 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 3 + 5?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 3 + 5?").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			calls := llmapi.PendingToolCalls(out)
@@ -158,10 +158,10 @@ func TestClaudeLLM_RealTurn(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil,
-			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word."),
-			llmapi.NewMessage("user", "What is the capital of France?"),
-		)
+		items := []llmapi.Item{
+			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word.").AsItem(),
+			llmapi.NewMessage("user", "What is the capital of France?").AsItem(),
+		}
 		out, stopReason, usage, err := client.Turn(ctx, realModel, items, nil, nil)
 		if assert.NoError(err) {
 			assert.True(strings.Contains(strings.ToLower(llmapi.LastAssistantMessage(out)), "paris"))
@@ -181,7 +181,7 @@ func TestClaudeLLM_RealTurn(t *testing.T) {
 			Description: "Computes the result of an arithmetic operation.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
 		}}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3.").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, realModel, items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
@@ -192,7 +192,7 @@ func TestClaudeLLM_RealTurn(t *testing.T) {
 				// Round-trip: append the assistant turn items verbatim, then the tool result, and
 				// confirm the tool_use / tool_result blocks thread through correctly.
 				items = append(items, out...)
-				items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`))
+				items = append(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`).AsItem())
 				out, stopReason, _, err = client.Turn(ctx, realModel, items, tools, nil)
 				if assert.NoError(err) {
 					assert.Expect(stopReason, llmapi.StopReasonEndTurn)

@@ -4,7 +4,7 @@ Create an example microservice at hostname `chatbox.example` that implements a d
 
 ## Types
 
-All types (`Item`, `Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` (package `github.com/microbus-io/fabric/coreservices/llm/llmapi`). Do not define local types. The conversation is an ordered `[]llmapi.Item`; build items with `llmapi.AppendItems` / `llmapi.NewMessage`.
+All types (`Item`, `Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` (package `github.com/microbus-io/fabric/coreservices/llm/llmapi`). Do not define local types. The conversation is an ordered `[]llmapi.Item`; build it with an `[]llmapi.Item` literal, wrapping each part via its `AsItem()` method (e.g. `llmapi.NewMessage("user", text).AsItem()`, `llmapi.ToolCall{...}.AsItem()`).
 
 ## Turn Endpoint
 
@@ -29,7 +29,7 @@ Logic:
 - `Demo` on `ANY //chatbox.example/demo` (absolute route mapped to ingress root) - serves an interactive chat UI from `resources/demo.html`.
 
 On GET: render the template with no data.
-On POST: read the `message` form value (return `400` if empty), and read `provider` (default `chatbox.example`, i.e. `Hostname`) and `model` (default `chatbox-default`). Build a single-item conversation `llmapi.AppendItems(nil, llmapi.NewMessage("user", userMessage))`, call `llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)` with `tools = []string{calculatorapi.Arithmetic.URL()}`, and return the resulting conversation as JSON (`Content-Type: application/json`).
+On POST: read the `message` form value (return `400` if empty), and read `provider` (default `chatbox.example`, i.e. `Hostname`) and `model` (default `chatbox-default`). Build a single-item conversation `[]llmapi.Item{llmapi.NewMessage("user", userMessage).AsItem()}`, call `llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)` with `tools = []string{calculatorapi.Arithmetic.URL()}`, and return the resulting conversation as JSON (`Content-Type: application/json`).
 
 ## Non-obvious Details
 

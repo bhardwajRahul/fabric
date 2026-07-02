@@ -39,6 +39,11 @@ type ToolCall struct {
 	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema_description:"Arguments is the JSON-encoded arguments for the tool call"`
 }
 
+// AsItem wraps the tool call as an Item, for building a conversation slice.
+func (tc ToolCall) AsItem() Item {
+	return Item{ToolCall: &tc}
+}
+
 // ToolResult is the outcome of a tool invocation, correlated to its ToolCall by CallID. It is roleless:
 // providers that nest tool results inside a message (Anthropic, Gemini) supply the enclosing role.
 type ToolResult struct {
@@ -46,7 +51,12 @@ type ToolResult struct {
 	Output string `json:"output,omitzero" jsonschema_description:"Output is the serialized result returned to the model"`
 }
 
-// NewToolResult builds a tool result, for use with AppendItems or an Item literal.
+// NewToolResult builds a tool result. Call AsItem on the result to place it in a conversation.
 func NewToolResult(callID, output string) *ToolResult {
 	return &ToolResult{CallID: callID, Output: output}
+}
+
+// AsItem wraps the tool result as an Item, for building a conversation slice.
+func (tr ToolResult) AsItem() Item {
+	return Item{ToolResult: &tr}
 }

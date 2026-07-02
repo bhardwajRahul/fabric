@@ -325,15 +325,15 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		}
 	}
 	if text != "" {
-		outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text))
+		outItems = append(outItems, llmapi.NewMessage("assistant", text).AsItem())
 	}
 	for _, block := range claudeResp.Content {
 		if block.Type == "tool_use" {
-			outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
+			outItems = append(outItems, llmapi.ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: block.Input,
-			})
+			}.AsItem())
 		}
 	}
 

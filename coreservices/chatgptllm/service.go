@@ -314,7 +314,7 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 			for _, s := range item.Summary {
 				r.Summary = append(r.Summary, s.Text)
 			}
-			outItems = llmapi.AppendItems(outItems, r)
+			outItems = append(outItems, r.AsItem())
 		case "message":
 			var text string
 			for _, part := range item.Content {
@@ -322,16 +322,16 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 					text += part.Text
 				}
 			}
-			outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text))
+			outItems = append(outItems, llmapi.NewMessage("assistant", text).AsItem())
 			if text != "" {
 				hasContent = true
 			}
 		case "function_call":
-			outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
+			outItems = append(outItems, llmapi.ToolCall{
 				ID:        item.CallID,
 				Name:      item.Name,
 				Arguments: json.RawMessage(item.Args),
-			})
+			}.AsItem())
 			hasToolCalls = true
 		}
 	}

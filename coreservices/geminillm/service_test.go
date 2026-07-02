@@ -93,7 +93,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, stopReason, usage, err := client.Turn(ctx, "gemini-3.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from Gemini!")
@@ -119,7 +119,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 7 * 6?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 7 * 6?").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "gemini-3.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			calls := llmapi.PendingToolCalls(out)
@@ -146,11 +146,11 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil,
-			llmapi.NewMessage("system", "You are terse."),
-			llmapi.NewMessage("system", "Reply in one word."),
-			llmapi.NewMessage("user", "Hello"),
-		)
+		items := []llmapi.Item{
+			llmapi.NewMessage("system", "You are terse.").AsItem(),
+			llmapi.NewMessage("system", "Reply in one word.").AsItem(),
+			llmapi.NewMessage("user", "Hello").AsItem(),
+		}
 		_, _, _, err := client.Turn(ctx, "gemini-3.5-flash", items, nil, nil)
 		if !assert.NoError(err) {
 			return
@@ -200,7 +200,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Look it up"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Look it up").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "gemini-2.5-flash", items, nil, nil)
 		if !assert.NoError(err) {
 			return
@@ -224,9 +224,9 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		// Round 2: hand the assistant turn (reasoning items included) back plus a tool result. The
 		// provider must re-glue the thoughtSignature onto the functionCall part it re-emits, otherwise
 		// Gemini 2.5 loses thinking continuity.
-		round2 := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Look it up"))
+		round2 := []llmapi.Item{llmapi.NewMessage("user", "Look it up").AsItem()}
 		round2 = append(round2, out...)
-		round2 = llmapi.AppendItems(round2, llmapi.NewToolResult("Lookup", `{"result":"42"}`))
+		round2 = append(round2, llmapi.NewToolResult("Lookup", `{"result":"42"}`).AsItem())
 		_, _, _, err = client.Turn(ctx, "gemini-2.5-flash", round2, nil, nil)
 		if !assert.NoError(err) {
 			return
@@ -272,7 +272,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "hi"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "hi").AsItem()}
 		_, _, usage, err := client.Turn(ctx, "gemini-2.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(usage.InputTokens, 100)
@@ -351,7 +351,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "gemini-2.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			// Empty response surfaces as end_turn with empty content; caller decides what to do.
@@ -389,10 +389,10 @@ func TestGeminiLLM_RealTurn(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil,
-			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word."),
-			llmapi.NewMessage("user", "What is the capital of France?"),
-		)
+		items := []llmapi.Item{
+			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word.").AsItem(),
+			llmapi.NewMessage("user", "What is the capital of France?").AsItem(),
+		}
 		out, stopReason, usage, err := client.Turn(ctx, realModel, items, nil, nil)
 		if assert.NoError(err) {
 			assert.True(strings.Contains(strings.ToLower(llmapi.LastAssistantMessage(out)), "paris"))
@@ -412,7 +412,7 @@ func TestGeminiLLM_RealTurn(t *testing.T) {
 			Description: "Computes the result of an arithmetic operation.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
 		}}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3.").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, realModel, items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
@@ -424,7 +424,7 @@ func TestGeminiLLM_RealTurn(t *testing.T) {
 				// items included), then the tool result, and confirm the functionCall /
 				// functionResponse parts thread through and the thinking model accepts the replay.
 				items = append(items, out...)
-				items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`))
+				items = append(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`).AsItem())
 				out, stopReason, _, err = client.Turn(ctx, realModel, items, tools, nil)
 				if assert.NoError(err) {
 					assert.Expect(stopReason, llmapi.StopReasonEndTurn)

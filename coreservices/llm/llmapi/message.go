@@ -27,7 +27,12 @@ type Message struct {
 	Attachments []Attachment `json:"attachments,omitzero" jsonschema_description:"Attachments are non-text parts (images/audio/video/documents) attached to this message; ignored by providers without multi-modal support"`
 }
 
-// NewMessage builds a message, for use with AppendItems or an Item literal.
+// NewMessage builds a message. Call AsItem on the result to place it in a conversation.
 func NewMessage(role, content string) *Message {
 	return &Message{Role: role, Content: content}
+}
+
+// AsItem wraps the message as an Item, e.g. items := []Item{NewMessage("user", "hi").AsItem()}.
+func (m Message) AsItem() Item {
+	return Item{Message: &m}
 }

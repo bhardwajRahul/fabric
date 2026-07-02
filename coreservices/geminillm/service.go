@@ -394,7 +394,7 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		var text strings.Builder
 		flushText := func() {
 			if text.Len() > 0 {
-				outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text.String()))
+				outItems = append(outItems, llmapi.NewMessage("assistant", text.String()).AsItem())
 				hasContent = true
 				text.Reset()
 			}
@@ -409,23 +409,23 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 				if part.Text != "" {
 					r.Summary = []string{part.Text}
 				}
-				outItems = llmapi.AppendItems(outItems, r)
+				outItems = append(outItems, r.AsItem())
 				continue
 			}
 			// A signature on a non-thought part binds to that part; emit it as a reasoning item
 			// immediately before the item it belongs to so a later turn can re-glue it by position.
 			if part.ThoughtSignature != "" {
 				flushText()
-				outItems = llmapi.AppendItems(outItems, llmapi.Reasoning{Signature: part.ThoughtSignature})
+				outItems = append(outItems, llmapi.Reasoning{Signature: part.ThoughtSignature}.AsItem())
 			}
 			if part.FunctionCall != nil {
 				flushText()
 				args, _ := json.Marshal(part.FunctionCall.Args)
-				outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
+				outItems = append(outItems, llmapi.ToolCall{
 					ID:        part.FunctionCall.Name,
 					Name:      part.FunctionCall.Name,
 					Arguments: args,
-				})
+				}.AsItem())
 				hasToolCalls = true
 			} else if part.Text != "" {
 				text.WriteString(part.Text)

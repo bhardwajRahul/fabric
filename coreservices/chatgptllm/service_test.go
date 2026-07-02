@@ -93,7 +93,7 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
 		out, stopReason, usage, err := client.Turn(ctx, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
 			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from OpenAI!")
@@ -119,7 +119,7 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 10 - 3?"))
+		items := []llmapi.Item{llmapi.NewMessage("user", "What is 10 - 3?").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
 			calls := llmapi.PendingToolCalls(out)
@@ -157,10 +157,10 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		items := llmapi.AppendItems(nil,
-			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word."),
-			llmapi.NewMessage("user", "What is the capital of France?"),
-		)
+		items := []llmapi.Item{
+			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word.").AsItem(),
+			llmapi.NewMessage("user", "What is the capital of France?").AsItem(),
+		}
 		out, stopReason, usage, err := client.Turn(ctx, realModel, items, nil, nil)
 		if assert.NoError(err) {
 			assert.True(strings.Contains(strings.ToLower(llmapi.LastAssistantMessage(out)), "paris"))
@@ -180,7 +180,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 			Description: "Computes the result of an arithmetic operation.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
 		}}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3.").AsItem()}
 		out, stopReason, _, err := client.Turn(ctx, realModel, items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
@@ -192,7 +192,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 			// Round-trip: append the assistant turn items verbatim, then the tool result, and confirm
 			// the function_call / function_call_output items thread through correctly.
 			items = append(items, out...)
-			items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`))
+			items = append(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`).AsItem())
 			out, stopReason, _, err = client.Turn(ctx, realModel, items, tools, nil)
 			if assert.NoError(err) {
 				assert.Expect(stopReason, llmapi.StopReasonEndTurn)
@@ -209,7 +209,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 			Description: "Computes the result of an arithmetic operation.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
 		}}
-		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 12 * 9, then state the result."))
+		items := []llmapi.Item{llmapi.NewMessage("user", "Use the Arithmetic tool to compute 12 * 9, then state the result.").AsItem()}
 		out, _, usage, err := client.Turn(ctx, realReasoningModel, items, tools, nil)
 		if assert.NoError(err) {
 			// A reasoning model should have emitted at least one reasoning item carrying an id/encrypted
@@ -228,7 +228,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 			calls := llmapi.PendingToolCalls(out)
 			if assert.True(len(calls) > 0) {
 				items = append(items, out...)
-				items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":108}`))
+				items = append(items, llmapi.NewToolResult(calls[0].ID, `{"result":108}`).AsItem())
 				out, _, _, err = client.Turn(ctx, realReasoningModel, items, tools, nil)
 				if assert.NoError(err) {
 					assert.True(strings.Contains(llmapi.LastAssistantMessage(out), "108"))
