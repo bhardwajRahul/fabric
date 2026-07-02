@@ -31,6 +31,7 @@ type Mock struct {
 	*Intermediate
 	mockTurn              func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 	mockOnResolveProvider func(ctx context.Context, model string) (ok bool, err error)                                                                                                                              // MARKER: OnResolveProvider
+	mockRefreshModels     func(ctx context.Context) (err error)                                                                                                                                                     // MARKER: RefreshModels
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -80,4 +81,18 @@ func (svc *Mock) OnResolveProvider(ctx context.Context, model string) (ok bool, 
 		ok, err = svc.mockOnResolveProvider(ctx, model)
 	}
 	return ok, errors.Trace(err)
+}
+
+// MockRefreshModels sets up a mock handler for RefreshModels.
+func (svc *Mock) MockRefreshModels(handler func(ctx context.Context) (err error)) *Mock { // MARKER: RefreshModels
+	svc.mockRefreshModels = handler
+	return svc
+}
+
+// RefreshModels executes the mock handler.
+func (svc *Mock) RefreshModels(ctx context.Context) (err error) { // MARKER: RefreshModels
+	if svc.mockRefreshModels != nil {
+		err = svc.mockRefreshModels(ctx)
+	}
+	return errors.Trace(err)
 }

@@ -17,6 +17,8 @@ limitations under the License.
 package chatgptllmapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/define"
 )
@@ -44,10 +46,22 @@ var ResponsesURL = define.Config{ // MARKER: ResponsesURL
 	Validation: "url",
 }
 
+// ModelsURL is the URL of the OpenAI models-list endpoint, used to refresh the alias table with the current catalog.
+var ModelsURL = define.Config{ // MARKER: ModelsURL
+	Value:      string(""),
+	Default:    "https://api.openai.com/v1/models",
+	Validation: "url",
+}
+
 // APIKey is the API key for the OpenAI API.
 var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
+}
+
+// RefreshModels periodically repopulates the model alias table from the OpenAI models-list API.
+var RefreshModels = define.Ticker{ // MARKER: RefreshModels
+	Interval: 6 * time.Hour,
 }
 
 // OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.

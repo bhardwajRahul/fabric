@@ -25,7 +25,15 @@ crossing the bus) is unchanged, so nothing downstream is affected:
 
 `max_tokens` is renamed `max_output_tokens`.
 
-The provider ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. Instead `resolveModel` (in `service.go`) maps a capability tier (`fast`/`default`/`smart`) or an OpenAI family alias (`mini`/`nano`) to a current concrete model, passes through any `gpt-`/`o1-`/`o3-`/`o4-` prefixed name as-is (so a newly released model works before it is listed), and returns `""` for anything else. `Turn` calls it at the top: a recognized alias/name resolves, an unrecognized string passes through unchanged so an explicit-provider call to a brand-new model still reaches the API. Entries are pinned to the current release because OpenAI exposes no floating pointer - its rolling `*-latest` aliases (e.g. `chatgpt-4o-latest`) are deprecated and current models are versioned only. The alias table is held in `svc.modelAliases` (a small runtime map, not a hand-maintained public catalog); the Phase 2 live `/v1/models` lookup repopulates it.
+The provider ships no typed model catalog and **no shipped default alias table**: provider model IDs rotate every quarter, so any maintained list would go stale. Instead `resolveModel` (in `service.go`) resolves a capability tier (`fast`/`default`/`smart`) or a synthesized floating alias (`gpt-latest`/`gpt-pro-latest`/`gpt-mini-latest`/`gpt-nano-latest`) through a `svc.modelAliases` table that is populated lazily from the live models-list API on first use. The `gpt-*-latest` aliases stand in for the floating pointer OpenAI does not publish; they are namespaced with the `gpt-` prefix on purpose - a bare generic family word like `mini`/`nano` is **not** a global alias, since it would collide across providers under `"any"` resolution. Only the neutral tiers are global. A concrete model id passes through *without* the table: `isConcreteOpenAIModel` (a `gpt-` prefix followed by a version digit, or an `o1-`/`o3-`/`o4-` prefix) is returned verbatim, so a concrete `Turn` never depends on the models-list fetch and a newly released model works before it is listed. The digit test is what separates a concrete `gpt-5.5` from a synthesized `gpt-latest` alias (letter after the dash), which must go through the table. Anything unrecognized returns `""`. **Consequence of dropping defaults:** until a fetch succeeds, only concrete prefixed names resolve - a tier/family alias returns `""` (and `OnResolveProvider` answers `ok=false`) rather than a stale default. This is an accepted hard dependency: resolving an alias needs the same API and key as the chat call itself.
+
+## Model Alias Refresh
+
+The alias table is populated by `RefreshModels`, which fetches the OpenAI models-list API (`ModelsURL`, default `https://api.openai.com/v1/models`) and rebuilds `svc.modelAliases`. It runs three ways: an eager warm at startup (launched from `OnStartup` via `svc.Go`, non-blocking), a 6h ticker, and a lazy fetch on the first alias resolve. The lazy path is `ensureAliases`: a **retryable "once"** - concurrent resolves are serialized by `fetchMu` and a populated table short-circuits, but a *failed* fetch leaves the table empty so the next call retries. (A plain `sync.Once` is deliberately avoided: with no default fallback, a wedged first fetch would break alias resolution until the ticker.) The table is swapped under `aliasMu` (an `RWMutex`; `resolveModel` reads under `RLock`).
+
+`buildChatgptAliases` (pure, unit-tested) builds the table from the live list: each tier and its `gpt-*-latest` alias points at the *latest* `gpt-5`-or-later model of that variant. "Latest" is the highest version, tie-broken by the newer `created` timestamp - version leads so a re-published older model never outranks a higher version. Mapping: base `gpt-5.x` -> `default` + `gpt-latest`, `-pro` -> `smart` + `gpt-pro-latest`, `-mini` -> `fast` + `gpt-mini-latest`, `-nano` -> `gpt-nano-latest`. The variant regex only accepts a single all-letters suffix ending the id, so `-preview`/`-beta` markers, dated snapshots (`gpt-5.5-2025-04-01`), and multi-segment names (`gpt-5.5-pro-preview`) never match - a "latest" pointer tracks stable, dateless flagships only. Pre-5 families (`gpt-4o`, `gpt-4.1`), o-series, and non-tier suffixes (`gpt-5-codex`, `gpt-5.5-chat`) are excluded; a variant absent from the list simply has no alias.
+
+A missing key is a no-op; a fetch failure is returned by `RefreshModels` (never swallowed) and logged by the framework - its `svc.Go` warm-up and the 6h ticker both log a returned error - while staying non-fatal, so the last-known table keeps serving. A successful fetch doubles as early API-key validation: a `401`/`403` surfaces in the log shortly after startup rather than only on first use. The OpenAI list is sparse (`id`, `created`, `owned_by` only - no token limits or reasoning flag), which is why reasoning is inferred by name; see Reasoning Items and Replay.
 
 `OnResolveProvider` is this provider's sink for the `llm.core` resolve event: it answers `ok = APIKey configured && resolveModel(model) != ""`, so `llm.core` selects this provider under an empty/`"any"` request only when ChatGPT holds a key and recognizes the model. See `coreservices/llm/CLAUDE.md` "Provider and Model Resolution".
 
@@ -42,20 +50,25 @@ mechanism. Instead we request the encrypted reasoning payload and echo reasoning
 That requires `include:["reasoning.encrypted_content"]` on the request, and `store` is always `false`
 (a plain bool - we never rely on OpenAI retaining responses, and not retaining is the privacy default).
 
-**Whether to send `include` is detected at runtime, not from a model-name list.** Two live-API
-constraints shape it: a non-reasoning model (e.g. `gpt-4o-mini`) rejects
-`include=reasoning.encrypted_content` with a `400`, and an echoed reasoning item must carry a `summary`
-array (empty is fine; omitting it is a `400`). So the provider keeps a per-replica
-`map[model]bool reasoningSeen`: a model is added when a response bills reasoning tokens
-(`usage.output_tokens_details.reasoning_tokens > 0`), and `include` is sent only for models already in
-that set. This replaces a hardcoded reasoning-family prefix list, which would rot as models rotate.
+**Whether to send `include` is inferred from the model name.** A non-reasoning model (e.g. `gpt-4o-mini`)
+rejects `include=reasoning.encrypted_content` with a `400`, so the flag is gated on `isReasoningModel`
+(`service.go`), which reads the name. The rule is stated in the **negative** so future models default
+correctly: the o-series (`o1`/`o3`/`o4-...`) reason, and a `gpt-` model reasons *unless* its version is
+below 5 (`gpt-4o`/`gpt-4.1` are chat) or its name contains `-chat` (the `gpt-5.x-chat`/`-chat-latest`
+variants are non-reasoning even at version >= 5). An unversioned or future `gpt` name (`gpt-6`, ...)
+therefore defaults to reasoning, because new OpenAI flagships are reasoning models - the safe default is to
+assume reasoning and only carve out the known pre-5 and `-chat` non-reasoning families. The models-list API carries no reasoning flag
+for OpenAI (unlike Anthropic's `capabilities` and Gemini's `thinking` bool), so this name heuristic is the
+only upfront signal.
 
-**Consequence - first-encounter turn has no replay.** Because the model is added to `reasoningSeen`
-only *after* its first response, the very first call to a model on a replica goes out without `include`,
-so that turn's reasoning items come back with no encrypted payload and can't be replayed (the input
-converter skips reasoning items whose `EncryptedContent` is empty). Every turn after the first replays
-normally. This first-turn gap is the price of not hardcoding model names; the eventual fix is an upfront
-capability signal from the provider's models-list API (the provider-portability work), not a name list.
+Inferring from the name rather than observing billed reasoning tokens is a deliberate reversal of the
+earlier runtime-detection scheme (a per-replica `reasoningSeen` set warmed from
+`usage.output_tokens_details.reasoning_tokens`). That scheme had a **first-encounter gap**: the very first
+call to a model went out without `include`, so its reasoning items came back with no encrypted payload and
+could not be replayed. Because the current models are effectively all reasoning models, the safer default
+is to assume reasoning from the name and send `include` on the first turn, so replay works immediately with
+no gap. An echoed reasoning item must still carry a `summary` array (empty is fine; omitting it is a
+`400`), which the input converter always initializes non-nil.
 
 `Turn` populates `llmapi.Usage` from the Responses `usage` block. Responses reports `input_tokens` and `output_tokens` plus `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens`. The cached portion maps to `CacheReadTokens` with the remainder reported as `InputTokens`; `reasoning_tokens` maps to `ThinkingTokens` (the reasoning subset of `OutputTokens`, populated for GPT-5-class reasoning models and zero otherwise). Responses does not expose write counts so `CacheWriteTokens` is left at zero.
 

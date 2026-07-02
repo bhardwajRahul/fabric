@@ -92,10 +92,15 @@ type Service struct {
 	blockedUntil  map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
 	reasonMu      sync.Mutex
 	reasoningSeen map[string]bool // model -> observed to reason (billed reasoning tokens); enables encrypted-reasoning replay
+	aliasMu       sync.RWMutex
+	fetchMu       sync.Mutex      // serializes the lazy models-list fetch so concurrent resolves make one call
+	modelNames    map[string]bool // set of model_name entries the proxy exposes; populated lazily from the models-list API
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	// Warm the model_name set in the background so the first resolve rarely pays the fetch; startup never blocks.
+	svc.Go(ctx, svc.RefreshModels)
 	return nil
 }
 
@@ -127,10 +132,119 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 }
 
 /*
-OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an operator-defined model_list, so this provider answers ok=true for any model_name the proxy exposes (fetched from its models-list API), including tiers like smart when the operator names an entry so.
 */
 func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
-	return false, nil
+	if svc.APIKey() == "" {
+		return false, nil
+	}
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return resolved != "", nil
+}
+
+// resolveModel returns the model as-is when the proxy exposes a model_name matching it, else "". LiteLLM's model_name
+// is the alias - the proxy maps it to a real backend model - so there is no vendor prefix or family to interpret;
+// membership in the lazily-fetched model_name set is the whole test. Turn does not call this: it passes the model
+// straight to the proxy (the proxy is the authority on its model_list), so an explicit-provider call never depends on
+// the fetch.
+func (svc *Service) resolveModel(ctx context.Context, model string) (string, error) {
+	if model == "" {
+		return "", nil
+	}
+	err := svc.ensureAliases(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	svc.aliasMu.RLock()
+	held := svc.modelNames[model]
+	svc.aliasMu.RUnlock()
+	if held {
+		return model, nil
+	}
+	return "", nil
+}
+
+// ensureAliases lazily populates the model_name set on first use, serialized by fetchMu; a failed fetch retries next call.
+func (svc *Service) ensureAliases(ctx context.Context) error {
+	svc.aliasMu.RLock()
+	populated := svc.modelNames != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	if svc.APIKey() == "" {
+		return nil
+	}
+	svc.fetchMu.Lock()
+	defer svc.fetchMu.Unlock()
+	svc.aliasMu.RLock()
+	populated = svc.modelNames != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	return svc.RefreshModels(ctx)
+}
+
+/*
+RefreshModels periodically repopulates the model_name set from the LiteLLM proxy's models-list API.
+*/
+func (svc *Service) RefreshModels(ctx context.Context) (err error) { // MARKER: RefreshModels
+	if svc.APIKey() == "" {
+		return nil
+	}
+	names, err := svc.listModelNames(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	svc.aliasMu.Lock()
+	svc.modelNames = set
+	svc.aliasMu.Unlock()
+	return nil
+}
+
+// listModelNames fetches the operator's model_name entries from the LiteLLM proxy's OpenAI-compatible models-list API.
+func (svc *Service) listModelNames(ctx context.Context) ([]string, error) {
+	httpReq, err := http.NewRequest("GET", svc.ModelsURL(), nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if svc.APIKey() != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+svc.APIKey())
+	}
+	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, errors.New("LiteLLM models list returned status %d", httpResp.StatusCode)
+	}
+	var listResp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(body, &listResp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	names := make([]string, 0, len(listResp.Data))
+	for _, m := range listResp.Data {
+		names = append(names, m.ID)
+	}
+	return names, nil
 }
 
 /*

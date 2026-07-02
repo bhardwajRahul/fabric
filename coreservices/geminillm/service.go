@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,11 +111,15 @@ type Service struct {
 	// HINT: Add member variables here
 	rateMu       sync.Mutex
 	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
-	modelAliases map[string]string    // tier/family alias -> concrete model; nil falls back to geminiDefaultAliases. Phase 2 repopulates it from the models-list API.
+	aliasMu      sync.RWMutex
+	fetchMu      sync.Mutex        // serializes the lazy models-list fetch so concurrent resolves make one call
+	modelAliases map[string]string // tier/family alias -> concrete model; populated lazily from the models-list API (no shipped defaults)
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	// Warm the alias table in the background so the first alias resolve rarely pays the fetch; startup never blocks.
+	svc.Go(ctx, svc.RefreshModels)
 	return nil
 }
 
@@ -145,40 +150,177 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
-// geminiDefaultAliases is the shipped alias table (capability tiers and Gemini family names -> concrete models).
-// Gemini exposes a floating "-latest" pointer for every family, so all tiers self-update to the current model with
-// no code change. Phase 2's models-list lookup repopulates svc.modelAliases if these ever need overriding.
-var geminiDefaultAliases = map[string]string{
+// geminiLatestTargets maps each neutral tier to its floating "-latest" pointer (a stable name, not a rotating concrete
+// id). Only the cross-provider tiers are aliased - generic family words like "pro"/"flash" would collide across
+// providers under "any" resolution, so a caller wanting a specific Gemini family uses its gemini- prefixed name.
+// buildGeminiAliases keeps only the entries whose pointer is a live text model.
+var geminiLatestTargets = map[string]string{
 	llmapi.ModelFast:    "gemini-flash-lite-latest",
 	llmapi.ModelDefault: "gemini-flash-latest",
 	llmapi.ModelSmart:   "gemini-pro-latest",
-	"flash":             "gemini-flash-latest",
-	"pro":               "gemini-pro-latest",
-	"flash-lite":        "gemini-flash-lite-latest",
 }
 
-// resolveModel maps a tier/family alias to a concrete Gemini model via svc.modelAliases (falling back to the shipped
-// defaults while that member is nil), passes through any gemini- prefixed name so a newly released model works before
-// it is listed, and returns "" for anything it does not recognize.
-func (svc *Service) resolveModel(model string) string {
-	aliases := svc.modelAliases
-	if aliases == nil {
-		aliases = geminiDefaultAliases
-	}
-	if concrete, ok := aliases[model]; ok {
-		return concrete
+// resolveModel resolves a tier/family alias to a Gemini floating pointer, or "" if unknown. A gemini- prefixed concrete
+// id or -latest pointer passes through without the table; aliases consult the lazily-populated table.
+func (svc *Service) resolveModel(ctx context.Context, model string) (string, error) {
+	if model == "" {
+		return "", nil
 	}
 	if strings.HasPrefix(model, "gemini-") {
-		return model
+		return model, nil
 	}
-	return ""
+	err := svc.ensureAliases(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	svc.aliasMu.RLock()
+	concrete := svc.modelAliases[model]
+	svc.aliasMu.RUnlock()
+	return concrete, nil
+}
+
+// ensureAliases lazily populates the alias table on first use, serialized by fetchMu; a failed fetch retries next call.
+func (svc *Service) ensureAliases(ctx context.Context) error {
+	svc.aliasMu.RLock()
+	populated := svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	if svc.APIKey() == "" {
+		return nil
+	}
+	svc.fetchMu.Lock()
+	defer svc.fetchMu.Unlock()
+	svc.aliasMu.RLock()
+	populated = svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	return svc.RefreshModels(ctx)
 }
 
 /*
 OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
 */
 func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
-	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+	if svc.APIKey() == "" {
+		return false, nil
+	}
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return resolved != "", nil
+}
+
+// listedModel is the subset of a models-list entry the alias refresher needs.
+type listedModel struct {
+	id      string   // the model id with the "models/" prefix stripped
+	methods []string // supportedGenerationMethods
+}
+
+// geminiNonTextDeny lists name substrings of non-text families to exclude, since a name like flash also appears on
+// non-text variants that still advertise generateContent.
+var geminiNonTextDeny = []string{
+	"image", "tts", "audio", "embedding", "aqa", "vision", "live",
+	"robotics", "lyria", "veo", "imagen", "computer-use", "gemma", "learnlm",
+}
+
+/*
+RefreshModels periodically repopulates the model alias table from the Gemini models-list API.
+*/
+func (svc *Service) RefreshModels(ctx context.Context) (err error) { // MARKER: RefreshModels
+	if svc.APIKey() == "" {
+		return nil
+	}
+	models, err := svc.listModels(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	aliases := buildGeminiAliases(models)
+	svc.aliasMu.Lock()
+	svc.modelAliases = aliases
+	svc.aliasMu.Unlock()
+	return nil
+}
+
+// buildGeminiAliases builds the alias table from the live list: each alias -> its family's floating -latest pointer,
+// kept only when that pointer is a live text model.
+func buildGeminiAliases(models []listedModel) map[string]string {
+	text := map[string]bool{}
+	for _, id := range geminiTextModelIDs(models) {
+		text[id] = true
+	}
+	aliases := map[string]string{}
+	for alias, target := range geminiLatestTargets {
+		if text[target] {
+			aliases[alias] = target
+		}
+	}
+	return aliases
+}
+
+// listModels fetches the current model catalog from the Gemini models-list API.
+func (svc *Service) listModels(ctx context.Context) ([]listedModel, error) {
+	apiURL := svc.ModelsURL() + "?pageSize=1000&key=" + svc.APIKey()
+	httpReq, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, errors.New("Gemini models list returned status %d", httpResp.StatusCode)
+	}
+	var listResp struct {
+		Models []struct {
+			Name                       string   `json:"name"`
+			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+		} `json:"models"`
+	}
+	err = json.Unmarshal(body, &listResp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	models := make([]listedModel, 0, len(listResp.Models))
+	for _, m := range listResp.Models {
+		models = append(models, listedModel{
+			id:      strings.TrimPrefix(m.Name, "models/"),
+			methods: m.SupportedGenerationMethods,
+		})
+	}
+	return models, nil
+}
+
+// geminiTextModelIDs filters the catalog to text-generation models: those advertising generateContent and not named
+// like a non-text family (image, tts, embedding, ...).
+func geminiTextModelIDs(models []listedModel) []string {
+	var ids []string
+	for _, m := range models {
+		if !slices.Contains(m.methods, "generateContent") {
+			continue
+		}
+		denied := false
+		for _, d := range geminiNonTextDeny {
+			if strings.Contains(m.id, d) {
+				denied = true
+				break
+			}
+		}
+		if !denied {
+			ids = append(ids, m.id)
+		}
+	}
+	return ids
 }
 
 /*
@@ -190,7 +332,11 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	}
 	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
 	// explicit-provider call to a brand-new model still reaches the API.
-	if resolved := svc.resolveModel(model); resolved != "" {
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
+	}
+	if resolved != "" {
 		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.

@@ -21,6 +21,7 @@ package claudellm
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
@@ -45,6 +46,7 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 	OnResolveProvider(ctx context.Context, model string) (ok bool, err error)                                                                                                                 // MARKER: OnResolveProvider
+	RefreshModels(ctx context.Context) (err error)                                                                                                                                            // MARKER: RefreshModels
 }
 
 // NewService creates a new instance of the microservice.
@@ -88,11 +90,18 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the Claude provider.`),
 		sub.Function(claudellmapi.TurnIn{}, claudellmapi.TurnOut{}),
 	)
-	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider) // MARKER: OnResolveProvider
-	svc.DefineConfig(                                            // MARKER: MessagesURL
+	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider)     // MARKER: OnResolveProvider
+	svc.StartTicker("RefreshModels", 6*time.Hour, svc.RefreshModels) // MARKER: RefreshModels
+	svc.DefineConfig(                                                // MARKER: MessagesURL
 		"MessagesURL",
 		cfg.Description(`MessagesURL is the URL of the Claude messages endpoint.`),
 		cfg.DefaultValue(`https://api.anthropic.com/v1/messages`),
+		cfg.Validation(`url`),
+	)
+	svc.DefineConfig( // MARKER: ModelsURL
+		"ModelsURL",
+		cfg.Description(`ModelsURL is the URL of the Claude models-list endpoint, used to refresh the alias table with the current catalog.`),
+		cfg.DefaultValue(`https://api.anthropic.com/v1/models`),
 		cfg.Validation(`url`),
 	)
 	svc.DefineConfig( // MARKER: APIKey
@@ -150,6 +159,16 @@ func (svc *Intermediate) MessagesURL() (value string) { // MARKER: MessagesURL
 // SetMessagesURL sets the value of the configuration property.
 func (svc *Intermediate) SetMessagesURL(value string) (err error) { // MARKER: MessagesURL
 	return svc.SetConfig("MessagesURL", value)
+}
+
+// ModelsURL is the URL of the Claude models-list endpoint, used to refresh the alias table with the current catalog.
+func (svc *Intermediate) ModelsURL() (value string) { // MARKER: ModelsURL
+	return svc.Config("ModelsURL")
+}
+
+// SetModelsURL sets the value of the configuration property.
+func (svc *Intermediate) SetModelsURL(value string) (err error) { // MARKER: ModelsURL
+	return svc.SetConfig("ModelsURL", value)
 }
 
 // APIKey is the API key for the Claude API.

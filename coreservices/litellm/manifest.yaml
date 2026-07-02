@@ -19,7 +19,7 @@ general:
   hostname: lite.llm.core
   description: The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Responses wire format.
   package: github.com/microbus-io/fabric/coreservices/litellm
-  modifiedAt: "2026-07-02T04:17:10Z"
+  modifiedAt: "2026-07-02T12:53:43Z"
 
 configs:
   ResponsesURL:
@@ -27,6 +27,11 @@ configs:
     description: ResponsesURL is the URL of the LiteLLM proxy responses endpoint.
     validation: url
     default: http://localhost:4000/v1/responses
+  ModelsURL:
+    signature: ModelsURL() (value string)
+    description: ModelsURL is the URL of the LiteLLM proxy models-list endpoint, whose model_name entries are this provider's aliases.
+    validation: url
+    default: http://localhost:4000/v1/models
   APIKey:
     signature: APIKey() (value string)
     description: APIKey is the virtual key for the LiteLLM proxy.
@@ -42,5 +47,11 @@ functions:
 inboundEvents:
   OnResolveProvider:
     signature: OnResolveProvider(model string) (ok bool)
-    description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+    description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an operator-defined model_list, so this provider answers ok=true for any model_name the proxy exposes (fetched from its models-list API), including tiers like smart when the operator names an entry so.
     package: github.com/microbus-io/fabric/coreservices/llm/llmapi
+
+tickers:
+  RefreshModels:
+    signature: RefreshModels()
+    description: RefreshModels periodically repopulates the model_name set from the LiteLLM proxy's models-list API.
+    interval: 6h

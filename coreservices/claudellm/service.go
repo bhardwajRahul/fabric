@@ -83,11 +83,15 @@ type Service struct {
 	// HINT: Add member variables here
 	rateMu       sync.Mutex
 	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
-	modelAliases map[string]string    // tier/family alias -> concrete model; nil falls back to claudeDefaultAliases. Phase 2 repopulates it from the models-list API.
+	aliasMu      sync.RWMutex
+	fetchMu      sync.Mutex        // serializes the lazy models-list fetch so concurrent resolves make one call
+	modelAliases map[string]string // tier/family alias -> concrete model; populated lazily from the models-list API (no shipped defaults)
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	// Warm the alias table in the background so the first alias resolve rarely pays the fetch; startup never blocks.
+	svc.Go(ctx, svc.RefreshModels)
 	return nil
 }
 
@@ -118,42 +122,170 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
-// claudeDefaultAliases is the shipped alias table (capability tiers and Claude family names -> concrete models). The
-// Anthropic API has no evergreen pointer - dateless IDs like claude-opus-4-8 are pinned snapshots, not floating
-// aliases (the opus/sonnet aliases that auto-migrate are a Claude Code CLI convenience, not API model IDs) - so these
-// are pinned to the current release and refreshed by the Phase 2 models-list lookup when svc.modelAliases is populated.
-var claudeDefaultAliases = map[string]string{
-	llmapi.ModelFast:    "claude-haiku-4-5",
-	llmapi.ModelDefault: "claude-sonnet-5",
-	llmapi.ModelSmart:   "claude-opus-4-8",
-	"haiku":             "claude-haiku-4-5",
-	"sonnet":            "claude-sonnet-5",
-	"opus":              "claude-opus-4-8",
-	"fable":             "claude-fable-5",
-}
-
-// resolveModel maps a tier/family alias to a concrete Claude model via svc.modelAliases (falling back to the shipped
-// defaults while that member is nil), passes through any claude- prefixed name so a newly released model works before
-// it is listed, and returns "" for anything it does not recognize.
-func (svc *Service) resolveModel(model string) string {
-	aliases := svc.modelAliases
-	if aliases == nil {
-		aliases = claudeDefaultAliases
+// resolveModel resolves a tier or claude-<family>-latest alias to a concrete Claude model, or "" if unknown. A concrete
+// claude- id (not ending in -latest) passes through without the table; the synthesized claude-*-latest aliases and the
+// tiers consult the lazily-populated table, and a claude- name absent from the table (e.g. a real vendor -latest alias
+// we did not synthesize) still passes through so the API can accept it.
+func (svc *Service) resolveModel(ctx context.Context, model string) (string, error) {
+	if model == "" {
+		return "", nil
 	}
-	if concrete, ok := aliases[model]; ok {
-		return concrete
+	if strings.HasPrefix(model, "claude-") && !strings.HasSuffix(model, "-latest") {
+		return model, nil
+	}
+	err := svc.ensureAliases(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	svc.aliasMu.RLock()
+	concrete, ok := svc.modelAliases[model]
+	svc.aliasMu.RUnlock()
+	if ok {
+		return concrete, nil
 	}
 	if strings.HasPrefix(model, "claude-") {
-		return model
+		return model, nil
 	}
-	return ""
+	return "", nil
+}
+
+// ensureAliases lazily populates the alias table on first use, serialized by fetchMu; a failed fetch retries next call.
+func (svc *Service) ensureAliases(ctx context.Context) error {
+	svc.aliasMu.RLock()
+	populated := svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	if svc.APIKey() == "" {
+		return nil
+	}
+	svc.fetchMu.Lock()
+	defer svc.fetchMu.Unlock()
+	svc.aliasMu.RLock()
+	populated = svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	return svc.RefreshModels(ctx)
 }
 
 /*
 OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
 */
 func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
-	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+	if svc.APIKey() == "" {
+		return false, nil
+	}
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return resolved != "", nil
+}
+
+// listedModel is the subset of a models-list entry the alias refresher needs.
+type listedModel struct {
+	id      string
+	created int64 // unix seconds; the newest per family wins
+}
+
+/*
+RefreshModels periodically repopulates the model alias table from the Claude models-list API.
+*/
+func (svc *Service) RefreshModels(ctx context.Context) (err error) { // MARKER: RefreshModels
+	if svc.APIKey() == "" {
+		return nil
+	}
+	models, err := svc.listModels(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	aliases := buildClaudeAliases(models)
+	svc.aliasMu.Lock()
+	svc.modelAliases = aliases
+	svc.aliasMu.Unlock()
+	return nil
+}
+
+// listModels fetches the current model catalog from the Claude models-list API.
+func (svc *Service) listModels(ctx context.Context) ([]listedModel, error) {
+	httpReq, err := http.NewRequest("GET", svc.ModelsURL()+"?limit=1000", nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	httpReq.Header.Set("x-api-key", svc.APIKey())
+	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, errors.New("Claude models list returned status %d", httpResp.StatusCode)
+	}
+	var listResp struct {
+		Data []struct {
+			ID        string `json:"id"`
+			CreatedAt string `json:"created_at"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(body, &listResp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	models := make([]listedModel, 0, len(listResp.Data))
+	for _, m := range listResp.Data {
+		var created int64
+		if t, perr := time.Parse(time.RFC3339, m.CreatedAt); perr == nil {
+			created = t.Unix()
+		}
+		models = append(models, listedModel{id: m.ID, created: created})
+	}
+	return models, nil
+}
+
+// buildClaudeAliases builds the alias table from the live list: each family's synthesized claude-<family>-latest alias
+// and its tier (haiku->fast, sonnet->default, opus->smart) -> newest claude-<family>-* by created_at. Bare family
+// words (opus/sonnet/haiku) are not global aliases - they are namespaced under the claude- prefix to avoid collisions.
+func buildClaudeAliases(models []listedModel) map[string]string {
+	newest := map[string]listedModel{} // family -> newest listed model
+	for _, m := range models {
+		if !strings.HasPrefix(m.id, "claude-") {
+			continue
+		}
+		// Family is the segment after "claude-", assuming the current claude-<family>-<version> id shape; an
+		// old-style claude-3-5-<family> id would bucket under its leading number, which is harmless as long as the
+		// newest model of each family stays new-style (true for the current catalog).
+		family := m.id[len("claude-"):]
+		if i := strings.IndexByte(family, '-'); i >= 0 {
+			family = family[:i]
+		}
+		if cur, ok := newest[family]; !ok || m.created > cur.created {
+			newest[family] = m
+		}
+	}
+	aliases := map[string]string{}
+	for _, family := range []string{"haiku", "sonnet", "opus", "fable"} {
+		if m, ok := newest[family]; ok {
+			aliases["claude-"+family+"-latest"] = m.id
+		}
+	}
+	if m, ok := newest["haiku"]; ok {
+		aliases[llmapi.ModelFast] = m.id
+	}
+	if m, ok := newest["sonnet"]; ok {
+		aliases[llmapi.ModelDefault] = m.id
+	}
+	if m, ok := newest["opus"]; ok {
+		aliases[llmapi.ModelSmart] = m.id
+	}
+	return aliases
 }
 
 /*
@@ -165,7 +297,11 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	}
 	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
 	// explicit-provider call to a brand-new model still reaches the API.
-	if resolved := svc.resolveModel(model); resolved != "" {
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
+	}
+	if resolved != "" {
 		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.

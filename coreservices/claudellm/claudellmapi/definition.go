@@ -17,6 +17,8 @@ limitations under the License.
 package claudellmapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/define"
 )
@@ -44,10 +46,22 @@ var MessagesURL = define.Config{ // MARKER: MessagesURL
 	Validation: "url",
 }
 
+// ModelsURL is the URL of the Claude models-list endpoint, used to refresh the alias table with the current catalog.
+var ModelsURL = define.Config{ // MARKER: ModelsURL
+	Value:      string(""),
+	Default:    "https://api.anthropic.com/v1/models",
+	Validation: "url",
+}
+
 // APIKey is the API key for the Claude API.
 var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
+}
+
+// RefreshModels periodically repopulates the model alias table from the Claude models-list API.
+var RefreshModels = define.Ticker{ // MARKER: RefreshModels
+	Interval: 6 * time.Hour,
 }
 
 // OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.

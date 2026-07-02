@@ -21,6 +21,7 @@ package chatgptllm
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/microbus-io/errors"
 	"github.com/microbus-io/fabric/cfg"
@@ -45,6 +46,7 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 	OnResolveProvider(ctx context.Context, model string) (ok bool, err error)                                                                                                                 // MARKER: OnResolveProvider
+	RefreshModels(ctx context.Context) (err error)                                                                                                                                            // MARKER: RefreshModels
 }
 
 // NewService creates a new instance of the microservice.
@@ -88,11 +90,18 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the ChatGPT provider.`),
 		sub.Function(chatgptllmapi.TurnIn{}, chatgptllmapi.TurnOut{}),
 	)
-	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider) // MARKER: OnResolveProvider
-	svc.DefineConfig(                                            // MARKER: ResponsesURL
+	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider)     // MARKER: OnResolveProvider
+	svc.StartTicker("RefreshModels", 6*time.Hour, svc.RefreshModels) // MARKER: RefreshModels
+	svc.DefineConfig(                                                // MARKER: ResponsesURL
 		"ResponsesURL",
 		cfg.Description(`ResponsesURL is the URL of the OpenAI responses endpoint.`),
 		cfg.DefaultValue(`https://api.openai.com/v1/responses`),
+		cfg.Validation(`url`),
+	)
+	svc.DefineConfig( // MARKER: ModelsURL
+		"ModelsURL",
+		cfg.Description(`ModelsURL is the URL of the OpenAI models-list endpoint, used to refresh the alias table with the current catalog.`),
+		cfg.DefaultValue(`https://api.openai.com/v1/models`),
 		cfg.Validation(`url`),
 	)
 	svc.DefineConfig( // MARKER: APIKey
@@ -150,6 +159,16 @@ func (svc *Intermediate) ResponsesURL() (value string) { // MARKER: ResponsesURL
 // SetResponsesURL sets the value of the configuration property.
 func (svc *Intermediate) SetResponsesURL(value string) (err error) { // MARKER: ResponsesURL
 	return svc.SetConfig("ResponsesURL", value)
+}
+
+// ModelsURL is the URL of the OpenAI models-list endpoint, used to refresh the alias table with the current catalog.
+func (svc *Intermediate) ModelsURL() (value string) { // MARKER: ModelsURL
+	return svc.Config("ModelsURL")
+}
+
+// SetModelsURL sets the value of the configuration property.
+func (svc *Intermediate) SetModelsURL(value string) (err error) { // MARKER: ModelsURL
+	return svc.SetConfig("ModelsURL", value)
 }
 
 // APIKey is the API key for the OpenAI API.

@@ -19,7 +19,7 @@ general:
   hostname: claude.llm.core
   description: The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.
   package: github.com/microbus-io/fabric/coreservices/claudellm
-  modifiedAt: "2026-07-02T04:13:50Z"
+  modifiedAt: "2026-07-02T11:40:06Z"
 
 configs:
   MessagesURL:
@@ -27,6 +27,11 @@ configs:
     description: MessagesURL is the URL of the Claude messages endpoint.
     validation: url
     default: https://api.anthropic.com/v1/messages
+  ModelsURL:
+    signature: ModelsURL() (value string)
+    description: ModelsURL is the URL of the Claude models-list endpoint, used to refresh the alias table with the current catalog.
+    validation: url
+    default: https://api.anthropic.com/v1/models
   APIKey:
     signature: APIKey() (value string)
     description: APIKey is the API key for the Claude API.
@@ -44,3 +49,9 @@ inboundEvents:
     signature: OnResolveProvider(model string) (ok bool)
     description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
     package: github.com/microbus-io/fabric/coreservices/llm/llmapi
+
+tickers:
+  RefreshModels:
+    signature: RefreshModels()
+    description: RefreshModels periodically repopulates the model alias table from the Claude models-list API.
+    interval: 6h

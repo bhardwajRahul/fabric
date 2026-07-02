@@ -17,6 +17,8 @@ limitations under the License.
 package geminillmapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/define"
 )
@@ -48,6 +50,11 @@ var ModelsURL = define.Config{ // MARKER: ModelsURL
 var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
+}
+
+// RefreshModels periodically repopulates the model alias table from the Gemini models-list API.
+var RefreshModels = define.Ticker{ // MARKER: RefreshModels
+	Interval: 6 * time.Hour,
 }
 
 // OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.

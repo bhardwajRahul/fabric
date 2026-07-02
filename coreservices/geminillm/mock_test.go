@@ -71,4 +71,14 @@ func TestGeminillm_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("refresh_models", func(t *testing.T) { // MARKER: RefreshModels
+		assert := testarossa.For(t)
+
+		mock.MockRefreshModels(func(ctx context.Context) (err error) {
+			return
+		})
+		err := mock.RefreshModels(ctx)
+		assert.NoError(err)
+	})
+
 }

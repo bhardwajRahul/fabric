@@ -86,15 +86,17 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
-	rateMu        sync.Mutex
-	blockedUntil  map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
-	reasonMu      sync.Mutex
-	reasoningSeen map[string]bool   // model -> observed to reason (billed reasoning tokens); enables encrypted-reasoning replay
-	modelAliases  map[string]string // tier/family alias -> concrete model; nil falls back to chatgptDefaultAliases. Phase 2 repopulates it from the models-list API.
+	rateMu       sync.Mutex
+	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	aliasMu      sync.RWMutex
+	fetchMu      sync.Mutex        // serializes the lazy models-list fetch so concurrent resolves make one call
+	modelAliases map[string]string // tier/family alias -> concrete model; populated lazily from the models-list API (no shipped defaults)
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	// Warm the alias table in the background so the first alias resolve rarely pays the fetch; startup never blocks.
+	svc.Go(ctx, svc.RefreshModels)
 	return nil
 }
 
@@ -125,40 +127,69 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
-// chatgptDefaultAliases is the shipped alias table (capability tiers and OpenAI family names -> concrete models).
-// OpenAI has no floating pointer - its rolling aliases (chatgpt-4o-latest, gpt-5.3-chat-latest) are deprecated and
-// current models are versioned only - so these are pinned to the current release and refreshed by the Phase 2
-// models-list lookup when svc.modelAliases is populated.
-var chatgptDefaultAliases = map[string]string{
-	llmapi.ModelFast:    "gpt-5.4-mini",
-	llmapi.ModelDefault: "gpt-5.5",
-	llmapi.ModelSmart:   "gpt-5.5-pro",
-	"mini":              "gpt-5.4-mini",
-	"nano":              "gpt-5.4-nano",
+// resolveModel resolves a tier/family/gpt-*-latest alias to a concrete OpenAI model, or "" if unknown. Concrete names
+// pass through without the table; aliases consult the lazily-populated table.
+func (svc *Service) resolveModel(ctx context.Context, model string) (string, error) {
+	if model == "" {
+		return "", nil
+	}
+	if isConcreteOpenAIModel(model) {
+		return model, nil
+	}
+	err := svc.ensureAliases(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	svc.aliasMu.RLock()
+	concrete := svc.modelAliases[model]
+	svc.aliasMu.RUnlock()
+	return concrete, nil
 }
 
-// resolveModel maps a tier/family alias to a concrete OpenAI model via svc.modelAliases (falling back to the shipped
-// defaults while that member is nil), passes through any gpt-/o1-/o3-/o4- prefixed name so a newly released model
-// works before it is listed, and returns "" for anything it does not recognize.
-func (svc *Service) resolveModel(model string) string {
-	aliases := svc.modelAliases
-	if aliases == nil {
-		aliases = chatgptDefaultAliases
+// isConcreteOpenAIModel reports whether model is a concrete id (gpt- + a version digit, or an o-series o + a digit)
+// rather than an alias; the digit distinguishes gpt-5.5 from the synthesized gpt-latest alias, and matches the o-series
+// the same way isReasoningModel does so a bare o3/o1 is recognized.
+func isConcreteOpenAIModel(model string) bool {
+	if strings.HasPrefix(model, "gpt-") && len(model) > 4 && model[4] >= '0' && model[4] <= '9' {
+		return true
 	}
-	if concrete, ok := aliases[model]; ok {
-		return concrete
+	return len(model) >= 2 && model[0] == 'o' && model[1] >= '1' && model[1] <= '9'
+}
+
+// ensureAliases lazily populates the alias table on first use, serialized by fetchMu; a failed fetch retries next call.
+func (svc *Service) ensureAliases(ctx context.Context) error {
+	svc.aliasMu.RLock()
+	populated := svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
 	}
-	if strings.HasPrefix(model, "gpt-") || strings.HasPrefix(model, "o1-") || strings.HasPrefix(model, "o3-") || strings.HasPrefix(model, "o4-") {
-		return model
+	if svc.APIKey() == "" {
+		return nil
 	}
-	return ""
+	svc.fetchMu.Lock()
+	defer svc.fetchMu.Unlock()
+	svc.aliasMu.RLock()
+	populated = svc.modelAliases != nil
+	svc.aliasMu.RUnlock()
+	if populated {
+		return nil
+	}
+	return svc.RefreshModels(ctx)
 }
 
 /*
 OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
 */
 func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
-	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+	if svc.APIKey() == "" {
+		return false, nil
+	}
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return resolved != "", nil
 }
 
 /*
@@ -170,7 +201,11 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	}
 	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
 	// explicit-provider call to a brand-new model still reaches the API.
-	if resolved := svc.resolveModel(model); resolved != "" {
+	resolved, err := svc.resolveModel(ctx, model)
+	if err != nil {
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
+	}
+	if resolved != "" {
 		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
@@ -260,11 +295,8 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		Instructions: instructions,
 		Tools:        oaiTools,
 	}
-	// Ask for the encrypted reasoning payload only once this model is known to reason. A non-reasoning
-	// model rejects include=reasoning.encrypted_content with a 400, so we don't send it until a prior
-	// response proved the model reasons (detected from usage.reasoning_tokens). The first call to a
-	// reasoning model therefore can't replay its own reasoning - acceptable; every later turn does.
-	if svc.knownReasoning(model) {
+	// Request the encrypted reasoning payload only for reasoning models; a non-reasoning model rejects it with a 400.
+	if isReasoningModel(model) {
 		reqBody.Include = []string{"reasoning.encrypted_content"}
 	}
 	if options != nil {
@@ -407,33 +439,146 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		usage.CacheReadTokens = 0
 	}
 
-	// Billed reasoning tokens prove this model reasons, so future turns request the encrypted reasoning
-	// payload for replay. This is what replaces a hardcoded reasoning-model name list.
-	if usage.ThinkingTokens > 0 {
-		svc.noteReasoning(model)
-	}
-
 	return outItems, stopReason, usage, nil
 }
 
-// knownReasoning reports whether this model has been observed to reason (a prior turn billed reasoning
-// tokens). Only then does Turn request the encrypted reasoning payload, since a non-reasoning model
-// rejects that request. Per-replica; warms on the first response from a reasoning model.
-func (svc *Service) knownReasoning(model string) bool {
-	svc.reasonMu.Lock()
-	defer svc.reasonMu.Unlock()
-	return svc.reasoningSeen[model]
+// openaiReasoningRE matches the gpt-<version> prefix, capturing the numeric version for the reasoning cutoff.
+var openaiReasoningRE = regexp.MustCompile(`^gpt-([0-9]+(?:\.[0-9]+)?)`)
+
+// isReasoningModel infers reasoning from the model name (the models-list API has no reasoning flag): the o-series
+// reasons, and a gpt reasons unless its version is below 5, so a future/unversioned gpt defaults to reasoning. The
+// gpt-*-chat variants are the exception - non-reasoning chat models even at version >= 5.
+func isReasoningModel(model string) bool {
+	if len(model) >= 2 && model[0] == 'o' && model[1] >= '1' && model[1] <= '9' {
+		return true
+	}
+	if !strings.HasPrefix(model, "gpt-") {
+		return false
+	}
+	if strings.Contains(model, "-chat") {
+		return false
+	}
+	if m := openaiReasoningRE.FindStringSubmatch(model); m != nil {
+		if v, err := strconv.ParseFloat(m[1], 64); err == nil && v < 5 {
+			return false
+		}
+	}
+	return true
 }
 
-// noteReasoning records that a model reasons, learned at runtime from billed reasoning tokens rather
-// than a hardcoded name list.
-func (svc *Service) noteReasoning(model string) {
-	svc.reasonMu.Lock()
-	defer svc.reasonMu.Unlock()
-	if svc.reasoningSeen == nil {
-		svc.reasoningSeen = map[string]bool{}
+// listedModel is the subset of a models-list entry the alias refresher needs.
+type listedModel struct {
+	id      string
+	created int64 // unix seconds; the newest per variant wins
+}
+
+/*
+RefreshModels periodically repopulates the model alias table from the OpenAI models-list API.
+*/
+func (svc *Service) RefreshModels(ctx context.Context) (err error) { // MARKER: RefreshModels
+	if svc.APIKey() == "" {
+		return nil
 	}
-	svc.reasoningSeen[model] = true
+	models, err := svc.listModels(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	aliases := buildChatgptAliases(models)
+	svc.aliasMu.Lock()
+	svc.modelAliases = aliases
+	svc.aliasMu.Unlock()
+	return nil
+}
+
+// listModels fetches the current model catalog from the OpenAI models-list API.
+func (svc *Service) listModels(ctx context.Context) ([]listedModel, error) {
+	httpReq, err := http.NewRequest("GET", svc.ModelsURL(), nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+svc.APIKey())
+	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, errors.New("OpenAI models list returned status %d", httpResp.StatusCode)
+	}
+	var listResp struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Created int64  `json:"created"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(body, &listResp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	models := make([]listedModel, 0, len(listResp.Data))
+	for _, m := range listResp.Data {
+		models = append(models, listedModel{id: m.ID, created: m.Created})
+	}
+	return models, nil
+}
+
+// openaiVariantRE parses a gpt-<version>[-<variant>] id. The single all-letters suffix requirement excludes
+// preview/beta/dated/multi-segment names, so a "latest" alias tracks stable, dateless flagships only.
+var openaiVariantRE = regexp.MustCompile(`^gpt-([0-9]+(?:\.[0-9]+)?)(?:-([a-z]+))?$`)
+
+// gptVariant is the running best model of a variant, ranked by version then recency.
+type gptVariant struct {
+	id      string
+	version float64
+	created int64
+}
+
+// buildChatgptAliases builds the alias table from the live list: each tier and its synthesized gpt-*-latest alias ->
+// latest gpt-5+ model of the variant (highest version, tie-broken by created). base->default, pro->smart, mini->fast,
+// nano->nano. Pre-5/chat/preview/non-tier models are excluded.
+func buildChatgptAliases(models []listedModel) map[string]string {
+	aliases := map[string]string{}
+	best := map[string]gptVariant{} // variant ("", "pro", "mini", "nano") -> latest gpt-5+ model
+	for _, m := range models {
+		match := openaiVariantRE.FindStringSubmatch(m.id)
+		if match == nil {
+			continue
+		}
+		version, perr := strconv.ParseFloat(match[1], 64)
+		if perr != nil || version < 5 {
+			continue
+		}
+		variant := match[2]
+		switch variant {
+		case "", "pro", "mini", "nano":
+		default:
+			continue
+		}
+		cur, ok := best[variant]
+		if !ok || version > cur.version || (version == cur.version && m.created > cur.created) {
+			best[variant] = gptVariant{id: m.id, version: version, created: m.created}
+		}
+	}
+	if m, ok := best[""]; ok {
+		aliases[llmapi.ModelDefault] = m.id
+		aliases["gpt-latest"] = m.id
+	}
+	if m, ok := best["pro"]; ok {
+		aliases[llmapi.ModelSmart] = m.id
+		aliases["gpt-pro-latest"] = m.id
+	}
+	if m, ok := best["mini"]; ok {
+		aliases[llmapi.ModelFast] = m.id
+		aliases["gpt-mini-latest"] = m.id
+	}
+	if m, ok := best["nano"]; ok {
+		aliases["gpt-nano-latest"] = m.id
+	}
+	return aliases
 }
 
 // mapStopReason derives the normalized llmapi stop reason from the Responses API result. The

@@ -34,19 +34,28 @@ The other three providers point at a fixed vendor URL (`api.openai.com`, `api.an
 operators running the proxy elsewhere set `ResponsesURL` outright (the whole URL, not a base + suffix, per the
 full-URL config convention shared by all four providers).
 
-### No typed model constants
+### No typed model constants; the proxy's model_list is the alias table
 
 No provider ships a typed model catalog anymore (model IDs rotate too fast to maintain, and removing stale consts
 breaks downstream). For LiteLLM the point is sharper still: the valid model strings are whatever the operator put in
 the proxy's `model_list`, so even a current catalog here would be wrong for most deployments. `model` is a
-passthrough string; callers pass whatever the proxy is configured to accept.
+passthrough string; `Turn` sends it straight to the proxy, which is the authority on its own `model_list`.
 
-This is also why LiteLLM cannot resolve the portable model aliases the other three providers implement: it has no
-static notion of which of its arbitrary `model_list` entries is a `smart` or an `opus`. Its `OnResolveProvider` sink
-therefore always answers `false`, so `llm.core` never auto-selects it under an empty/`"any"` request. Reach LiteLLM by
-pinning `provider="lite.llm.core"` with a concrete `model_list` name (the explicit-provider path bypasses the resolve
-event). The Phase 2 provider-portability work may query the proxy's `/v1/models` and add an operator alias-map config;
-until then, alias resolution does not apply here.
+Unlike the other three providers, LiteLLM has no fixed vendor families or tiers to synthesize aliases from. Instead
+**its `model_list` is the alias table**: each entry's `model_name` is an operator-chosen public label (arbitrary - a
+real id like `gpt-4o`, or a friendly name like `smart`) that the proxy maps to a real backend model. So this provider
+fetches the proxy's OpenAI-compatible models-list API (`ModelsURL`, default `http://localhost:4000/v1/models`) and
+keeps the returned `model_name` set. `resolveModel` is a pure membership test - a held `model_name` resolves to itself,
+anything else to `""` - and `OnResolveProvider` answers `ok=true` for any held name. **The portable tiers work with no
+extra Microbus config when the operator names `model_list` entries `fast`/`default`/`smart`**; there is no separate
+operator alias-map because LiteLLM's own naming already is one.
+
+The set is populated by the same lazy-fetch/ticker machinery as the other providers: an eager `OnStartup` warm via
+`svc.Go`, a 6h `RefreshModels` ticker, and a lazy fetch on first resolve (`ensureAliases`, a retryable "once" guarded
+by `fetchMu`). It is gated on a configured `APIKey` (the proxy's virtual/master key) - a keyless dev proxy is reached
+by pinning `provider="lite.llm.core"` explicitly, since `Turn` passes the model through without consulting the set, so
+the explicit-provider path never depends on the fetch. Reasoning detection stays **runtime** (`reasoningSeen`): the
+`model_name` is operator-defined and cannot be name-inferred the way `chatgptllm` infers from `gpt-`/`o-` names.
 
 ### Token usage mapping
 

@@ -17,6 +17,8 @@ limitations under the License.
 package litellmapi
 
 import (
+	"time"
+
 	"github.com/microbus-io/fabric/coreservices/llm/llmapi"
 	"github.com/microbus-io/fabric/define"
 )
@@ -44,15 +46,27 @@ var ResponsesURL = define.Config{ // MARKER: ResponsesURL
 	Validation: "url",
 }
 
+// ModelsURL is the URL of the LiteLLM proxy models-list endpoint, whose model_name entries are this provider's aliases.
+var ModelsURL = define.Config{ // MARKER: ModelsURL
+	Value:      string(""),
+	Default:    "http://localhost:4000/v1/models",
+	Validation: "url",
+}
+
 // APIKey is the virtual key for the LiteLLM proxy.
 var APIKey = define.Config{ // MARKER: APIKey
 	Value:  string(""),
 	Secret: true,
 }
 
-// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an operator-defined model_list, so this provider answers ok=true for any model_name the proxy exposes (fetched from its models-list API), including tiers like smart when the operator names an entry so.
 var OnResolveProvider = define.InboundEvent{ // MARKER: OnResolveProvider
 	Source: llmapi.OnResolveProvider,
+}
+
+// RefreshModels periodically repopulates the model_name set from the LiteLLM proxy's models-list API.
+var RefreshModels = define.Ticker{ // MARKER: RefreshModels
+	Interval: 6 * time.Hour,
 }
 
 // Turn executes a single LLM turn through the LiteLLM proxy.
