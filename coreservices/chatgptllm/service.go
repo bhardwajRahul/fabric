@@ -302,6 +302,11 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	if options != nil {
 		reqBody.MaxOutputTokens = options.MaxTokens
 		reqBody.Temperature = options.Temperature
+		// Reasoning effort passes through verbatim; the summary surfaces reasoning for display. Only a
+		// reasoning model accepts the field, so a non-reasoning model never receives it.
+		if options.Effort != "" && isReasoningModel(model) {
+			reqBody.Reasoning = &openaiReasoning{Effort: options.Effort, Summary: "auto"}
+		}
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -429,7 +434,7 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	usage = llmapi.Usage{
 		InputTokens:     oaiResp.Usage.InputTokens - cachedTokens,
 		OutputTokens:    oaiResp.Usage.OutputTokens,
-		ThinkingTokens:  oaiResp.Usage.OutputTokensDetails.ReasoningTokens,
+		ReasoningTokens: oaiResp.Usage.OutputTokensDetails.ReasoningTokens,
 		CacheReadTokens: cachedTokens,
 		Model:           oaiResp.Model,
 		Turns:           1,

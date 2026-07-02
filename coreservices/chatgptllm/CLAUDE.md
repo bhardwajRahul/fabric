@@ -70,9 +70,18 @@ is to assume reasoning from the name and send `include` on the first turn, so re
 no gap. An echoed reasoning item must still carry a `summary` array (empty is fine; omitting it is a
 `400`), which the input converter always initializes non-nil.
 
-`Turn` populates `llmapi.Usage` from the Responses `usage` block. Responses reports `input_tokens` and `output_tokens` plus `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens`. The cached portion maps to `CacheReadTokens` with the remainder reported as `InputTokens`; `reasoning_tokens` maps to `ThinkingTokens` (the reasoning subset of `OutputTokens`, populated for GPT-5-class reasoning models and zero otherwise). Responses does not expose write counts so `CacheWriteTokens` is left at zero.
+`Turn` populates `llmapi.Usage` from the Responses `usage` block. Responses reports `input_tokens` and `output_tokens` plus `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens`. The cached portion maps to `CacheReadTokens` with the remainder reported as `InputTokens`; `reasoning_tokens` maps to `ReasoningTokens` (the reasoning subset of `OutputTokens`, populated for GPT-5-class reasoning models and zero otherwise). Responses does not expose write counts so `CacheWriteTokens` is left at zero.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
+
+## Reasoning Effort
+
+`TurnOptions.Effort`, when non-empty, is written verbatim to the Responses `reasoning.effort` field, together with
+`reasoning.summary:"auto"` so the reasoning summary is populated for display. It is gated on `isReasoningModel` - the
+same reasoning-model check that gates `include=reasoning.encrypted_content` - because a non-reasoning model (`gpt-4o`
+etc.) `400`s on a `reasoning` field. The value is passed through unchanged (llm.core does not normalize effort);
+OpenAI accepts `none`/`minimal`/`low`/`medium`/`high`/`xhigh` as a per-model subset, and an unsupported level returns
+its `400`.
 
 ## Empty Response Diagnostics
 

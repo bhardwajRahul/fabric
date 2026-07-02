@@ -20,15 +20,15 @@ package llmapi
 // Providers populate per-turn usage with Turns=1; Chat aggregates across turns.
 //
 // Token accounting convention across providers: OutputTokens always covers every billed
-// completion token, including any tokens the model spent on internal reasoning. ThinkingTokens
+// completion token, including any tokens the model spent on internal reasoning. ReasoningTokens
 // reports the subset of OutputTokens that was reasoning, so visible-output tokens are
-// (OutputTokens - ThinkingTokens). Providers that don't expose a thinking breakdown leave
-// ThinkingTokens at zero, which lets ThinkingTokens be summed across mixed-provider runs
+// (OutputTokens - ReasoningTokens). Providers that don't expose a reasoning breakdown leave
+// ReasoningTokens at zero, which lets ReasoningTokens be summed across mixed-provider runs
 // without double-counting.
 type Usage struct {
 	InputTokens      int    `json:"inputTokens,omitzero" jsonschema_description:"InputTokens is the number of prompt tokens charged"`
-	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema_description:"OutputTokens is the number of billed completion tokens (includes ThinkingTokens)"`
-	ThinkingTokens   int    `json:"thinkingTokens,omitzero" jsonschema_description:"ThinkingTokens is the subset of OutputTokens spent on internal reasoning (Gemini 2.5 thoughtsTokenCount; others 0)"`
+	OutputTokens     int    `json:"outputTokens,omitzero" jsonschema_description:"OutputTokens is the number of billed completion tokens (includes ReasoningTokens)"`
+	ReasoningTokens  int    `json:"reasoningTokens,omitzero" jsonschema_description:"ReasoningTokens is the subset of OutputTokens spent on internal reasoning (0 when the provider exposes no breakdown)"`
 	CacheReadTokens  int    `json:"cacheReadTokens,omitzero" jsonschema_description:"CacheReadTokens is the number of tokens served from the provider's prompt cache"`
 	CacheWriteTokens int    `json:"cacheWriteTokens,omitzero" jsonschema_description:"CacheWriteTokens is the number of tokens written to the provider's prompt cache"`
 	Model            string `json:"model,omitzero" jsonschema_description:"Model is the provider's model identifier that produced this completion"`
@@ -39,7 +39,7 @@ type Usage struct {
 func (u *Usage) Add(other Usage) {
 	u.InputTokens += other.InputTokens
 	u.OutputTokens += other.OutputTokens
-	u.ThinkingTokens += other.ThinkingTokens
+	u.ReasoningTokens += other.ReasoningTokens
 	u.CacheReadTokens += other.CacheReadTokens
 	u.CacheWriteTokens += other.CacheWriteTokens
 	u.Turns += other.Turns

@@ -471,6 +471,10 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		Tools:     claudeTools,
 		System:    systemBlocks,
 	}
+	// Reasoning effort passes through verbatim; an unsupported value for the model returns a provider 400.
+	if options != nil && options.Effort != "" {
+		reqBody.OutputConfig = &claudeOutputConfig{Effort: options.Effort}
+	}
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {

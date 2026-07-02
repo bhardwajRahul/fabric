@@ -21,4 +21,5 @@ type ChatOptions struct {
 	MaxToolRounds int     `json:"maxToolRounds,omitzero" jsonschema_description:"MaxToolRounds caps tool-call round-trips for this chat (overrides MaxToolRounds config)"`
 	MaxTokens     int     `json:"maxTokens,omitzero" jsonschema_description:"MaxTokens caps the response length per turn"`
 	Temperature   float64 `json:"temperature,omitzero" jsonschema_description:"Temperature controls sampling randomness"`
+	Effort        string  `json:"effort,omitzero" jsonschema_description:"Effort is the reasoning-effort level, passed verbatim to the provider (Anthropic low|medium|high|xhigh|max; OpenAI none|minimal|low|medium|high|xhigh; Gemini minimal|low|medium|high; low/medium/high work on all three); empty leaves the provider default"`
 }

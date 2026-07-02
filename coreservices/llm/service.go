@@ -207,10 +207,11 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 		if options.MaxToolRounds > 0 {
 			maxRounds = options.MaxToolRounds
 		}
-		if options.MaxTokens > 0 || options.Temperature != 0 {
+		if options.MaxTokens > 0 || options.Temperature != 0 || options.Effort != "" {
 			turnOpts = &llmapi.TurnOptions{
 				MaxTokens:   options.MaxTokens,
 				Temperature: options.Temperature,
+				Effort:      options.Effort,
 			}
 		}
 	}
@@ -310,10 +311,11 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, provider 
 		maxToolRounds = options.MaxToolRounds
 	}
 	flow.Set("maxToolRounds", maxToolRounds)
-	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0) {
+	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0 || options.Effort != "") {
 		flow.Set("turnOptions", &llmapi.TurnOptions{
 			MaxTokens:   options.MaxTokens,
 			Temperature: options.Temperature,
+			Effort:      options.Effort,
 		})
 	}
 	flow.Set("toolRounds", 0)

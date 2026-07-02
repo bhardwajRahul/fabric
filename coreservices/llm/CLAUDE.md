@@ -137,9 +137,15 @@ the first call it yields (the foreman parks the step and runs the child); on re-
 
 ### Options Layering
 
-`ChatOptions` (caller-facing) and `TurnOptions` (provider-facing) are deliberately separate types so each layer controls what it exposes. `ChatOptions` adds `MaxToolRounds` (loop-level) and forwards `MaxTokens`/`Temperature` to a `TurnOptions` built per turn. The duplication is intentional: it lets future fields be added to one layer without auto-leaking to the other.
+`ChatOptions` (caller-facing) and `TurnOptions` (provider-facing) are deliberately separate types so each layer controls what it exposes. `ChatOptions` adds `MaxToolRounds` (loop-level) and forwards `MaxTokens`/`Temperature`/`Effort` to a `TurnOptions` built per turn. The duplication is intentional: it lets future fields be added to one layer without auto-leaking to the other.
 
 `MaxToolRounds` remains as a service config (operational guardrail), with `ChatOptions.MaxToolRounds` as an optional override.
+
+`Effort` is the reasoning-effort knob, and it is **passed through verbatim** - llm.core does not validate, clamp, or translate it, and no provider normalizes it against another's vocabulary. This is the same stance as model names ("llm.core never maps model names"): effort is a vendor knob, so each provider drops the string into its own native reasoning field and an unrecognized value returns that provider's `400`. Normalizing would mean owning a per-model clamp table and chasing three providers' quarterly effort-enum churn; a caller who wants cross-provider normalization routes through LiteLLM. Practical guidance for portable callers: `low`/`medium`/`high` are accepted by all three providers, while `xhigh`/`max` (Anthropic) and `none`/`minimal` (OpenAI) work only where the pinned provider accepts them - so effort, like model, is a choice the caller makes with the resolved provider in mind. Each provider's own CLAUDE.md documents which native field it maps `Effort` into.
+
+### Reasoning nomenclature
+
+"Reasoning" is the canonical term in the neutral layer; vendor wire terms are kept as-is in each provider. The neutral surface uses *reasoning* uniformly - the `Reasoning` item, `Usage.ReasoningTokens`, `isReasoningModel`, and the unprefixed `Effort` knob - matching OpenAI's "reasoning" items model that the `[]Item` log mirrors. A provider keeps its vendor's field names where it maps the wire (Anthropic `output_config.effort`/`thinking`, Gemini `thinkingConfig`/`thinkingLevel`/`thoughtsTokenCount`, OpenAI `reasoning.effort`), since renaming those would obscure the mapping; but any neutral-facing helper inside a provider still uses *reasoning*.
 
 ### Stop-Reason Branching
 

@@ -43,8 +43,14 @@ type geminiCountTokensResp struct {
 }
 
 type geminiGenConfig struct {
-	MaxOutputTokens int     `json:"maxOutputTokens,omitzero"`
-	Temperature     float64 `json:"temperature,omitzero"`
+	MaxOutputTokens int                   `json:"maxOutputTokens,omitzero"`
+	Temperature     float64               `json:"temperature,omitzero"`
+	ThinkingConfig  *geminiThinkingConfig `json:"thinkingConfig,omitzero"`
+}
+
+// geminiThinkingConfig carries the reasoning-effort level; Gemini names it thinkingLevel (3.x models).
+type geminiThinkingConfig struct {
+	ThinkingLevel string `json:"thinkingLevel,omitzero"`
 }
 
 type geminiContent struct {
@@ -113,6 +119,6 @@ type geminiUsageMetadata struct {
 	// ThoughtsTokenCount is the number of tokens spent on internal reasoning by Gemini 2.5
 	// thinking models. Billed but reported separately from CandidatesTokenCount. We fold this
 	// into llmapi.Usage.OutputTokens so OutputTokens reflects total billed completion across
-	// providers, and surface the breakdown via llmapi.Usage.ThinkingTokens.
+	// providers, and surface the breakdown via llmapi.Usage.ReasoningTokens.
 	ThoughtsTokenCount int `json:"thoughtsTokenCount"`
 }

@@ -221,7 +221,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 				}
 			}
 			assert.True(reasoningItems > 0)
-			assert.True(usage.ThinkingTokens > 0)
+			assert.True(usage.ReasoningTokens > 0)
 
 			// Echo the assistant turn (reasoning items included) back with the tool result. If the
 			// reasoning items are replayed correctly the model accepts them and continues.

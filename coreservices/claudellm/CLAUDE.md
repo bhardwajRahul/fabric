@@ -18,6 +18,16 @@ The same fetch also captures each model's `max_tokens` (its output cap) into `sv
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
 
+## Reasoning Effort
+
+`TurnOptions.Effort`, when non-empty, is written verbatim to the top-level `output_config.effort` request field
+(`claudeOutputConfig`). Effort is **not** nested under `thinking` on Anthropic - it is its own top-level object, and it
+controls overall token spend across the whole response (text, tool calls, and thinking when enabled) rather than
+toggling extended thinking. Setting effort therefore does not on its own produce thinking blocks, so the input-side
+drop of reasoning items still holds. The value is passed through unchanged (llm.core does not normalize effort); an
+unsupported level for the resolved model returns Anthropic's `400`. Current models accept `low`/`medium`/`high`, with
+`xhigh` and `max` on the newest tiers.
+
 ## Stop-Reason Mapping
 
 `Turn` returns a normalized `stopReason` (constants in `llmapi/stopreason.go`). `mapStopReason` in

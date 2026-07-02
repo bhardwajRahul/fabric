@@ -12,7 +12,7 @@ The alias table is populated by `RefreshModels`, which fetches the Gemini models
 
 `OnResolveProvider` is this provider's sink for the `llm.core` resolve event: it answers `ok = APIKey configured && resolveModel(model) != ""`, so `llm.core` selects this provider under an empty/`"any"` request only when Gemini holds a key and recognizes the model. See `coreservices/llm/CLAUDE.md` "Provider and Model Resolution".
 
-`Turn` populates `llmapi.Usage` from the Gemini `usageMetadata` block. Gemini reports `promptTokenCount`, `candidatesTokenCount`, `cachedContentTokenCount`, and (on 2.5 thinking models) `thoughtsTokenCount`. We map the cached portion to `CacheReadTokens` and report the remainder as `InputTokens`; `OutputTokens` is `candidatesTokenCount + thoughtsTokenCount` (so it reflects total billed completion, the cross-provider invariant for `llmapi.Usage`) and `ThinkingTokens` breaks out the thoughts portion for observability. Gemini does not expose write counts so `CacheWriteTokens` is left at zero.
+`Turn` populates `llmapi.Usage` from the Gemini `usageMetadata` block. Gemini reports `promptTokenCount`, `candidatesTokenCount`, `cachedContentTokenCount`, and (on 2.5 thinking models) `thoughtsTokenCount`. We map the cached portion to `CacheReadTokens` and report the remainder as `InputTokens`; `OutputTokens` is `candidatesTokenCount + thoughtsTokenCount` (so it reflects total billed completion, the cross-provider invariant for `llmapi.Usage`) and `ReasoningTokens` breaks out the thoughts portion for observability. Gemini does not expose write counts so `CacheWriteTokens` is left at zero.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform interface across all provider microservices.
 
@@ -43,6 +43,15 @@ If you're touching the conversion code, the invariant to preserve is: **every pa
 a thoughtSignature must come back to it on the next turn with that same signature attached** (as a
 reasoning item immediately before its part). Dropping a signature is silently corrupting — it doesn't
 fail, but the model's quality on subsequent turns degrades.
+
+## Reasoning Effort
+
+`TurnOptions.Effort`, when non-empty, is written verbatim to `generationConfig.thinkingConfig.thinkingLevel`
+(`geminiThinkingConfig`); the `generationConfig` object is built whenever any of `MaxTokens`/`Temperature`/`Effort` is
+set. The value is passed through unchanged (llm.core does not normalize effort). `thinkingLevel` is a Gemini 3.x
+feature - the models list advertises only a `thinking` bool, no level metadata - so an effort value sent to a
+non-3.x/non-thinking model returns Gemini's `400`. Gemini accepts `minimal`/`low`/`medium`/`high` (a per-family
+subset) and has no `xhigh`/`max`.
 
 ## Multimodal Attachments
 

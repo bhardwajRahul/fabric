@@ -61,10 +61,18 @@ the explicit-provider path never depends on the fetch. Reasoning detection stays
 
 `Turn` maps the Responses `usage` block the same way `chatgptllm` does: `input_tokens` minus
 `input_tokens_details.cached_tokens` to `InputTokens`, the cached portion to `CacheReadTokens`,
-`output_tokens` to `OutputTokens`, `output_tokens_details.reasoning_tokens` to `ThinkingTokens`, no write count.
+`output_tokens` to `OutputTokens`, `output_tokens_details.reasoning_tokens` to `ReasoningTokens`, no write count.
 LiteLLM normalizes most backends into this shape, but for non-OpenAI backends some fields (notably cached- and
 reasoning-token details) may be absent and surface as zero. This is a fidelity limit of the upstream proxy, not a
 bug here.
+
+### Reasoning effort
+
+`TurnOptions.Effort`, when non-empty, is written verbatim to the Responses `reasoning.effort` field with
+`reasoning.summary:"auto"`, gated on the runtime `knownReasoning(model)` check (the same `reasoningSeen` signal that
+gates `include=reasoning.encrypted_content`), since a non-reasoning backend `400`s on a `reasoning` field. The value is
+passed through unchanged (llm.core does not normalize effort); the accepted set depends on the operator-defined backend
+model, and an unsupported level returns the upstream `400`.
 
 Types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to ensure a uniform
 interface across all provider microservices.

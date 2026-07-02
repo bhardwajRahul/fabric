@@ -24,14 +24,21 @@ import "encoding/json"
 // once a model is known to reason (see the reasoning detection in service.go); it asks for the
 // encrypted reasoning payload that stateless replay echoes back next turn.
 type openaiRequest struct {
-	Model           string       `json:"model"`
-	Input           []openaiItem `json:"input"`
-	Instructions    string       `json:"instructions,omitzero"`
-	Tools           []openaiTool `json:"tools,omitzero"`
-	MaxOutputTokens int          `json:"max_output_tokens,omitzero"`
-	Temperature     float64      `json:"temperature,omitzero"`
-	Store           bool         `json:"store"`
-	Include         []string     `json:"include,omitzero"`
+	Model           string           `json:"model"`
+	Input           []openaiItem     `json:"input"`
+	Instructions    string           `json:"instructions,omitzero"`
+	Tools           []openaiTool     `json:"tools,omitzero"`
+	MaxOutputTokens int              `json:"max_output_tokens,omitzero"`
+	Temperature     float64          `json:"temperature,omitzero"`
+	Store           bool             `json:"store"`
+	Include         []string         `json:"include,omitzero"`
+	Reasoning       *openaiReasoning `json:"reasoning,omitzero"`
+}
+
+// openaiReasoning carries the reasoning-effort level and requests a summary for display.
+type openaiReasoning struct {
+	Effort  string `json:"effort,omitzero"`
+	Summary string `json:"summary,omitzero"`
 }
 
 // openaiItem is one item in a Responses input or output array. The Responses API is item-native: an

@@ -263,7 +263,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 			if strings.Contains(req.URL.String(), "generateContent") {
 				w.Header().Set("Content-Type", "application/json")
 				// 2.5 model returns thoughtsTokenCount separately from candidatesTokenCount.
-				// OutputTokens must equal the sum (60+250); ThinkingTokens carries the breakdown.
+				// OutputTokens must equal the sum (60+250); ReasoningTokens carries the breakdown.
 				w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"answer"}]},"finishReason":"STOP"}],"modelVersion":"gemini-2.5-flash","usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":60,"thoughtsTokenCount":250}}`))
 			} else {
 				w.WriteHeader(http.StatusNotFound)
@@ -277,7 +277,7 @@ func TestGeminiLLM_Turn(t *testing.T) { // MARKER: Turn
 		if assert.NoError(err) {
 			assert.Expect(usage.InputTokens, 100)
 			assert.Expect(usage.OutputTokens, 310) // candidates + thoughts
-			assert.Expect(usage.ThinkingTokens, 250)
+			assert.Expect(usage.ReasoningTokens, 250)
 		}
 	})
 

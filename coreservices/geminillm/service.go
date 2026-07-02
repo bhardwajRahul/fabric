@@ -458,10 +458,14 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 		Tools:             gemTools,
 		SystemInstruction: systemInstruction,
 	}
-	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0) {
+	if options != nil && (options.MaxTokens > 0 || options.Temperature != 0 || options.Effort != "") {
 		reqBody.GenerationConfig = &geminiGenConfig{
 			MaxOutputTokens: options.MaxTokens,
 			Temperature:     options.Temperature,
+		}
+		// Reasoning effort passes through verbatim as thinkingLevel; an unsupported value returns a provider 400.
+		if options.Effort != "" {
+			reqBody.GenerationConfig.ThinkingConfig = &geminiThinkingConfig{ThinkingLevel: options.Effort}
 		}
 	}
 
@@ -659,7 +663,7 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	usage = llmapi.Usage{
 		InputTokens:     gemResp.UsageMetadata.PromptTokenCount - cachedTokens,
 		OutputTokens:    gemResp.UsageMetadata.CandidatesTokenCount + thoughtsTokens,
-		ThinkingTokens:  thoughtsTokens,
+		ReasoningTokens: thoughtsTokens,
 		CacheReadTokens: cachedTokens,
 		Model:           gemResp.ModelVersion,
 		Turns:           1,

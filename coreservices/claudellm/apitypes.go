@@ -19,11 +19,17 @@ package claudellm
 import "encoding/json"
 
 type claudeRequest struct {
-	Model     string               `json:"model"`
-	MaxTokens int                  `json:"max_tokens"`
-	System    []claudeContentBlock `json:"system,omitzero"`
-	Messages  []claudeMessage      `json:"messages"`
-	Tools     []claudeTool         `json:"tools,omitzero"`
+	Model        string               `json:"model"`
+	MaxTokens    int                  `json:"max_tokens"`
+	System       []claudeContentBlock `json:"system,omitzero"`
+	Messages     []claudeMessage      `json:"messages"`
+	Tools        []claudeTool         `json:"tools,omitzero"`
+	OutputConfig *claudeOutputConfig  `json:"output_config,omitzero"`
+}
+
+// claudeOutputConfig carries the top-level effort level; effort is not nested under thinking.
+type claudeOutputConfig struct {
+	Effort string `json:"effort,omitzero"`
 }
 
 type claudeMessage struct {

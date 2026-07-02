@@ -23,17 +23,24 @@ import "encoding/json"
 // default). Include is set only once a model is observed to reason (see service.go), since a
 // non-reasoning model rejects the encrypted-reasoning request.
 type openaiRequest struct {
-	Model           string       `json:"model"`
-	Input           []openaiItem `json:"input"`
-	Instructions    string       `json:"instructions,omitzero"`
-	Tools           []openaiTool `json:"tools,omitzero"`
-	MaxOutputTokens int          `json:"max_output_tokens,omitzero"`
-	Temperature     float64      `json:"temperature,omitzero"`
-	Store           bool         `json:"store"`
-	Include         []string     `json:"include,omitzero"`
+	Model           string           `json:"model"`
+	Input           []openaiItem     `json:"input"`
+	Instructions    string           `json:"instructions,omitzero"`
+	Tools           []openaiTool     `json:"tools,omitzero"`
+	MaxOutputTokens int              `json:"max_output_tokens,omitzero"`
+	Temperature     float64          `json:"temperature,omitzero"`
+	Store           bool             `json:"store"`
+	Include         []string         `json:"include,omitzero"`
+	Reasoning       *openaiReasoning `json:"reasoning,omitzero"`
 	// NumRetries is always sent as 0 (no omitzero) to disable LiteLLM's internal retries: its retry decision is
 	// status-code-only and cannot detect the poison case, and retries belong in exactly one place (CallLLM).
 	NumRetries int `json:"num_retries"`
+}
+
+// openaiReasoning carries the reasoning-effort level and requests a summary for display.
+type openaiReasoning struct {
+	Effort  string `json:"effort,omitzero"`
+	Summary string `json:"summary,omitzero"`
 }
 
 // openaiItem is one item in a Responses input or output array. The Responses API is item-native: an
