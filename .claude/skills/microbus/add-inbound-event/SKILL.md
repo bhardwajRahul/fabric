@@ -91,75 +91,9 @@ Then verify the microservice compiles with `go vet ./...` from the project root.
 
 #### Step 7: Test the Inbound Event Sink
 
-Append the integration test to `service_test.go`.
+Skip this step if instructed to be "quick" or to skip tests.
 
-```go
-func TestMyService_OnMyEvent(t *testing.T) { // MARKER: OnMyEvent
-	t.Parallel()
-	ctx := t.Context()
-	_ = ctx
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the testers
-	tester := connector.New("tester.client")
-	eventsourceTrigger := eventsourceapi.NewMulticastTrigger(tester)
-	_ = eventsourceTrigger
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	/*
-		HINT: Use the following pattern for each test case
-
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			actor := jwt.MapClaims{}
-			for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, input1, input2) {
-				output1, err := e.Get()
-				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
-					assert.Expect(
-						output1, expectedResult1,
-						err, nil,
-					)
-				}
-			}
-		})
-	*/
-}
-```
-
-Skip the remainder of this step if instructed to be "quick" or to skip tests.
-
-Insert test cases at the bottom of the integration test function using the recommended pattern.
-
-- You may omit the `pub.Actor` option if the inbound event does not require claims.
-- Do not remove the `HINT` comments.
-
-```go
-t.Run("test_case_name", func(t *testing.T) {
-	assert := testarossa.For(t)
-
-	actor := jwt.MapClaims{}
-	for e := range eventsourceTrigger.WithOptions(pub.Actor(actor)).OnMyEvent(ctx, input1, input2) {
-		output1, err := e.Get()
-		if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
-			assert.Expect(
-				output1, expectedResult1,
-				err, nil,
-			)
-		}
-	}
-})
-```
+The boilerplate generator created a placeholder test function `TestMyService_OnMyEvent` in `service_test.go`, tagged with a `// MARKER: OnMyEvent` comment and a `HINT` block. Add one or more test cases at the bottom of that function, following the pattern shown in its `HINT` comment. Do not remove the `HINT` comment.
 
 #### Step 8: Housekeeping
 

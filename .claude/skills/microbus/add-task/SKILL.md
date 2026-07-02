@@ -202,64 +202,9 @@ Run `go mod tidy` first: a task that introduces a new import (a downstream clien
 
 #### Step 10: Test the Task
 
-Append the integration test to `service_test.go`. The test calls the task endpoint directly via the generated `Executor` without needing the foreman.
+Skip this step if instructed to be "quick" or to skip tests.
 
-```go
-func TestMyService_MyTask(t *testing.T) { // MARKER: MyTask
-	t.Parallel()
-	ctx := t.Context()
-	_ = ctx
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the testers
-	tester := connector.New("tester.client")
-	exec := myserviceapi.NewExecutor(tester)
-	_ = exec
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		tester,
-	)
-	app.RunInTest(t)
-
-	/*
-		HINT: Use the following pattern for each test case.
-		Use WithOutputFlow to also verify control signals (Goto, Retry, Interrupt, Sleep) if applicable.
-
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			var outFlow workflow.Flow
-			output1, err := exec.WithOutputFlow(&outFlow).MyTask(ctx, input1, input2)
-			if assert.NoError(err) {
-				assert.Expect(output1, expectedResult1)
-				_, interrupted := outFlow.InterruptRequested()
-				assert.Expect(interrupted, true)
-			}
-		})
-	*/
-}
-```
-
-Skip the remainder of this step if instructed to be "quick" or to skip tests.
-
-Insert test cases at the bottom of the integration test function using the recommended pattern. Do not remove the `HINT` comments.
-
-```go
-t.Run("test_case_name", func(t *testing.T) {
-	assert := testarossa.For(t)
-
-	output1, err := exec.MyTask(ctx, input1, input2)
-	if assert.NoError(err) {
-		assert.Expect(output1, expectedResult1)
-	}
-})
-```
+The boilerplate generator created a placeholder test function `TestMyService_MyTask` in `service_test.go`, tagged with a `// MARKER: MyTask` comment and a `HINT` block. Add one or more test cases at the bottom of that function, following the pattern shown in its `HINT` comment. Do not remove the `HINT` comment.
 
 #### Step 11: Housekeeping
 

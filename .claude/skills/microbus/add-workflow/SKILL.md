@@ -161,75 +161,9 @@ Run `go mod tidy` first: the workflow test imports the foreman, which pulls tran
 
 #### Step 8: Test the Workflow
 
-Append the integration test to `service_test.go`. The test includes the foreman service in the app to enable end-to-end workflow execution.
+Skip this step if instructed to be "quick" or to skip tests.
 
-Ensure that `"github.com/microbus-io/fabric/coreservices/foreman"`, `"github.com/microbus-io/fabric/coreservices/foreman/foremanapi"`, and `"github.com/microbus-io/dwarf/workflow"` are imported in `service_test.go`. Add them if not already present. (foreman is needed to add the foreman microservice to the test bundle, foremanapi for `NewClient`, and workflow for the status constants like `workflow.StatusCompleted`.)
-
-```go
-func TestMyService_MyWorkflow(t *testing.T) { // MARKER: MyWorkflow
-	t.Parallel()
-	ctx := t.Context()
-	_ = ctx
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Initialize the testers
-	tester := connector.New("tester.client")
-	foremanClient := foremanapi.NewClient(tester)
-	exec := myserviceapi.NewExecutor(tester).WithWorkflowRunner(foremanClient)
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-		foreman.NewService(),
-		tester,
-	)
-	app.RunInTest(t)
-
-	/*
-		HINT: Use the following pattern for each test case.
-		Use WithOutputState to also inspect the full state map if applicable.
-
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			outputField1, outputField2, status, err := exec.MyWorkflow(ctx, inputField1, inputField2)
-			assert.Expect(
-				err, nil,
-				status, workflow.StatusCompleted,
-				outputField1, expectedValue1,
-				outputField2, expectedValue2,
-			)
-		})
-	*/
-}
-```
-
-Skip the remainder of this step if instructed to be "quick" or to skip tests.
-
-Insert test cases at the bottom of the integration test function using the recommended pattern.
-
-- Run the workflow via `exec.MyWorkflow` with various initial states
-- Assert expected output state values
-- Cover the main paths through the workflow (happy path, error paths, edge cases)
-- Do not remove the `HINT` comments
-
-```go
-t.Run("test_case_name", func(t *testing.T) {
-	assert := testarossa.For(t)
-
-	outputField1, outputField2, status, err := exec.MyWorkflow(ctx, inputField1, inputField2)
-	assert.Expect(
-		err, nil,
-		status, workflow.StatusCompleted,
-		outputField1, expectedValue1,
-		outputField2, expectedValue2,
-	)
-})
-```
+The boilerplate generator created a placeholder test function `TestMyService_MyWorkflow` in `service_test.go`, tagged with a `// MARKER: MyWorkflow` comment and a `HINT` block. Add one or more test cases at the bottom of that function, following the pattern shown in its `HINT` comment. Do not remove the `HINT` comment.
 
 #### Step 9: Housekeeping
 

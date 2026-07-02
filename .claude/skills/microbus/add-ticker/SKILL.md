@@ -62,50 +62,9 @@ Then verify the microservice compiles with `go vet ./...` from the project root.
 
 #### Step 5: Test the Handler
 
-Append the integration test to `service_test.go`.
+Skip this step if instructed to be "quick" or to skip tests.
 
-```go
-func TestMyService_MyTicker(t *testing.T) { // MARKER: MyTicker
-	t.Parallel()
-	ctx := t.Context()
-	_ = ctx
-
-	// Initialize the microservice under test
-	svc := NewService()
-
-	// Run the testing app
-	app := application.New()
-	app.Add(
-		// HINT: Add microservices or mocks required for this test
-		svc,
-	)
-	app.RunInTest(t)
-
-	/*
-		HINT: Use the following pattern for each test case
-
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			err := svc.MyTicker(ctx)
-			assert.NoError(err)
-		})
-	*/
-}
-```
-
-Skip the remainder of this step if instructed to be "quick" or to skip tests.
-
-Insert test cases at the bottom of the integration test function using the recommended pattern. Do not remove the `HINT` comments.
-
-```go
-t.Run("test_case_name", func(t *testing.T) {
-	assert := testarossa.For(t)
-
-	err := svc.MyTicker(ctx)
-	assert.NoError(err)
-})
-```
+The boilerplate generator created a placeholder test function `TestMyService_MyTicker` in `service_test.go`, tagged with a `// MARKER: MyTicker` comment and a `HINT` block. Add one or more test cases at the bottom of that function, following the pattern shown in its `HINT` comment. Do not remove the `HINT` comment.
 
 #### Step 6: Housekeeping
 
