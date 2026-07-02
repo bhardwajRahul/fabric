@@ -56,13 +56,6 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 
 /*
 AddPet adds a new pet to the store.
-
-Input:
-  - httpRequestBody: httpRequestBody is the pet to add
-
-Output:
-  - httpResponseBody: httpResponseBody is the created pet
-  - httpStatusCode: httpStatusCode is the remote HTTP status code
 */
 func (svc *Service) AddPet(ctx context.Context, httpRequestBody *petstoreapi.Pet) (httpResponseBody *petstoreapi.Pet, httpStatusCode int, err error) { // MARKER: AddPet
 	httpStatusCode, err = svc.makeFunctionRequest(ctx, "POST", svc.remoteURL("/pet"), httpRequestBody, &httpResponseBody)
@@ -71,13 +64,6 @@ func (svc *Service) AddPet(ctx context.Context, httpRequestBody *petstoreapi.Pet
 
 /*
 GetPetById returns a single pet.
-
-Input:
-  - petId: petId is the ID of the pet to return
-
-Output:
-  - httpResponseBody: httpResponseBody is the requested pet
-  - httpStatusCode: httpStatusCode is the remote HTTP status code
 */
 func (svc *Service) GetPetById(ctx context.Context, petId int64) (httpResponseBody *petstoreapi.Pet, httpStatusCode int, err error) { // MARKER: GetPetById
 	u, err := url.Parse(svc.remoteURL("/pet/" + url.PathEscape(fmt.Sprint(petId))))

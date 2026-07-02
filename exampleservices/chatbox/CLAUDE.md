@@ -20,4 +20,4 @@ No API key is needed. The provider is now selected per-call via the `provider` a
 
 ### Types
 
-All types (`Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to maintain a uniform interface with the real provider microservices. `Turn` returns flat values `(content, toolCalls, stopReason, usage, err)`, the same contract as the real provider microservices.
+All types (`Item`, `Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` to maintain a uniform interface with the real provider microservices. `Turn` takes and returns the `[]llmapi.Item` conversation model and returns `(items, stopReason, usage, err)`, the same contract as the real provider microservices: it reads the last item (a `user` message or a `tool_result`) and returns its assistant reply as a message item, plus a `tool_call` item when it wants the calculator.

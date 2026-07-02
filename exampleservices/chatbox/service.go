@@ -75,28 +75,32 @@ var opMap = map[string]string{
 Turn executes a single LLM turn using the chatbox demo provider.
 It pattern-matches math questions and generates tool calls to the calculator.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	usage = llmapi.Usage{Model: model, Turns: 1}
 
-	if len(messages) == 0 {
-		return "I'm the Chatbox demo. Ask me a math question!", nil, llmapi.StopReasonEndTurn, usage, nil
+	reply := func(text, stop string) ([]llmapi.Item, string, llmapi.Usage, error) {
+		return llmapi.AppendItems(nil, llmapi.NewMessage("assistant", text)), stop, usage, nil
 	}
 
-	lastMsg := messages[len(messages)-1]
+	if len(items) == 0 {
+		return reply("I'm the Chatbox demo. Ask me a math question!", llmapi.StopReasonEndTurn)
+	}
 
-	// If the last message is a tool result, format it as a response
-	if lastMsg.Role == "tool" {
+	last := items[len(items)-1]
+
+	// If the last item is a tool result, format it as a response
+	if last.ToolResult != nil {
 		var result map[string]any
-		json.Unmarshal([]byte(lastMsg.Content), &result)
+		json.Unmarshal([]byte(last.ToolResult.Output), &result)
 		if r, ok := result["result"]; ok {
-			return fmt.Sprintf("The answer is %v.", r), nil, llmapi.StopReasonEndTurn, usage, nil
+			return reply(fmt.Sprintf("The answer is %v.", r), llmapi.StopReasonEndTurn)
 		}
-		return fmt.Sprintf("The result is: %s", lastMsg.Content), nil, llmapi.StopReasonEndTurn, usage, nil
+		return reply(fmt.Sprintf("The result is: %s", last.ToolResult.Output), llmapi.StopReasonEndTurn)
 	}
 
 	// Try to match a math question
-	if lastMsg.Role == "user" {
-		matches := mathPattern.FindStringSubmatch(lastMsg.Content)
+	if last.Message != nil && last.Message.Role == "user" {
+		matches := mathPattern.FindStringSubmatch(last.Message.Content)
 		if matches != nil {
 			x, _ := strconv.Atoi(matches[1])
 			opStr := strings.TrimSpace(strings.ToLower(matches[2]))
@@ -118,12 +122,10 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 			if calcTool != nil {
 				args, _ := json.Marshal(map[string]any{"x": x, "op": op, "y": y})
-				return fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y),
-					[]llmapi.ToolCall{{
-						ID:        "chatbox_1",
-						Name:      calcTool.Name,
-						Arguments: args,
-					}}, llmapi.StopReasonToolUse, usage, nil
+				return llmapi.AppendItems(nil,
+					llmapi.NewMessage("assistant", fmt.Sprintf("I'll use the calculator to compute %d %s %d.", x, op, y)),
+					llmapi.ToolCall{ID: "chatbox_1", Name: calcTool.Name, Arguments: args},
+				), llmapi.StopReasonToolUse, usage, nil
 			}
 
 			// No calculator tool - do the math ourselves
@@ -139,17 +141,17 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 				if y != 0 {
 					answer = x / y
 				} else {
-					return "Cannot divide by zero.", nil, llmapi.StopReasonEndTurn, usage, nil
+					return reply("Cannot divide by zero.", llmapi.StopReasonEndTurn)
 				}
 			}
-			return fmt.Sprintf("%d %s %d = %d", x, op, y, answer), nil, llmapi.StopReasonEndTurn, usage, nil
+			return reply(fmt.Sprintf("%d %s %d = %d", x, op, y, answer), llmapi.StopReasonEndTurn)
 		}
 
 		// No pattern matched
-		return "I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"", nil, llmapi.StopReasonEndTurn, usage, nil
+		return reply("I don't understand. I'm the Chatbox demo and I can only answer math questions like \"What is 6 times 7?\"", llmapi.StopReasonEndTurn)
 	}
 
-	return "I don't understand that message.", nil, llmapi.StopReasonEndTurn, usage, nil
+	return reply("I don't understand that message.", llmapi.StopReasonEndTurn)
 }
 
 /*
@@ -181,9 +183,9 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 	}
 
 	// Call the LLM service's Chat endpoint with the calculator as a tool.
-	messages := []llmapi.Message{{Role: "user", Content: userMessage}}
+	items := llmapi.AppendItems(nil, llmapi.NewMessage("user", userMessage))
 	tools := []string{calculatorapi.Arithmetic.URL()}
-	result, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, messages, tools, nil)
+	result, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

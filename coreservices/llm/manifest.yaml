@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-06-27T23:43:10Z"
+  modifiedAt: "2026-07-01T23:03:33Z"
 
 configs:
   MaxToolRounds:
@@ -42,36 +42,36 @@ metrics:
 
 functions:
   Chat:
-    signature: Chat(provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage)
-    description: Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
+    signature: Chat(provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage)
+    description: Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
     method: POST
     route: :444/chat
   Turn:
-    signature: Turn(model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, stopReason string, usage Usage)
-    description: Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
+    signature: Turn(model string, items []Item, tools []Tool, options *TurnOptions) (itemsOut []Item, stopReason string, usage Usage)
+    description: Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
     method: POST
     route: :444/turn
 
 tasks:
   InitChat:
-    signature: InitChat(messages []Message, toolURLs []string, options *ChatOptions) (maxToolRounds int, toolRounds int)
-    description: InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
+    signature: InitChat(items []Item, toolURLs []string, options *ChatOptions)
+    description: InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
     route: :428/init-chat
   CallLLM:
-    signature: CallLLM(provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage)
-    description: CallLLM sends the current messages and tools to the LLM provider.
+    signature: CallLLM(provider string, model string, items []Item) (turnItems []Item, pendingToolCalls any, turnUsage Usage)
+    description: CallLLM sends the current conversation items and tools to the LLM provider.
     route: :428/call-llm
   ProcessResponse:
-    signature: ProcessResponse(llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage)
+    signature: ProcessResponse(turnItems []Item, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage)
     description: ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
     route: :428/process-response
   ExecuteTool:
-    signature: ExecuteTool()
+    signature: ExecuteTool(currentTool ToolCall) (items []Item)
     description: ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
     route: :428/execute-tool
 
 workflows:
   ChatLoop:
-    signature: ChatLoop(provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage)
+    signature: ChatLoop(provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage)
     description: ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
     route: :428/chat-loop

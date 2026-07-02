@@ -93,11 +93,11 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		content, toolCalls, stopReason, usage, err := client.Turn(ctx, "gpt-5.4-mini", messages, nil, nil)
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		out, stopReason, usage, err := client.Turn(ctx, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
-			assert.Expect(content, "Hello from OpenAI!")
-			assert.Expect(len(toolCalls), 0)
+			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from OpenAI!")
+			assert.Expect(len(llmapi.PendingToolCalls(out)), 0)
 			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.Expect(usage.OutputTokens, 5)
 			assert.Expect(usage.Turns, 1)
@@ -119,11 +119,12 @@ func TestChatGPTLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		messages := []llmapi.Message{{Role: "user", Content: "What is 10 - 3?"}}
-		_, toolCalls, stopReason, _, err := client.Turn(ctx, "gpt-5.4-mini", messages, nil, nil)
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 10 - 3?"))
+		out, stopReason, _, err := client.Turn(ctx, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
-			assert.Expect(len(toolCalls), 1)
-			assert.Expect(toolCalls[0].Name, "Arithmetic")
+			calls := llmapi.PendingToolCalls(out)
+			assert.Expect(len(calls), 1)
+			assert.Expect(calls[0].Name, "Arithmetic")
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
 		}
 	})
@@ -138,6 +139,7 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 		t.Skip("set realAPIKey to run against the live OpenAI Responses API")
 	}
 	const realModel = "gpt-4o-mini"
+	const realReasoningModel = "o4-mini"
 
 	t.Parallel()
 	ctx := t.Context()
@@ -155,14 +157,14 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 	t.Run("text_response", func(t *testing.T) {
 		assert := testarossa.For(t)
 
-		messages := []llmapi.Message{
-			{Role: "system", Content: "You are a terse assistant. Answer in one word."},
-			{Role: "user", Content: "What is the capital of France?"},
-		}
-		content, toolCalls, stopReason, usage, err := client.Turn(ctx, realModel, messages, nil, nil)
+		items := llmapi.AppendItems(nil,
+			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word."),
+			llmapi.NewMessage("user", "What is the capital of France?"),
+		)
+		out, stopReason, usage, err := client.Turn(ctx, realModel, items, nil, nil)
 		if assert.NoError(err) {
-			assert.True(strings.Contains(strings.ToLower(content), "paris"))
-			assert.Expect(len(toolCalls), 0)
+			assert.True(strings.Contains(strings.ToLower(llmapi.LastAssistantMessage(out)), "paris"))
+			assert.Expect(len(llmapi.PendingToolCalls(out)), 0)
 			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.True(usage.InputTokens > 0)
 			assert.True(usage.OutputTokens > 0)
@@ -178,34 +180,60 @@ func TestChatGPTLLM_RealTurn(t *testing.T) {
 			Description: "Computes the result of an arithmetic operation.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
 		}}
-		messages := []llmapi.Message{{Role: "user", Content: "Use the Arithmetic tool to compute 10 - 3."}}
-		content, toolCalls, stopReason, _, err := client.Turn(ctx, realModel, messages, tools, nil)
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3."))
+		out, stopReason, _, err := client.Turn(ctx, realModel, items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
-			if assert.True(len(toolCalls) > 0) {
-				assert.Expect(toolCalls[0].Name, "Arithmetic")
+			calls := llmapi.PendingToolCalls(out)
+			if assert.True(len(calls) > 0) {
+				assert.Expect(calls[0].Name, "Arithmetic")
 			}
 
-			// Round-trip the tool result back to confirm function_call / function_call_output items
-			// are threaded through correctly.
-			messages = append(messages,
-				llmapi.Message{Role: "assistant", Content: content, ToolCalls: toolCallsJSON(t, toolCalls)},
-				llmapi.Message{Role: "tool", ToolCallID: toolCalls[0].ID, Content: `{"result":7}`},
-			)
-			content, _, stopReason, _, err = client.Turn(ctx, realModel, messages, tools, nil)
+			// Round-trip: append the assistant turn items verbatim, then the tool result, and confirm
+			// the function_call / function_call_output items thread through correctly.
+			items = append(items, out...)
+			items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`))
+			out, stopReason, _, err = client.Turn(ctx, realModel, items, tools, nil)
 			if assert.NoError(err) {
 				assert.Expect(stopReason, llmapi.StopReasonEndTurn)
-				assert.True(strings.Contains(content, "7"))
+				assert.True(strings.Contains(llmapi.LastAssistantMessage(out), "7"))
 			}
 		}
 	})
-}
 
-// toolCallsJSON serializes tool calls the way llm.core persists them on an assistant message.
-func toolCallsJSON(t *testing.T, toolCalls []llmapi.ToolCall) string {
-	b, err := json.Marshal(toolCalls)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
+	t.Run("reasoning_replay", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		tools := []llmapi.Tool{{
+			Name:        "Arithmetic",
+			Description: "Computes the result of an arithmetic operation.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
+		}}
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 12 * 9, then state the result."))
+		out, _, usage, err := client.Turn(ctx, realReasoningModel, items, tools, nil)
+		if assert.NoError(err) {
+			// A reasoning model should have emitted at least one reasoning item carrying an id/encrypted
+			// payload, and billed thinking tokens.
+			var reasoningItems int
+			for _, it := range out {
+				if it.Type() == llmapi.ItemReasoning {
+					reasoningItems++
+				}
+			}
+			assert.True(reasoningItems > 0)
+			assert.True(usage.ThinkingTokens > 0)
+
+			// Echo the assistant turn (reasoning items included) back with the tool result. If the
+			// reasoning items are replayed correctly the model accepts them and continues.
+			calls := llmapi.PendingToolCalls(out)
+			if assert.True(len(calls) > 0) {
+				items = append(items, out...)
+				items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":108}`))
+				out, _, _, err = client.Turn(ctx, realReasoningModel, items, tools, nil)
+				if assert.NoError(err) {
+					assert.True(strings.Contains(llmapi.LastAssistantMessage(out), "108"))
+				}
+			}
+		}
+	})
 }

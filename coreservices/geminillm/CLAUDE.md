@@ -19,13 +19,22 @@ Gemini 2.5 models (`gemini-2.5-flash`, `gemini-2.5-pro`) ship with thinking enab
 - **Thought parts** — `{"text": "...", "thought": true}` parts in the response that carry the model's internal reasoning, not the answer. The parser sets `Thought` on `geminiPart` and skips thought parts when accumulating `content`. Letting them through would leak reasoning into the assistant message body and confuse downstream parsers expecting a clean final answer.
 - **Thought signatures** — opaque base64-encoded tokens attached to parts (text or functionCall) that the caller is expected to echo back on subsequent turns to preserve reasoning continuity across a multi-turn tool-calling conversation. Without round-trip, 2.5 models can lose the thread after a few rounds of tool use and return an empty STOP response (i.e. give up).
 
-We carry the signature out via two new `llmapi` fields:
-- `llmapi.Message.ThoughtSignature` — for the assistant's text part (last-wins if multiple text parts have signatures; in practice Gemini only attaches it to the last visible text).
-- `llmapi.ToolCall.ThoughtSignature` — per function-call part.
+We carry the signature via `llmapi.Reasoning` items (`Reasoning.Signature`). In the item model there is
+no per-part signature field; instead a signature is a standalone reasoning item positioned immediately
+before the item it binds to:
+- A response part carrying a `thoughtSignature` is emitted as a `Reasoning{Signature}` item just before
+  the message or tool_call item it belonged to.
+- A `thought:true` part (the model's internal reasoning text) becomes a `Reasoning{Summary}` item.
 
-Both are surfaced with the `omitzero` JSON tag and are silently ignored by every other provider, so adding them is non-breaking. On the next `Turn` invocation, the provider re-emits them on the corresponding parts of the model-role content it reconstructs.
+On the next `Turn`, the input converter holds each reasoning item's signature in a `pendingSig` and
+attaches it to the next text/functionCall part it emits, re-gluing what the split separated. This is the
+same positional-adjacency contract OpenAI's Responses API uses for reasoning items, and the conversation
+slice preserves order across the bus and the workflow append-reducer, so adjacency is reliable.
 
-If you're touching the message-conversion code, the invariant to preserve is: **every part the model sent us with a thoughtSignature must come back to it on the next turn with that same signature attached**. Dropping a signature is silently corrupting — it doesn't fail, but the model's quality on subsequent turns degrades.
+If you're touching the conversion code, the invariant to preserve is: **every part the model sent us with
+a thoughtSignature must come back to it on the next turn with that same signature attached** (as a
+reasoning item immediately before its part). Dropping a signature is silently corrupting — it doesn't
+fail, but the model's quality on subsequent turns degrades.
 
 ## Multimodal Attachments
 
@@ -163,6 +172,13 @@ body:
 
 A `quotaId` ending in `PerDay` (daily-quota exhaustion) should be treated as a give-up rather than retried; that
 case is not yet special-cased because the probes only reached the per-minute quota.
+
+### 503 UNAVAILABLE
+
+A `503 UNAVAILABLE` is a transient overload (the model is momentarily swamped), not a permanent failure, and Gemini
+attaches no `retryDelay` to it. The provider therefore retries it with a modest default wait (5s) rather than the
+body-derived value, arming the same preemption gate. This keeps Gemini symmetric with Anthropic's retryable `529`
+overload, where the `429` poison/transient distinction above does not apply.
 
 ## Rate-Limit Preemption
 

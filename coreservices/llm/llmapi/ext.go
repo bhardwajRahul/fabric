@@ -22,15 +22,34 @@ import (
 	"github.com/microbus-io/errors"
 )
 
-// LastAssistantMessage returns the Content of the last message in messages
-// whose role is "assistant", or "" if there is none.
-func LastAssistantMessage(messages []Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "assistant" {
-			return messages[i].Content
+// LastAssistantMessage returns the Content of the last assistant message item in items,
+// or "" if there is none.
+func LastAssistantMessage(items []Item) string {
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Message != nil && items[i].Message.Role == "assistant" {
+			return items[i].Message.Content
 		}
 	}
 	return ""
+}
+
+// PendingToolCalls returns the tool_call items that appear after the last message item, i.e. the calls
+// the most recent assistant turn is still waiting on. Reasoning items are ignored.
+func PendingToolCalls(items []Item) []ToolCall {
+	var calls []ToolCall
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Message != nil {
+			break // reached the assistant turn's text
+		}
+		if items[i].ToolCall != nil {
+			calls = append(calls, *items[i].ToolCall)
+		}
+	}
+	// Collected back-to-front; restore original order.
+	for l, r := 0, len(calls)-1; l < r; l, r = l+1, r-1 {
+		calls[l], calls[r] = calls[r], calls[l]
+	}
+	return calls
 }
 
 // RetryAfter reports whether err is a rate-limit error that can be retried after a delay, and if so the

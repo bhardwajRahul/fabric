@@ -120,76 +120,82 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 /*
 Turn executes a single LLM turn using the Claude provider.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
-		return "", nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {
-		return "", nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
+		return nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 	maxTokens := 4096
 	if options != nil && options.MaxTokens > 0 {
 		maxTokens = options.MaxTokens
 	}
 
-	// Extract system message
+	// Convert the item log to Claude's two-level shape. A system message folds into systemMsg; an
+	// assistant text item plus the tool_call items that follow it coalesce into one assistant message
+	// (text then tool_use blocks); tool_result items coalesce into a single user message, as Anthropic
+	// requires all tool_results for a turn to share one user message. Content is always a block array so
+	// cache_control can attach to the last block uniformly. Reasoning items are dropped: extended
+	// thinking is not enabled, so no thinking blocks are produced or replayed.
 	var systemMsg string
-	for _, msg := range messages {
-		if msg.Role == "system" {
-			systemMsg = msg.Content
-			break
-		}
-	}
-
-	// Convert messages to Claude format. Content is always emitted as a content-block array
-	// (even for plain text), so cache_control can be attached to the last block uniformly.
-	claudeMsgs := make([]claudeMessage, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
-		case "system":
-			continue
-		case "assistant":
-			blocks := make([]claudeContentBlock, 0, 2)
-			if msg.Content != "" {
-				blocks = append(blocks, claudeContentBlock{Type: "text", Text: msg.Content})
+	claudeMsgs := make([]claudeMessage, 0, len(items))
+	for _, it := range items {
+		switch it.Type() {
+		case llmapi.ItemMessage:
+			if it.Message == nil {
+				continue
 			}
-			if msg.ToolCalls != "" {
-				var tcs []llmapi.ToolCall
-				json.Unmarshal([]byte(msg.ToolCalls), &tcs)
-				for _, tc := range tcs {
-					blocks = append(blocks, claudeContentBlock{
-						Type:  "tool_use",
-						ID:    tc.ID,
-						Name:  tc.Name,
-						Input: tc.Arguments,
-					})
+			switch it.Message.Role {
+			case "system":
+				if systemMsg != "" {
+					systemMsg += "\n\n"
 				}
+				systemMsg += it.Message.Content
+			case "assistant":
+				if it.Message.Content == "" {
+					continue // an empty assistant text; following tool_call items open the message
+				}
+				claudeMsgs = append(claudeMsgs, claudeMessage{
+					Role:    "assistant",
+					Content: []claudeContentBlock{{Type: "text", Text: it.Message.Content}},
+				})
+			default:
+				claudeMsgs = append(claudeMsgs, claudeMessage{
+					Role:    it.Message.Role,
+					Content: []claudeContentBlock{{Type: "text", Text: it.Message.Content}},
+				})
 			}
-			claudeMsgs = append(claudeMsgs, claudeMessage{Role: "assistant", Content: blocks})
-		case "tool":
-			// Anthropic requires ALL tool_result blocks paired with a single assistant turn's
-			// tool_use blocks to live in ONE user message. Coalesce consecutive `tool` role
-			// llmapi.Messages into the trailing user message we just emitted (if any), instead
-			// of emitting a separate user message per tool_result.
+		case llmapi.ItemToolCall:
+			if it.ToolCall == nil {
+				continue
+			}
+			block := claudeContentBlock{
+				Type:  "tool_use",
+				ID:    it.ToolCall.ID,
+				Name:  it.ToolCall.Name,
+				Input: it.ToolCall.Arguments,
+			}
+			if n := len(claudeMsgs); n > 0 && claudeMsgs[n-1].Role == "assistant" {
+				claudeMsgs[n-1].Content = append(claudeMsgs[n-1].Content, block)
+			} else {
+				claudeMsgs = append(claudeMsgs, claudeMessage{Role: "assistant", Content: []claudeContentBlock{block}})
+			}
+		case llmapi.ItemToolResult:
+			if it.ToolResult == nil {
+				continue
+			}
 			block := claudeContentBlock{
 				Type:      "tool_result",
-				ToolUseID: msg.ToolCallID,
-				Content:   msg.Content,
+				ToolUseID: it.ToolResult.CallID,
+				Content:   it.ToolResult.Output,
 			}
 			if n := len(claudeMsgs); n > 0 && claudeMsgs[n-1].Role == "user" {
 				claudeMsgs[n-1].Content = append(claudeMsgs[n-1].Content, block)
 			} else {
-				claudeMsgs = append(claudeMsgs, claudeMessage{
-					Role:    "user",
-					Content: []claudeContentBlock{block},
-				})
+				claudeMsgs = append(claudeMsgs, claudeMessage{Role: "user", Content: []claudeContentBlock{block}})
 			}
-		default:
-			claudeMsgs = append(claudeMsgs, claudeMessage{
-				Role:    msg.Role,
-				Content: []claudeContentBlock{{Type: "text", Text: msg.Content}},
-			})
 		}
 	}
 
@@ -254,14 +260,14 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	// Build the HTTP request to the Claude API
 	apiURL := svc.MessagesURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", svc.APIKey())
@@ -270,7 +276,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	// Send via HTTP egress proxy
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
@@ -300,22 +306,30 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 			}
 		}
 		props = append(props, errorDetailAttrs(httpResp.Header, respBody)...)
-		return "", nil, "", llmapi.Usage{}, errors.New(message, props...)
+		return nil, "", llmapi.Usage{}, errors.New(message, props...)
 	}
 
 	// Parse the response
 	var claudeResp claudeResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&claudeResp)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
+	// Emit the assistant text (if any) as a single message item, then a tool_call item per tool_use
+	// block. On replay these coalesce back into one assistant message (text then tool_use blocks).
+	var text string
 	for _, block := range claudeResp.Content {
-		switch block.Type {
-		case "text":
-			content += block.Text
-		case "tool_use":
-			toolCalls = append(toolCalls, llmapi.ToolCall{
+		if block.Type == "text" {
+			text += block.Text
+		}
+	}
+	if text != "" {
+		outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text))
+	}
+	for _, block := range claudeResp.Content {
+		if block.Type == "tool_use" {
+			outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: block.Input,
@@ -333,7 +347,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	}
 
 	stopReason = mapStopReason(claudeResp.StopReason)
-	return content, toolCalls, stopReason, usage, nil
+	return outItems, stopReason, usage, nil
 }
 
 // mapStopReason translates Anthropic's stop_reason field to the normalized llmapi value.

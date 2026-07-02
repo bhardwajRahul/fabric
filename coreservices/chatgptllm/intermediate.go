@@ -43,7 +43,7 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 }
 
 // NewService creates a new instance of the microservice.
@@ -134,7 +134,7 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in chatgptllmapi.TurnIn
 	var out chatgptllmapi.TurnOut
 	err = marshalFunction(w, r, chatgptllmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Content, out.ToolCalls, out.StopReason, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
+		out.ItemsOut, out.StopReason, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Items, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace

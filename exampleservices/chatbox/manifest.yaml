@@ -19,11 +19,11 @@ general:
   hostname: chatbox.example
   description: Chatbox is a demo LLM provider that pattern-matches user messages to demonstrate the tool-calling flow.
   package: github.com/microbus-io/fabric/exampleservices/chatbox
-  modifiedAt: "2026-06-30T01:49:24Z"
+  modifiedAt: "2026-07-01T16:49:40Z"
 
 functions:
   Turn:
-    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage)
+    signature: Turn(model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage)
     description: |-
       Turn executes a single LLM turn using the chatbox demo provider.
       It pattern-matches math questions and generates tool calls to the calculator.

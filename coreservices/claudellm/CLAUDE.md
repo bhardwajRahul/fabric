@@ -1,6 +1,6 @@
 ## Design Rationale
 
-This microservice implements the `Turn` endpoint for the Claude (Anthropic) LLM provider. It translates between the Microbus LLM message format and the Claude Messages API format, handling system messages, tool_use/tool_result content blocks, and error parsing.
+This microservice implements the `Turn` endpoint for the Claude (Anthropic) LLM provider. It translates between the Microbus `[]llmapi.Item` conversation log and the Claude Messages API format. The flat item log is regrouped into Claude's two-level shape: a `system` message folds into `system`, an assistant text item and the `tool_call` items after it coalesce into one assistant message (text then `tool_use` blocks), and `tool_result` items coalesce into one user message (Anthropic requires all tool_results for a turn to share a user message). Reasoning items are dropped on input: extended thinking is not enabled, so Claude produces no thinking blocks to round-trip, and a Claude conversation never contains reasoning items to replay.
 
 The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"claude-haiku-4-5"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `opus` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
 

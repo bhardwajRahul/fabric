@@ -6,6 +6,18 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 
 ## Design Rationale
 
+### Conversation Item Model
+
+`Chat`, `Turn`, and the workflow tasks carry the conversation as an ordered, append-only `[]llmapi.Item`
+log (not the old flat `[]llmapi.Message`). An `Item` is a discriminated union - `message`, `tool_call`,
+`tool_result`, or `reasoning` - mirroring OpenAI's Responses "items" model, which is the neutral shape
+every provider translates to and from its native wire format. This replaced the flat message model whose
+`ToolCalls` JSON-string blob and per-message reasoning fields could not represent interleaved
+reasoning/tool_call ordering or opaque provider reasoning payloads. A tool call and its result are
+separate items correlated by `CallID`; reasoning is a distinct item that a provider round-trips for
+continuity (see each provider's CLAUDE.md). `Turn` returns the assistant turn as `[]Item` (reasoning,
+message, and tool_call items in order); `Chat`/`ChatLoop` return the full accumulated `[]Item` conversation.
+
 ### Caller-Selected Provider and Model
 
 `Chat` takes `provider` and `model` as required arguments. There is no `ProviderHostname` config and providers no longer carry a `Model` config - every call site picks both. This was a deliberate breaking change in v1.28.0:
@@ -41,7 +53,7 @@ Each provider's `Turn` populates `llmapi.Usage` with input/output/cache-read/cac
 
 If/when external GenAI dashboard compatibility is needed, the OTel metric can be emitted in parallel as a second metric - both can coexist. The `Usage` struct already carries everything needed; only the attribute key mapping and a histogram emission would be added in `logCompletion`.
 
-`ChatLoop` workflow accumulates usage in flow state via `ProcessResponse` (which `Add`s the per-turn `turnUsage` into the running `usage` key) and exposes `messages` and `usage` as declared workflow outputs.
+`ChatLoop` workflow accumulates usage in flow state via `ProcessResponse` (which `Add`s the per-turn `turnUsage` into the running `usage` key) and exposes `items` and `usage` as declared workflow outputs.
 
 ### Tool-Call Tracking
 
@@ -63,16 +75,15 @@ The chat loop is `InitChat → FirstLLM → ProcessResponse → forEach pendingT
   `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped. A
   truncation / pause_turn / unknown `stopReason` never reaches `ProcessResponse` — `CallLLM`
   fails the step before that, so the workflow's `OnError` route (if any) handles it.
-- Otherwise the forEach fans out one ExecuteTool per pending tool call. All branches converge at `NextLLM` via `graph.SetFanIn("NextLLM")`. The fan-in merges per-tool messages into the `messages` field, which is wired with `graph.SetReducer("messages", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
+- Otherwise the forEach fans out one ExecuteTool per pending tool call. All branches converge at `NextLLM` via `graph.SetFanIn("NextLLM")`. The fan-in merges per-tool `tool_result` items into the `items` field, which is wired with `graph.SetReducer("items", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
 
 `FirstLLM` and `NextLLM` are two graph positions sharing one task URL (`CallLLM`). `FirstLLM` is the initial sequential call after `InitChat`; `NextLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `exampleservices/creditflow` for the same pattern (the `ReviewJoin` / `ReviewCredit` split).
 
 `ExecuteTool` dispatches a workflow tool via `flow.Subgraph(def.URL, input)`, which returns `(out, yield, err)`. On
 the first call it yields (the foreman parks the step and runs the child); on re-entry it returns the child's
-`final_state` as `out`, which `ExecuteTool` serializes into the tool-result message. The child's output is no longer
-merged into the parent's state, so the old `preSubgraphKeys` snapshot-diff is gone. The `toolExecuted`/`toolExecutedOut`
-argument is now vestigial - re-entry is detected by `flow.Subgraph`'s `yield`, not a state field - and is retained only
-to avoid regenerating boilerplate.
+`final_state` as `out`, which `ExecuteTool` wraps into a `tool_result` item and returns as its `items` output (merged
+into the `items` state key by the append reducer). Re-entry is detected purely by `flow.Subgraph`'s `yield`, so no
+state field or snapshot-diff tracks it.
 
 **The live `Chat` entry point does not use this workflow.** `Chat` implements the loop entirely in Go for the synchronous request/response case. `ChatLoop` is exposed as a workflow so it can be invoked via `foremanapi.Run` (or composed as a subgraph) when the caller wants the foreman's persistence, fork/resume, and observability for an LLM conversation. The graph is part of the API contract whether or not it's exercised by every test.
 
@@ -130,7 +141,7 @@ knob, and it is the same one that already says "how long is this task worth."
 
 **Long-term retry is the caller's.** A patient, no-HITL workload (e.g. async document extraction) that
 would rather finish late than fail wraps `Chat` in its own retry loop with whatever policy it likes. Two
-affordances make that cheap and correct: `Chat` returns the **messages accumulated before the failure**
+affordances make that cheap and correct: `Chat` returns the **items accumulated before the failure**
 (so the caller resumes from them instead of restarting the conversation and re-paying for prior turns
 and tool calls), and `llmapi.RetryAfter(err) (wait, retryable)` is the typed accessor for the
 `retryAfter` signal (so the caller decides whether and how long to wait without spelunking the error's

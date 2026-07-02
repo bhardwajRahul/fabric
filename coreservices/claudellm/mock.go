@@ -29,7 +29,7 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTurn func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	mockTurn func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -54,15 +54,15 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 }
 
 // MockTurn sets up a mock handler for Turn.
-func (svc *Mock) MockTurn(handler func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error)) *Mock { // MARKER: Turn
+func (svc *Mock) MockTurn(handler func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error)) *Mock { // MARKER: Turn
 	svc.mockTurn = handler
 	return svc
 }
 
 // Turn executes the mock handler.
-func (svc *Mock) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Mock) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if svc.mockTurn != nil {
-		content, toolCalls, stopReason, usage, err = svc.mockTurn(ctx, model, messages, tools, options)
+		itemsOut, stopReason, usage, err = svc.mockTurn(ctx, model, items, tools, options)
 	}
-	return content, toolCalls, stopReason, usage, errors.Trace(err)
+	return itemsOut, stopReason, usage, errors.Trace(err)
 }

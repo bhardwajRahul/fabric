@@ -16,19 +16,18 @@ limitations under the License.
 
 package llmapi
 
-// Message is a single message in a conversation with an LLM.
+// Message is a text message from a single role within a conversation. It is the message variant of an
+// Item; tool calls, tool results, and reasoning are separate Item variants rather than fields here.
 type Message struct {
-	Role       string `json:"role,omitzero" jsonschema_description:"Role is the message role: user, assistant, system, or tool"`
-	Content    string `json:"content,omitzero" jsonschema_description:"Content is the text content of the message"`
-	ToolCallID string `json:"toolCallId,omitzero" jsonschema_description:"ToolCallID pairs a tool result with its tool call (role=tool only)"`
-	ToolCalls  string `json:"toolCalls,omitzero" jsonschema_description:"ToolCalls is the JSON-serialized tool calls from the assistant (role=assistant only)"`
-	// ThoughtSignature is an opaque, provider-issued token attached to the assistant's text part
-	// that must be echoed back on subsequent turns to preserve reasoning continuity. Currently used
-	// only by Gemini 2.5 thinking models; other providers leave it empty. Per-tool-call signatures
-	// live on ToolCall.ThoughtSignature instead.
-	ThoughtSignature string `json:"thoughtSignature,omitzero" jsonschema_description:"ThoughtSignature is an opaque provider token (Gemini 2.5 thinking models) that must be round-tripped to preserve reasoning continuity"`
+	Role    string `json:"role,omitzero" jsonschema_description:"Role is the message role: user, assistant, or system"`
+	Content string `json:"content,omitzero" jsonschema_description:"Content is the text content of the message"`
 	// Attachments are non-text parts (images, audio, video, documents) attached to the message.
 	// Order is preserved on the wire; providers that don't support multi-modal input silently
 	// drop them. See the Attachment type for inline vs URI semantics.
 	Attachments []Attachment `json:"attachments,omitzero" jsonschema_description:"Attachments are non-text parts (images/audio/video/documents) attached to this message; ignored by providers without multi-modal support"`
+}
+
+// NewMessage builds a message, for use with AppendItems or an Item literal.
+func NewMessage(role, content string) *Message {
+	return &Message{Role: role, Content: content}
 }

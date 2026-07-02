@@ -19,7 +19,7 @@ general:
   hostname: chatgpt.llm.core
   description: The ChatGPT LLM provider microservice implements the Turn endpoint for the OpenAI Responses API.
   package: github.com/microbus-io/fabric/coreservices/chatgptllm
-  modifiedAt: "2026-07-01T02:04:40Z"
+  modifiedAt: "2026-07-01T16:48:01Z"
 
 configs:
   ResponsesURL:
@@ -34,7 +34,7 @@ configs:
 
 functions:
   Turn:
-    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage)
+    signature: Turn(model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage)
     description: Turn executes a single LLM turn using the ChatGPT provider.
     method: POST
     route: :444/turn

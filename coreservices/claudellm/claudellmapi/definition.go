@@ -32,7 +32,7 @@ const Hostname = "claude.llm.core"
 const Name = "ClaudeLLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 5
+const Version = 6
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.`
@@ -58,16 +58,15 @@ var Turn = define.Function{ // MARKER: Turn
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Model    string              `json:"model,omitzero"`
-	Messages []llmapi.Message    `json:"messages,omitzero"`
-	Tools    []llmapi.Tool       `json:"tools,omitzero"`
-	Options  *llmapi.TurnOptions `json:"options,omitzero"`
+	Model   string              `json:"model,omitzero"`
+	Items   []llmapi.Item       `json:"items,omitzero"`
+	Tools   []llmapi.Tool       `json:"tools,omitzero"`
+	Options *llmapi.TurnOptions `json:"options,omitzero"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content    string            `json:"content,omitzero"`
-	ToolCalls  []llmapi.ToolCall `json:"toolCalls,omitzero"`
-	StopReason string            `json:"stopReason,omitzero"`
-	Usage      llmapi.Usage      `json:"usage,omitzero"`
+	ItemsOut   []llmapi.Item `json:"items,omitzero"`
+	StopReason string        `json:"stopReason,omitzero"`
+	Usage      llmapi.Usage  `json:"usage,omitzero"`
 }

@@ -94,11 +94,11 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		messages := []llmapi.Message{{Role: "user", Content: "Hello"}}
-		content, toolCalls, stopReason, usage, err := client.Turn(ctx, "claude-haiku-4-5", messages, nil, nil)
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Hello"))
+		out, stopReason, usage, err := client.Turn(ctx, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
-			assert.Expect(content, "Hello from Claude!")
-			assert.Expect(len(toolCalls), 0)
+			assert.Expect(llmapi.LastAssistantMessage(out), "Hello from Claude!")
+			assert.Expect(len(llmapi.PendingToolCalls(out)), 0)
 			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
 			assert.Expect(usage.InputTokens, 10)
 			assert.Expect(usage.OutputTokens, 5)
@@ -121,12 +121,84 @@ func TestClaudeLLM_Turn(t *testing.T) { // MARKER: Turn
 		})
 		defer httpEgressMock.MockMakeRequest(nil)
 
-		messages := []llmapi.Message{{Role: "user", Content: "What is 3 + 5?"}}
-		_, toolCalls, stopReason, _, err := client.Turn(ctx, "claude-haiku-4-5", messages, nil, nil)
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "What is 3 + 5?"))
+		out, stopReason, _, err := client.Turn(ctx, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
-			assert.Expect(len(toolCalls), 1)
-			assert.Expect(toolCalls[0].Name, "Arithmetic")
+			calls := llmapi.PendingToolCalls(out)
+			assert.Expect(len(calls), 1)
+			assert.Expect(calls[0].Name, "Arithmetic")
 			assert.Expect(stopReason, llmapi.StopReasonToolUse)
+		}
+	})
+}
+
+// TestClaudeLLM_RealTurn exercises the real Anthropic Messages API end-to-end through the live HTTP
+// egress proxy. It is skipped by default; drop an API key into realAPIKey and remove the skip to run
+// it against production.
+func TestClaudeLLM_RealTurn(t *testing.T) {
+	const realAPIKey = ""
+	if realAPIKey == "" {
+		t.Skip("set realAPIKey to run against the live Anthropic Messages API")
+	}
+	const realModel = "claude-haiku-4-5"
+
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+	tester := connector.New("tester.client")
+	client := claudellmapi.NewClient(tester)
+
+	app := application.New()
+	app.Add(svc, httpegress.NewService(), tester)
+	app.RunInTest(t)
+
+	svc.SetAPIKey(realAPIKey)
+
+	t.Run("text_response", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		items := llmapi.AppendItems(nil,
+			llmapi.NewMessage("system", "You are a terse assistant. Answer in one word."),
+			llmapi.NewMessage("user", "What is the capital of France?"),
+		)
+		out, stopReason, usage, err := client.Turn(ctx, realModel, items, nil, nil)
+		if assert.NoError(err) {
+			assert.True(strings.Contains(strings.ToLower(llmapi.LastAssistantMessage(out)), "paris"))
+			assert.Expect(len(llmapi.PendingToolCalls(out)), 0)
+			assert.Expect(stopReason, llmapi.StopReasonEndTurn)
+			assert.True(usage.InputTokens > 0)
+			assert.True(usage.OutputTokens > 0)
+			assert.Expect(usage.Turns, 1)
+		}
+	})
+
+	t.Run("tool_calling", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		tools := []llmapi.Tool{{
+			Name:        "Arithmetic",
+			Description: "Computes the result of an arithmetic operation.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"x":{"type":"number"},"op":{"type":"string"},"y":{"type":"number"}},"required":["x","op","y"]}`),
+		}}
+		items := llmapi.AppendItems(nil, llmapi.NewMessage("user", "Use the Arithmetic tool to compute 10 - 3."))
+		out, stopReason, _, err := client.Turn(ctx, realModel, items, tools, nil)
+		if assert.NoError(err) {
+			assert.Expect(stopReason, llmapi.StopReasonToolUse)
+			calls := llmapi.PendingToolCalls(out)
+			if assert.True(len(calls) > 0) {
+				assert.Expect(calls[0].Name, "Arithmetic")
+
+				// Round-trip: append the assistant turn items verbatim, then the tool result, and
+				// confirm the tool_use / tool_result blocks thread through correctly.
+				items = append(items, out...)
+				items = llmapi.AppendItems(items, llmapi.NewToolResult(calls[0].ID, `{"result":7}`))
+				out, stopReason, _, err = client.Turn(ctx, realModel, items, tools, nil)
+				if assert.NoError(err) {
+					assert.Expect(stopReason, llmapi.StopReasonEndTurn)
+					assert.True(strings.Contains(llmapi.LastAssistantMessage(out), "7"))
+				}
+			}
 		}
 	})
 }

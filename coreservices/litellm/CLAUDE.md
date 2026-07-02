@@ -7,11 +7,14 @@ intentionally a near-clone of `chatgptllm`: the request/response structs in `api
 names because the bytes on the wire genuinely are OpenAI's schema, not a LiteLLM-specific one. Keeping the names
 identical documents that fact and keeps the two providers easy to diff.
 
-The `Turn` output shape must match the contract `llm.core` dispatches against: `llm.core` calls providers via
-`llmapi.NewClient(svc).ForHost(provider).Turn(...)`, which deserializes the provider's response into
-`llmapi.TurnOut` - including `stopReason`. A provider that omits `stopReason` returns it as `""`, which `llm.core`
-reads as `StopReasonUnknown` and surfaces as a `502` on every turn. So this provider returns the full
-`(content, toolCalls, stopReason, usage)` tuple exactly like `chatgptllm`. The only intended differences from
+Like `chatgptllm`, `Turn` speaks the `[]llmapi.Item` model and maps it onto Responses input/output items,
+including reasoning capture and replay (`store` always false; `include:reasoning.encrypted_content` sent
+only once a model is observed to reason). Reasoning support is detected at **runtime** - a per-replica
+`reasoningSeen` set populated when a response bills reasoning tokens - not from a model-name list. This
+runtime detection matters especially behind LiteLLM, where the model string is operator-defined and can't
+be pattern-matched. Its `Turn` returns the same `(items, stopReason, usage)` shape `llm.core` dispatches against
+(`llm.core` deserializes the provider response into `llmapi.TurnOut`, including `stopReason`; a missing
+`stopReason` would read as `StopReasonUnknown` and 502 every turn). The only intended differences from
 `chatgptllm` are the LiteLLM-specific `num_retries` field, the localhost default, and the absence of the
 empty-response debug diagnostic.
 

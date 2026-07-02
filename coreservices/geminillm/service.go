@@ -147,114 +147,107 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
-		return "", nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {
-		return "", nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
+		return nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 
-	// Gemini has a dedicated `systemInstruction` request field; system role messages
-	// belong there, not in the `contents` array (where mapping them to `user` would
-	// create user/user adjacency at the start and isn't the contract Gemini documents).
-	// Collect every system message in arrival order and concatenate them with blank lines.
+	// Convert the item log to Gemini's two-level shape. System messages hoist into the dedicated
+	// systemInstruction field (blank-line joined). Reasoning items carry a thought signature that binds
+	// to the item that follows them: pendingSig holds it until the next text/functionCall part consumes
+	// it, re-gluing the signature Gemini requires on that exact part. An assistant text item and the
+	// tool_call items after it coalesce into one model content; tool_result items coalesce into one user
+	// content, matching Gemini's call/response pairing.
 	var systemInstruction *geminiContent
 	var systemParts []string
-	for _, msg := range messages {
-		if msg.Role == "system" && msg.Content != "" {
-			systemParts = append(systemParts, msg.Content)
-		}
-	}
-	if len(systemParts) > 0 {
-		systemInstruction = &geminiContent{
-			Parts: []geminiPart{{Text: strings.Join(systemParts, "\n\n")}},
-		}
-	}
-
-	// Convert messages
-	contents := make([]geminiContent, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
-		case "system":
-			// Hoisted into systemInstruction above.
-			continue
-		case "assistant":
-			if msg.ToolCalls != "" {
-				var tcs []llmapi.ToolCall
-				json.Unmarshal([]byte(msg.ToolCalls), &tcs)
-				parts := make([]geminiPart, 0, len(tcs)+1+len(msg.Attachments))
-				if msg.Content != "" {
-					// The assistant's text part carries its own thoughtSignature (stored on
-					// the parent Message). Echo it back so the model can resume its thinking.
-					parts = append(parts, geminiPart{
-						Text:             msg.Content,
-						ThoughtSignature: msg.ThoughtSignature,
-					})
+	contents := make([]geminiContent, 0, len(items))
+	var pendingSig string
+	for _, it := range items {
+		switch it.Type() {
+		case llmapi.ItemReasoning:
+			if it.Reasoning != nil && it.Reasoning.Signature != "" {
+				pendingSig = it.Reasoning.Signature
+			}
+		case llmapi.ItemMessage:
+			if it.Message == nil {
+				continue
+			}
+			switch it.Message.Role {
+			case "system":
+				if it.Message.Content != "" {
+					systemParts = append(systemParts, it.Message.Content)
 				}
-				parts = append(parts, attachmentsToParts(msg.Attachments)...)
-				for _, tc := range tcs {
-					var args map[string]any
-					json.Unmarshal(tc.Arguments, &args)
-					parts = append(parts, geminiPart{
-						FunctionCall:     &geminiFuncCall{Name: tc.Name, Args: args},
-						ThoughtSignature: tc.ThoughtSignature,
-					})
+			case "assistant":
+				parts := make([]geminiPart, 0, 1+len(it.Message.Attachments))
+				if it.Message.Content != "" {
+					parts = append(parts, geminiPart{Text: it.Message.Content, ThoughtSignature: pendingSig})
+					pendingSig = ""
+				}
+				parts = append(parts, attachmentsToParts(it.Message.Attachments)...)
+				if len(parts) == 0 {
+					continue
 				}
 				contents = append(contents, geminiContent{Role: "model", Parts: parts})
+			default:
+				parts := make([]geminiPart, 0, 1+len(it.Message.Attachments))
+				if it.Message.Content != "" {
+					parts = append(parts, geminiPart{Text: it.Message.Content})
+				}
+				parts = append(parts, attachmentsToParts(it.Message.Attachments)...)
+				if len(parts) == 0 {
+					// Skip silently rather than emit a content with no parts -- Gemini rejects
+					// empty-parts contents with an INVALID_ARGUMENT error.
+					continue
+				}
+				contents = append(contents, geminiContent{Role: it.Message.Role, Parts: parts})
+			}
+		case llmapi.ItemToolCall:
+			if it.ToolCall == nil {
+				continue
+			}
+			var args map[string]any
+			json.Unmarshal(it.ToolCall.Arguments, &args)
+			part := geminiPart{
+				FunctionCall:     &geminiFuncCall{Name: it.ToolCall.Name, Args: args},
+				ThoughtSignature: pendingSig,
+			}
+			pendingSig = ""
+			if n := len(contents); n > 0 && contents[n-1].Role == "model" {
+				contents[n-1].Parts = append(contents[n-1].Parts, part)
 			} else {
-				parts := make([]geminiPart, 0, 1+len(msg.Attachments))
-				if msg.Content != "" {
-					parts = append(parts, geminiPart{
-						Text:             msg.Content,
-						ThoughtSignature: msg.ThoughtSignature,
-					})
-				}
-				parts = append(parts, attachmentsToParts(msg.Attachments)...)
-				contents = append(contents, geminiContent{Role: "model", Parts: parts})
+				contents = append(contents, geminiContent{Role: "model", Parts: []geminiPart{part}})
 			}
-		case "tool":
+		case llmapi.ItemToolResult:
+			if it.ToolResult == nil {
+				continue
+			}
 			var resultMap map[string]any
-			json.Unmarshal([]byte(msg.Content), &resultMap)
+			json.Unmarshal([]byte(it.ToolResult.Output), &resultMap)
 			if resultMap == nil {
-				resultMap = map[string]any{"result": msg.Content}
+				resultMap = map[string]any{"result": it.ToolResult.Output}
 			}
-			// Gemini expects ALL functionResponses paired with a single model turn's
-			// functionCalls to live in ONE user content turn. Coalesce consecutive `tool`
-			// role llmapi.Messages into the trailing user content (if any) instead of
-			// emitting a separate user content per result. Without this, a model turn that
-			// requested N parallel function calls produces a follow-up sequence of N
-			// separate user contents, breaking Gemini's call/response pairing.
+			// Gemini keys a functionResponse by name (functionCall has no id), so ToolResult.CallID,
+			// which mirrors the ToolCall.ID we set to the function name, is the name here.
 			part := geminiPart{
 				FunctionResponse: &geminiFuncResp{
-					Name:     msg.ToolCallID,
+					Name:     it.ToolResult.CallID,
 					Response: resultMap,
 				},
 			}
 			if n := len(contents); n > 0 && contents[n-1].Role == "user" {
 				contents[n-1].Parts = append(contents[n-1].Parts, part)
 			} else {
-				contents = append(contents, geminiContent{
-					Role:  "user",
-					Parts: []geminiPart{part},
-				})
+				contents = append(contents, geminiContent{Role: "user", Parts: []geminiPart{part}})
 			}
-		default:
-			parts := make([]geminiPart, 0, 1+len(msg.Attachments))
-			if msg.Content != "" {
-				parts = append(parts, geminiPart{Text: msg.Content})
-			}
-			parts = append(parts, attachmentsToParts(msg.Attachments)...)
-			if len(parts) == 0 {
-				// Skip silently rather than emit a content with no parts -- Gemini rejects
-				// empty-parts contents with an INVALID_ARGUMENT error.
-				continue
-			}
-			contents = append(contents, geminiContent{
-				Role:  msg.Role,
-				Parts: parts,
-			})
+		}
+	}
+	if len(systemParts) > 0 {
+		systemInstruction = &geminiContent{
+			Parts: []geminiPart{{Text: strings.Join(systemParts, "\n\n")}},
 		}
 	}
 
@@ -286,25 +279,25 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	apiURL := svc.ModelsURL() + "/" + model + ":generateContent?key=" + svc.APIKey()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
 	rawBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	if httpResp.StatusCode != http.StatusOK {
 		svc.LogWarn(ctx, "Gemini API error response",
@@ -372,42 +365,77 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 			}
 			props = append(props, "retryAfter", retryAfter)
 		}
+		// 503 UNAVAILABLE is a transient overload (the model is momentarily swamped), not a permanent
+		// failure. Gemini attaches no retryDelay to it, so we retry with a modest default wait, keeping
+		// the provider symmetric with Anthropic's retryable 529 overload.
+		if httpResp.StatusCode == http.StatusServiceUnavailable {
+			wait := 5 * time.Second
+			props = append(props, "retryAfter", wait.String())
+			svc.blockModel(model, wait)
+		}
 		props = append(props, errorDetailAttrs(httpResp.Header, rawBody)...)
-		return "", nil, "", llmapi.Usage{}, errors.New(message, props...)
+		return nil, "", llmapi.Usage{}, errors.New(message, props...)
 	}
 
 	var gemResp geminiResponse
 	err = json.Unmarshal(rawBody, &gemResp)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	var mediaPartCount int
+	hasContent := false
+	hasToolCalls := false
 	if len(gemResp.Candidates) > 0 {
+		// Gemini can split a single assistant answer across several text parts. Accumulate consecutive
+		// text into one assistant message (matching the other providers) so LastAssistantMessage sees
+		// the whole answer and the replayed conversation stays role-alternating. The buffer is flushed
+		// before any non-text item (tool call, reasoning signature, thought) and at the end.
+		var text strings.Builder
+		flushText := func() {
+			if text.Len() > 0 {
+				outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text.String()))
+				hasContent = true
+				text.Reset()
+			}
+		}
 		for _, part := range gemResp.Candidates[0].Content.Parts {
-			// Thought parts are the model's internal reasoning (Gemini 2.5 thinking models).
-			// Skip them from the visible content; their thoughtSignature is still attached to
-			// the corresponding non-thought parts further down the parts list.
+			// Thought parts are the model's internal reasoning (Gemini 2.5 thinking models). Emit them
+			// as reasoning items carrying the thinking text and signature, and keep them out of the
+			// visible assistant content.
 			if part.Thought {
+				flushText()
+				r := llmapi.Reasoning{Signature: part.ThoughtSignature}
+				if part.Text != "" {
+					r.Summary = []string{part.Text}
+				}
+				outItems = llmapi.AppendItems(outItems, r)
 				continue
 			}
-			if part.Text != "" {
-				content += part.Text
+			// A signature on a non-thought part binds to that part; emit it as a reasoning item
+			// immediately before the item it belongs to so a later turn can re-glue it by position.
+			if part.ThoughtSignature != "" {
+				flushText()
+				outItems = llmapi.AppendItems(outItems, llmapi.Reasoning{Signature: part.ThoughtSignature})
 			}
 			if part.FunctionCall != nil {
+				flushText()
 				args, _ := json.Marshal(part.FunctionCall.Args)
-				toolCalls = append(toolCalls, llmapi.ToolCall{
-					ID:               part.FunctionCall.Name,
-					Name:             part.FunctionCall.Name,
-					Arguments:        args,
-					ThoughtSignature: part.ThoughtSignature,
+				outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
+					ID:        part.FunctionCall.Name,
+					Name:      part.FunctionCall.Name,
+					Arguments: args,
 				})
+				hasToolCalls = true
+			} else if part.Text != "" {
+				text.WriteString(part.Text)
 			}
 			if part.InlineData != nil || part.FileData != nil {
 				mediaPartCount++
 			}
 		}
-		stopReason = mapFinishReason(gemResp.Candidates[0].FinishReason, len(toolCalls) > 0)
+		flushText()
+		stopReason = mapFinishReason(gemResp.Candidates[0].FinishReason, hasToolCalls)
 	}
 	// Image-generation models (e.g. gemini-2.5-flash-image-preview) return inlineData/fileData
 	// parts carrying produced media. Surfacing them through Turn would require widening the
@@ -425,7 +453,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 	// (often a 2.5-Flash multi-turn quirk, or a safety/policy clip that doesn't surface as a
 	// refusal finishReason). Logged at debug so it's available with MICROBUS_LOG_DEBUG=1 when
 	// you need it, without pestering the normal log stream.
-	if content == "" && len(toolCalls) == 0 {
+	if !hasContent && !hasToolCalls {
 		finishReason := ""
 		if len(gemResp.Candidates) > 0 {
 			finishReason = gemResp.Candidates[0].FinishReason
@@ -456,7 +484,7 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		usage.Model = model
 	}
 
-	return content, toolCalls, stopReason, usage, nil
+	return outItems, stopReason, usage, nil
 }
 
 // attachmentsToParts converts llmapi.Attachment values into Gemini parts. An attachment

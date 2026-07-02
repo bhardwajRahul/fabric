@@ -86,8 +86,10 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
-	rateMu       sync.Mutex
-	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	rateMu        sync.Mutex
+	blockedUntil  map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	reasonMu      sync.Mutex
+	reasoningSeen map[string]bool // model -> observed to reason (billed reasoning tokens); enables encrypted-reasoning replay
 }
 
 // OnStartup is called when the microservice is started up.
@@ -125,58 +127,77 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 /*
 Turn executes a single LLM turn using the ChatGPT provider.
 */
-func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
+func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
-		return "", nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {
-		return "", nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
+		return nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
 
-	// Convert messages to Responses input items. System messages fold into the top-level instructions;
-	// an assistant tool call and its result become distinct function_call / function_call_output items.
+	// Convert the item log to Responses input items. System messages fold into the top-level
+	// instructions; every other item maps one-to-one and stays in order, so a reasoning item keeps its
+	// position immediately before the function_call it belongs to.
 	var instructions string
-	oaiInput := make([]openaiInputItem, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
-		case "system":
-			if instructions != "" {
-				instructions += "\n\n"
+	oaiInput := make([]openaiItem, 0, len(items))
+	for _, it := range items {
+		switch it.Type() {
+		case llmapi.ItemMessage:
+			if it.Message == nil {
+				continue
 			}
-			instructions += msg.Content
-		case "tool":
-			oaiInput = append(oaiInput, openaiInputItem{
-				Type:   "function_call_output",
-				CallID: msg.ToolCallID,
-				Output: msg.Content,
-			})
-		case "assistant":
-			if msg.Content != "" {
-				oaiInput = append(oaiInput, openaiInputItem{
-					Type:    "message",
-					Role:    "assistant",
-					Content: []openaiContent{{Type: "output_text", Text: msg.Content}},
-				})
-			}
-			if msg.ToolCalls != "" {
-				var tcs []llmapi.ToolCall
-				json.Unmarshal([]byte(msg.ToolCalls), &tcs)
-				for _, tc := range tcs {
-					oaiInput = append(oaiInput, openaiInputItem{
-						Type:   "function_call",
-						CallID: tc.ID,
-						Name:   tc.Name,
-						Args:   string(tc.Arguments),
-					})
+			if it.Message.Role == "system" {
+				if instructions != "" {
+					instructions += "\n\n"
 				}
+				instructions += it.Message.Content
+				continue
 			}
-		default:
-			oaiInput = append(oaiInput, openaiInputItem{
+			partType := "input_text"
+			if it.Message.Role == "assistant" {
+				partType = "output_text"
+			}
+			oaiInput = append(oaiInput, openaiItem{
 				Type:    "message",
-				Role:    msg.Role,
-				Content: []openaiContent{{Type: "input_text", Text: msg.Content}},
+				Role:    it.Message.Role,
+				Content: []openaiContent{{Type: partType, Text: it.Message.Content}},
 			})
+		case llmapi.ItemToolCall:
+			if it.ToolCall == nil {
+				continue
+			}
+			oaiInput = append(oaiInput, openaiItem{
+				Type:   "function_call",
+				CallID: it.ToolCall.ID,
+				Name:   it.ToolCall.Name,
+				Args:   string(it.ToolCall.Arguments),
+			})
+		case llmapi.ItemToolResult:
+			if it.ToolResult == nil {
+				continue
+			}
+			oaiInput = append(oaiInput, openaiItem{
+				Type:   "function_call_output",
+				CallID: it.ToolResult.CallID,
+				Output: it.ToolResult.Output,
+			})
+		case llmapi.ItemReasoning:
+			if it.Reasoning == nil || it.Reasoning.EncryptedContent == "" {
+				continue // only reasoning items carrying the encrypted payload can be replayed
+			}
+			// summary must be present on an echoed reasoning item (empty array is accepted; omitting
+			// it is a 400), so initialize it non-nil.
+			ri := openaiItem{
+				Type:             "reasoning",
+				ID:               it.Reasoning.ID,
+				EncryptedContent: it.Reasoning.EncryptedContent,
+				Summary:          []openaiSummary{},
+			}
+			for _, s := range it.Reasoning.Summary {
+				ri.Summary = append(ri.Summary, openaiSummary{Type: "summary_text", Text: s})
+			}
+			oaiInput = append(oaiInput, ri)
 		}
 	}
 
@@ -197,6 +218,13 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		Instructions: instructions,
 		Tools:        oaiTools,
 	}
+	// Ask for the encrypted reasoning payload only once this model is known to reason. A non-reasoning
+	// model rejects include=reasoning.encrypted_content with a 400, so we don't send it until a prior
+	// response proved the model reasons (detected from usage.reasoning_tokens). The first call to a
+	// reasoning model therefore can't replay its own reasoning - acceptable; every later turn does.
+	if svc.knownReasoning(model) {
+		reqBody.Include = []string{"reasoning.encrypted_content"}
+	}
 	if options != nil {
 		reqBody.MaxOutputTokens = options.MaxTokens
 		reqBody.Temperature = options.Temperature
@@ -204,20 +232,20 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
 	apiURL := svc.ResponsesURL()
 	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+svc.APIKey())
 
 	httpResp, err := httpegressapi.NewClient(svc).Do(ctx, httpReq)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	defer httpResp.Body.Close()
 
@@ -261,46 +289,59 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 			}
 		}
 		props = append(props, errorDetailAttrs(httpResp.Header, respBody)...)
-		return "", nil, "", llmapi.Usage{}, errors.New(message, props...)
+		return nil, "", llmapi.Usage{}, errors.New(message, props...)
 	}
 
 	rawBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 	var oaiResp openaiResponse
 	err = json.Unmarshal(rawBody, &oaiResp)
 	if err != nil {
-		return "", nil, "", llmapi.Usage{}, errors.Trace(err)
+		return nil, "", llmapi.Usage{}, errors.Trace(err)
 	}
 
-	// Walk the output items: text lives in message items (output_text content parts), tool calls are
-	// function_call items correlated by call_id.
-	var textParts []string
+	// Walk the output items in order, preserving reasoning/message/function_call sequencing so a later
+	// turn can echo reasoning items back adjacent to their tool call. Reasoning items carry the
+	// encrypted payload (and any summary) needed for replay.
+	hasContent := false
+	hasToolCalls := false
 	for _, item := range oaiResp.Output {
 		switch item.Type {
+		case "reasoning":
+			r := llmapi.Reasoning{ID: item.ID, EncryptedContent: item.EncryptedContent}
+			for _, s := range item.Summary {
+				r.Summary = append(r.Summary, s.Text)
+			}
+			outItems = llmapi.AppendItems(outItems, r)
 		case "message":
+			var text string
 			for _, part := range item.Content {
 				if part.Type == "output_text" {
-					textParts = append(textParts, part.Text)
+					text += part.Text
 				}
 			}
+			outItems = llmapi.AppendItems(outItems, llmapi.NewMessage("assistant", text))
+			if text != "" {
+				hasContent = true
+			}
 		case "function_call":
-			toolCalls = append(toolCalls, llmapi.ToolCall{
+			outItems = llmapi.AppendItems(outItems, llmapi.ToolCall{
 				ID:        item.CallID,
 				Name:      item.Name,
 				Arguments: json.RawMessage(item.Args),
 			})
+			hasToolCalls = true
 		}
 	}
-	content = strings.Join(textParts, "")
-	stopReason = mapStopReason(oaiResp.Status, oaiResp.IncompleteDetails.Reason, len(toolCalls) > 0)
+	stopReason = mapStopReason(oaiResp.Status, oaiResp.IncompleteDetails.Reason, hasToolCalls)
 
 	// No content and no tool calls is the smoking-gun shape behind downstream "LLM returned no
 	// final assistant content" errors - typically an incomplete response from a content-filter
 	// block, which otherwise surfaces only as an opaque unknown-stop-reason 502. Logged at
 	// debug with the raw body so the cause is visible under MICROBUS_LOG_DEBUG=1.
-	if content == "" && len(toolCalls) == 0 {
+	if !hasContent && !hasToolCalls {
 		svc.LogDebug(ctx, "OpenAI returned no content and no tool calls",
 			"model", model,
 			"status", oaiResp.Status,
@@ -324,7 +365,33 @@ func (svc *Service) Turn(ctx context.Context, model string, messages []llmapi.Me
 		usage.CacheReadTokens = 0
 	}
 
-	return content, toolCalls, stopReason, usage, nil
+	// Billed reasoning tokens prove this model reasons, so future turns request the encrypted reasoning
+	// payload for replay. This is what replaces a hardcoded reasoning-model name list.
+	if usage.ThinkingTokens > 0 {
+		svc.noteReasoning(model)
+	}
+
+	return outItems, stopReason, usage, nil
+}
+
+// knownReasoning reports whether this model has been observed to reason (a prior turn billed reasoning
+// tokens). Only then does Turn request the encrypted reasoning payload, since a non-reasoning model
+// rejects that request. Per-replica; warms on the first response from a reasoning model.
+func (svc *Service) knownReasoning(model string) bool {
+	svc.reasonMu.Lock()
+	defer svc.reasonMu.Unlock()
+	return svc.reasoningSeen[model]
+}
+
+// noteReasoning records that a model reasons, learned at runtime from billed reasoning tokens rather
+// than a hardcoded name list.
+func (svc *Service) noteReasoning(model string) {
+	svc.reasonMu.Lock()
+	defer svc.reasonMu.Unlock()
+	if svc.reasoningSeen == nil {
+		svc.reasoningSeen = map[string]bool{}
+	}
+	svc.reasoningSeen[model] = true
 }
 
 // mapStopReason derives the normalized llmapi stop reason from the Responses API result. The

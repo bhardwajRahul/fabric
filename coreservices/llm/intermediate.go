@@ -45,13 +45,13 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Chat(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error)                    // MARKER: Chat
-	Turn(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
-	InitChat(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error)                                         // MARKER: InitChat
-	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error)                             // MARKER: CallLLM
-	ProcessResponse(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error)   // MARKER: ProcessResponse
-	ExecuteTool(ctx context.Context, flow *workflow.Flow) (err error)                                                                                                                                                    // MARKER: ExecuteTool
-	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                     // MARKER: ChatLoop
+	Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error)                                                     // MARKER: Chat
+	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error)                                                 // MARKER: Turn
+	InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)                                                                                                       // MARKER: InitChat
+	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item) (turnItems []llmapi.Item, pendingToolCalls any, turnUsage llmapi.Usage, err error)                                                  // MARKER: CallLLM
+	ProcessResponse(ctx context.Context, flow *workflow.Flow, turnItems []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
+	ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (items []llmapi.Item, err error)                                                                                                                       // MARKER: ExecuteTool
+	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                                          // MARKER: ChatLoop
 }
 
 // NewService creates a new instance of the microservice.
@@ -92,25 +92,25 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Chat
 		"Chat", svc.doChat,
 		sub.At(llmapi.Chat.Method, llmapi.Chat.Route),
-		sub.Description(`Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.`),
+		sub.Description(`Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.`),
 		sub.Function(llmapi.ChatIn{}, llmapi.ChatOut{}),
 	)
 	svc.Subscribe( // MARKER: Turn
 		"Turn", svc.doTurn,
 		sub.At(llmapi.Turn.Method, llmapi.Turn.Route),
-		sub.Description(`Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).`),
+		sub.Description(`Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.`),
 		sub.Function(llmapi.TurnIn{}, llmapi.TurnOut{}),
 	)
 	svc.Subscribe( // MARKER: InitChat
 		"InitChat", svc.doInitChat,
 		sub.At(llmapi.InitChat.Method, llmapi.InitChat.Route),
-		sub.Description(`InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.`),
+		sub.Description(`InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.`),
 		sub.Task(llmapi.InitChatIn{}, llmapi.InitChatOut{}),
 	)
 	svc.Subscribe( // MARKER: CallLLM
 		"CallLLM", svc.doCallLLM,
 		sub.At(llmapi.CallLLM.Method, llmapi.CallLLM.Route),
-		sub.Description(`CallLLM sends the current messages and tools to the LLM provider.`),
+		sub.Description(`CallLLM sends the current conversation items and tools to the LLM provider.`),
 		sub.Task(llmapi.CallLLMIn{}, llmapi.CallLLMOut{}),
 	)
 	svc.Subscribe( // MARKER: ProcessResponse
@@ -175,7 +175,7 @@ func (svc *Intermediate) doChat(w http.ResponseWriter, r *http.Request) (err err
 	var in llmapi.ChatIn
 	var out llmapi.ChatOut
 	err = marshalFunction(w, r, llmapi.Chat.Route, &in, &out, func(_ any, _ any) error {
-		out.MessagesOut, out.Usage, err = svc.Chat(r.Context(), in.Provider, in.Model, in.Messages, in.ToolURLs, in.Options)
+		out.ItemsOut, out.Usage, err = svc.Chat(r.Context(), in.Provider, in.Model, in.Items, in.ToolURLs, in.Options)
 		return err // No trace
 	})
 	return err // No trace
@@ -186,7 +186,7 @@ func (svc *Intermediate) doTurn(w http.ResponseWriter, r *http.Request) (err err
 	var in llmapi.TurnIn
 	var out llmapi.TurnOut
 	err = marshalFunction(w, r, llmapi.Turn.Route, &in, &out, func(_ any, _ any) error {
-		out.Content, out.ToolCalls, out.StopReason, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Messages, in.Tools, in.Options)
+		out.ItemsOut, out.StopReason, out.Usage, err = svc.Turn(r.Context(), in.Model, in.Items, in.Tools, in.Options)
 		return err // No trace
 	})
 	return err // No trace
@@ -203,7 +203,7 @@ func (svc *Intermediate) doInitChat(w http.ResponseWriter, r *http.Request) (err
 	var in llmapi.InitChatIn
 	flow.ParseState(&in)
 	var out llmapi.InitChatOut
-	out.MaxToolRounds, out.ToolRounds, err = svc.InitChat(r.Context(), &flow, in.Messages, in.ToolURLs, in.Options)
+	err = svc.InitChat(r.Context(), &flow, in.Items, in.ToolURLs, in.Options)
 	if err != nil {
 		return err // No trace
 	}
@@ -227,7 +227,7 @@ func (svc *Intermediate) doCallLLM(w http.ResponseWriter, r *http.Request) (err 
 	var in llmapi.CallLLMIn
 	flow.ParseState(&in)
 	var out llmapi.CallLLMOut
-	out.LLMContent, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Messages)
+	out.TurnItems, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Items)
 	if err != nil {
 		return err // No trace
 	}
@@ -251,7 +251,7 @@ func (svc *Intermediate) doProcessResponse(w http.ResponseWriter, r *http.Reques
 	var in llmapi.ProcessResponseIn
 	flow.ParseState(&in)
 	var out llmapi.ProcessResponseOut
-	out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.LLMContent, in.TurnUsage, in.ToolRounds, in.MaxToolRounds)
+	out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.TurnItems, in.PendingToolCalls, in.TurnUsage, in.ToolRounds)
 	if err != nil {
 		return err // No trace
 	}
@@ -275,7 +275,7 @@ func (svc *Intermediate) doExecuteTool(w http.ResponseWriter, r *http.Request) (
 	var in llmapi.ExecuteToolIn
 	flow.ParseState(&in)
 	var out llmapi.ExecuteToolOut
-	err = svc.ExecuteTool(r.Context(), &flow)
+	out.Items, err = svc.ExecuteTool(r.Context(), &flow, in.CurrentTool)
 	if err != nil {
 		return err // No trace
 	}

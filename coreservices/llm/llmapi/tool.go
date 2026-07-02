@@ -30,13 +30,23 @@ type Tool struct {
 	Type        string          `json:"type,omitzero" jsonschema_description:"Type is the endpoint kind (function/web/workflow). Workflow tools are dispatched as dynamic subgraphs"`
 }
 
-// ToolCall represents an LLM's request to invoke a tool.
+// ToolCall represents an LLM's request to invoke a tool. It is the tool_call variant of an Item; its
+// result is a separate ToolResult item correlated by ID. Any reasoning bound to this call travels as a
+// reasoning Item positioned immediately before it.
 type ToolCall struct {
 	ID        string          `json:"id,omitzero" jsonschema_description:"ID is a unique identifier for this tool call"`
 	Name      string          `json:"name,omitzero" jsonschema_description:"Name is the tool name the LLM wants to invoke"`
 	Arguments json.RawMessage `json:"arguments,omitzero" jsonschema_description:"Arguments is the JSON-encoded arguments for the tool call"`
-	// ThoughtSignature is an opaque, provider-issued token attached to this call that must be echoed
-	// back on subsequent turns to preserve the model's internal reasoning continuity. Currently used
-	// only by Gemini 2.5 thinking models; other providers leave it empty.
-	ThoughtSignature string `json:"thoughtSignature,omitzero" jsonschema_description:"ThoughtSignature is an opaque provider token (Gemini 2.5 thinking models) that must be round-tripped to preserve reasoning continuity"`
+}
+
+// ToolResult is the outcome of a tool invocation, correlated to its ToolCall by CallID. It is roleless:
+// providers that nest tool results inside a message (Anthropic, Gemini) supply the enclosing role.
+type ToolResult struct {
+	CallID string `json:"callId,omitzero" jsonschema_description:"CallID correlates this result with the ToolCall.ID that requested it"`
+	Output string `json:"output,omitzero" jsonschema_description:"Output is the serialized result returned to the model"`
+}
+
+// NewToolResult builds a tool result, for use with AppendItems or an Item literal.
+func NewToolResult(callID, output string) *ToolResult {
+	return &ToolResult{CallID: callID, Output: output}
 }

@@ -4,23 +4,23 @@ Create an example microservice at hostname `chatbox.example` that implements a d
 
 ## Types
 
-All types (`Message`, `Tool`, `ToolCall`, `TurnCompletion`) are imported from `llmapi` (package `github.com/microbus-io/fabric/coreservices/llm/llmapi`). Do not define local types.
+All types (`Item`, `Message`, `Tool`, `ToolCall`, `Usage`, `TurnOptions`) are imported from `llmapi` (package `github.com/microbus-io/fabric/coreservices/llm/llmapi`). Do not define local types. The conversation is an ordered `[]llmapi.Item`; build items with `llmapi.AppendItems` / `llmapi.NewMessage`.
 
 ## Turn Endpoint
 
-- `Turn` on `POST :444/turn` - signature `Turn(messages []llmapi.Message, tools []llmapi.Tool) (completion *llmapi.TurnCompletion)`. This is the LLM provider interface endpoint.
+- `Turn` on `POST :444/turn` - signature `Turn(model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error)`. This is the LLM provider interface endpoint, the same contract the real provider microservices implement. `outItems` is only the assistant turn's new items.
 
 Logic:
-1. If `messages` is empty, return a welcome message.
-2. Inspect `lastMsg := messages[len(messages)-1]`.
-3. If `lastMsg.Role == "tool"`: parse the tool result JSON, extract the `"result"` field, and return `"The answer is <result>."`. If no result field, return `"The result is: <content>"`.
-4. If `lastMsg.Role == "user"`: run `mathPattern` against the content. `mathPattern` is a compiled regex:
+1. If `items` is empty, return a welcome message item with `stopReason = llmapi.StopReasonEndTurn`.
+2. Inspect `last := items[len(items)-1]` and branch on `last.Type()`.
+3. If `last.Type() == llmapi.ItemToolResult`: parse the tool result JSON (`last.ToolResult.Output`), extract the `"result"` field, and return `"The answer is <result>."` (else `"The result is: <output>"`), as an assistant message with `StopReasonEndTurn`.
+4. If `last.Type() == llmapi.ItemMessage` with role `user`: run `mathPattern` against `last.Message.Content`. `mathPattern` is a compiled regex:
    ```
    (?i)(?:what is|how much is|calculate|compute|what's|whats)\s+(\d+)\s*([\+\-\*\/x]|plus|minus|times|multiplied by|divided by|over)\s*(\d+)
    ```
    Extract groups: `x int`, `opStr string`, `y int`. Normalize `opStr` via a static `opMap` that maps English operator names and `x` to symbols (`+`, `-`, `*`, `/`).
-   - If a tool whose name contains `"arithmetic"` or `"calculator"` (case-insensitive) is found in `tools`: return a `TurnCompletion` with a `ToolCall` (ID `"chatbox_1"`, Name from the tool, Arguments JSON `{"x": x, "op": op, "y": y}`).
-   - If no such tool: compute the answer directly (`switch op { case "+": ... }`) and return the result as a string. Handle division by zero.
+   - If a tool whose name contains `"arithmetic"` or `"calculator"` (case-insensitive) is found in `tools`: return an assistant message plus a `ToolCall` item (ID `"chatbox_1"`, Name from the tool, Arguments JSON `{"x": x, "op": op, "y": y}`) with `stopReason = llmapi.StopReasonToolUse`.
+   - If no such tool: compute the answer directly (`switch op { case "+": ... }`) and return the result as a message. Handle division by zero.
    - If pattern does not match: return an explanation that only math questions are understood.
 5. Default: return `"I don't understand that message."`
 
@@ -29,11 +29,11 @@ Logic:
 - `Demo` on `ANY //chatbox.example/demo` (absolute route mapped to ingress root) - serves an interactive chat UI from `resources/demo.html`.
 
 On GET: render the template with no data.
-On POST: read `message` form value (return `400` if empty), build a single-message conversation `[]llmapi.Message{{Role: "user", Content: userMessage}}`, call `llmapi.NewClient(svc).Chat(r.Context(), messages, tools)` with `tools = []string{calculatorapi.Arithmetic.URL()}`, and return the resulting conversation as JSON (`Content-Type: application/json`).
+On POST: read the `message` form value (return `400` if empty), and read `provider` (default `chatbox.example`, i.e. `Hostname`) and `model` (default `chatbox-default`). Build a single-item conversation `llmapi.AppendItems(nil, llmapi.NewMessage("user", userMessage))`, call `llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)` with `tools = []string{calculatorapi.Arithmetic.URL()}`, and return the resulting conversation as JSON (`Content-Type: application/json`).
 
 ## Non-obvious Details
 
 - The `Turn` endpoint is the provider interface; it is called by `llm.core` during its tool-calling orchestration loop. The chatbox must never call `llm.core` from within `Turn`.
 - The `Demo` endpoint calls `llmapi.NewClient(svc).Chat(...)` (the LLM core service), which internally delegates back to this chatbox's `Turn` endpoint. This round-trip is the intended demonstration.
 - The `opMap` must handle both symbol aliases (`"x"` → `"*"`) and full English phrases (`"multiplied by"` → `"*"`, `"divided by"` → `"/"`, `"over"` → `"/"`).
-- To configure the LLM core service to use this provider, set `ProviderHostname: chatbox.example` in `config.yaml` for `llm.core`.
+- The provider is selected per call, not by config: pass `chatbox.example` as the `provider` argument to `Chat` (the `Demo` endpoint reads it from the `provider` form value, defaulting to `chatbox.example`). There is no `ProviderHostname` config on `llm.core`.

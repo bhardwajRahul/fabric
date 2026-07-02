@@ -1,17 +1,20 @@
+---
+title: "ChatLoop"
+config:
+  themeCSS: ".flowchartTitleText { fill: #32a7c1; }"
+---
 graph LR
     classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
     classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
-    classDef note fill:none,stroke:none,color:#32a7c1,font-size:0.8em
     linkStyle default stroke:#32a7c1
 
-    _title{{"chat-loop"}}:::term -.-> _start
-    t0["initChat"]:::task
-    t1["firstLLM"]:::task
-    t2["nextLLM"]:::task
+    t0["InitChat"]:::task
+    t1["FirstLLM"]:::task
+    t2["NextLLM"]:::task
     t2_reduce(("reduce")):::term
     t2_reduce --> t2
-    t3["processResponse"]:::task
-    t4["executeTool"]:::task
+    t3["ProcessResponse"]:::task
+    t4["ExecuteTool"]:::task
     t0 --> t1
     t1 --> t3
     t3 -->|"for each"| t4

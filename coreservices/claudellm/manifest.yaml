@@ -19,7 +19,7 @@ general:
   hostname: claude.llm.core
   description: The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.
   package: github.com/microbus-io/fabric/coreservices/claudellm
-  modifiedAt: "2026-07-01T02:18:07Z"
+  modifiedAt: "2026-07-01T16:48:01Z"
 
 configs:
   MessagesURL:
@@ -34,7 +34,7 @@ configs:
 
 functions:
   Turn:
-    signature: Turn(model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage)
+    signature: Turn(model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage)
     description: Turn executes a single LLM turn using the Claude provider.
     method: POST
     route: :444/turn

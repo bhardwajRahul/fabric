@@ -31,7 +31,7 @@ const Hostname = "llm.core"
 const Name = "LLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 13
+const Version = 14
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
@@ -55,7 +55,7 @@ var ToolCalls = define.Metric{ // MARKER: ToolCalls
 	OTelName: "microbus_llm_tool_calls",
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
 var Chat = define.Function{ // MARKER: Chat
 	Host: Hostname, Method: "POST", Route: ":444/chat",
 	In: ChatIn{}, Out: ChatOut{},
@@ -65,18 +65,18 @@ var Chat = define.Function{ // MARKER: Chat
 type ChatIn struct { // MARKER: Chat
 	Provider string       `json:"provider,omitzero" jsonschema_description:"provider is the hostname of the LLM provider microservice to use"`
 	Model    string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
-	Messages []Message    `json:"messages,omitzero" jsonschema_description:"messages is the conversation history to send to the LLM"`
+	Items    []Item       `json:"items,omitzero" jsonschema_description:"items is the conversation history to send to the LLM"`
 	ToolURLs []string     `json:"toolURLs,omitzero" jsonschema_description:"toolURLs is the list of Microbus endpoint URLs exposed to the LLM"`
 	Options  *ChatOptions `json:"options,omitzero" jsonschema_description:"options configures tool-call rounds, max tokens, temperature (nil = defaults)"`
 }
 
 // ChatOut are the output arguments of Chat.
 type ChatOut struct { // MARKER: Chat
-	MessagesOut []Message `json:"messagesOut,omitzero" jsonschema_description:"messagesOut is the full conversation including new messages produced by the LLM"`
-	Usage       Usage     `json:"usage,omitzero" jsonschema_description:"usage is the aggregate token consumption across all turns"`
+	ItemsOut []Item `json:"items,omitzero" jsonschema_description:"items is the full conversation including new items produced by the LLM"`
+	Usage    Usage  `json:"usage,omitzero" jsonschema_description:"usage is the aggregate token consumption across all turns"`
 }
 
-// Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
+// Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
 var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",
 	In: TurnIn{}, Out: TurnOut{},
@@ -84,21 +84,20 @@ var Turn = define.Function{ // MARKER: Turn
 
 // TurnIn are the input arguments of Turn.
 type TurnIn struct { // MARKER: Turn
-	Model    string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
-	Messages []Message    `json:"messages,omitzero" jsonschema_description:"messages is the conversation history to send to the LLM"`
-	Tools    []Tool       `json:"tools,omitzero" jsonschema_description:"tools is the resolved tool definitions with schemas"`
-	Options  *TurnOptions `json:"options,omitzero" jsonschema_description:"options configures max tokens and temperature (nil = provider defaults)"`
+	Model   string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
+	Items   []Item       `json:"items,omitzero" jsonschema_description:"items is the conversation history to send to the LLM"`
+	Tools   []Tool       `json:"tools,omitzero" jsonschema_description:"tools is the resolved tool definitions with schemas"`
+	Options *TurnOptions `json:"options,omitzero" jsonschema_description:"options configures max tokens and temperature (nil = provider defaults)"`
 }
 
 // TurnOut are the output arguments of Turn.
 type TurnOut struct { // MARKER: Turn
-	Content    string     `json:"content,omitzero" jsonschema_description:"content is the LLM's text response, if any"`
-	ToolCalls  []ToolCall `json:"toolCalls,omitzero" jsonschema_description:"toolCalls is the list of tool calls requested by the LLM"`
-	StopReason string     `json:"stopReason,omitzero"`
-	Usage      Usage      `json:"usage,omitzero" jsonschema_description:"usage is the token consumption for this single turn"`
+	ItemsOut   []Item `json:"items,omitzero" jsonschema_description:"items is the LLM's response turn: reasoning, message, and tool_call items in order"`
+	StopReason string `json:"stopReason,omitzero"`
+	Usage      Usage  `json:"usage,omitzero" jsonschema_description:"usage is the token consumption for this single turn"`
 }
 
-// InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
+// InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
 var InitChat = define.Task{ // MARKER: InitChat
 	Host: Hostname, Method: "POST", Route: ":428/init-chat",
 	In: InitChatIn{}, Out: InitChatOut{},
@@ -106,18 +105,17 @@ var InitChat = define.Task{ // MARKER: InitChat
 
 // InitChatIn are the input arguments of InitChat.
 type InitChatIn struct { // MARKER: InitChat
-	Messages []Message    `json:"messages,omitzero"`
-	ToolURLs []string     `json:"toolURLs,omitzero"`
-	Options  *ChatOptions `json:"options,omitzero"`
+	Items    []Item       `json:"items,omitzero" jsonschema_description:"items is the initial conversation history sent to the LLM"`
+	ToolURLs []string     `json:"toolURLs,omitzero" jsonschema_description:"toolURLs is the list of Microbus endpoint URLs exposed to the LLM"`
+	Options  *ChatOptions `json:"options,omitzero" jsonschema_description:"options configures tool-call rounds, max tokens, temperature (nil = defaults)"`
 }
 
-// InitChatOut are the output arguments of InitChat.
+// InitChatOut are the output arguments of InitChat. InitChat is a pure setup step - it seeds ambient
+// flow state (toolSchemas, turnOptions, maxToolRounds, toolRounds) via flow.Set and declares no outputs.
 type InitChatOut struct { // MARKER: InitChat
-	MaxToolRounds int `json:"maxToolRounds,omitzero"`
-	ToolRounds    int `json:"toolRounds,omitzero"`
 }
 
-// CallLLM sends the current messages and tools to the LLM provider.
+// CallLLM sends the current conversation items and tools to the LLM provider.
 var CallLLM = define.Task{ // MARKER: CallLLM
 	Host: Hostname, Method: "POST", Route: ":428/call-llm",
 	In: CallLLMIn{}, Out: CallLLMOut{},
@@ -125,14 +123,14 @@ var CallLLM = define.Task{ // MARKER: CallLLM
 
 // CallLLMIn are the input arguments of CallLLM.
 type CallLLMIn struct { // MARKER: CallLLM
-	Provider string    `json:"provider,omitzero"`
-	Model    string    `json:"model,omitzero"`
-	Messages []Message `json:"messages,omitzero"`
+	Provider string `json:"provider,omitzero"`
+	Model    string `json:"model,omitzero"`
+	Items    []Item `json:"items,omitzero"`
 }
 
 // CallLLMOut are the output arguments of CallLLM.
 type CallLLMOut struct { // MARKER: CallLLM
-	LLMContent       string `json:"llmContent,omitzero"`
+	TurnItems        []Item `json:"turnItems,omitzero"`
 	PendingToolCalls any    `json:"pendingToolCalls,omitzero"`
 	TurnUsage        Usage  `json:"turnUsage,omitzero"`
 }
@@ -145,17 +143,17 @@ var ProcessResponse = define.Task{ // MARKER: ProcessResponse
 
 // ProcessResponseIn are the input arguments of ProcessResponse.
 type ProcessResponseIn struct { // MARKER: ProcessResponse
-	LLMContent    string `json:"llmContent,omitzero"`
-	TurnUsage     Usage  `json:"turnUsage,omitzero"`
-	ToolRounds    int    `json:"toolRounds,omitzero"`
-	MaxToolRounds int    `json:"maxToolRounds,omitzero"`
+	TurnItems        []Item     `json:"turnItems,omitzero"`
+	PendingToolCalls []ToolCall `json:"pendingToolCalls,omitzero"`
+	TurnUsage        Usage      `json:"turnUsage,omitzero"`
+	ToolRounds       int        `json:"toolRounds,omitzero"`
 }
 
 // ProcessResponseOut are the output arguments of ProcessResponse.
-// The running conversation lives entirely in the `messages` state key (Append-reduced across the
+// The running conversation lives entirely in the `items` state key (Append-reduced across the
 // per-tool-call cohort), which ChatLoop's terminal output reads at flow completion. There is no
-// per-task "messagesOut" accumulator to return: ProcessResponse and ExecuteTool contribute deltas
-// to `messages` via flow.Set, the reducer assembles them, done.
+// per-task "itemsOut" accumulator to return: ProcessResponse and ExecuteTool contribute deltas
+// to `items` via flow.Set, the reducer assembles them, done.
 type ProcessResponseOut struct { // MARKER: ProcessResponse
 	ToolsRequested bool  `json:"toolsRequested,omitzero"`
 	ToolRoundsOut  int   `json:"toolRounds,omitzero"`
@@ -170,10 +168,12 @@ var ExecuteTool = define.Task{ // MARKER: ExecuteTool
 
 // ExecuteToolIn are the input arguments of ExecuteTool.
 type ExecuteToolIn struct { // MARKER: ExecuteTool
+	CurrentTool ToolCall `json:"currentTool,omitzero"`
 }
 
 // ExecuteToolOut are the output arguments of ExecuteTool.
 type ExecuteToolOut struct { // MARKER: ExecuteTool
+	Items []Item `json:"items,omitzero"`
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
@@ -186,13 +186,13 @@ var ChatLoop = define.Workflow{ // MARKER: ChatLoop
 type ChatLoopIn struct { // MARKER: ChatLoop
 	Provider string       `json:"provider,omitzero"`
 	Model    string       `json:"model,omitzero"`
-	Messages []Message    `json:"messages,omitzero"`
+	Items    []Item       `json:"items,omitzero"`
 	ToolURLs []string     `json:"toolURLs,omitzero"`
 	Options  *ChatOptions `json:"options,omitzero"`
 }
 
 // ChatLoopOut are the output arguments of ChatLoop.
 type ChatLoopOut struct { // MARKER: ChatLoop
-	MessagesOut []Message `json:"messages,omitzero"`
-	Usage       Usage     `json:"usage,omitzero"`
+	ItemsOut []Item `json:"items,omitzero"`
+	Usage    Usage  `json:"usage,omitzero"`
 }

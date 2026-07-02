@@ -1,17 +1,16 @@
 ## LLM Core Service
 
-Create a core microservice at hostname `llm.core` that bridges LLM tool-calling with Microbus endpoint invocations. The service is provider-agnostic: it delegates all LLM calls to a configurable provider microservice via the `Turn` endpoint.
+Create a core microservice at hostname `llm.core` that bridges LLM tool-calling with Microbus endpoint invocations. It is provider-agnostic: each call names the provider microservice (e.g. `claude.llm.core`) and the model, and `llm.core` delegates the actual LLM call to that provider's `Turn` endpoint.
 
 ### Config Properties
 
-- `ProviderHostname` - hostname of the LLM provider to delegate to, default `claude.llm.core`.
-- `MaxToolRounds` - maximum number of tool-call round-trips per invocation, default `10`, range `[1, 50]`.
+- `MaxToolRounds` - maximum number of tool-call round-trips per invocation, default `10`, range `[1, 50]`. A caller can override per call via `ChatOptions.MaxToolRounds`.
 
 ### Functional Endpoints (both on `:444`)
 
-**`Turn(messages []Message, tools []Tool) (completion *TurnCompletion)`** - single LLM turn, delegates to `llmapi.NewClient(svc).ForHost(svc.ProviderHostname()).Turn(ctx, messages, tools)`. This allows `llm.core` itself to be the configured provider for upstream callers, while still routing to the actual provider.
+**`Turn(model string, items []Item, tools []Tool) (itemsOut []Item, stopReason string, usage Usage)`** - a single LLM turn. On `llm.core` this is a stub returning 501; the real implementation lives in each provider microservice (`claudellm`, `chatgptllm`, `geminillm`, `litellm`). The conversation is an ordered `[]Item` (message / tool_call / tool_result / reasoning); `Turn` returns only the assistant turn's new items.
 
-**`Chat(messages []Message, tools []string) (messagesOut []Message)`** - full multi-turn chat loop with tool execution. Takes `[]string` of canonical Microbus endpoint URLs (e.g. `calculatorapi.Arithmetic.URL()`). Resolves URLs to `[]llmapi.Tool` via `fetchTools`, then iterates up to `MaxToolRounds` turns. After each turn, if the LLM returns tool calls, execute each one via `executeTool` and append tool result messages. When no tool calls remain, return accumulated messages. After exhausting `MaxToolRounds`, make one final call without tools to force a text response.
+**`Chat(provider, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage)`** - the full multi-turn chat loop with tool execution. `toolURLs` are canonical Microbus endpoint URLs (e.g. `calculatorapi.Arithmetic.URL()`), resolved to `[]llmapi.Tool` via `fetchTools`. It iterates up to `MaxToolRounds` turns; after each turn that returns tool calls, it executes each via `executeTool` and appends `tool_result` items. When no tool calls remain it returns; after exhausting `MaxToolRounds` it makes one final call without tools to force a text answer. `itemsOut` is the full conversation - the input `items` plus every item the LLM produced - so a caller can resume by re-invoking with it.
 
 ### Tool Resolution (`fetchTools`)
 
@@ -26,16 +25,16 @@ Invoke the endpoint over the bus using `svc.Request` with the tool's URL, method
 The `ChatLoop` workflow orchestrates multi-turn LLM conversations as durable workflow steps:
 
 ```
-InitChat → CallLLM → ProcessResponse
-                          ↓ (!toolsRequested) → END
-                          ↓ forEach(pendingToolCalls, currentTool) → ExecuteTool → CallLLM
+InitChat -> FirstLLM -> ProcessResponse
+                             |- (no tool calls, or round limit) -> END
+                             |- forEach(pendingToolCalls, currentTool) -> ExecuteTool -> NextLLM -> ProcessResponse
 ```
 
-A `ReducerAppend` reducer on `messages` merges parallel `ExecuteTool` branches.
+`FirstLLM` and `NextLLM` are two graph positions dispatching to the same `CallLLM` task (the split lets `NextLLM` be the fan-in nexus). A `ReducerAppend` reducer on `items` merges the parallel `ExecuteTool` branches' `tool_result` deltas at the fan-in.
 
 **Task endpoints (all on `:428`):**
 
-- `InitChat(messages []Message, tools []Tool) (maxToolRounds int, toolRounds int)` - stores `tools` in flow state as `toolSchemas`; returns `MaxToolRounds` and `0`.
-- `CallLLM(messages []Message) (llmContent string, pendingToolCalls any)` - reads `toolSchemas` from flow state, calls the provider, returns content and tool calls.
-- `ProcessResponse(llmContent string, toolRounds int, maxToolRounds int) (messagesOut []Message, toolsRequested bool, toolRoundsOut int)` - reads `pendingToolCalls` and `messagesOut` from flow state. If no pending calls or round limit reached, sets `toolsRequested=false` and returns. Otherwise increments `toolRoundsOut` and sets `toolsRequested=true`, signaling the `forEach` fan-out.
-- `ExecuteTool(toolExecuted bool) (toolExecutedOut bool)` - uses the `Out` suffix pattern for subgraph re-entry detection. On first run (`toolExecuted=false`): if `Tool.Type == "workflow"`, snapshot current state keys into `preSubgraphKeys`, inject input state, and call `flow.Subgraph(def.URL, inputState)` for dynamic subgraph execution. Otherwise execute via direct bus call and append a `tool` message. On re-entry (`toolExecuted=true`): diff state keys against `preSubgraphKeys` snapshot to find child output fields, marshal them as the tool result.
+- `InitChat(items []Item, toolURLs []string, options *ChatOptions)` - a pure setup step with no outputs; resolves `toolURLs` to tool schemas via each host's OpenAPI document and seeds the ambient flow state the rest of the loop reads - `toolSchemas`, `turnOptions`, `maxToolRounds`, and the `toolRounds` counter (0) - all via `flow.Set`.
+- `CallLLM(items []Item) (turnItems []Item, pendingToolCalls any, turnUsage Usage)` - reads `toolSchemas`/`turnOptions` ambiently from flow state, calls the provider, and returns the assistant turn's items, the pending tool calls, and the turn's usage.
+- `ProcessResponse(turnItems []Item, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage)` - reads `maxToolRounds` ambiently and appends `turnItems` to the `items` state key (append reducer). If no pending calls or the round limit is reached, sets `toolsRequested=false` and `flow.Goto(END)`. Otherwise increments `toolRoundsOut` and sets `toolsRequested=true`, signaling the `forEach` fan-out over `pendingToolCalls`.
+- `ExecuteTool(currentTool ToolCall) (items []Item)` - executes the single tool call named by the `currentTool` forEach variable. Workflow tools run as dynamic subgraphs via `flow.Subgraph` (parks on the first call, returns the child's `final_state` on re-entry); other tools run via a direct bus call. Returns the `tool_result` item, which the append reducer merges into the `items` state key.

@@ -18,33 +18,49 @@ package chatgptllm
 
 import "encoding/json"
 
-// openaiRequest is the body of a POST to the OpenAI Responses API (/v1/responses).
+// openaiRequest is the body of a POST to the OpenAI Responses API (/v1/responses). Store is always
+// false: the conversation is stateless (the full item log is sent each turn), so we never rely on
+// OpenAI retaining responses, and not retaining is the privacy-preferring default. Include is set only
+// once a model is known to reason (see the reasoning detection in service.go); it asks for the
+// encrypted reasoning payload that stateless replay echoes back next turn.
 type openaiRequest struct {
-	Model           string            `json:"model"`
-	Input           []openaiInputItem `json:"input"`
-	Instructions    string            `json:"instructions,omitzero"`
-	Tools           []openaiTool      `json:"tools,omitzero"`
-	MaxOutputTokens int               `json:"max_output_tokens,omitzero"`
-	Temperature     float64           `json:"temperature,omitzero"`
+	Model           string       `json:"model"`
+	Input           []openaiItem `json:"input"`
+	Instructions    string       `json:"instructions,omitzero"`
+	Tools           []openaiTool `json:"tools,omitzero"`
+	MaxOutputTokens int          `json:"max_output_tokens,omitzero"`
+	Temperature     float64      `json:"temperature,omitzero"`
+	Store           bool         `json:"store"`
+	Include         []string     `json:"include,omitzero"`
 }
 
-// openaiInputItem is one item in the Responses request input array. The Responses API represents an
-// assistant tool call and its result as distinct items (function_call, function_call_output), rather
-// than as tool_calls/tool_call_id fields on chat messages.
-type openaiInputItem struct {
-	Type    string          `json:"type"`               // message, function_call, function_call_output
-	Role    string          `json:"role,omitzero"`      // message items only
-	Content []openaiContent `json:"content,omitzero"`   // message items only
+// openaiItem is one item in a Responses input or output array. The Responses API is item-native: an
+// assistant text message, a tool call, a tool result, and a reasoning step are each a distinct item.
+// A single struct covers all variants (the unused fields stay zero); the Type discriminates.
+type openaiItem struct {
+	Type    string          `json:"type"`               // message, function_call, function_call_output, reasoning
+	Role    string          `json:"role,omitzero"`      // message
+	Content []openaiContent `json:"content,omitzero"`   // message
 	CallID  string          `json:"call_id,omitzero"`   // function_call, function_call_output
 	Name    string          `json:"name,omitzero"`      // function_call
 	Args    string          `json:"arguments,omitzero"` // function_call
 	Output  string          `json:"output,omitzero"`    // function_call_output
+	// reasoning
+	ID               string          `json:"id,omitzero"`                // reasoning item id (rs_...)
+	Summary          []openaiSummary `json:"summary,omitzero"`           // reasoning summary parts
+	EncryptedContent string          `json:"encrypted_content,omitzero"` // opaque reasoning payload for replay
 }
 
 // openaiContent is a typed content part of a message item. Input text uses input_text; assistant text
 // echoed back uses output_text.
 type openaiContent struct {
 	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// openaiSummary is a summarized-reasoning part of a reasoning item.
+type openaiSummary struct {
+	Type string `json:"type"` // summary_text
 	Text string `json:"text"`
 }
 
@@ -57,23 +73,13 @@ type openaiTool struct {
 
 // openaiResponse is the body of a Responses API completion.
 type openaiResponse struct {
-	Output            []openaiOutputItem `json:"output"`
-	Status            string             `json:"status"` // completed, incomplete
+	Output            []openaiItem `json:"output"`
+	Status            string       `json:"status"` // completed, incomplete
 	IncompleteDetails struct {
 		Reason string `json:"reason"`
 	} `json:"incomplete_details"`
 	Model string      `json:"model"`
 	Usage openaiUsage `json:"usage"`
-}
-
-// openaiOutputItem is one item in the Responses output array. Text lives in message items (content
-// parts of type output_text); tool calls are function_call items correlated by call_id.
-type openaiOutputItem struct {
-	Type    string          `json:"type"` // message, function_call, reasoning
-	Content []openaiContent `json:"content,omitzero"`
-	CallID  string          `json:"call_id,omitzero"`
-	Name    string          `json:"name,omitzero"`
-	Args    string          `json:"arguments,omitzero"`
 }
 
 type openaiUsage struct {

@@ -50,86 +50,87 @@ func TestLlm_Mock(t *testing.T) {
 	t.Run("chat", func(t *testing.T) { // MARKER: Chat
 		assert := testarossa.For(t)
 
-		mock.MockChat(func(ctx context.Context, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error) {
+		mock.MockChat(func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) {
 			return
 		})
 		var provider string
 		var model string
-		var messages []llmapi.Message
+		var items []llmapi.Item
 		var toolURLs []string
 		var options *llmapi.ChatOptions
-		_, _, err := mock.Chat(ctx, provider, model, messages, toolURLs, options)
+		_, _, err := mock.Chat(ctx, provider, model, items, toolURLs, options)
 		assert.NoError(err)
 	})
 
 	t.Run("turn", func(t *testing.T) { // MARKER: Turn
 		assert := testarossa.For(t)
 
-		mock.MockTurn(func(ctx context.Context, model string, messages []llmapi.Message, tools []llmapi.Tool, options *llmapi.TurnOptions) (content string, toolCalls []llmapi.ToolCall, stopReason string, usage llmapi.Usage, err error) {
+		mock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
 			return
 		})
 		var model string
-		var messages []llmapi.Message
+		var items []llmapi.Item
 		var tools []llmapi.Tool
 		var options *llmapi.TurnOptions
-		_, _, _, _, err := mock.Turn(ctx, model, messages, tools, options)
+		_, _, _, err := mock.Turn(ctx, model, items, tools, options)
 		assert.NoError(err)
 	})
 
 	t.Run("init_chat", func(t *testing.T) { // MARKER: InitChat
 		assert := testarossa.For(t)
 
-		mock.MockInitChat(func(ctx context.Context, flow *workflow.Flow, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (maxToolRounds int, toolRounds int, err error) {
+		mock.MockInitChat(func(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) {
 			return
 		})
-		var messages []llmapi.Message
+		var items []llmapi.Item
 		var toolURLs []string
 		var options *llmapi.ChatOptions
-		_, _, err := mock.InitChat(ctx, nil, messages, toolURLs, options)
+		err := mock.InitChat(ctx, nil, items, toolURLs, options)
 		assert.NoError(err)
 	})
 
 	t.Run("call_l_l_m", func(t *testing.T) { // MARKER: CallLLM
 		assert := testarossa.For(t)
 
-		mock.MockCallLLM(func(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message) (llmContent string, pendingToolCalls any, turnUsage llmapi.Usage, err error) {
+		mock.MockCallLLM(func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item) (turnItems []llmapi.Item, pendingToolCalls any, turnUsage llmapi.Usage, err error) {
 			return
 		})
 		var provider string
 		var model string
-		var messages []llmapi.Message
-		_, _, _, err := mock.CallLLM(ctx, nil, provider, model, messages)
+		var items []llmapi.Item
+		_, _, _, err := mock.CallLLM(ctx, nil, provider, model, items)
 		assert.NoError(err)
 	})
 
 	t.Run("process_response", func(t *testing.T) { // MARKER: ProcessResponse
 		assert := testarossa.For(t)
 
-		mock.MockProcessResponse(func(ctx context.Context, flow *workflow.Flow, llmContent string, turnUsage llmapi.Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) {
+		mock.MockProcessResponse(func(ctx context.Context, flow *workflow.Flow, turnItems []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) {
 			return
 		})
-		var llmContent string
+		var turnItems []llmapi.Item
+		var pendingToolCalls []llmapi.ToolCall
 		var turnUsage llmapi.Usage
 		var toolRounds int
-		var maxToolRounds int
-		_, _, _, err := mock.ProcessResponse(ctx, nil, llmContent, turnUsage, toolRounds, maxToolRounds)
+		_, _, _, err := mock.ProcessResponse(ctx, nil, turnItems, pendingToolCalls, turnUsage, toolRounds)
 		assert.NoError(err)
 	})
 
 	t.Run("execute_tool", func(t *testing.T) { // MARKER: ExecuteTool
 		assert := testarossa.For(t)
 
-		mock.MockExecuteTool(func(ctx context.Context, flow *workflow.Flow) (err error) {
+		mock.MockExecuteTool(func(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (items []llmapi.Item, err error) {
 			return
 		})
-		err := mock.ExecuteTool(ctx, nil)
+		var currentTool llmapi.ToolCall
+		_, err := mock.ExecuteTool(ctx, nil, currentTool)
 		assert.NoError(err)
 	})
 
 	t.Run("chat_loop", func(t *testing.T) { // MARKER: ChatLoop
 		assert := testarossa.For(t)
 
-		mock.MockChatLoop(func(ctx context.Context, flow *workflow.Flow, provider string, model string, messages []llmapi.Message, toolURLs []string, options *llmapi.ChatOptions) (messagesOut []llmapi.Message, usage llmapi.Usage, err error) {
+		mock.MockChatLoop(func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) {
 			return
 		})
 		graph, err := mock.ChatLoop(ctx)

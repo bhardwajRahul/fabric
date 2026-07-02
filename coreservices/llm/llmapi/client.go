@@ -290,26 +290,26 @@ func marshalSubgraph(flow *workflow.Flow, url string, in any, out any) (yield bo
 	return flow.Subgraph(url, in, out)
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
-func (_c Client) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
-	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+func (_c Client) Chat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, err error) { // MARKER: Chat
+	_in := ChatIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
-	return _out.MessagesOut, _out.Usage, err // No trace
+	return _out.ItemsOut, _out.Usage, err // No trace
 }
 
 // ChatResponse packs the response of Chat.
 type ChatResponse multicastResponse // MARKER: Chat
 
 // Get unpacks the return arguments of Chat.
-func (_res *ChatResponse) Get() (messagesOut []Message, usage Usage, err error) { // MARKER: Chat
+func (_res *ChatResponse) Get() (itemsOut []Item, usage Usage, err error) { // MARKER: Chat
 	_d := _res.data.(*ChatOut)
-	return _d.MessagesOut, _d.Usage, _res.err
+	return _d.ItemsOut, _d.Usage, _res.err
 }
 
-// Chat sends messages to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. On error it still returns the messages accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned messages) instead of restarting the conversation.
-func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
-	_in := ChatIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
+	_in := ChatIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
 	return func(yield func(*ChatResponse) bool) {
@@ -323,26 +323,26 @@ func (_c MulticastClient) Chat(ctx context.Context, provider string, model strin
 	}
 }
 
-// Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-func (_c Client) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) (content string, toolCalls []ToolCall, stopReason string, usage Usage, err error) { // MARKER: Turn
-	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
+// Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
+func (_c Client) Turn(ctx context.Context, model string, items []Item, tools []Tool, options *TurnOptions) (itemsOut []Item, stopReason string, usage Usage, err error) { // MARKER: Turn
+	_in := TurnIn{Model: model, Items: items, Tools: tools, Options: options}
 	_out := TurnOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
-	return _out.Content, _out.ToolCalls, _out.StopReason, _out.Usage, err // No trace
+	return _out.ItemsOut, _out.StopReason, _out.Usage, err // No trace
 }
 
 // TurnResponse packs the response of Turn.
 type TurnResponse multicastResponse // MARKER: Turn
 
 // Get unpacks the return arguments of Turn.
-func (_res *TurnResponse) Get() (content string, toolCalls []ToolCall, stopReason string, usage Usage, err error) { // MARKER: Turn
+func (_res *TurnResponse) Get() (itemsOut []Item, stopReason string, usage Usage, err error) { // MARKER: Turn
 	_d := _res.data.(*TurnOut)
-	return _d.Content, _d.ToolCalls, _d.StopReason, _d.Usage, _res.err
+	return _d.ItemsOut, _d.StopReason, _d.Usage, _res.err
 }
 
-// Turn executes a single LLM turn. On llm.core this returns 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm).
-func (_c MulticastClient) Turn(ctx context.Context, model string, messages []Message, tools []Tool, options *TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
-	_in := TurnIn{Model: model, Messages: messages, Tools: tools, Options: options}
+// Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
+func (_c MulticastClient) Turn(ctx context.Context, model string, items []Item, tools []Tool, options *TurnOptions) iter.Seq[*TurnResponse] { // MARKER: Turn
+	_in := TurnIn{Model: model, Items: items, Tools: tools, Options: options}
 	_out := TurnOut{}
 	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Turn.Method, Turn.Route, &_in, &_out)
 	return func(yield func(*TurnResponse) bool) {
@@ -356,49 +356,49 @@ func (_c MulticastClient) Turn(ctx context.Context, model string, messages []Mes
 	}
 }
 
-// InitChat validates inputs, resolves tool schemas from OpenAPI, and stores them in flow state.
-func (_c Executor) InitChat(ctx context.Context, messages []Message, toolURLs []string, options *ChatOptions) (maxToolRounds int, toolRounds int, err error) { // MARKER: InitChat
-	var out InitChatOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{Messages: messages, ToolURLs: toolURLs, Options: options}, &out, _c.inFlow, _c.outFlow)
-	return out.MaxToolRounds, out.ToolRounds, err // No trace
+// InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
+func (_c Executor) InitChat(ctx context.Context, items []Item, toolURLs []string, options *ChatOptions) (err error) { // MARKER: InitChat
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{Items: items, ToolURLs: toolURLs, Options: options}, nil, _c.inFlow, _c.outFlow)
+	return err // No trace
 }
 
-// CallLLM sends the current messages and tools to the LLM provider.
-func (_c Executor) CallLLM(ctx context.Context, provider string, model string, messages []Message) (llmContent string, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
+// CallLLM sends the current conversation items and tools to the LLM provider.
+func (_c Executor) CallLLM(ctx context.Context, provider string, model string, items []Item) (turnItems []Item, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{Provider: provider, Model: model, Messages: messages}, &out, _c.inFlow, _c.outFlow)
-	return out.LLMContent, out.PendingToolCalls, out.TurnUsage, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{Provider: provider, Model: model, Items: items}, &out, _c.inFlow, _c.outFlow)
+	return out.TurnItems, out.PendingToolCalls, out.TurnUsage, err // No trace
 }
 
 // ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
-func (_c Executor) ProcessResponse(ctx context.Context, llmContent string, turnUsage Usage, toolRounds int, maxToolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
+func (_c Executor) ProcessResponse(ctx context.Context, turnItems []Item, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
 	var out ProcessResponseOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{LLMContent: llmContent, TurnUsage: turnUsage, ToolRounds: toolRounds, MaxToolRounds: maxToolRounds}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{TurnItems: turnItems, PendingToolCalls: pendingToolCalls, TurnUsage: turnUsage, ToolRounds: toolRounds}, &out, _c.inFlow, _c.outFlow)
 	return out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
 }
 
 // ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
-func (_c Executor) ExecuteTool(ctx context.Context) (err error) { // MARKER: ExecuteTool
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ExecuteTool.Method, ExecuteTool.Route, ExecuteToolIn{}, nil, _c.inFlow, _c.outFlow)
-	return err // No trace
+func (_c Executor) ExecuteTool(ctx context.Context, currentTool ToolCall) (items []Item, err error) { // MARKER: ExecuteTool
+	var out ExecuteToolOut
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ExecuteTool.Method, ExecuteTool.Route, ExecuteToolIn{CurrentTool: currentTool}, &out, _c.inFlow, _c.outFlow)
+	return out.Items, err // No trace
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
-func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, status string, err error) { // MARKER: ChatLoop
+func (_c Executor) ChatLoop(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, status string, err error) { // MARKER: ChatLoop
 	if _c.runner == nil {
-		return messagesOut, usage, "", errors.New("workflow runner not set, use WithWorkflowRunner")
+		return itemsOut, usage, "", errors.New("workflow runner not set, use WithWorkflowRunner")
 	}
 	var out ChatLoopOut
-	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, ChatLoop.URL(), ChatLoopIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}, &out)
-	return out.MessagesOut, out.Usage, status, err
+	status, err = marshalWorkflow(ctx, _c.runner, _c.flowOptions, ChatLoop.URL(), ChatLoopIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}, &out)
+	return out.ItemsOut, out.Usage, status, err
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
-func (_sg Subgraph) ChatLoop(ctx context.Context, provider string, model string, messages []Message, toolURLs []string, options *ChatOptions) (messagesOut []Message, usage Usage, yield bool, err error) { // MARKER: ChatLoop
+func (_sg Subgraph) ChatLoop(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, yield bool, err error) { // MARKER: ChatLoop
 	var out ChatLoopOut
-	yield, err = marshalSubgraph(_sg.flow, ChatLoop.URL(), ChatLoopIn{Provider: provider, Model: model, Messages: messages, ToolURLs: toolURLs, Options: options}, &out)
+	yield, err = marshalSubgraph(_sg.flow, ChatLoop.URL(), ChatLoopIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}, &out)
 	if yield || err != nil {
-		return messagesOut, usage, yield, err
+		return itemsOut, usage, yield, err
 	}
-	return out.MessagesOut, out.Usage, false, nil
+	return out.ItemsOut, out.Usage, false, nil
 }

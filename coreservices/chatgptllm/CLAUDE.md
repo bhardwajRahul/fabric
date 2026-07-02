@@ -12,18 +12,48 @@ crossing the bus) is unchanged, so nothing downstream is affected:
   `tool_calls` field and its result is a `role:"tool"` message keyed by `tool_call_id`. Responses uses an `input` array of
   typed items: a text turn is a `message` item (with `content` parts of type `input_text` for user text, `output_text` for
   assistant text echoed back), a tool call is a `function_call` item, and a tool result is a `function_call_output` item.
-  Calls and results are correlated by `call_id` rather than by message adjacency. The Microbus `Message` list is flattened
-  into these items in `Turn`: a `system` message folds into the top-level `instructions` string, an `assistant` message
-  with `ToolCalls` expands into one `function_call` item per call, and a `tool` message becomes a `function_call_output`.
+  Calls and results are correlated by `call_id` rather than by message adjacency. This is a near one-to-one mapping onto the
+  Microbus `[]llmapi.Item` model (the neutral conversation shape), which `Turn` translates in order: a `system` `Message`
+  item folds into the top-level `instructions` string, a `message` item maps to a Responses `message`, a `tool_call` item to
+  a `function_call`, a `tool_result` item to a `function_call_output`, and a `reasoning` item to a `reasoning` item (see
+  Reasoning Items and Replay below).
 - **Tools.** Responses drops the `{type:"function", function:{...}}` wrapper - the function's `name`, `description`, and
   `parameters` sit flat on the tool object.
-- **Response walk.** There are no `choices`; the response is an `output` array of typed items. Text is gathered from
-  `output_text` content parts of `message` items and joined; tool calls are read from `function_call` items (their `call_id`
-  becomes `ToolCall.ID`). `reasoning` items are ignored.
+- **Response walk.** There are no `choices`; the response is an `output` array of typed items, appended to the returned
+  `[]Item` in order. Text is gathered from `output_text` content parts of `message` items; tool calls come from
+  `function_call` items (their `call_id` becomes `ToolCall.ID`); `reasoning` items are captured for replay, not discarded.
 
 `max_tokens` is renamed `max_output_tokens`.
 
 The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"gpt-5.4-mini"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `mini` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
+
+## Reasoning Items and Replay
+
+`Turn` speaks the `[]llmapi.Item` conversation model. The item log maps one-to-one onto Responses input
+items and preserves order, so a reasoning item stays adjacent to the function_call it belongs to. On the
+response, `reasoning` output items are captured into `llmapi.Reasoning` items (`ID` + `Summary` +
+`EncryptedContent`) interleaved in order with the message and tool_call items.
+
+Reasoning continuity is **manual replay, not `previous_response_id`**: the conversation is the full item
+log passed on every turn (stateless), so `previous_response_id` (server-retained state) is the wrong
+mechanism. Instead we request the encrypted reasoning payload and echo reasoning items back next turn.
+That requires `include:["reasoning.encrypted_content"]` on the request, and `store` is always `false`
+(a plain bool - we never rely on OpenAI retaining responses, and not retaining is the privacy default).
+
+**Whether to send `include` is detected at runtime, not from a model-name list.** Two live-API
+constraints shape it: a non-reasoning model (e.g. `gpt-4o-mini`) rejects
+`include=reasoning.encrypted_content` with a `400`, and an echoed reasoning item must carry a `summary`
+array (empty is fine; omitting it is a `400`). So the provider keeps a per-replica
+`map[model]bool reasoningSeen`: a model is added when a response bills reasoning tokens
+(`usage.output_tokens_details.reasoning_tokens > 0`), and `include` is sent only for models already in
+that set. This replaces a hardcoded reasoning-family prefix list, which would rot as models rotate.
+
+**Consequence - first-encounter turn has no replay.** Because the model is added to `reasoningSeen`
+only *after* its first response, the very first call to a model on a replica goes out without `include`,
+so that turn's reasoning items come back with no encrypted payload and can't be replayed (the input
+converter skips reasoning items whose `EncryptedContent` is empty). Every turn after the first replays
+normally. This first-turn gap is the price of not hardcoding model names; the eventual fix is an upfront
+capability signal from the provider's models-list API (the provider-portability work), not a name list.
 
 `Turn` populates `llmapi.Usage` from the Responses `usage` block. Responses reports `input_tokens` and `output_tokens` plus `input_tokens_details.cached_tokens` and `output_tokens_details.reasoning_tokens`. The cached portion maps to `CacheReadTokens` with the remainder reported as `InputTokens`; `reasoning_tokens` maps to `ThinkingTokens` (the reasoning subset of `OutputTokens`, populated for GPT-5-class reasoning models and zero otherwise). Responses does not expose write counts so `CacheWriteTokens` is left at zero.
 
