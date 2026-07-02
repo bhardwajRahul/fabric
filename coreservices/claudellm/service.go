@@ -81,11 +81,12 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
-	rateMu       sync.Mutex
-	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
-	aliasMu      sync.RWMutex
-	fetchMu      sync.Mutex        // serializes the lazy models-list fetch so concurrent resolves make one call
-	modelAliases map[string]string // tier/family alias -> concrete model; populated lazily from the models-list API (no shipped defaults)
+	rateMu         sync.Mutex
+	blockedUntil   map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	aliasMu        sync.RWMutex
+	fetchMu        sync.Mutex        // serializes the lazy models-list fetch so concurrent resolves make one call
+	modelAliases   map[string]string // tier/family alias -> concrete model; populated lazily from the models-list API (no shipped defaults)
+	modelMaxTokens map[string]int    // concrete model -> its max output tokens, from the same fetch; the default max_tokens
 }
 
 // OnStartup is called when the microservice is started up.
@@ -185,10 +186,16 @@ func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok boo
 	return resolved != "", nil
 }
 
+// claudeFallbackMaxTokens is the max_tokens sent when the resolved model's own output limit is not yet known (the
+// models-list fetch is the source of truth). It is high enough not to truncate on the large models; on a smaller
+// model it may 400 until the fetch populates the real limit.
+const claudeFallbackMaxTokens = 128_000
+
 // listedModel is the subset of a models-list entry the alias refresher needs.
 type listedModel struct {
-	id      string
-	created int64 // unix seconds; the newest per family wins
+	id        string
+	created   int64 // unix seconds; the newest per family wins
+	maxTokens int   // max output tokens for this model
 }
 
 /*
@@ -203,10 +210,30 @@ func (svc *Service) RefreshModels(ctx context.Context) (err error) { // MARKER: 
 		return errors.Trace(err)
 	}
 	aliases := buildClaudeAliases(models)
+	maxTokens := buildClaudeMaxTokens(models)
 	svc.aliasMu.Lock()
 	svc.modelAliases = aliases
+	svc.modelMaxTokens = maxTokens
 	svc.aliasMu.Unlock()
 	return nil
+}
+
+// buildClaudeMaxTokens maps each listed model to its max output tokens, used as the default max_tokens for that model.
+func buildClaudeMaxTokens(models []listedModel) map[string]int {
+	m := map[string]int{}
+	for _, lm := range models {
+		if lm.maxTokens > 0 {
+			m[lm.id] = lm.maxTokens
+		}
+	}
+	return m
+}
+
+// modelMax returns the model's max output tokens from the last fetch, or 0 if unknown.
+func (svc *Service) modelMax(model string) int {
+	svc.aliasMu.RLock()
+	defer svc.aliasMu.RUnlock()
+	return svc.modelMaxTokens[model]
 }
 
 // listModels fetches the current model catalog from the Claude models-list API.
@@ -233,6 +260,7 @@ func (svc *Service) listModels(ctx context.Context) ([]listedModel, error) {
 		Data []struct {
 			ID        string `json:"id"`
 			CreatedAt string `json:"created_at"`
+			MaxTokens int    `json:"max_tokens"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(body, &listResp)
@@ -245,7 +273,7 @@ func (svc *Service) listModels(ctx context.Context) ([]listedModel, error) {
 		if t, perr := time.Parse(time.RFC3339, m.CreatedAt); perr == nil {
 			created = t.Unix()
 		}
-		models = append(models, listedModel{id: m.ID, created: created})
+		models = append(models, listedModel{id: m.ID, created: created, maxTokens: m.MaxTokens})
 	}
 	return models, nil
 }
@@ -308,7 +336,13 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 	if wait := svc.rateLimitWait(model); wait > 0 {
 		return nil, "", llmapi.Usage{}, errors.New("rate limited (preempted)", http.StatusTooManyRequests, "retryAfter", wait.String())
 	}
-	maxTokens := 4096
+	// Anthropic requires max_tokens, so default it to the model's own output cap (from the models-list fetch) rather
+	// than an arbitrary low number; fall back to 128k when the model's limit is not known yet. A caller-supplied value
+	// wins. A value above the model's streaming threshold will 400 until streaming is supported.
+	maxTokens := svc.modelMax(model)
+	if maxTokens == 0 {
+		maxTokens = claudeFallbackMaxTokens
+	}
 	if options != nil && options.MaxTokens > 0 {
 		maxTokens = options.MaxTokens
 	}

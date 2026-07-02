@@ -89,3 +89,19 @@ func TestBuildClaudeAliases(t *testing.T) {
 		t.Errorf("buildClaudeAliases = %v, want %v", got, want)
 	}
 }
+
+func TestBuildClaudeMaxTokens(t *testing.T) {
+	t.Parallel()
+	models := []listedModel{
+		{id: "claude-opus-4-8", maxTokens: 128000},
+		{id: "claude-haiku-4-5", maxTokens: 64000},
+		{id: "claude-no-limit"}, // no max_tokens reported, omitted from the map
+	}
+	want := map[string]int{
+		"claude-opus-4-8":  128000,
+		"claude-haiku-4-5": 64000,
+	}
+	if got := buildClaudeMaxTokens(models); !maps.Equal(got, want) {
+		t.Errorf("buildClaudeMaxTokens = %v, want %v", got, want)
+	}
+}
