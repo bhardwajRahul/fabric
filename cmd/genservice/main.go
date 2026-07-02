@@ -16,7 +16,8 @@ limitations under the License.
 
 // Command genservice generates a microservice's boilerplate from its api package definition.go.
 // Given an api package directory it generates client.go; given a service directory (with an <x>api
-// subdirectory) it generates client.go, intermediate.go, mock.go, mock_test.go, and manifest.yaml.
+// subdirectory) it generates client.go, intermediate.go, mock.go, mock_test.go, and manifest.yaml, and
+// syncs the godoc of each hand-written *Service handler method to its feature's description.
 //
 // Usage: genservice [-check] <dir> [<dir>...]. Each dir may be a microservice directory or its api
 // package; an api package belonging to a microservice regenerates all five artifacts, so either points at
@@ -188,13 +189,18 @@ func emitAllService(dir, apiDir, now string) ([]output, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []output{
+	outs := []output{
 		{clientPath, clientSrc},
 		{interPath, interSrc},
 		{mockPath, mockSrc},
 		{mockTestPath, mockTestSrc},
 		{manifestPath, manifestSrc},
-	}, nil
+	}
+	docOuts, err := emitServiceDocs(dir, svc)
+	if err != nil {
+		return nil, err
+	}
+	return append(outs, docOuts...), nil
 }
 
 func fileExists(p string) bool {

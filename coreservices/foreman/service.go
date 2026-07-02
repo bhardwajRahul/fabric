@@ -82,10 +82,11 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return errors.Trace(err)
 }
 
-// OnChangedNumShards is fired when the NumShards config changes. SetNumShards records the new target and
-// brings any added shards online live (open + migrate on the running engine). New flows then spread onto
-// the new shards immediately; existing flows stay on their original shard. A decrease is restart-only by
-// design (SetNumShards never removes shards; old shards drain naturally).
+/*
+OnChangedNumShards is called when the NumShards config property changes.
+
+NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+*/
 func (svc *Service) OnChangedNumShards(ctx context.Context) (err error) { // MARKER: NumShards
 	if svc.engine == nil {
 		return nil
@@ -132,8 +133,7 @@ func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptio
 }
 
 /*
-Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is
-no separate start step; Opts authors the flow's genesis policy.
+Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
 */
 func (svc *Service) Create(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error) { // MARKER: Create
 	ro, err := svc.resolveOptions(ctx, opts)
@@ -151,8 +151,7 @@ func (svc *Service) Snapshot(ctx context.Context, flowKey string) (outcome *work
 }
 
 /*
-Fingerprint returns an opaque hash that changes when a flow's status, step count, or any step's
-updated_at changes — across the flow and any nested subgraph descendants.
+Fingerprint returns a short opaque hash that changes when the flow's status, step count, or any step's updated_at changes — across the flow and any nested subgraph descendants.
 */
 func (svc *Service) Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error) { // MARKER: Fingerprint
 	return svc.engine.Fingerprint(ctx, flowKey)
@@ -173,8 +172,7 @@ func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (
 }
 
 /*
-Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and
-re-executes from that step with optional stateOverrides applied to it. The original flow is never modified.
+Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
 */
 func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
 	// A fork inherits the origin flow's scheduling and baggage (so it re-runs as the original actor); it
@@ -190,22 +188,21 @@ func (svc *Service) History(ctx context.Context, flowKey string) (steps []forema
 }
 
 /*
-Step returns the full detail of one execution step, including the state, changes and interrupt payload
-that History omits.
+Step returns the full detail of one execution step, including the state, changes and interrupt payload that History omits.
 */
 func (svc *Service) Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error) { // MARKER: Step
 	return svc.engine.Step(ctx, stepKey)
 }
 
 /*
-List queries flows by status or workflow URL with per-shard pagination.
+List queries flows by status or workflow URL. Set Query.Cursor to the previous call's NextCursor to paginate.
 */
 func (svc *Service) List(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error) { // MARKER: List
 	return svc.engine.List(ctx, query)
 }
 
 /*
-Delete removes a flow and its steps from the database. The flow must not be running.
+Delete removes a flow and its steps from the database. The flow must not be running. Subgraph and thread lineage references become dangling.
 */
 func (svc *Service) Delete(ctx context.Context, flowKey string) (err error) { // MARKER: Delete
 	return svc.engine.Delete(ctx, flowKey)
@@ -247,21 +244,14 @@ func (svc *Service) Run(ctx context.Context, workflowURL string, initialState an
 }
 
 /*
-Continue creates a new running flow from the latest completed flow in a thread, merged with additional
-state using the graph's reducers. The new flow inherits the thread's policy (scheduling/baggage/notify);
-it takes no options. A caller wanting explicit per-turn policy uses Create with Opts.ThreadKey instead.
+Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
 */
 func (svc *Service) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
 	return svc.engine.Continue(ctx, threadKey, additionalState)
 }
 
 /*
-Signal delivers an opaque cross-replica coordination signal (op, payload) to the embedded engine. It is
-the inbound side of the engine's SignalPeers: a peer replica's foreman multicast it to all foreman.core
-replicas (self included). It is processed only when it came from ANOTHER foreman replica - the
-FromHost==Hostname gate restricts it to foreman peers (matching the legacy signal endpoints), and the
-FromID!=svc.ID self-exclusion honors the engine's contract that a signal already applied locally before
-SignalPeers must not be re-applied on the originating replica when the multicast echoes back to self.
+Signal delivers an opaque cross-replica coordination signal (op, payload) to the embedded engine. Excludes self-delivery; processes only signals originating from a peer foreman replica.
 */
 func (svc *Service) Signal(ctx context.Context, op string, payload []byte) (err error) { // MARKER: Signal
 	fr := frame.Of(ctx)

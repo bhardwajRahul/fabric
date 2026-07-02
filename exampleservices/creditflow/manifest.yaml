@@ -19,7 +19,7 @@ general:
   hostname: creditflow.example
   description: CreditFlow is an example microservice that demonstrates agentic workflow features.
   package: github.com/microbus-io/fabric/exampleservices/creditflow
-  modifiedAt: "2026-06-30T01:49:24Z"
+  modifiedAt: "2026-07-02T02:27:26Z"
 
 webs:
   Demo:
@@ -30,7 +30,9 @@ webs:
 tasks:
   SubmitCreditApplication:
     signature: SubmitCreditApplication(applicant Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int)
-    description: SubmitCreditApplication receives a credit application and sets up the workflow state.
+    description: |-
+      SubmitCreditApplication receives a credit application and unpacks the applicant into individual workflow
+      state fields.
     route: :428/submit-credit-application
   VerifyCredit:
     signature: VerifyCredit(creditScore int) (creditVerified bool)
@@ -71,7 +73,10 @@ tasks:
     route: :428/request-more-info
   ReviewCredit:
     signature: ReviewCredit(creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool)
-    description: ReviewCredit performs a manual review of borderline credit scores.
+    description: |-
+      ReviewCredit performs a manual review of borderline credit scores. For very borderline scores (550-579)
+      it requests more info up to 2 times before deciding; scores of 580+ are approved and below 550 are
+      rejected.
     route: :428/review-credit
   HandleCreditError:
     signature: HandleCreditError(onErr *errors.TracedError) (creditVerified bool)

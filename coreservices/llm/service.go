@@ -147,23 +147,14 @@ func stopReasonError(stopReason, provider, model string) error {
 }
 
 /*
-Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual
-implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call
-ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full
-conversation loop.
+Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
 */
 func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	return nil, "", llmapi.Usage{}, errors.New("stub, not implemented on llm.core", http.StatusNotImplemented)
 }
 
 /*
-Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM
-returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core)
-and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or
-Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to
-a callable tool. On error it still returns the items accumulated before the failure, so a caller running
-its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items)
-instead of restarting the conversation.
+Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
 */
 func (svc *Service) Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) { // MARKER: Chat
 	if provider == "" {
@@ -259,8 +250,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 }
 
 /*
-InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document
-and stores them, along with chat options, in flow state for use by the rest of the chat loop.
+InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
 */
 func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) { // MARKER: InitChat
 	// InitChat is a pure setup step: it seeds the ambient flow state the rest of the loop reads
@@ -289,8 +279,9 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, items []l
 }
 
 /*
-CallLLM is the sole owner of the `items` conversation state key. It folds the prior round's tool
-results into the conversation, calls the provider, and writes the full conversation back to `items`.
+CallLLM is the sole owner of the items conversation state key. It folds the prior round's tool
+results (accumulated in the toolResults key by the fan-in) into the conversation, calls the provider,
+and writes the full conversation back to items (plain replace, not a delta).
 */
 func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolResults []llmapi.ToolResult) (itemsOut []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
 	// Fold the prior round's tool results (appended into toolResults by the fan-in reducer) into a local
@@ -364,10 +355,8 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 }
 
 /*
-ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
-When the conversation is complete (no tool calls, or the round limit has already produced a final
-tool-less answer), it calls flow.Goto(workflow.END) to exit the chat loop. Otherwise the forEach
-transition fans out one ExecuteTool per pending tool call.
+ProcessResponse accumulates usage and routes the loop: it fans out one ExecuteTool per pending tool
+call, or ends the loop. It does not write the conversation - CallLLM owns the items state key.
 */
 func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// maxToolRounds is ambient config seeded once by InitChat.
@@ -425,9 +414,9 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, pe
 }
 
 /*
-ExecuteTool executes a single tool call identified by the currentTool forEach variable. Workflow tools run as
-dynamic subgraphs via flow.Subgraph, which parks the step and returns the child's result on re-entry; regular
-tools run via a direct bus call.
+ExecuteTool executes a single tool call, identified by the currentTool forEach variable, and returns
+its result. The results of all fanned-out ExecuteTool branches are Append-reduced into the
+toolResults state key, which the next CallLLM folds into the conversation.
 */
 func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (toolResults []llmapi.ToolResult, err error) { // MARKER: ExecuteTool
 	// toolSchemas is ambient flow state set once by InitChat, not a per-branch argument.
@@ -484,7 +473,7 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, curren
 }
 
 /*
-ChatLoop defines the workflow graph for the LLM chat loop.
+ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.
 */
 func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: ChatLoop
 	graph = workflow.NewGraph("ChatLoop")

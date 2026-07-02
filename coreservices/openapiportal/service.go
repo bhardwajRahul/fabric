@@ -67,8 +67,9 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return nil
 }
 
-// Document returns the OpenAPI 3.1 document as JSON. Without `?hostname=<host>` it returns
-// an aggregate; with the query arg it proxies to a single service's `:888/openapi.json`.
+/*
+Document returns the OpenAPI 3.1 document as JSON. Without a hostname query arg, returns an aggregate covering every microservice on the bus. With ?hostname=<host>, proxies to that single service's :888/openapi.json. Filtered by the caller's claims; the aggregate is also filtered by the request's port.
+*/
 func (svc *Service) Document(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Document
 	if hostname := r.URL.Query().Get("hostname"); hostname != "" {
 		return svc.openAPISingle(w, r, hostname)
@@ -214,8 +215,9 @@ func (svc *Service) openAPIAggregate(w http.ResponseWriter, r *http.Request) err
 	return writeJSON(w, body)
 }
 
-// Explorer renders a human-friendly HTML browser. Without `?hostname=<host>` it lists every
-// service; with the query arg it shows that service's endpoints expanded.
+/*
+Explorer renders a human-friendly HTML browser for the OpenAPI documents on the bus. Without ?hostname=<host>, lists every service. With ?hostname=<host>, shows that service's endpoints.
+*/
 func (svc *Service) Explorer(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Explorer
 	if hostname := r.URL.Query().Get("hostname"); hostname != "" {
 		return svc.exploreHost(w, r, hostname)

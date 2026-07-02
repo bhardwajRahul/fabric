@@ -43,7 +43,8 @@ var Demo = define.Web{ // MARKER: Demo
 	Host: Hostname, Method: "ANY", Route: "/demo",
 }
 
-// SubmitCreditApplication receives a credit application and sets up the workflow state.
+// SubmitCreditApplication receives a credit application and unpacks the applicant into individual workflow
+// state fields.
 var SubmitCreditApplication = define.Task{ // MARKER: SubmitCreditApplication
 	Host: Hostname, Method: "POST", Route: ":428/submit-credit-application",
 	In: SubmitCreditApplicationIn{}, Out: SubmitCreditApplicationOut{},
@@ -217,7 +218,9 @@ type RequestMoreInfoOut struct { // MARKER: RequestMoreInfo
 	ReviewAttemptsOut int `json:"reviewAttempts,omitzero"`
 }
 
-// ReviewCredit performs a manual review of borderline credit scores.
+// ReviewCredit performs a manual review of borderline credit scores. For very borderline scores (550-579)
+// it requests more info up to 2 times before deciding; scores of 580+ are approved and below 550 are
+// rejected.
 var ReviewCredit = define.Task{ // MARKER: ReviewCredit
 	Host: Hostname, Method: "POST", Route: ":428/review-credit",
 	In: ReviewCreditIn{}, Out: ReviewCreditOut{},

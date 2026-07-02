@@ -89,9 +89,12 @@ type jsonrpcError struct {
 	Message string `json:"message"`
 }
 
-// MCP is the JSON-RPC 2.0 wire endpoint. Reads one envelope, dispatches on `method`, writes
-// one envelope back. Notifications (envelopes without an `id`) acknowledge with 200 and no
-// body per spec.
+/*
+MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+per spec.
+*/
 func (svc *Service) MCP(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MCP
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

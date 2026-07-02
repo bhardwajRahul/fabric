@@ -58,7 +58,7 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 }
 
 /*
-Browser shows a simple address bar and the source code of a URL.
+Browse shows a simple address bar and the source code of a URL.
 */
 func (svc *Service) Browse(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Browse
 	ctx := r.Context()

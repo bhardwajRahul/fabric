@@ -217,7 +217,7 @@ func (svc *Service) LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, e
 }
 
 /*
-JWKS aggregates public keys from all replicas by multicasting to LocalKeys and returns them in JWKS format.
+JWKS aggregates public keys from all replicas and returns them in JWKS format.
 */
 func (svc *Service) JWKS(ctx context.Context) (keys []accesstokenapi.JWK, err error) { // MARKER: JWKS
 	var result []accesstokenapi.JWK

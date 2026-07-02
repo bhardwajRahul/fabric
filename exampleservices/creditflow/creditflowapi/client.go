@@ -253,7 +253,8 @@ func (_c MulticastClient) Demo(ctx context.Context, method string, relativeURL s
 	)
 }
 
-// SubmitCreditApplication receives a credit application and sets up the workflow state.
+// SubmitCreditApplication receives a credit application and unpacks the applicant into individual workflow
+// state fields.
 func (_c Executor) SubmitCreditApplication(ctx context.Context, applicant Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) { // MARKER: SubmitCreditApplication
 	var out SubmitCreditApplicationOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, SubmitCreditApplication.Method, SubmitCreditApplication.Route, SubmitCreditApplicationIn{Applicant: applicant}, &out, _c.inFlow, _c.outFlow)
@@ -322,7 +323,9 @@ func (_c Executor) RequestMoreInfo(ctx context.Context, reviewAttempts int) (rev
 	return out.ReviewAttemptsOut, err // No trace
 }
 
-// ReviewCredit performs a manual review of borderline credit scores.
+// ReviewCredit performs a manual review of borderline credit scores. For very borderline scores (550-579)
+// it requests more info up to 2 times before deciding; scores of 580+ are approved and below 550 are
+// rejected.
 func (_c Executor) ReviewCredit(ctx context.Context, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
 	var out ReviewCreditOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ReviewCredit.Method, ReviewCredit.Route, ReviewCreditIn{CreditScore: creditScore, CreditVerified: creditVerified, ReviewAttempts: reviewAttempts}, &out, _c.inFlow, _c.outFlow)

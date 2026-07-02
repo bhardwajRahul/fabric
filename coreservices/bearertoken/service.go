@@ -166,12 +166,20 @@ func (svc *Service) loadKey(pemData string, target **keyEntry) (err error) {
 	return nil
 }
 
-// OnChangedPrivateKey is called when the PrivateKey config changes.
+/*
+OnChangedPrivateKey is called when the PrivateKey config property changes.
+
+PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
+*/
 func (svc *Service) OnChangedPrivateKey(ctx context.Context) (err error) { // MARKER: PrivateKey
 	return errors.Trace(svc.loadKey(svc.PrivateKey(), &svc.primary))
 }
 
-// OnChangedAltPrivateKey is called when the AltPrivateKey config changes.
+/*
+OnChangedAltPrivateKey is called when the AltPrivateKey config property changes.
+
+AltPrivateKey is an alternative Ed25519 private key used during key rotation, in PEM or raw base64 format.
+*/
 func (svc *Service) OnChangedAltPrivateKey(ctx context.Context) (err error) { // MARKER: AltPrivateKey
 	return errors.Trace(svc.loadKey(svc.AltPrivateKey(), &svc.alt))
 }

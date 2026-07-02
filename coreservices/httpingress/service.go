@@ -134,7 +134,14 @@ func (svc *Service) Middleware() *middleware.Chain {
 	return svc.middleware
 }
 
-// OnChangedPorts is triggered when the value of the Ports config property changes.
+/*
+OnChangedPorts is called when the Ports config property changes.
+
+Ports is a comma-separated list of HTTP ports on which to listen for requests. A port may be
+followed by a "tls" marker, e.g. "80, 443 tls, 8080", to terminate TLS using the SAN-indexed
+certificates; a bare port enables TLS only when its legacy httpingress-{port}-cert.pem and -key.pem
+files are present. Port 80 is always plaintext.
+*/
 func (svc *Service) OnChangedPorts(ctx context.Context) (err error) { // MARKER: Ports
 	return svc.restartHTTPServers(ctx)
 }
@@ -518,7 +525,14 @@ func (svc *Service) releaseRequestBody(body []byte) {
 	atomic.AddInt64(&svc.reqMemoryUsed, -int64(len(body)))
 }
 
-// OnChangedAllowedOrigins is triggered when the value of the AllowedOrigins config property changes.
+/*
+OnChangedAllowedOrigins is called when the AllowedOrigins config property changes.
+
+AllowedOrigins is a comma-separated list of CORS origins to allow requests from.
+When empty (the default), Access-Control-Allow-Origin is pinned to the request's own scheme://host,
+which permits only same-origin browser reads. The * origin can be used to reflect any caller's Origin;
+operators must opt into that explicitly because it combines with credentials.
+*/
 func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) { // MARKER: AllowedOrigins
 	value := svc.AllowedOrigins()
 	newOrigins := map[string]bool{}
@@ -532,7 +546,13 @@ func (svc *Service) OnChangedAllowedOrigins(ctx context.Context) (err error) { /
 	return nil
 }
 
-// OnChangedPortMappings rejects any non-empty value; PortMappings has been removed.
+/*
+OnChangedPortMappings is called when the PortMappings config property changes.
+
+PortMappings is REMOVED. The x:y->z port-rewrite model has been replaced by AllowedInternalPorts
+(internal-port allowlist, no rewrite). Setting this config to any non-empty value causes the
+microservice to refuse to start, rather than silently ignore an operator's intended posture.
+*/
 func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) { // MARKER: PortMappings
 	if strings.TrimSpace(svc.PortMappings()) != "" {
 		return errors.New(
@@ -543,7 +563,16 @@ func (svc *Service) OnChangedPortMappings(ctx context.Context) (err error) { // 
 	return nil
 }
 
-// OnChangedAllowedInternalPorts parses the configured allowlist into svc.allowedInternalPorts.
+/*
+OnChangedAllowedInternalPorts is called when the AllowedInternalPorts config property changes.
+
+AllowedInternalPorts is the operator-tunable allowlist of internal destination ports the
+ingress is willing to forward to, in addition to the implicitly-allowed :443. Entries are
+comma-separated and may be a single port or an inclusive range "N-M", e.g. "1234, 10000-11000".
+All entries must satisfy 1024 <= port <= 65535; the microservice refuses to start otherwise.
+Ports :666 and :888 are hard-blocked in every deployment mode and cannot be allowlisted. In LOCAL
+deployment this config is ignored and every port except :666 and :888 is reachable.
+*/
 func (svc *Service) OnChangedAllowedInternalPorts(ctx context.Context) (err error) { // MARKER: AllowedInternalPorts
 	set, err := parseAllowedInternalPorts(svc.AllowedInternalPorts())
 	if err != nil {
@@ -619,22 +648,40 @@ func resolveInternalURL(externalURL *url.URL) (natsURL *url.URL, err error) {
 	return internalURL, nil
 }
 
-// OnChangedReadTimeout is triggered when the value of the ReadTimeout config property changes.
+/*
+OnChangedReadTimeout is called when the ReadTimeout config property changes.
+
+ReadTimeout specifies the timeout for fully reading a request.
+*/
 func (svc *Service) OnChangedReadTimeout(ctx context.Context) (err error) { // MARKER: ReadTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
-// OnChangedWriteTimeout is triggered when the value of the WriteTimeout config property changes.
+/*
+OnChangedWriteTimeout is called when the WriteTimeout config property changes.
+
+WriteTimeout specifies the timeout for fully writing the response to a request.
+*/
 func (svc *Service) OnChangedWriteTimeout(ctx context.Context) (err error) { // MARKER: WriteTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
-// OnChangedReadHeaderTimeout is triggered when the value of the ReadHeaderTimeout config property changes.
+/*
+OnChangedReadHeaderTimeout is called when the ReadHeaderTimeout config property changes.
+
+ReadHeaderTimeout specifies the timeout for fully reading the header of a request.
+*/
 func (svc *Service) OnChangedReadHeaderTimeout(ctx context.Context) (err error) { // MARKER: ReadHeaderTimeout
 	return svc.restartHTTPServers(ctx)
 }
 
-// OnChangedBlockedPaths is triggered when the value of the BlockPaths config property changes.
+/*
+OnChangedBlockedPaths is called when the BlockedPaths config property changes.
+
+A newline-separated list of paths or extensions to block with a 404.
+Paths should not include any arguments and are matched exactly.
+Extensions are specified with "*.ext" and are matched against the extension of the path only.
+*/
 func (svc *Service) OnChangedBlockedPaths(ctx context.Context) (err error) { // MARKER: BlockedPaths
 	value := svc.BlockedPaths()
 	newPaths := map[string]bool{}

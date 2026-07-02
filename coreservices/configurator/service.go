@@ -206,8 +206,8 @@ func (svc *Service) SyncRepo(ctx context.Context, timestamp time.Time, values ma
 }
 
 /*
-PeriodicRefresh tells all microservices to contact the configurator and refresh their configs.
-An error is returned if any of the values sent to the microservices fails validation.
+PeriodicRefresh tells all microservices to contact the configurator and refresh their configs. An error
+is returned if any of the values sent to the microservices fails validation.
 */
 func (svc *Service) PeriodicRefresh(ctx context.Context) (err error) {
 	var lastErr error
@@ -253,7 +253,7 @@ func (svc *Service) loadYAML(configYAML string) error {
 }
 
 /*
-Values443 is deprecated.
+Deprecated.
 */
 func (svc *Service) Values443(ctx context.Context, names []string) (values map[string]string, err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {
@@ -265,7 +265,7 @@ func (svc *Service) Values443(ctx context.Context, names []string) (values map[s
 }
 
 /*
-Refresh443 is deprecated.
+Deprecated.
 */
 func (svc *Service) Refresh443(ctx context.Context) (err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {
@@ -277,7 +277,7 @@ func (svc *Service) Refresh443(ctx context.Context) (err error) {
 }
 
 /*
-Sync443 is deprecated.
+Deprecated.
 */
 func (svc *Service) Sync443(ctx context.Context, timestamp time.Time, values map[string]map[string]string) (err error) {
 	if frame.Of(ctx).XForwardedBaseURL() != "" {

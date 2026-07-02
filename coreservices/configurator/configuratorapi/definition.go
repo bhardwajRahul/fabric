@@ -131,7 +131,8 @@ type Sync443In struct { // MARKER: Sync443
 type Sync443Out struct { // MARKER: Sync443
 }
 
-// PeriodicRefresh tells all microservices to contact the configurator and refresh their configs.
+// PeriodicRefresh tells all microservices to contact the configurator and refresh their configs. An error
+// is returned if any of the values sent to the microservices fails validation.
 var PeriodicRefresh = define.Ticker{ // MARKER: PeriodicRefresh
 	Interval: 20 * time.Minute,
 }

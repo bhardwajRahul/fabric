@@ -29,5 +29,9 @@ func (svc *Service) OnStartup(ctx context.Context) (err error) { return nil }
 // OnShutdown is called when the microservice is shut down.
 func (svc *Service) OnShutdown(ctx context.Context) (err error) { return nil }
 
-// OnChangedDenyList is the callback fired when the DenyList config changes.
+/*
+OnChangedDenyList is called when the DenyList config property changes.
+
+DenyList is a multi-line config default; changes fire OnChangedDenyList.
+*/
 func (svc *Service) OnChangedDenyList(ctx context.Context) (err error) { return nil }

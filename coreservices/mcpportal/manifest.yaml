@@ -22,10 +22,14 @@ general:
     Clients send JSON-RPC 2.0 envelopes to a single wire endpoint (POST //mcp:0); the service
     dispatches on the JSON-RPC method to handlers for initialize, tools/list, and tools/call.
   package: github.com/microbus-io/fabric/coreservices/mcpportal
-  modifiedAt: "2026-06-18T23:21:29Z"
+  modifiedAt: "2026-07-02T02:27:26Z"
 
 webs:
   MCP:
-    description: MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.
+    description: |-
+      MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+      dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+      writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+      per spec.
     method: POST
     route: //mcp:0

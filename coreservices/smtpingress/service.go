@@ -254,7 +254,11 @@ func (svc *Service) processEnvelope(ctx context.Context, p backends.Processor, e
 	return p.Process(e, task)
 }
 
-// OnChangedPort is triggered when the value of the Port config property changes.
+/*
+OnChangedPort is called when the Port config property changes.
+
+Port is the TCP port to listen to.
+*/
 func (svc *Service) OnChangedPort(ctx context.Context) (err error) { // MARKER: Port
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
@@ -266,25 +270,41 @@ func (svc *Service) OnChangedLogLevel(ctx context.Context) (err error) {
 	return errors.Trace(err)
 }
 
-// OnChangedEnabled is triggered when the value of the Enabled config property changes.
+/*
+OnChangedEnabled is called when the Enabled config property changes.
+
+Enabled determines whether the email server is started.
+*/
 func (svc *Service) OnChangedEnabled(ctx context.Context) (err error) { // MARKER: Enabled
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
-// OnChangedMaxSize is triggered when the value of the MaxSize config property changes.
+/*
+OnChangedMaxSize is called when the MaxSize config property changes.
+
+MaxSize is the maximum size of messages that will be accepted, in megabytes. Defaults to 10 megabytes.
+*/
 func (svc *Service) OnChangedMaxSize(ctx context.Context) (err error) { // MARKER: MaxSize
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
-// OnChangedMaxClients is triggered when the value of the MaxClients config property changes.
+/*
+OnChangedMaxClients is called when the MaxClients config property changes.
+
+MaxClients controls how many client connections can be opened in parallel. Defaults to 128.
+*/
 func (svc *Service) OnChangedMaxClients(ctx context.Context) (err error) { // MARKER: MaxClients
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)
 }
 
-// OnChangedWorkers is triggered when the value of the Workers config property changes.
+/*
+OnChangedWorkers is called when the Workers config property changes.
+
+Workers controls how many workers process incoming mail. Defaults to 8.
+*/
 func (svc *Service) OnChangedWorkers(ctx context.Context) (err error) { // MARKER: Workers
 	err = svc.restartDaemon(ctx)
 	return errors.Trace(err)

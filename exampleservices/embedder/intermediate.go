@@ -110,13 +110,22 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: DemoInit
 		"DemoInit", svc.DemoInit,
 		sub.At(embedderapi.DemoInit.Method, embedderapi.DemoInit.Route),
-		sub.Description(`DemoInit kicks off Python venv allocation in the background.`),
+		sub.Description(`DemoInit kicks off Python venv allocation in the background. It is idempotent: a second call while
+initialization is pending or already ready returns the current status without restarting.`),
 		sub.Web(),
 	)
 	svc.Subscribe( // MARKER: DemoStatus
 		"DemoStatus", svc.DemoStatus,
 		sub.At(embedderapi.DemoStatus.Method, embedderapi.DemoStatus.Route),
-		sub.Description(`DemoStatus returns the current venv initialization status and tailed logs.`),
+		sub.Description(`DemoStatus is a long-poll endpoint reporting venv initialization status and tailed logs. The client
+passes its last-seen ETag via If-None-Match; the server snapshots the current status and logs, hashes
+them into an ETag, and:
+  - returns 200 with the new ETag and body if the snapshot differs;
+  - holds the connection (polling every 500ms) until the snapshot changes;
+  - returns 204 No Content when the request is within ~1s of its deadline without any change, so the
+    client can immediately re-issue the request with the same ETag.
+
+A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.`),
 		sub.Web(),
 	)
 	svc.DefineConfig( // MARKER: MaxWorkers

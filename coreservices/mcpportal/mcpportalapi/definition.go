@@ -38,7 +38,10 @@ const Description = `The MCP portal exposes the bus's tools to LLM clients via t
 Clients send JSON-RPC 2.0 envelopes to a single wire endpoint (POST //mcp:0); the service
 dispatches on the JSON-RPC method to handlers for initialize, tools/list, and tools/call.`
 
-// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.
+// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+// dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+// writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+// per spec.
 var MCP = define.Web{ // MARKER: MCP
 	Host: Hostname, Method: "POST", Route: "//mcp:0",
 }

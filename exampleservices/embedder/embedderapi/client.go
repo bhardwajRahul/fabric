@@ -248,7 +248,8 @@ func (_c MulticastClient) Demo(ctx context.Context, method string, relativeURL s
 	)
 }
 
-// DemoInit kicks off Python venv allocation in the background.
+// DemoInit kicks off Python venv allocation in the background. It is idempotent: a second call while
+// initialization is pending or already ready returns the current status without restarting.
 func (_c Client) DemoInit(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: DemoInit
 	return _c.svc.Request(
 		ctx,
@@ -260,7 +261,8 @@ func (_c Client) DemoInit(ctx context.Context, relativeURL string, body any) (re
 	)
 }
 
-// DemoInit kicks off Python venv allocation in the background.
+// DemoInit kicks off Python venv allocation in the background. It is idempotent: a second call while
+// initialization is pending or already ready returns the current status without restarting.
 func (_c MulticastClient) DemoInit(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: DemoInit
 	return _c.svc.Publish(
 		ctx,
@@ -272,7 +274,15 @@ func (_c MulticastClient) DemoInit(ctx context.Context, relativeURL string, body
 	)
 }
 
-// DemoStatus returns the current venv initialization status and tailed logs.
+// DemoStatus is a long-poll endpoint reporting venv initialization status and tailed logs. The client
+// passes its last-seen ETag via If-None-Match; the server snapshots the current status and logs, hashes
+// them into an ETag, and:
+//   - returns 200 with the new ETag and body if the snapshot differs;
+//   - holds the connection (polling every 500ms) until the snapshot changes;
+//   - returns 204 No Content when the request is within ~1s of its deadline without any change, so the
+//     client can immediately re-issue the request with the same ETag.
+//
+// A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.
 func (_c Client) DemoStatus(ctx context.Context, relativeURL string) (res *http.Response, err error) { // MARKER: DemoStatus
 	return _c.svc.Request(
 		ctx,
@@ -283,7 +293,15 @@ func (_c Client) DemoStatus(ctx context.Context, relativeURL string) (res *http.
 	)
 }
 
-// DemoStatus returns the current venv initialization status and tailed logs.
+// DemoStatus is a long-poll endpoint reporting venv initialization status and tailed logs. The client
+// passes its last-seen ETag via If-None-Match; the server snapshots the current status and logs, hashes
+// them into an ETag, and:
+//   - returns 200 with the new ETag and body if the snapshot differs;
+//   - holds the connection (polling every 500ms) until the snapshot changes;
+//   - returns 204 No Content when the request is within ~1s of its deadline without any change, so the
+//     client can immediately re-issue the request with the same ETag.
+//
+// A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.
 func (_c MulticastClient) DemoStatus(ctx context.Context, relativeURL string) iter.Seq[*pub.Response] { // MARKER: DemoStatus
 	return _c.svc.Publish(
 		ctx,

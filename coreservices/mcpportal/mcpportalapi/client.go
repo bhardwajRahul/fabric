@@ -72,7 +72,10 @@ func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
 }
 
-// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.
+// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+// dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+// writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+// per spec.
 func (_c Client) MCP(ctx context.Context, relativeURL string, body any) (res *http.Response, err error) { // MARKER: MCP
 	return _c.svc.Request(
 		ctx,
@@ -84,7 +87,10 @@ func (_c Client) MCP(ctx context.Context, relativeURL string, body any) (res *ht
 	)
 }
 
-// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.
+// MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+// dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+// writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+// per spec.
 func (_c MulticastClient) MCP(ctx context.Context, relativeURL string, body any) iter.Seq[*pub.Response] { // MARKER: MCP
 	return _c.svc.Publish(
 		ctx,

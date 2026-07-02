@@ -10,6 +10,10 @@ that one file genservice emits five artifacts:
 - `mock.go` + `mock_test.go` - the mockable `Mock` and a structural smoke test.
 - `manifest.yaml` - the derived navigational view of what the microservice exposes.
 
+Beyond those five fully-generated artifacts, genservice also performs one *in-place* edit of hand-written
+code: it syncs the godoc of each `*Service` handler method to its feature's description (see Syncing
+handler godoc below).
+
 genservice is the sole generator of a microservice's boilerplate. The housekeeping skill runs it; every
 microservice authors a `definition.go` and genservice produces everything else.
 
@@ -247,11 +251,42 @@ tree. The committed fixture files therefore *are* the goldens.
   value type's package stops being resolved into `intermediate.go`'s imports. `svc` cannot pin this because its
   duration config and ticker import `time` regardless.
 
+## Syncing handler godoc
+
+`definition.go` is the single source of a feature's description, but that description is a human's first stop when
+reading the handler in `service.go`, not the api package. So `emitServiceDocs` keeps the two in lockstep: after the
+five artifacts are built, it rewrites the godoc of every `*Service` method named after a feature to match that
+feature's description, as a `/* */` block comment. This is the one place genservice edits hand-written code, so it
+is deliberately narrow.
+
+- **Which methods.** The kinds whose handler is a `*Service` method named exactly after the feature -
+  functions, web handlers, tasks, workflows, inbound events, and tickers (`serviceDocKinds`) - take the feature's
+  description verbatim. An observable metric's `OnObserveXxx` and a callback config's `OnChangedXxx` are also
+  hand-written on `*Service`, but their names carry a fixed prefix, so a verbatim description would not open with
+  the method name (the godoc convention, which some downstream linters enforce). For those, `handlerDocs`
+  synthesizes a fixed first line naming the method (`OnObserveXxx emits the observed value of the Xxx metric.`,
+  `OnChangedXxx is called when the Xxx config property changes.`) and appends the feature's description as a second
+  paragraph. The generated surface (recorders, getters) that backs those callbacks lives on the intermediate and is
+  untouched. A method whose name matches no feature (a private helper, `OnStartup`, an `OnObserve`/`OnChanged` for a
+  non-observable/non-callback feature) is left alone, as is a same-named method on a different receiver.
+- **Byte splice, not reprint.** The edit is a positional splice against the original file text (locate the existing
+  `Doc` comment group by AST offset and replace it, or insert before the `func` keyword when there is none), not a
+  `go/printer` round-trip. Reprinting the whole file would reformat unrelated hand-written code and reorder or drop
+  comments; splicing touches only the located doc regions. The result is re-parsed to guarantee valid Go before it
+  is written.
+- **`/* */` style.** Descriptions are multi-line prose lifted verbatim from `definition.go`; a block comment
+  carries them without a per-line `//` prefix that gofmt-alignment and hand-editing would fight over. A pre-existing
+  `//` doc is replaced by the block form, so re-running is idempotent (`TestGoldens` and `-check` stay stable).
+- **Only changed files are emitted.** `emitServiceDocs` returns an `output` only for a file whose bytes actually
+  change, so an already-synced directory produces nothing and `-check` does not flag it. Generated files (the
+  `Code generated ... DO NOT EDIT` marker) and `_test.go` files are skipped.
+
 ## What genservice does not touch
 
 - `*api/clientext.go` - hand-written client extensions that cannot be derived from `definition.go`. Never read or
   written.
-- `service.go` handler bodies and `OnStartup`/`OnShutdown` - the hand-written half of the microservice.
+- `service.go` handler *bodies* and `OnStartup`/`OnShutdown` - the hand-written half of the microservice. Handler
+  godoc is the sole exception (see Syncing handler godoc).
 - Anything outside the api package and the service directory.
 
 ## Known limitations

@@ -77,7 +77,8 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 }
 
 /*
-SubmitCreditApplication receives a credit application and unpacks the applicant into individual state fields.
+SubmitCreditApplication receives a credit application and unpacks the applicant into individual workflow
+state fields.
 */
 func (svc *Service) SubmitCreditApplication(ctx context.Context, flow *workflow.Flow, applicant creditflowapi.Applicant) (applicantName string, ssn string, address string, phone string, employers []string, creditScore int, err error) { // MARKER: SubmitCreditApplication
 	return applicant.ApplicantName, applicant.SSN, applicant.Address, applicant.Phone, applicant.Employers, applicant.CreditScore, nil
@@ -93,7 +94,6 @@ func (svc *Service) VerifyCredit(ctx context.Context, flow *workflow.Flow, credi
 
 /*
 HandleCreditError handles a credit verification error by setting creditVerified to false.
-The error is received via the onErr state field from an error transition.
 */
 func (svc *Service) HandleCreditError(ctx context.Context, flow *workflow.Flow, onErr *errors.TracedError) (creditVerified bool, err error) { // MARKER: HandleCreditError
 	svc.LogWarn(ctx, "Credit verification failed, defaulting to not verified", "error", onErr)
@@ -111,7 +111,7 @@ func (svc *Service) VerifyEmployment(ctx context.Context, flow *workflow.Flow, a
 }
 
 /*
-InitIdentityVerification is the entry point for the identity verification subgraph. It passes through the applicant name.
+InitIdentityVerification is the entry point for the identity verification subgraph.
 */
 func (svc *Service) InitIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (err error) { // MARKER: InitIdentityVerification
 	return nil
@@ -153,8 +153,7 @@ func (svc *Service) IdentityDecision(ctx context.Context, flow *workflow.Flow, s
 }
 
 /*
-RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgraph and adopts its
-identityVerified output. It is one branch of the credit-application fan-out, converging at the review join.
+RunIdentityVerification invokes the IdentityVerification subgraph via flow.Subgraph and adopts identityVerified.
 */
 func (svc *Service) RunIdentityVerification(ctx context.Context, flow *workflow.Flow, applicantName string, ssn string, address string, phone string) (identityVerified bool, err error) { // MARKER: RunIdentityVerification
 	var out creditflowapi.IdentityVerificationOut
@@ -205,9 +204,9 @@ func (svc *Service) RequestMoreInfo(ctx context.Context, flow *workflow.Flow, re
 }
 
 /*
-ReviewCredit performs a manual review of borderline credit scores.
-For very borderline scores (550-579), it requests more info up to 2 times before deciding.
-Scores of 580+ are approved. Below 550 are rejected.
+ReviewCredit performs a manual review of borderline credit scores. For very borderline scores (550-579)
+it requests more info up to 2 times before deciding; scores of 580+ are approved and below 550 are
+rejected.
 */
 func (svc *Service) ReviewCredit(ctx context.Context, flow *workflow.Flow, creditScore int, creditVerified bool, reviewAttempts int) (creditVerifiedOut bool, err error) { // MARKER: ReviewCredit
 	// Good scores (650+): pass through without review
@@ -410,7 +409,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 }
 
 /*
-CreditApproval defines the workflow graph for the credit approval process.
+CreditApproval defines the workflow graph for the full credit approval process.
 */
 func (svc *Service) CreditApproval(ctx context.Context) (graph *workflow.Graph, err error) { // MARKER: CreditApproval
 	graph = workflow.NewGraph("CreditApproval")

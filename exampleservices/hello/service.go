@@ -120,9 +120,7 @@ func (svc *Service) Ping(w http.ResponseWriter, r *http.Request) error { // MARK
 }
 
 /*
-Calculator renders a UI for a calculator.
-The calculation operation is delegated to another microservice in order to demonstrate
-a call from one microservice to another.
+Calculator renders a UI for a calculator. The calculation operation is delegated to another microservice in order to demonstrate a call from one microservice to another.
 */
 func (svc *Service) Calculator(w http.ResponseWriter, r *http.Request) error { // MARKER: Calculator
 	var buf bytes.Buffer

@@ -125,7 +125,9 @@ func (svc *Service) setInitStatus(status, msg string) {
 	svc.initMu.Unlock()
 }
 
-// Embed returns the sentence-embedding vector for the input text.
+/*
+Embed returns the sentence-embedding vector for the input text.
+*/
 func (svc *Service) Embed(ctx context.Context, text string) (vector []float64, err error) { // MARKER: Embed
 	if svc.venv == nil || !svc.venv.Ready() {
 		return nil, errors.New("venv not ready", http.StatusServiceUnavailable)
@@ -141,7 +143,9 @@ func (svc *Service) Embed(ctx context.Context, text string) (vector []float64, e
 	return out.Vector, nil
 }
 
-// Similarity returns the cosine similarity between the embeddings of strings a and b.
+/*
+Similarity returns the cosine similarity between the embeddings of strings a and b.
+*/
 func (svc *Service) Similarity(ctx context.Context, a string, b string) (score float64, err error) { // MARKER: Similarity
 	if svc.venv == nil || !svc.venv.Ready() {
 		return 0, errors.New("venv not ready", http.StatusServiceUnavailable)
@@ -158,15 +162,18 @@ func (svc *Service) Similarity(ctx context.Context, a string, b string) (score f
 	return out.Score, nil
 }
 
-// Demo serves the interactive demo page for the embedder.
+/*
+Demo serves the interactive demo page for the embedder.
+*/
 func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Demo
 	err = svc.WriteResTemplate(w, "demo.html", nil)
 	return errors.Trace(err)
 }
 
-// DemoInit kicks off Python venv Start in the background. Idempotent: a second invocation
-// while initialization is pending or already ready returns the current status without
-// restarting.
+/*
+DemoInit kicks off Python venv allocation in the background. It is idempotent: a second call while
+initialization is pending or already ready returns the current status without restarting.
+*/
 func (svc *Service) DemoInit(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: DemoInit
 	svc.initMu.Lock()
 	switch svc.initStatus {
@@ -192,14 +199,17 @@ func (svc *Service) DemoInit(w http.ResponseWriter, r *http.Request) (err error)
 	return writeJSON(w, map[string]any{"status": "pending"})
 }
 
-// DemoStatus is a long-poll endpoint. The client passes its last-seen ETag via If-None-Match;
-// the server snapshots the current status + tailed logs, hashes them into an ETag, and:
-//   - returns 200 with the new ETag and body if the snapshot differs;
-//   - holds the connection (polling every 500ms) until the snapshot changes;
-//   - returns 204 No Content if the request context is within ~1s of its deadline without any
-//     change, so the client can immediately re-issue the request with the same ETag.
-//
-// A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.
+/*
+DemoStatus is a long-poll endpoint reporting venv initialization status and tailed logs. The client
+passes its last-seen ETag via If-None-Match; the server snapshots the current status and logs, hashes
+them into an ETag, and:
+  - returns 200 with the new ETag and body if the snapshot differs;
+  - holds the connection (polling every 500ms) until the snapshot changes;
+  - returns 204 No Content when the request is within ~1s of its deadline without any change, so the
+    client can immediately re-issue the request with the same ETag.
+
+A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.
+*/
 func (svc *Service) DemoStatus(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: DemoStatus
 	clientETag := r.Header.Get("If-None-Match")
 	deadline, hasDeadline := r.Context().Deadline()

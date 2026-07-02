@@ -105,7 +105,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: SubmitCreditApplication
 		"SubmitCreditApplication", svc.doSubmitCreditApplication,
 		sub.At(creditflowapi.SubmitCreditApplication.Method, creditflowapi.SubmitCreditApplication.Route),
-		sub.Description(`SubmitCreditApplication receives a credit application and sets up the workflow state.`),
+		sub.Description(`SubmitCreditApplication receives a credit application and unpacks the applicant into individual workflow
+state fields.`),
 		sub.Task(creditflowapi.SubmitCreditApplicationIn{}, creditflowapi.SubmitCreditApplicationOut{}),
 	)
 	svc.Subscribe( // MARKER: VerifyCredit
@@ -166,7 +167,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: ReviewCredit
 		"ReviewCredit", svc.doReviewCredit,
 		sub.At(creditflowapi.ReviewCredit.Method, creditflowapi.ReviewCredit.Route),
-		sub.Description(`ReviewCredit performs a manual review of borderline credit scores.`),
+		sub.Description(`ReviewCredit performs a manual review of borderline credit scores. For very borderline scores (550-579)
+it requests more info up to 2 times before deciding; scores of 580+ are approved and below 550 are
+rejected.`),
 		sub.Task(creditflowapi.ReviewCreditIn{}, creditflowapi.ReviewCreditOut{}),
 	)
 	svc.Subscribe( // MARKER: HandleCreditError

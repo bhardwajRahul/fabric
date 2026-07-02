@@ -80,7 +80,10 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: MCP
 		"MCP", svc.MCP,
 		sub.At(mcpportalapi.MCP.Method, mcpportalapi.MCP.Route),
-		sub.Description(`MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. Dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call.`),
+		sub.Description(`MCP is the JSON-RPC 2.0 wire endpoint for Model Context Protocol clients. It reads one envelope and
+dispatches on the JSON-RPC method to internal handlers for initialize, tools/list, and tools/call,
+writing one envelope back. Notifications (envelopes without an id) are acknowledged with 200 and no body
+per spec.`),
 		sub.Web(),
 	)
 

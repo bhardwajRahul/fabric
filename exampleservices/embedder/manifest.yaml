@@ -19,7 +19,7 @@ general:
   hostname: embedder.example
   description: Embedder is a sentence-embedding microservice backed by sentence-transformers running in an in-process Python virtual environment via github.com/microbus-io/pyvenv.
   package: github.com/microbus-io/fabric/exampleservices/embedder
-  modifiedAt: "2026-06-30T01:49:24Z"
+  modifiedAt: "2026-07-02T02:27:26Z"
 
 configs:
   MaxWorkers:
@@ -46,10 +46,21 @@ webs:
     method: ANY
     route: :443/demo
   DemoInit:
-    description: DemoInit kicks off Python venv allocation in the background.
+    description: |-
+      DemoInit kicks off Python venv allocation in the background. It is idempotent: a second call while
+      initialization is pending or already ready returns the current status without restarting.
     method: POST
     route: :443/demo/init
   DemoStatus:
-    description: DemoStatus returns the current venv initialization status and tailed logs.
+    description: |-
+      DemoStatus is a long-poll endpoint reporting venv initialization status and tailed logs. The client
+      passes its last-seen ETag via If-None-Match; the server snapshots the current status and logs, hashes
+      them into an ETag, and:
+        - returns 200 with the new ETag and body if the snapshot differs;
+        - holds the connection (polling every 500ms) until the snapshot changes;
+        - returns 204 No Content when the request is within ~1s of its deadline without any change, so the
+          client can immediately re-issue the request with the same ETag.
+      
+      A fresh client (no If-None-Match) gets the current snapshot back on the first iteration.
     method: GET
     route: :443/demo/status

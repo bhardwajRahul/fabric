@@ -95,8 +95,7 @@ func (svc *Service) Square(ctx context.Context, x int) (xEcho int, result int, e
 }
 
 /*
-Distance calculates the distance between two points.
-It demonstrates the use of the defined type Point.
+Distance calculates the distance between two points. It demonstrates the use of the defined type Point.
 */
 func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 calculatorapi.Point) (d float64, err error) { // MARKER: Distance
 	dx := p1.X - p2.X
@@ -105,7 +104,8 @@ func (svc *Service) Distance(ctx context.Context, p1 calculatorapi.Point, p2 cal
 }
 
 /*
-OnObserveSumOperations observes the value of the SumOperations gauge metric.
+OnObserveSumOperations emits the observed value of the SumOperations metric.
+
 SumOperations tracks the total sum of the results of all operators.
 */
 func (svc *Service) OnObserveSumOperations(ctx context.Context) (err error) { // MARKER: SumOperations

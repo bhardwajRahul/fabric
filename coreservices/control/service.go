@@ -76,9 +76,7 @@ func (svc *Service) Metrics(w http.ResponseWriter, r *http.Request) (err error) 
 }
 
 /*
-OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports
-filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their
-ingress boundary.
+OpenAPI returns the OpenAPI 3.1 document of the microservice. Returns endpoints across all ports filtered by the caller's claims; consumers (portal/MCP) apply any port-based filtering at their ingress boundary.
 */
 func (svc *Service) OpenAPI(ctx context.Context) (httpResponseBody *controlapi.Document, httpStatusCode int, err error) { // MARKER: OpenAPI
 	return nil, 0, nil
