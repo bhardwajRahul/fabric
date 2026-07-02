@@ -385,7 +385,7 @@ var CreateREST = define.Function{ // MARKER: CreateREST
 
 // CreateRESTIn are the input arguments of CreateREST.
 type CreateRESTIn struct { // MARKER: CreateREST
-	HTTPRequestBody *BusStop `json:"-"`
+	HTTPRequestBody *BusStop `json:"-" jsonschema_description:"The bus stop to create"`
 }
 
 // CreateRESTOut are the output arguments of CreateREST.
@@ -403,7 +403,7 @@ var StoreREST = define.Function{ // MARKER: StoreREST
 // StoreRESTIn are the input arguments of StoreREST.
 type StoreRESTIn struct { // MARKER: StoreREST
 	Key             BusStopKey `json:"key,omitzero"`
-	HTTPRequestBody *BusStop   `json:"-"`
+	HTTPRequestBody *BusStop   `json:"-" jsonschema_description:"The updated bus stop"`
 }
 
 // StoreRESTOut are the output arguments of StoreREST.
@@ -440,7 +440,7 @@ type LoadRESTIn struct { // MARKER: LoadREST
 
 // LoadRESTOut are the output arguments of LoadREST.
 type LoadRESTOut struct { // MARKER: LoadREST
-	HTTPResponseBody *BusStop `json:"-"`
+	HTTPResponseBody *BusStop `json:"-" jsonschema_description:"The requested bus stop"`
 	HTTPStatusCode   int      `json:"-"`
 }
 
@@ -457,7 +457,7 @@ type ListRESTIn struct { // MARKER: ListREST
 
 // ListRESTOut are the output arguments of ListREST.
 type ListRESTOut struct { // MARKER: ListREST
-	HTTPResponseBody []*BusStop `json:"-"`
+	HTTPResponseBody []*BusStop `json:"-" jsonschema_description:"The bus stops matching the query"`
 	HTTPStatusCode   int        `json:"-"`
 }
 

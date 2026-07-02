@@ -495,6 +495,20 @@ truncates a description at its first comma). Reserve the `jsonschema:"..."` tag 
 `jsonschema:"example=6"`. The legacy `Input:`/`Output:` godoc-section convention has been retired; descriptions
 live only on the fields.
 
+A `jsonschema_description` tag on a magic HTTP body field (`HTTPRequestBody`/`HTTPResponseBody`, whose `json` tag is
+`-`) describes the body payload as a whole; it surfaces on the OpenAPI request-body/response node. This is the only
+way to describe a magic body over a non-struct type (e.g. `[]string`), and it complements the endpoint's own godoc.
+
+```go
+type CreateIn struct {
+    HTTPRequestBody *Object `json:"-" jsonschema_description:"The object to create"`
+}
+type LoadOut struct {
+    HTTPResponseBody *Object `json:"-" jsonschema_description:"The loaded object"`
+    HTTPStatusCode   int     `json:"-"`
+}
+```
+
 ## Development Workflow
 
 ### Building a Microservice With Skills

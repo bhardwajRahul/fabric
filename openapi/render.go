@@ -169,6 +169,11 @@ func Render(s *Service) *Document {
 			if field, ok := reflect.TypeOf(outputArgs).FieldByName("HTTPResponseBody"); ok {
 				// httpResponseBody argument overrides the response body and preempts all other return values
 				schemaOut = jsonschemaReflectFromType(field.Type)
+				// The body schema is reflected from the field's type alone, which drops the field-level
+				// tag, so read the description directly and set it on the response node.
+				if desc := fieldTagDescription(field); desc != "" {
+					op.Responses["2XX"].Description = desc
+				}
 			} else {
 				schemaOut = jsonschemaReflect(outputArgs)
 			}
@@ -193,6 +198,11 @@ func Render(s *Service) *Document {
 								},
 							},
 						},
+					}
+					// The body schema is reflected from the field's type alone, which drops the field-level
+					// tag, so read the description directly and set it on the request body node.
+					if desc := fieldTagDescription(field); desc != "" {
+						op.RequestBody.Description = desc
 					}
 				}
 			}

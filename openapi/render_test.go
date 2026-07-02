@@ -168,6 +168,63 @@ func TestRender_ParamDescriptions_POST(t *testing.T) {
 	assert.Expect(idProp["description"], "The generated user ID")
 }
 
+// TestRender_MagicBodyDescriptions covers the magic HTTP body case. A jsonschema_description tag on the
+// HTTPRequestBody / HTTPResponseBody field is dropped by struct reflection (the body schema is reflected
+// from the field's type alone), so it is read directly and set on the requestBody / response nodes.
+func TestRender_MagicBodyDescriptions(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	type Payload struct {
+		Value string `json:"value,omitzero"`
+	}
+	type CreateIn struct {
+		HTTPRequestBody *Payload `json:"-" jsonschema_description:"The object to create"`
+	}
+	type CreateOut struct {
+		HTTPResponseBody *Payload `json:"-" jsonschema_description:"The created object"`
+		HTTPStatusCode   int      `json:"-"`
+	}
+
+	svc := &Service{
+		ServiceName: "store.test",
+		Endpoints: []*Endpoint{
+			{
+				Type:       "function",
+				Name:       "Create",
+				Method:     "POST",
+				Route:      "/create",
+				Summary:    "Create(httpRequestBody *Payload) (httpResponseBody *Payload, httpStatusCode int)",
+				InputArgs:  CreateIn{},
+				OutputArgs: CreateOut{},
+			},
+		},
+	}
+
+	data, err := json.Marshal(Render(svc))
+	if !assert.NoError(err) {
+		return
+	}
+
+	var doc map[string]any
+	err = json.Unmarshal(data, &doc)
+	if !assert.NoError(err) {
+		return
+	}
+
+	paths := doc["paths"].(map[string]any)
+	op := paths["/store.test/create"].(map[string]any)["post"].(map[string]any)
+
+	// Request body description comes from the HTTPRequestBody field tag
+	reqBody := op["requestBody"].(map[string]any)
+	assert.Expect(reqBody["description"], "The object to create")
+
+	// Response description comes from the HTTPResponseBody field tag, replacing the "OK" default
+	responses := op["responses"].(map[string]any)
+	resp := responses["2XX"].(map[string]any)
+	assert.Expect(resp["description"], "The created object")
+}
+
 func TestRender_JsonSchemaTags(t *testing.T) {
 	t.Parallel()
 	assert := testarossa.For(t)
