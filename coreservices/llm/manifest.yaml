@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-07-01T23:03:33Z"
+  modifiedAt: "2026-07-02T01:44:58Z"
 
 configs:
   MaxToolRounds:
@@ -58,16 +58,24 @@ tasks:
     description: InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
     route: :428/init-chat
   CallLLM:
-    signature: CallLLM(provider string, model string, items []Item) (turnItems []Item, pendingToolCalls any, turnUsage Usage)
-    description: CallLLM sends the current conversation items and tools to the LLM provider.
+    signature: CallLLM(provider string, model string, items []Item, toolResults []ToolResult) (itemsOut []Item, pendingToolCalls []ToolCall, turnUsage Usage)
+    description: |-
+      CallLLM is the sole owner of the items conversation state key. It folds the prior round's tool
+      results (accumulated in the toolResults key by the fan-in) into the conversation, calls the provider,
+      and writes the full conversation back to items (plain replace, not a delta).
     route: :428/call-llm
   ProcessResponse:
-    signature: ProcessResponse(turnItems []Item, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage)
-    description: ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
+    signature: ProcessResponse(pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage)
+    description: |-
+      ProcessResponse accumulates usage and routes the loop: it fans out one ExecuteTool per pending tool
+      call, or ends the loop. It does not write the conversation - CallLLM owns the items state key.
     route: :428/process-response
   ExecuteTool:
-    signature: ExecuteTool(currentTool ToolCall) (items []Item)
-    description: ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
+    signature: ExecuteTool(currentTool ToolCall) (toolResults []ToolResult)
+    description: |-
+      ExecuteTool executes a single tool call, identified by the currentTool forEach variable, and returns
+      its result. The results of all fanned-out ExecuteTool branches are Append-reduced into the
+      toolResults state key, which the next CallLLM folds into the conversation.
     route: :428/execute-tool
 
 workflows:

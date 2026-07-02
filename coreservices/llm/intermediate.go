@@ -45,13 +45,13 @@ const (
 type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
-	Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error)                                                     // MARKER: Chat
-	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error)                                                 // MARKER: Turn
-	InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)                                                                                                       // MARKER: InitChat
-	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item) (turnItems []llmapi.Item, pendingToolCalls any, turnUsage llmapi.Usage, err error)                                                  // MARKER: CallLLM
-	ProcessResponse(ctx context.Context, flow *workflow.Flow, turnItems []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) // MARKER: ProcessResponse
-	ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (items []llmapi.Item, err error)                                                                                                                       // MARKER: ExecuteTool
-	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                                          // MARKER: ChatLoop
+	Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error)                                                  // MARKER: Chat
+	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error)                                              // MARKER: Turn
+	InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)                                                                                                    // MARKER: InitChat
+	CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolResults []llmapi.ToolResult) (itemsOut []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, err error) // MARKER: CallLLM
+	ProcessResponse(ctx context.Context, flow *workflow.Flow, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error)                       // MARKER: ProcessResponse
+	ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (toolResults []llmapi.ToolResult, err error)                                                                                                        // MARKER: ExecuteTool
+	ChatLoop(ctx context.Context) (graph *workflow.Graph, err error)                                                                                                                                                                       // MARKER: ChatLoop
 }
 
 // NewService creates a new instance of the microservice.
@@ -110,19 +110,24 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: CallLLM
 		"CallLLM", svc.doCallLLM,
 		sub.At(llmapi.CallLLM.Method, llmapi.CallLLM.Route),
-		sub.Description(`CallLLM sends the current conversation items and tools to the LLM provider.`),
+		sub.Description(`CallLLM is the sole owner of the items conversation state key. It folds the prior round's tool
+results (accumulated in the toolResults key by the fan-in) into the conversation, calls the provider,
+and writes the full conversation back to items (plain replace, not a delta).`),
 		sub.Task(llmapi.CallLLMIn{}, llmapi.CallLLMOut{}),
 	)
 	svc.Subscribe( // MARKER: ProcessResponse
 		"ProcessResponse", svc.doProcessResponse,
 		sub.At(llmapi.ProcessResponse.Method, llmapi.ProcessResponse.Route),
-		sub.Description(`ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.`),
+		sub.Description(`ProcessResponse accumulates usage and routes the loop: it fans out one ExecuteTool per pending tool
+call, or ends the loop. It does not write the conversation - CallLLM owns the items state key.`),
 		sub.Task(llmapi.ProcessResponseIn{}, llmapi.ProcessResponseOut{}),
 	)
 	svc.Subscribe( // MARKER: ExecuteTool
 		"ExecuteTool", svc.doExecuteTool,
 		sub.At(llmapi.ExecuteTool.Method, llmapi.ExecuteTool.Route),
-		sub.Description(`ExecuteTool executes a single tool call, identified by the currentTool forEach variable.`),
+		sub.Description(`ExecuteTool executes a single tool call, identified by the currentTool forEach variable, and returns
+its result. The results of all fanned-out ExecuteTool branches are Append-reduced into the
+toolResults state key, which the next CallLLM folds into the conversation.`),
 		sub.Task(llmapi.ExecuteToolIn{}, llmapi.ExecuteToolOut{}),
 	)
 	svc.Subscribe( // MARKER: ChatLoop
@@ -227,7 +232,7 @@ func (svc *Intermediate) doCallLLM(w http.ResponseWriter, r *http.Request) (err 
 	var in llmapi.CallLLMIn
 	flow.ParseState(&in)
 	var out llmapi.CallLLMOut
-	out.TurnItems, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Items)
+	out.ItemsOut, out.PendingToolCalls, out.TurnUsage, err = svc.CallLLM(r.Context(), &flow, in.Provider, in.Model, in.Items, in.ToolResults)
 	if err != nil {
 		return err // No trace
 	}
@@ -251,7 +256,7 @@ func (svc *Intermediate) doProcessResponse(w http.ResponseWriter, r *http.Reques
 	var in llmapi.ProcessResponseIn
 	flow.ParseState(&in)
 	var out llmapi.ProcessResponseOut
-	out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.TurnItems, in.PendingToolCalls, in.TurnUsage, in.ToolRounds)
+	out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err = svc.ProcessResponse(r.Context(), &flow, in.PendingToolCalls, in.TurnUsage, in.ToolRounds)
 	if err != nil {
 		return err // No trace
 	}
@@ -275,7 +280,7 @@ func (svc *Intermediate) doExecuteTool(w http.ResponseWriter, r *http.Request) (
 	var in llmapi.ExecuteToolIn
 	flow.ParseState(&in)
 	var out llmapi.ExecuteToolOut
-	out.Items, err = svc.ExecuteTool(r.Context(), &flow, in.CurrentTool)
+	out.ToolResults, err = svc.ExecuteTool(r.Context(), &flow, in.CurrentTool)
 	if err != nil {
 		return err // No trace
 	}

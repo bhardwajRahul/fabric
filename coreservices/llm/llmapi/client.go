@@ -362,25 +362,30 @@ func (_c Executor) InitChat(ctx context.Context, items []Item, toolURLs []string
 	return err // No trace
 }
 
-// CallLLM sends the current conversation items and tools to the LLM provider.
-func (_c Executor) CallLLM(ctx context.Context, provider string, model string, items []Item) (turnItems []Item, pendingToolCalls any, turnUsage Usage, err error) { // MARKER: CallLLM
+// CallLLM is the sole owner of the items conversation state key. It folds the prior round's tool
+// results (accumulated in the toolResults key by the fan-in) into the conversation, calls the provider,
+// and writes the full conversation back to items (plain replace, not a delta).
+func (_c Executor) CallLLM(ctx context.Context, provider string, model string, items []Item, toolResults []ToolResult) (itemsOut []Item, pendingToolCalls []ToolCall, turnUsage Usage, err error) { // MARKER: CallLLM
 	var out CallLLMOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{Provider: provider, Model: model, Items: items}, &out, _c.inFlow, _c.outFlow)
-	return out.TurnItems, out.PendingToolCalls, out.TurnUsage, err // No trace
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, CallLLM.Method, CallLLM.Route, CallLLMIn{Provider: provider, Model: model, Items: items, ToolResults: toolResults}, &out, _c.inFlow, _c.outFlow)
+	return out.ItemsOut, out.PendingToolCalls, out.TurnUsage, err // No trace
 }
 
-// ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
-func (_c Executor) ProcessResponse(ctx context.Context, turnItems []Item, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
+// ProcessResponse accumulates usage and routes the loop: it fans out one ExecuteTool per pending tool
+// call, or ends the loop. It does not write the conversation - CallLLM owns the items state key.
+func (_c Executor) ProcessResponse(ctx context.Context, pendingToolCalls []ToolCall, turnUsage Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut Usage, err error) { // MARKER: ProcessResponse
 	var out ProcessResponseOut
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{TurnItems: turnItems, PendingToolCalls: pendingToolCalls, TurnUsage: turnUsage, ToolRounds: toolRounds}, &out, _c.inFlow, _c.outFlow)
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ProcessResponse.Method, ProcessResponse.Route, ProcessResponseIn{PendingToolCalls: pendingToolCalls, TurnUsage: turnUsage, ToolRounds: toolRounds}, &out, _c.inFlow, _c.outFlow)
 	return out.ToolsRequested, out.ToolRoundsOut, out.UsageOut, err // No trace
 }
 
-// ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
-func (_c Executor) ExecuteTool(ctx context.Context, currentTool ToolCall) (items []Item, err error) { // MARKER: ExecuteTool
+// ExecuteTool executes a single tool call, identified by the currentTool forEach variable, and returns
+// its result. The results of all fanned-out ExecuteTool branches are Append-reduced into the
+// toolResults state key, which the next CallLLM folds into the conversation.
+func (_c Executor) ExecuteTool(ctx context.Context, currentTool ToolCall) (toolResults []ToolResult, err error) { // MARKER: ExecuteTool
 	var out ExecuteToolOut
 	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, ExecuteTool.Method, ExecuteTool.Route, ExecuteToolIn{CurrentTool: currentTool}, &out, _c.inFlow, _c.outFlow)
-	return out.Items, err // No trace
+	return out.ToolResults, err // No trace
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.

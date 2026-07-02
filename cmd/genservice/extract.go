@@ -107,6 +107,15 @@ func parseService(dir string) (*service, error) {
 	if svc.apiPkg == "" {
 		return nil, fmt.Errorf("no Go package found in %s", dir)
 	}
+	// A feature's godoc is embedded verbatim into a Go raw string literal (sub.Description(`...`),
+	// cfg.Description(`...`), the metric describe calls) in the generated intermediate.go. A backtick in
+	// the godoc closes that raw string early and yields uncompilable Go, surfacing only as an opaque
+	// gofmt parse error. Reject it here with an actionable message instead.
+	for _, ft := range svc.features {
+		if strings.Contains(ft.doc, "`") {
+			return nil, fmt.Errorf("godoc for %s must not contain backticks: the description is embedded into a Go raw string literal in the generated code; rephrase without backticks", ft.name)
+		}
+	}
 	return svc, nil
 }
 

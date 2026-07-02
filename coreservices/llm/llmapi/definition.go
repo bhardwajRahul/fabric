@@ -31,7 +31,7 @@ const Hostname = "llm.core"
 const Name = "LLM"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 14
+const Version = 15
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
@@ -115,7 +115,9 @@ type InitChatIn struct { // MARKER: InitChat
 type InitChatOut struct { // MARKER: InitChat
 }
 
-// CallLLM sends the current conversation items and tools to the LLM provider.
+// CallLLM is the sole owner of the items conversation state key. It folds the prior round's tool
+// results (accumulated in the toolResults key by the fan-in) into the conversation, calls the provider,
+// and writes the full conversation back to items (plain replace, not a delta).
 var CallLLM = define.Task{ // MARKER: CallLLM
 	Host: Hostname, Method: "POST", Route: ":428/call-llm",
 	In: CallLLMIn{}, Out: CallLLMOut{},
@@ -123,19 +125,22 @@ var CallLLM = define.Task{ // MARKER: CallLLM
 
 // CallLLMIn are the input arguments of CallLLM.
 type CallLLMIn struct { // MARKER: CallLLM
-	Provider string `json:"provider,omitzero"`
-	Model    string `json:"model,omitzero"`
-	Items    []Item `json:"items,omitzero"`
+	Provider    string       `json:"provider,omitzero"`
+	Model       string       `json:"model,omitzero"`
+	Items       []Item       `json:"items,omitzero"`
+	ToolResults []ToolResult `json:"toolResults,omitzero"`
 }
 
-// CallLLMOut are the output arguments of CallLLM.
+// CallLLMOut are the output arguments of CallLLM. ItemsOut writes the full conversation to the items
+// state key; PendingToolCalls drives the forEach fan-out.
 type CallLLMOut struct { // MARKER: CallLLM
-	TurnItems        []Item `json:"turnItems,omitzero"`
-	PendingToolCalls any    `json:"pendingToolCalls,omitzero"`
-	TurnUsage        Usage  `json:"turnUsage,omitzero"`
+	ItemsOut         []Item     `json:"items,omitzero"`
+	PendingToolCalls []ToolCall `json:"pendingToolCalls,omitzero"`
+	TurnUsage        Usage      `json:"turnUsage,omitzero"`
 }
 
-// ProcessResponse inspects the LLM response, accumulates usage, and routes to the next step.
+// ProcessResponse accumulates usage and routes the loop: it fans out one ExecuteTool per pending tool
+// call, or ends the loop. It does not write the conversation - CallLLM owns the items state key.
 var ProcessResponse = define.Task{ // MARKER: ProcessResponse
 	Host: Hostname, Method: "POST", Route: ":428/process-response",
 	In: ProcessResponseIn{}, Out: ProcessResponseOut{},
@@ -143,24 +148,23 @@ var ProcessResponse = define.Task{ // MARKER: ProcessResponse
 
 // ProcessResponseIn are the input arguments of ProcessResponse.
 type ProcessResponseIn struct { // MARKER: ProcessResponse
-	TurnItems        []Item     `json:"turnItems,omitzero"`
 	PendingToolCalls []ToolCall `json:"pendingToolCalls,omitzero"`
 	TurnUsage        Usage      `json:"turnUsage,omitzero"`
 	ToolRounds       int        `json:"toolRounds,omitzero"`
 }
 
-// ProcessResponseOut are the output arguments of ProcessResponse.
-// The running conversation lives entirely in the `items` state key (Append-reduced across the
-// per-tool-call cohort), which ChatLoop's terminal output reads at flow completion. There is no
-// per-task "itemsOut" accumulator to return: ProcessResponse and ExecuteTool contribute deltas
-// to `items` via flow.Set, the reducer assembles them, done.
+// ProcessResponseOut are the output arguments of ProcessResponse. ProcessResponse routes the loop and
+// accumulates usage; it does not touch the items state key, which CallLLM owns. The conversation
+// therefore survives to ChatLoop's terminal output (ChatLoopOut.ItemsOut) as CallLLM last wrote it.
 type ProcessResponseOut struct { // MARKER: ProcessResponse
 	ToolsRequested bool  `json:"toolsRequested,omitzero"`
 	ToolRoundsOut  int   `json:"toolRounds,omitzero"`
 	UsageOut       Usage `json:"usage,omitzero"`
 }
 
-// ExecuteTool executes a single tool call, identified by the currentTool forEach variable.
+// ExecuteTool executes a single tool call, identified by the currentTool forEach variable, and returns
+// its result. The results of all fanned-out ExecuteTool branches are Append-reduced into the
+// toolResults state key, which the next CallLLM folds into the conversation.
 var ExecuteTool = define.Task{ // MARKER: ExecuteTool
 	Host: Hostname, Method: "POST", Route: ":428/execute-tool",
 	In: ExecuteToolIn{}, Out: ExecuteToolOut{},
@@ -171,9 +175,10 @@ type ExecuteToolIn struct { // MARKER: ExecuteTool
 	CurrentTool ToolCall `json:"currentTool,omitzero"`
 }
 
-// ExecuteToolOut are the output arguments of ExecuteTool.
+// ExecuteToolOut are the output arguments of ExecuteTool. ToolResults is a single-element delta that the
+// fan-in appends into the toolResults state key (Append-reduced).
 type ExecuteToolOut struct { // MARKER: ExecuteTool
-	Items []Item `json:"items,omitzero"`
+	ToolResults []ToolResult `json:"toolResults,omitzero"`
 }
 
 // ChatLoop defines the workflow graph for multi-turn LLM conversations with tool calling.

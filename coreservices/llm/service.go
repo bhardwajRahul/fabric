@@ -289,9 +289,17 @@ func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, items []l
 }
 
 /*
-CallLLM sends the current conversation items and tools to the LLM provider.
+CallLLM is the sole owner of the `items` conversation state key. It folds the prior round's tool
+results into the conversation, calls the provider, and writes the full conversation back to `items`.
 */
-func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item) (turnItems []llmapi.Item, pendingToolCalls any, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
+func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolResults []llmapi.ToolResult) (itemsOut []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, err error) { // MARKER: CallLLM
+	// Fold the prior round's tool results (appended into toolResults by the fan-in reducer) into a local
+	// conversation copy. On the first call (FirstLLM) there are none.
+	convo := items
+	for _, tr := range toolResults {
+		convo = llmapi.AppendItems(convo, tr)
+	}
+
 	// Read tool schemas
 	var tools []llmapi.Tool
 	flow.Get("toolSchemas", &tools)
@@ -310,8 +318,8 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 	}
 
 	// Call the LLM
-	svc.logPrompt(ctx, items)
-	turnItems, stopReason, turnUsage, err := svc.turn(ctx, provider, model, items, tools, turnOpts)
+	svc.logPrompt(ctx, convo)
+	turnItems, stopReason, turnUsage, err := svc.turn(ctx, provider, model, convo, tools, turnOpts)
 	if err != nil {
 		// A rate-limited error carries a retryAfter (a duration string); its presence is the retry signal, not the
 		// status code. Re-dispatch this step after exactly that wait. The wait goes in Retry's initialDelay with
@@ -326,7 +334,11 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 				wait = time.Minute // provider marked it retryable but sent a malformed or non-positive retryAfter
 			}
 			if budget := frame.Of(ctx).TimeBudget(); budget > 0 && flow.Retry(wait, 1.0, 0, budget) {
-				return nil, nil, llmapi.Usage{}, nil
+				// Clean rewind: return the pristine input items so SetChanges records no diff on `items`,
+				// and leave toolResults untouched so the re-dispatched call re-folds them. Returning nil
+				// here would clear `items` (a nil field marshals to null and is persisted with the retry),
+				// losing the conversation.
+				return items, nil, llmapi.Usage{}, nil
 			}
 		}
 		return nil, nil, llmapi.Usage{}, errors.Trace(err)
@@ -341,7 +353,14 @@ func (svc *Service) CallLLM(ctx context.Context, flow *workflow.Flow, provider s
 		return nil, nil, llmapi.Usage{}, errors.Trace(err)
 	}
 
-	return turnItems, llmapi.PendingToolCalls(turnItems), turnUsage, nil
+	// Commit: the fold is now permanent, so clear the reduced toolResults key (else the next round's
+	// fan-in would re-append this round's results and double-fold), and write the full conversation -
+	// input + folded results + this turn - back to `items` as a plain replace.
+	if len(toolResults) > 0 {
+		flow.Delete("toolResults")
+	}
+	itemsOut = append(convo, turnItems...)
+	return itemsOut, llmapi.PendingToolCalls(turnItems), turnUsage, nil
 }
 
 /*
@@ -350,7 +369,7 @@ When the conversation is complete (no tool calls, or the round limit has already
 tool-less answer), it calls flow.Goto(workflow.END) to exit the chat loop. Otherwise the forEach
 transition fans out one ExecuteTool per pending tool call.
 */
-func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, turnItems []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
+func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) { // MARKER: ProcessResponse
 	// maxToolRounds is ambient config seeded once by InitChat.
 	var maxToolRounds int
 	flow.Get("maxToolRounds", &maxToolRounds)
@@ -360,25 +379,14 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, tu
 
 	toolRoundsOut = toolRounds
 
-	// The running conversation lives in the `items` state key (Append-reduced). This step contributes
-	// the assistant turn's items (reasoning, text, and tool_call items) as a delta; ExecuteTool
-	// branches contribute their tool_result deltas. ProcessResponseOut has no items field, so the
-	// auto-marshaler never overwrites the accumulated key; the workflow's ChatLoopOut.ItemsOut
-	// (json:"items") reads that same key when the flow terminates.
-	//
-	// The turn's tool_call items MUST be carried so that, on the next round, claudellm can emit a
-	// tool_use block whose id matches the tool_use_id on the upcoming tool_result. Without this,
-	// Anthropic rejects the next call with "unexpected tool_use_id found in tool_result blocks: ...".
-	// `items` has reducer ReducerAppend on the parent graph, so we write only the delta (this turn's
-	// items) and let the reducer append it onto the prior snapshot; writing the full accumulated list
-	// would concatenate history onto itself.
-	if len(turnItems) > 0 {
-		flow.Set("items", turnItems)
-	}
+	// ProcessResponse does not touch the `items` state key - CallLLM owns it (plain replace, the full
+	// conversation each turn). This step only accumulates usage and routes: fan out to execute the
+	// pending tool calls, or end the loop. The ExecuteTool branches write the `toolResults` state key
+	// (Append-reduced at the fan-in), which the next CallLLM folds into `items`.
 
 	// Done when the model returned no tool calls (natural completion), or the round limit has already
-	// been reached. The latter is only hit if the final tool-less call (see below) still came back with
-	// tool calls - a failsafe against an unbounded loop, not the normal exit.
+	// been reached. The latter is only hit if the final tool-less call still came back with tool calls -
+	// a failsafe against an unbounded loop, not the normal exit.
 	done := len(pendingToolCalls) == 0 || toolRounds >= maxToolRounds
 	if done {
 		toolsRequested = false
@@ -395,8 +403,8 @@ func (svc *Service) ProcessResponse(ctx context.Context, flow *workflow.Flow, tu
 			"turnOptions",
 			"pendingToolCalls",
 			"maxToolRounds",
-			"turnItems",
 			"turnUsage",
+			"toolResults",
 			"finalCall",
 		)
 		flow.Goto(workflow.END)
@@ -421,7 +429,7 @@ ExecuteTool executes a single tool call identified by the currentTool forEach va
 dynamic subgraphs via flow.Subgraph, which parks the step and returns the child's result on re-entry; regular
 tools run via a direct bus call.
 */
-func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (items []llmapi.Item, err error) { // MARKER: ExecuteTool
+func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (toolResults []llmapi.ToolResult, err error) { // MARKER: ExecuteTool
 	// toolSchemas is ambient flow state set once by InitChat, not a per-branch argument.
 	var toolSchemas []llmapi.Tool
 	flow.Get("toolSchemas", &toolSchemas)
@@ -455,14 +463,14 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, curren
 			return nil, nil // parked, child workflow running; counted on re-entry
 		}
 		svc.IncrementToolCalls(ctx, 1, def.URL, def.Type, "ok")
-		// Re-entry: the child's final_state is the tool result. The returned items is a delta appended
-		// to the `items` state key by its ReducerAppend, so contribute only the new tool_result.
+		// Re-entry: the child's final_state is the tool result. Return a single-element delta that the
+		// fan-in appends into the `toolResults` state key (Append-reduced).
 		childOutput := out
 		if len(childOutput) == 0 {
 			childOutput = map[string]any{"status": "completed"}
 		}
 		resultJSON, _ := json.Marshal(childOutput)
-		return llmapi.AppendItems(nil, llmapi.NewToolResult(currentTool.ID, string(resultJSON))), nil
+		return []llmapi.ToolResult{{CallID: currentTool.ID, Output: string(resultJSON)}}, nil
 	}
 
 	// Regular endpoint tools are executed via direct bus call
@@ -471,9 +479,8 @@ func (svc *Service) ExecuteTool(ctx context.Context, flow *workflow.Flow, curren
 		return nil, errors.Trace(err)
 	}
 
-	// The returned items is a delta appended to `items` by its ReducerAppend; contribute only the
-	// new tool_result.
-	return llmapi.AppendItems(nil, llmapi.NewToolResult(currentTool.ID, string(result))), nil
+	// Single-element delta; the fan-in appends it into the `toolResults` state key (Append-reduced).
+	return []llmapi.ToolResult{{CallID: currentTool.ID, Output: string(result)}}, nil
 }
 
 /*
@@ -492,10 +499,11 @@ func (svc *Service) ChatLoop(ctx context.Context) (graph *workflow.Graph, err er
 	graph.SetEndpoint("ProcessResponse", llmapi.ProcessResponse.URL())
 	graph.SetEndpoint("ExecuteTool", llmapi.ExecuteTool.URL())
 	graph.SetFanIn("NextLLM")
-	// items is the conversation history shared with the LLM each turn. forEach branches each
-	// contribute their tool_result item; Append reducer concatenates them at the fan-in so the
-	// next CallLLM sees the full history.
-	graph.SetReducer("items", workflow.ReducerAppend)
+	// toolResults is the only Append-reduced key: each forEach branch (ExecuteTool) contributes one
+	// tool_result, and the reducer concatenates them at the NextLLM fan-in. The next CallLLM folds the
+	// assembled toolResults into the conversation and clears the key. `items` itself is NOT reduced -
+	// CallLLM owns it and writes the full conversation each turn (plain replace).
+	graph.SetReducer("toolResults", workflow.ReducerAppend)
 	graph.AddTransition("InitChat", "FirstLLM")
 	graph.AddTransition("FirstLLM", "ProcessResponse")
 	// When ProcessResponse decides the conversation is done (no tools requested or round

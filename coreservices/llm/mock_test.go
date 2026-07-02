@@ -92,34 +92,34 @@ func TestLlm_Mock(t *testing.T) {
 	t.Run("call_l_l_m", func(t *testing.T) { // MARKER: CallLLM
 		assert := testarossa.For(t)
 
-		mock.MockCallLLM(func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item) (turnItems []llmapi.Item, pendingToolCalls any, turnUsage llmapi.Usage, err error) {
+		mock.MockCallLLM(func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolResults []llmapi.ToolResult) (itemsOut []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, err error) {
 			return
 		})
 		var provider string
 		var model string
 		var items []llmapi.Item
-		_, _, _, err := mock.CallLLM(ctx, nil, provider, model, items)
+		var toolResults []llmapi.ToolResult
+		_, _, _, err := mock.CallLLM(ctx, nil, provider, model, items, toolResults)
 		assert.NoError(err)
 	})
 
 	t.Run("process_response", func(t *testing.T) { // MARKER: ProcessResponse
 		assert := testarossa.For(t)
 
-		mock.MockProcessResponse(func(ctx context.Context, flow *workflow.Flow, turnItems []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) {
+		mock.MockProcessResponse(func(ctx context.Context, flow *workflow.Flow, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error) {
 			return
 		})
-		var turnItems []llmapi.Item
 		var pendingToolCalls []llmapi.ToolCall
 		var turnUsage llmapi.Usage
 		var toolRounds int
-		_, _, _, err := mock.ProcessResponse(ctx, nil, turnItems, pendingToolCalls, turnUsage, toolRounds)
+		_, _, _, err := mock.ProcessResponse(ctx, nil, pendingToolCalls, turnUsage, toolRounds)
 		assert.NoError(err)
 	})
 
 	t.Run("execute_tool", func(t *testing.T) { // MARKER: ExecuteTool
 		assert := testarossa.For(t)
 
-		mock.MockExecuteTool(func(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (items []llmapi.Item, err error) {
+		mock.MockExecuteTool(func(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (toolResults []llmapi.ToolResult, err error) {
 			return
 		})
 		var currentTool llmapi.ToolCall

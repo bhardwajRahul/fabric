@@ -71,19 +71,36 @@ This is the LLM service's tool-use signal; it is distinct from the engine's `dwa
 The chat loop is `InitChat → FirstLLM → ProcessResponse → forEach pendingToolCalls → ExecuteTool → NextLLM → ProcessResponse`. Each round, ProcessResponse decides:
 
 - If no tool calls are pending (the prior turn's `stopReason` was a completion: `end_turn`,
-  `stop_sequence`, or `refusal`) or the round limit is exhausted, it calls
-  `flow.Goto(workflow.END)` to exit the loop. The forEach transition is skipped. A
-  truncation / pause_turn / unknown `stopReason` never reaches `ProcessResponse` — `CallLLM`
-  fails the step before that, so the workflow's `OnError` route (if any) handles it.
-- Otherwise the forEach fans out one ExecuteTool per pending tool call. All branches converge at `NextLLM` via `graph.SetFanIn("NextLLM")`. The fan-in merges per-tool `tool_result` items into the `items` field, which is wired with `graph.SetReducer("items", workflow.ReducerAppend)` at graph-build time so the LLM sees the full conversation history on the next round.
+  `stop_sequence`, or `refusal`), it calls `flow.Goto(workflow.END)` to exit the loop. The forEach
+  transition is skipped. A truncation / pause_turn / unknown `stopReason` never reaches
+  `ProcessResponse` — `CallLLM` fails the step before that, so the workflow's `OnError` route (if any)
+  handles it.
+- Otherwise the forEach fans out one ExecuteTool per pending tool call. On the last permitted round
+  (`toolRounds+1 >= maxToolRounds`) ProcessResponse also sets the ambient `finalCall` flag, so the next
+  `CallLLM` offers no tools and the model must return a text answer instead of the loop ending on
+  dangling, unexecuted `tool_use` items. This mirrors the live `Chat` loop's post-limit "one final call
+  without tools". The `toolRounds >= maxToolRounds` done-check remains as a failsafe against an unbounded
+  loop if that tool-less call still returns tool calls.
+
+**`CallLLM` owns the `items` conversation; `toolResults` is the only reduced key.** The single
+Append-reduced key is `toolResults` (`graph.SetReducer("toolResults", workflow.ReducerAppend)`): each
+forEach branch (`ExecuteTool`) contributes one `ToolResult`, and the fan-in at `NextLLM` concatenates
+them. `CallLLM` then folds the assembled `toolResults` into the conversation, clears the key (so the next
+round's fan-in starts empty and results are not double-folded), calls the provider, and writes the full
+conversation back to `items` as a plain replace. `items` is deliberately *not* reduced: making `CallLLM`
+its sole writer removes the fragile "write only a delta, never the full list" rule the old
+`items`-reducer design forced on `ProcessResponse` and `ExecuteTool` (a full-list write under an append
+reducer concatenates history onto itself). The rate-limit retry path in `CallLLM` returns the unchanged
+input `items` (a clean rewind: a nil return would marshal to null and be persisted with the retry,
+losing the conversation), leaving `toolResults` in place to be re-folded on re-dispatch.
 
 `FirstLLM` and `NextLLM` are two graph positions sharing one task URL (`CallLLM`). `FirstLLM` is the initial sequential call after `InitChat`; `NextLLM` is the fan-in nexus that closes each per-round tool cohort. The split is forced by the lineage validator: a fan-in target requires a stack frame to pop, so the initial entry (which has no frame) cannot also be the fan-in. Both nodes dispatch to the same task; the foreman runs `CallLLM` once at each visit. See `exampleservices/creditflow` for the same pattern (the `ReviewJoin` / `ReviewCredit` split).
 
 `ExecuteTool` dispatches a workflow tool via `flow.Subgraph(def.URL, input)`, which returns `(out, yield, err)`. On
 the first call it yields (the foreman parks the step and runs the child); on re-entry it returns the child's
-`final_state` as `out`, which `ExecuteTool` wraps into a `tool_result` item and returns as its `items` output (merged
-into the `items` state key by the append reducer). Re-entry is detected purely by `flow.Subgraph`'s `yield`, so no
-state field or snapshot-diff tracks it.
+`final_state` as `out`, which `ExecuteTool` wraps into a `tool_result` and returns as its single-element
+`toolResults` output (merged into the `toolResults` state key by the append reducer). Re-entry is detected purely by
+`flow.Subgraph`'s `yield`, so no state field or snapshot-diff tracks it.
 
 **The live `Chat` entry point does not use this workflow.** `Chat` implements the loop entirely in Go for the synchronous request/response case. `ChatLoop` is exposed as a workflow so it can be invoked via `foremanapi.Run` (or composed as a subgraph) when the caller wants the foreman's persistence, fork/resume, and observability for an LLM conversation. The graph is part of the API contract whether or not it's exercised by every test.
 
