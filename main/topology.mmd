@@ -13,12 +13,16 @@ graph LR
     http.ingress.core --->|danger| bearer.token.core[BearerToken<br>bearer.token.core]
     llm.core[LLM<br>llm.core]
     chatgpt.llm.core[ChatGPTLLM<br>chatgpt.llm.core] ---> http.egress.core
+    llm.core -..-> chatgpt.llm.core
     chatgpt.llm.core --- chatgpt.llm.core.cloud@{shape: cloud, label: "api.openai.com"}
     claude.llm.core[ClaudeLLM<br>claude.llm.core] ---> http.egress.core
+    llm.core -..-> claude.llm.core
     claude.llm.core --- claude.llm.core.cloud@{shape: cloud, label: "api.anthropic.com"}
     gemini.llm.core[GeminiLLM<br>gemini.llm.core] ---> http.egress.core
+    llm.core -..-> gemini.llm.core
     gemini.llm.core --- gemini.llm.core.cloud@{shape: cloud, label: "generativelanguage.googleapis.com"}
     lite.llm.core[LiteLLM<br>lite.llm.core] ---> http.egress.core
+    llm.core -..-> lite.llm.core
     lite.llm.core --- lite.llm.core.cloud@{shape: cloud, label: "localhost"}
     mcp.core[MCPPortal<br>mcp.core] ---> openapi.core[OpenAPIPortal<br>openapi.core]
     metrics.core[Metrics<br>metrics.core]
@@ -34,9 +38,10 @@ graph LR
     helloworld.example[HelloWorld<br>helloworld.example]
     login.example[Login<br>login.example] --->|danger| bearer.token.core
     messaging.example[Messaging<br>messaging.example]
+    weather.example[Weather<br>weather.example]
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class agentstudio.dev,browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,yellowpages.example svc
+    class agentstudio.dev,browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,weather.example,yellowpages.example svc
     class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,lite.llm.core,mcp.core,metrics.core,openapi.core core
     class access.token.core,bearer.token.core danger
     class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,lite.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext

@@ -36,6 +36,10 @@ const Version = 15
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
 
+// ProviderAny is the provider sentinel that auto-selects any configured provider. Pass it (equivalent to the
+// empty string) as the provider argument to Chat or ChatLoop to let llm.core resolve a provider that holds a key.
+const ProviderAny = "any"
+
 // Generic capability-tier model aliases. A caller passes one of these (or a provider family alias like opus, or a
 // concrete model name) as the model argument; the resolved provider maps it to a concrete model. ModelDefault is
 // the fallback when no model is given.
