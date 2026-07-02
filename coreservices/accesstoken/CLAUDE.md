@@ -7,3 +7,11 @@ Key rotation happens on a configurable interval (default 6h, minimum 2h). The ti
 The JWKS endpoint multicasts to `LocalKeys` on all peers to aggregate public keys. Downstream connectors cache these keys and refresh on unknown `kid`. The `LocalKeys` endpoint uses `sub.NoQueue()` so every replica responds to the multicast.
 
 Token expiration is tied to the request's time budget, reinforcing the maximum transaction lifetime set at the HTTP ingress.
+
+### Mint is a trust root
+
+`Mint` runs on `:666` and signs arbitrary caller-supplied claims by design (only the critical claims `iss`, `idp`,
+`iat`, `exp`, `jti` are stamped), which is what enables claims enrichment and impersonation. It therefore cannot be
+secured with `requiredClaims` or an in-handler authorization check - that is circular, since minting is how a caller
+obtains a verified claim in the first place. The only technical control is the `:666` `PUB` ACL; isolation and a CI
+allow-list (in the production deployment guide's trust-root hardening section) are the operational controls.

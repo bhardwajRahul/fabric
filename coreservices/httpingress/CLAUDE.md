@@ -8,6 +8,16 @@ This microservice does not maintain a `PROMPTS.md`. Skip the prompts step when r
 
 ## Design Rationale
 
+### Token exchange copies verified bearer claims verbatim
+
+`exchangeToken` verifies the external bearer token's signature, pins its issuer to `bearer.token.core` (an external
+identity provider must wrap through that service; it cannot drop a token straight through the ingress), and then
+calls `access.token.core`'s `Mint` with the verified claims passed through unchanged. The exchange transfers claims,
+it does not vet them, and it deliberately cannot: an access token is enriched relative to the bearer (via the access
+service's claims transformers), so its claims are not a subset of the bearer's. What each token may carry is
+application policy - the authenticator's mint call and the registered transformers - not something the ingress or the
+framework enforces. The exchange is therefore not a safer mint than a direct `:666` call.
+
 ### `resolveInternalURL` lowercases but does not validate
 
 The hostname segment of an external URL is lowercased before publishing because Microbus identities are canonical lowercase, but external URLs may arrive with uppercase characters (browsers don't always preserve case in path segments). Without normalization, requests for `/MyService/path` would fail to route despite a perfectly valid `myservice` subscription on the bus.

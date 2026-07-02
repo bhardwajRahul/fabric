@@ -572,14 +572,25 @@ func (c *Connector) handleRequest(msg *transport.Msg, s *sub.Subscription) (err 
 		handlerErr = errors.New("timeout", http.StatusRequestTimeout)
 	}
 
-	// Check actor constraints
-	if handlerErr == nil && s.RequiredClaims != "" {
+	// Check actor constraints. Whenever an actor token is present it is verified,
+	// even if the endpoint declares no requiredClaims, so a handler that reads claims
+	// via IfActor/ParseActor can trust them. A missing token fails only when the
+	// endpoint declares requiredClaims.
+	if handlerErr == nil {
 		actor := httpReq.Header.Get(frame.HeaderActor)
 		if actor == "" || !utils.LooksLikeJWT(actor) {
-			handlerErr = errors.New("", http.StatusUnauthorized)
+			if s.RequiredClaims != "" {
+				handlerErr = errors.New("", http.StatusUnauthorized)
+			}
 		} else {
+			// An empty requiredClaims still verifies the token's signature; "true"
+			// satisfies the claim evaluation unconditionally.
+			requiredClaims := s.RequiredClaims
+			if requiredClaims == "" {
+				requiredClaims = "true"
+			}
 			var claims jwt.MapClaims
-			claims, handlerErr = c.verifyToken(actor, s.RequiredClaims)
+			claims, handlerErr = c.verifyToken(actor, requiredClaims)
 			if handlerErr == nil {
 				ctx = logActorClaims(ctx, claims)
 				httpReq = httpReq.WithContext(ctx)

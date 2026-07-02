@@ -1363,6 +1363,101 @@ func TestConnector_Actor(t *testing.T) {
 	assert.Equal(3, entered)
 }
 
+// TestConnector_ActorVerifiedWithoutRequiredClaims verifies that a present actor token is
+// signature-verified even on an endpoint that declares no requiredClaims. A missing token is
+// still allowed through (the endpoint is public), but a token that fails verification is
+// rejected with 401 rather than reaching the handler with unverified claims.
+func TestConnector_ActorVerifiedWithoutRequiredClaims(t *testing.T) {
+	t.Parallel()
+	assert := testarossa.For(t)
+
+	type JWK struct {
+		KTY string `json:"kty"`
+		CRV string `json:"crv"`
+		X   string `json:"x"`
+		KID string `json:"kid"`
+	}
+
+	// Generate the issuer key pair and an unrelated attacker key pair
+	pub25519, priv25519, err := ed25519.GenerateKey(rand.Reader)
+	assert.NoError(err)
+	_, attackerPriv, err := ed25519.GenerateKey(rand.Reader)
+	assert.NoError(err)
+	hash := sha256.Sum256(pub25519)
+	kid := base64.RawURLEncoding.EncodeToString(hash[:8])
+	signWith := func(key ed25519.PrivateKey, claims jwt.MapClaims) (string, error) {
+		claims["iss"] = "https://access.token.core"
+		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+		token.Header["kid"] = kid
+		return token.SignedString(key)
+	}
+
+	// Mock token issuer serving JWKS for the issuer key only
+	issuer := New("access.token.core")
+	issuer.Subscribe("JWKS",
+		func(w http.ResponseWriter, r *http.Request) error {
+			jwks := struct {
+				Keys []JWK `json:"keys"`
+			}{}
+			jwks.Keys = append(jwks.Keys, JWK{
+				KTY: "OKP",
+				CRV: "Ed25519",
+				X:   base64.RawURLEncoding.EncodeToString(pub25519),
+				KID: kid,
+			})
+			w.Header().Set("Content-Type", "application/json")
+			return json.NewEncoder(w).Encode(jwks)
+		},
+		sub.At("GET", ":888/jwks"),
+		sub.Web(),
+	)
+
+	// Endpoint with no requiredClaims that reads the actor claims
+	entered := 0
+	sawAdmin := false
+	con := New("con.actor.noclaims.connector")
+	con.Subscribe("Open",
+		func(w http.ResponseWriter, r *http.Request) error {
+			entered++
+			sawAdmin, _ = frame.Of(r).IfActor("roles.admin")
+			return nil
+		},
+		sub.At("GET", "open"),
+		sub.Web(),
+	)
+
+	ctx := t.Context()
+	err = issuer.Startup(ctx)
+	assert.NoError(err)
+	defer issuer.Shutdown(ctx)
+	err = con.Startup(ctx)
+	assert.NoError(err)
+	defer con.Shutdown(ctx)
+
+	// No token: the endpoint is public and serves the request
+	_, err = con.GET(ctx, "https://con.actor.noclaims.connector/open")
+	assert.NoError(err)
+	assert.Equal(1, entered)
+	assert.False(sawAdmin)
+
+	// A properly signed token is verified and its claims are readable in the handler
+	valid, err := signWith(priv25519, jwt.MapClaims{"sub": "root@example.com", "roles": []string{"admin"}})
+	assert.NoError(err)
+	_, err = con.Request(ctx, pub.GET("https://con.actor.noclaims.connector/open"), pub.Token(valid))
+	assert.NoError(err)
+	assert.Equal(2, entered)
+	assert.True(sawAdmin)
+
+	// A token signed by an attacker key (same kid) fails signature verification and is rejected,
+	// even though the endpoint declares no requiredClaims
+	forged, err := signWith(attackerPriv, jwt.MapClaims{"sub": "mallory@example.com", "roles": []string{"admin"}})
+	assert.NoError(err)
+	_, err = con.Request(ctx, pub.GET("https://con.actor.noclaims.connector/open"), pub.Token(forged))
+	assert.Error(err)
+	assert.Equal(http.StatusUnauthorized, errors.StatusCode(err))
+	assert.Equal(2, entered)
+}
+
 // TestConnector_ActorPinnedIssuer verifies that the JWKS-pinning gate rejects tokens
 // whose iss claim points at a hostname that is not on the framework's pinned-issuer list,
 // even when the token would otherwise be syntactically valid and signed correctly. The

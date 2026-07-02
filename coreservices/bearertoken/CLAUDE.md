@@ -12,3 +12,11 @@ Key design decisions:
 - Two keys can be active simultaneously during rotation: current + alternative
 - The `kid` header in issued JWTs identifies which key was used for signing
 
+### Mint is a trust root
+
+`Mint` runs on `:666` and signs whatever claims the authenticator supplies; it is the external identity root of the
+deployment. It cannot be secured with `requiredClaims` or an in-handler claim check - that is circular, since minting
+is how a caller obtains a verified claim in the first place. The only technical control is the `:666` `PUB` ACL;
+isolation and a CI allow-list (in the production deployment guide's trust-root hardening section) are the operational
+controls.
+

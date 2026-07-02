@@ -24,6 +24,26 @@ These directories contain microservices built using the framework. Treat them th
 - **`<name>api/definition.go` is the source of truth; `manifest.yaml` and the boilerplate are derived from it.** `cmd/genservice` regenerates `manifest.yaml`, `*api/client.go`, `intermediate.go`, `mock.go`, and `mock_test.go` from `definition.go` (the housekeeping skill runs it); never hand-edit those generated files, hand edits are overwritten. The manifest exists as a fast navigational map for coding agents - what a microservice exposes - so an agent can model the system without reading every file. After changing `definition.go`, regenerate rather than editing the derived files.
 - **The generated `ToDo` interface in `intermediate.go` must stay an interface.** `NewIntermediate(impl ToDo)` takes an interface, not a concrete `*Service`, so one constructor serves both `*Service` in production and `*Mock` in tests; it is also the compile-time proof that both implement every handler. genservice derives it from the feature set, so there is nothing to hand-edit - but do not redesign the generator to take a concrete type, which would break mocking.
 
+## The token minters are trust roots
+
+The `Mint` endpoints on `access.token.core` and `bearer.token.core` sit on port `:666` and sign whatever claims the
+caller supplies (only `iss`, `idp`, `iat`, `exp`, `jti` are stamped by the service). This is deliberate: it is what
+makes claims enrichment and actor impersonation work. It also means any caller that can publish to `:666/mint` can
+mint any claims, including administrative roles.
+
+Do not try to secure a `Mint` endpoint by adding `requiredClaims` or an in-handler check that the caller already
+holds some claim. That is circular: obtaining any verified claim requires a token, and issuing a token is exactly
+what `Mint` does. A trust root cannot be gated by the credential system it roots. The only technical control is the
+NATS `:666` `PUB` ACL, which `cmd/gencreds` grants a microservice solely because its source code calls a `:666`
+endpoint; the operational controls (isolating trust-root microservices, and a CI allow-list that fails the build on
+an unlisted `:666` grant) live in the production deployment guide's "Hardening the Trust-Root Tier" section, not in
+framework code. The ingress token exchange is not a safer mint either: it verifies and issuer-pins the bearer token
+and then passes its claims into `Mint` verbatim, so the access token is exactly as trustworthy as the bearer token,
+and what each token carries is application policy rather than a framework-enforced invariant.
+
+When reviewing or changing framework code, treat any new `:666` call site as a trust-root capability expansion, and
+never rework a minter to gate itself on a claim.
+
 ## Authoring framework upgrade skills
 
 When a new fabric version needs a mechanical migration, its versioned `upgrade-vX-Y-Z` skill (under

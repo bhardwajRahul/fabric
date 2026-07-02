@@ -235,6 +235,24 @@ The decorator wraps synchronous instruments (appending the attribute option on `
 
 The decorator is the **single** injection mechanism. The connector's own `c.meter` is built from it too (`decoratedMeterProvider().Meter("microbus")` in `startMetricsCollector`), so `microbus_*` metrics get the identity attributes the same way sequel/dwarf do. The per-call recording path (`makeAttributeSetOption`) therefore assembles only the caller's per-measurement attributes; the decorated meter merges the common identity attributes in. (Earlier the recording path prepended the identity by hand - that manual echo was removed when the meter moved onto the decorator, so identity is stamped in exactly one place and never doubled. The two attribute groups are disjoint, so the merge is a plain union.) The identity is immutable once the connector starts, so `decoratedMeterProvider` derives it from the accessors (`Hostname`, `Deployment`, …) on each call rather than caching it in a field.
 
+### Actor tokens are verified whenever present, not only under requiredClaims
+
+A present actor token is signature-verified on the receive path even when the endpoint declares an empty
+`requiredClaims`. The gate on the request path (`subscribe.go`) branches on whether a token is present, not on
+whether the endpoint gates itself: a missing token fails only when `requiredClaims` is non-empty, but a token that
+is present is always run through `verifyToken`, and a token that fails verification is rejected `401` before the
+handler runs. When `requiredClaims` is empty the connector passes the literal `"true"` as the expression so the
+claim evaluation inside `verifyToken` passes unconditionally while the signature check still executes.
+
+This exists because signature verification and claim reads were otherwise decoupled: handlers read actor claims via
+`frame.IfActor` / `frame.ParseActor`, which parse with `ParseUnverified` (the `frame` package is a thin header
+wrapper with no key access, so it cannot verify). If verification only ran under a non-empty `requiredClaims`, an
+endpoint that authorized in-handler via `IfActor` instead of declaratively would trust claims nothing had checked,
+and any mesh peer authorized to reach it could forge an actor with arbitrary claims. Verifying on presence closes
+that gap: by the time a handler reads claims, the framework has already validated the signature. The external path
+was never exposed here - the ingress `InternalHeaders` middleware strips inbound `Microbus-*` headers and re-mints
+the actor from a verified bearer - so this specifically hardens peer-to-peer and in-bundle traffic.
+
 ### `alg=none` JWTs in TESTING
 
 `verifyToken` accepts unsigned tokens (`alg=none`) only when `deployment == TESTING`. Required-claim evaluation still runs against the unsigned payload - TESTING relaxes the *signature* check, not the *authorization* check. This is what lets test code use `pub.Actor(claims)` without standing up a signing key.
