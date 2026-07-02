@@ -19,7 +19,7 @@ general:
   hostname: claude.llm.core
   description: The Claude LLM provider microservice implements the Turn endpoint for the Anthropic Claude API.
   package: github.com/microbus-io/fabric/coreservices/claudellm
-  modifiedAt: "2026-07-01T16:48:01Z"
+  modifiedAt: "2026-07-02T04:13:50Z"
 
 configs:
   MessagesURL:
@@ -38,3 +38,9 @@ functions:
     description: Turn executes a single LLM turn using the Claude provider.
     method: POST
     route: :444/turn
+
+inboundEvents:
+  OnResolveProvider:
+    signature: OnResolveProvider(model string) (ok bool)
+    description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
+    package: github.com/microbus-io/fabric/coreservices/llm/llmapi

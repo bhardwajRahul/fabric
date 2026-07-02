@@ -41,6 +41,13 @@ breaks downstream). For LiteLLM the point is sharper still: the valid model stri
 the proxy's `model_list`, so even a current catalog here would be wrong for most deployments. `model` is a
 passthrough string; callers pass whatever the proxy is configured to accept.
 
+This is also why LiteLLM cannot resolve the portable model aliases the other three providers implement: it has no
+static notion of which of its arbitrary `model_list` entries is a `smart` or an `opus`. Its `OnResolveProvider` sink
+therefore always answers `false`, so `llm.core` never auto-selects it under an empty/`"any"` request. Reach LiteLLM by
+pinning `provider="lite.llm.core"` with a concrete `model_list` name (the explicit-provider path bypasses the resolve
+event). The Phase 2 provider-portability work may query the proxy's `/v1/models` and add an operator alias-map config;
+until then, alias resolution does not apply here.
+
 ### Token usage mapping
 
 `Turn` maps the Responses `usage` block the same way `chatgptllm` does: `input_tokens` minus

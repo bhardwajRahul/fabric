@@ -27,15 +27,13 @@
 </head>
 <body>
     <h1>Chatbox Demo</h1>
-    <p>This demo uses the <strong>LLM core service</strong> with the <strong>Calculator</strong> as a tool. Pick a provider below - the simulated chatbox needs no API key, the others require their <code>APIKey</code> config to be set.</p>
+    <p>This demo uses the <strong>LLM core service</strong> with the <strong>Calculator</strong> as a tool. The simulated chatbox needs no API key; the real option auto-selects whichever provider has its <code>APIKey</code> configured, so a single key of any brand works.</p>
 
     <div class="controls">
         <label for="provider">Provider:</label>
         <select id="provider">
-            <option value="chatbox.example|chatbox-default" selected>Simulated (no API key)</option>
-            <option value="claude.llm.core|claude-haiku-4-5">Claude Haiku 4.5</option>
-            <option value="chatgpt.llm.core|gpt-4o-mini">ChatGPT GPT-4o mini</option>
-            <option value="gemini.llm.core|gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="chatbox.example|chatbox-default" selected>Simulated</option>
+            <option value="any|fast">Real</option>
         </select>
     </div>
 

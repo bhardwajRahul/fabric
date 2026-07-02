@@ -19,7 +19,7 @@ general:
   hostname: lite.llm.core
   description: The LiteLLM provider microservice implements the Turn endpoint for a LiteLLM proxy using the OpenAI Responses wire format.
   package: github.com/microbus-io/fabric/coreservices/litellm
-  modifiedAt: "2026-07-01T16:48:01Z"
+  modifiedAt: "2026-07-02T04:17:10Z"
 
 configs:
   ResponsesURL:
@@ -38,3 +38,9 @@ functions:
     description: Turn executes a single LLM turn through the LiteLLM proxy.
     method: POST
     route: :444/turn
+
+inboundEvents:
+  OnResolveProvider:
+    signature: OnResolveProvider(model string) (ok bool)
+    description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+    package: github.com/microbus-io/fabric/coreservices/llm/llmapi

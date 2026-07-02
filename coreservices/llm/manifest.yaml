@@ -19,7 +19,7 @@ general:
   hostname: llm.core
   description: The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.
   package: github.com/microbus-io/fabric/coreservices/llm
-  modifiedAt: "2026-07-02T01:44:58Z"
+  modifiedAt: "2026-07-02T04:11:38Z"
 
 configs:
   MaxToolRounds:
@@ -40,10 +40,17 @@ metrics:
     kind: counter
     otelName: microbus_llm_tool_calls
 
+outboundEvents:
+  OnResolveProvider:
+    signature: OnResolveProvider(model string) (ok bool)
+    description: OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. Each provider microservice sinks it and answers ok=true when it is configured (holds an API key) and its catalog recognizes the model. llm.core reads the responder's hostname from the response frame and routes the turn there; the simulated chatbox provider does not subscribe, so it never participates in resolution.
+    method: POST
+    route: :417/on-resolve-provider
+
 functions:
   Chat:
-    signature: Chat(provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage)
-    description: Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+    signature: Chat(provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, resolvedProvider string)
+    description: Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. Provider is a provider microservice hostname (e.g. claude.llm.core); pass it empty or "any" to auto-select a configured provider. Model is a capability-tier alias (fast, default, smart), a provider family alias (e.g. opus), or a concrete model name; empty means default. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
     method: POST
     route: :444/chat
   Turn:
@@ -54,7 +61,7 @@ functions:
 
 tasks:
   InitChat:
-    signature: InitChat(items []Item, toolURLs []string, options *ChatOptions)
+    signature: InitChat(provider string, model string, items []Item, toolURLs []string, options *ChatOptions)
     description: InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
     route: :428/init-chat
   CallLLM:

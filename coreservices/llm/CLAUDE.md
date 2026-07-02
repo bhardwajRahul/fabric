@@ -18,14 +18,45 @@ separate items correlated by `CallID`; reasoning is a distinct item that a provi
 continuity (see each provider's CLAUDE.md). `Turn` returns the assistant turn as `[]Item` (reasoning,
 message, and tool_call items in order); `Chat`/`ChatLoop` return the full accumulated `[]Item` conversation.
 
-### Caller-Selected Provider and Model
+### Provider and Model Resolution
 
-`Chat` takes `provider` and `model` as required arguments. There is no `ProviderHostname` config and providers no longer carry a `Model` config - every call site picks both. This was a deliberate breaking change in v1.28.0:
+`Chat` (and the `ChatLoop` workflow) accept `provider` and `model`, but neither is required:
 
-- **Provider** is a *capability* choice (different schemas, tool-calling behavior, rate limits). Caller must know.
-- **Model** is a *cost* choice (Opus is ~100x the cost of Haiku). Hiding it behind a config is dangerous; an operator config edit could silently change a service's spend by orders of magnitude. Forcing it into the signature makes cost visible at every call site.
+- **`provider`** is a provider microservice hostname; empty or `"any"` triggers resolution. **`model`** is a
+  capability-tier alias (`fast`/`default`/`smart`, exported as `llmapi.ModelFast`/`ModelDefault`/`ModelSmart`), a
+  provider family alias (`opus`, `flash`, `mini`, ...), or a concrete model name; empty defaults to `"default"`.
+- **Model is still a cost choice** (Opus is ~100x the cost of Haiku), so it stays visible at the call site - but as a
+  portable *tier* rather than a vendor-specific string, so an example runs on whatever single provider a user
+  configured. There is no `DefaultProvider`/`DefaultTier` config: an llm.core-side default would hide the cost knob
+  the tier is meant to expose.
 
-Each provider's `*api` package exports typed model constants (e.g. `claudellmapi.ModelHaiku45`) so a typo is a compile error rather than a runtime failure.
+**Resolution is a DNS-like lookup over an outbound event, owned entirely by llm.core.** `resolveProvider` (in
+`service.go`) fires the `OnResolveProvider(model) (ok bool)` outbound event; each real provider sinks it (a static
+`define.InboundEvent`) and answers `ok = APIKey configured && resolveModel(model) != ""` - it says yes only if it
+holds a key and its own catalog recognizes the alias/name. llm.core reads each `ok` responder's **verified** hostname
+from the response frame (`frame.Of(resp.HTTPResponse).FromHost()`, spoof-proof per the connector) and picks one at
+random. The event subject *is* the enumeration, so there is no provider registry or hostname list; a provider opts in
+purely by wiring the inbound event. Resolution runs **once per call** (no cache in Phase 1) - a cheap on-bus
+multicast, which sidesteps the drift-hazard of caching `model -> providers`. In the `ChatLoop` workflow the same
+resolution happens in `InitChat`, which persists the resolved provider/model into flow state so the whole loop
+dispatches to one provider and the step is retryable.
+
+**llm.core never maps model names.** It forwards the alias/name unchanged; each provider's `Turn` resolves it to a
+concrete model (`resolveModel`: alias -> concrete, known-prefix -> passthrough, else the raw string is passed through
+on the explicit-provider path). This keeps the vendor catalog knowledge in the provider that owns it.
+
+**No automatic simulated fallback.** If no provider answers `ok`, `Chat` returns `503` ("no LLM provider configured
+for model") rather than silently degrading. The simulated `chatbox.example` provider deliberately does **not**
+subscribe to `OnResolveProvider`, so it never participates in `"any"` resolution and can never absorb production
+traffic; it is reachable only by explicitly pinning `provider="chatbox.example"`.
+
+**Stickiness is caller-pin.** `Chat` returns the resolved host in `ChatOut.ResolvedProvider`; a stateful caller can
+pass it back as `provider` on the next call to guarantee the same provider across a multi-call conversation.
+Within a single `Chat`/`ChatLoop` call the provider is always fixed (resolved once, up front).
+
+There is no typed model-constant catalog: a per-provider const list for a quarterly-rotating external catalog churns
+forever if kept current and rots if frozen. The alias tables live inside each provider as small runtime maps (not
+exported consts) and are superseded by the Phase 2 live `/v1/models` lookup.
 
 ### `Turn` on `llm.core` is a stub
 

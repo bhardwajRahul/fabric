@@ -110,6 +110,7 @@ type Service struct {
 	// HINT: Add member variables here
 	rateMu       sync.Mutex
 	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	modelAliases map[string]string    // tier/family alias -> concrete model; nil falls back to geminiDefaultAliases. Phase 2 repopulates it from the models-list API.
 }
 
 // OnStartup is called when the microservice is started up.
@@ -144,12 +145,54 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
+// geminiDefaultAliases is the shipped alias table (capability tiers and Gemini family names -> concrete models).
+// Gemini exposes one floating pointer, gemini-flash-latest, which the flash/default tier uses; the other tiers are
+// pinned (there is no gemini-pro-latest or gemini-flash-lite-latest, and Pro is currently preview-only). Phase 2's
+// models-list lookup refreshes the pinned entries when svc.modelAliases is populated.
+var geminiDefaultAliases = map[string]string{
+	llmapi.ModelFast:    "gemini-3.1-flash-lite",
+	llmapi.ModelDefault: "gemini-flash-latest",
+	llmapi.ModelSmart:   "gemini-3.1-pro-preview",
+	"flash":             "gemini-flash-latest",
+	"pro":               "gemini-3.1-pro-preview",
+	"flash-lite":        "gemini-3.1-flash-lite",
+}
+
+// resolveModel maps a tier/family alias to a concrete Gemini model via svc.modelAliases (falling back to the shipped
+// defaults while that member is nil), passes through any gemini- prefixed name so a newly released model works before
+// it is listed, and returns "" for anything it does not recognize.
+func (svc *Service) resolveModel(model string) string {
+	aliases := svc.modelAliases
+	if aliases == nil {
+		aliases = geminiDefaultAliases
+	}
+	if concrete, ok := aliases[model]; ok {
+		return concrete
+	}
+	if strings.HasPrefix(model, "gemini-") {
+		return model
+	}
+	return ""
+}
+
+/*
+OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
+*/
+func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
+	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+}
+
 /*
 Turn executes a single LLM turn using the Gemini provider.
 */
 func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
 		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
+	// explicit-provider call to a brand-new model still reaches the API.
+	if resolved := svc.resolveModel(model); resolved != "" {
+		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {

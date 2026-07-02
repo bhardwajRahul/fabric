@@ -127,6 +127,13 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 }
 
 /*
+OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+*/
+func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
+	return false, nil
+}
+
+/*
 Turn executes a single LLM turn through the LiteLLM proxy.
 */
 func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn

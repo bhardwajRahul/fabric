@@ -12,7 +12,11 @@ When a calculator tool is available in the `tools` list, the chatbox generates a
 
 ### Demo Page
 
-The `/demo` web endpoint serves an interactive chat UI. On POST, it calls `llm.core`'s `Chat` endpoint passing `chatbox.example` as the provider hostname (since chatbox itself implements `Turn`). The LLM service routes back to chatbox over the bus, the chatbox returns a tool call, the LLM service executes it against the calculator, and the chatbox formats the final answer.
+The `/demo` web endpoint serves an interactive chat UI. On POST, it calls `llm.core`'s `Chat` endpoint. The provider dropdown offers the simulated chatbox (which pins `provider=chatbox.example`) and "Any configured provider" at the `fast`/`default`/`smart` tiers (which pass `provider=any` + the tier so `llm.core` auto-selects whichever real provider has a key). The LLM service routes back to chatbox (or the resolved real provider) over the bus, the provider returns a tool call, the LLM service executes it against the calculator, and the provider formats the final answer.
+
+### Walled off from provider resolution
+
+Unlike the real provider microservices, chatbox deliberately does **not** subscribe to `llm.core`'s `OnResolveProvider` event. This keeps the simulator out of `"any"` resolution entirely, so a chatbox accidentally left running in a non-dev app can never absorb portable-tier traffic - it is reachable only by explicitly pinning `provider="chatbox.example"`. See `coreservices/llm/CLAUDE.md` "Provider and Model Resolution".
 
 ### Configuration
 

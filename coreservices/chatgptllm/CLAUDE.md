@@ -25,7 +25,9 @@ crossing the bus) is unchanged, so nothing downstream is affected:
 
 `max_tokens` is renamed `max_output_tokens`.
 
-The `model` argument is required per call (no `Model` config) and is a passthrough string (e.g. `"gpt-5.4-mini"`). The provider deliberately ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. The planned ergonomic replacement is alias resolution (a family/tier name like `mini` or `smart` resolved to a current concrete model at runtime), not a hand-maintained catalog.
+The provider ships no typed model catalog: provider model IDs rotate every quarter, so a maintained `Model*` const list would always be stale and removing entries would break downstream compilation. Instead `resolveModel` (in `service.go`) maps a capability tier (`fast`/`default`/`smart`) or an OpenAI family alias (`mini`/`nano`) to a current concrete model, passes through any `gpt-`/`o1-`/`o3-`/`o4-` prefixed name as-is (so a newly released model works before it is listed), and returns `""` for anything else. `Turn` calls it at the top: a recognized alias/name resolves, an unrecognized string passes through unchanged so an explicit-provider call to a brand-new model still reaches the API. Entries are pinned to the current release because OpenAI exposes no floating pointer - its rolling `*-latest` aliases (e.g. `chatgpt-4o-latest`) are deprecated and current models are versioned only. The alias table is held in `svc.modelAliases` (a small runtime map, not a hand-maintained public catalog); the Phase 2 live `/v1/models` lookup repopulates it.
+
+`OnResolveProvider` is this provider's sink for the `llm.core` resolve event: it answers `ok = APIKey configured && resolveModel(model) != ""`, so `llm.core` selects this provider under an empty/`"any"` request only when ChatGPT holds a key and recognizes the model. See `coreservices/llm/CLAUDE.md` "Provider and Model Resolution".
 
 ## Reasoning Items and Replay
 

@@ -50,6 +50,11 @@ var APIKey = define.Config{ // MARKER: APIKey
 	Secret: true,
 }
 
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. The LiteLLM proxy fronts an arbitrary operator-defined model_list, so it recognizes no tier/family alias and always answers ok=false; reach it via an explicit provider hostname with a concrete model_list name.
+var OnResolveProvider = define.InboundEvent{ // MARKER: OnResolveProvider
+	Source: llmapi.OnResolveProvider,
+}
+
 // Turn executes a single LLM turn through the LiteLLM proxy.
 var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",

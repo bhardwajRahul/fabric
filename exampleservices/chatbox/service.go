@@ -185,7 +185,7 @@ func (svc *Service) Demo(w http.ResponseWriter, r *http.Request) (err error) { /
 	// Call the LLM service's Chat endpoint with the calculator as a tool.
 	items := []llmapi.Item{llmapi.NewMessage("user", userMessage).AsItem()}
 	tools := []string{calculatorapi.Arithmetic.URL()}
-	result, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)
+	result, _, _, err := llmapi.NewClient(svc).Chat(r.Context(), provider, model, items, tools, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

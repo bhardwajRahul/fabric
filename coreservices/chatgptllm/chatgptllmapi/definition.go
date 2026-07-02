@@ -50,6 +50,11 @@ var APIKey = define.Config{ // MARKER: APIKey
 	Secret: true,
 }
 
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
+var OnResolveProvider = define.InboundEvent{ // MARKER: OnResolveProvider
+	Source: llmapi.OnResolveProvider,
+}
+
 // Turn executes a single LLM turn using the ChatGPT provider.
 var Turn = define.Function{ // MARKER: Turn
 	Host: Hostname, Method: "POST", Route: ":444/turn",

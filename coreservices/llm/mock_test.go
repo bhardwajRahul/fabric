@@ -50,7 +50,7 @@ func TestLlm_Mock(t *testing.T) {
 	t.Run("chat", func(t *testing.T) { // MARKER: Chat
 		assert := testarossa.For(t)
 
-		mock.MockChat(func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) {
+		mock.MockChat(func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error) {
 			return
 		})
 		var provider string
@@ -58,7 +58,7 @@ func TestLlm_Mock(t *testing.T) {
 		var items []llmapi.Item
 		var toolURLs []string
 		var options *llmapi.ChatOptions
-		_, _, err := mock.Chat(ctx, provider, model, items, toolURLs, options)
+		_, _, _, err := mock.Chat(ctx, provider, model, items, toolURLs, options)
 		assert.NoError(err)
 	})
 
@@ -79,13 +79,15 @@ func TestLlm_Mock(t *testing.T) {
 	t.Run("init_chat", func(t *testing.T) { // MARKER: InitChat
 		assert := testarossa.For(t)
 
-		mock.MockInitChat(func(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) {
+		mock.MockInitChat(func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) {
 			return
 		})
+		var provider string
+		var model string
 		var items []llmapi.Item
 		var toolURLs []string
 		var options *llmapi.ChatOptions
-		err := mock.InitChat(ctx, nil, items, toolURLs, options)
+		err := mock.InitChat(ctx, nil, provider, model, items, toolURLs, options)
 		assert.NoError(err)
 	})
 

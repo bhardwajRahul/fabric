@@ -291,20 +291,23 @@ Return to the Example Menu.
 
 The `chatbox.example` microservice demonstrates the LLM integration capabilities of Microbus. It implements a *simulated* LLM provider that pattern-matches math questions and uses the Calculator microservice as a tool - all without requiring a real LLM API key. The demo showcases the full tool-calling flow: the LLM service resolves tool schemas from OpenAPI, the simulated provider requests a tool call, the LLM service executes it against the Calculator, and the result is fed back to produce the final answer.
 
-The demo page also includes a provider dropdown so the user can route the same chat through real LLM providers (Claude, ChatGPT, Gemini). The simulated option works out of the box; the real providers each require an `APIKey` to be configured.
+The demo page also includes a provider dropdown. Besides the simulated option, it offers **"Any configured provider"** at the `fast`, `default`, and `smart` tiers. These pass `provider="any"` with a tier alias, and `llm.core` auto-selects whichever real provider (Claude, ChatGPT, or Gemini) has its `APIKey` configured - so a **single key of any brand** makes them work, with no code change. This is the provider-portability path: examples ask for a capability tier, not a specific vendor model.
 
-To enable the real provider options, add the relevant API keys to `config.local.yaml` (which is git-ignored):
+**Offer to set up a real provider (optional).** Ask the user whether they want to try a real LLM, and if so, to paste one API key from any of the three providers. Detect which provider it belongs to from the key prefix and write it to that provider's block in the git-ignored `config.local.yaml`:
+
+- `sk-ant-...` -> `claude.llm.core`
+- `AIza...` (or `AI...`) -> `gemini.llm.core`
+- `sk-...` (not `sk-ant-`) -> `chatgpt.llm.core`
 
 ```yaml
+# example: a Claude key was provided
 claude.llm.core:
   APIKey: sk-ant-...
-chatgpt.llm.core:
-  APIKey: sk-...
-gemini.llm.core:
-  APIKey: AI...
 ```
 
-Skipping this step is fine - the simulated option in the dropdown remains fully functional without any API keys. Mention to the user that real-provider calls are billable.
+If the prefix is ambiguous, ask the user which provider the key is for. Only one provider needs a key for the "Any configured provider" options to work.
+
+Skipping this step is fine - the simulated option remains fully functional without any API keys. Mention that real-provider calls are billable.
 
 Restart the example app if any config changes were made.
 
@@ -312,7 +315,7 @@ Explain the microservice to the user and present the following link for them to 
 
 - http://localhost:8080/chatbox.example/demo - the interactive chat demo page
 
-Suggest the user try questions like "What is 6 times 7?", "How much is 100 divided by 4?", or "Calculate 15 plus 28". Also try "Hello!" to see how it handles unrecognized questions. The provider dropdown lets them swap between the simulated chatbox and any real providers they configured.
+Suggest the user try questions like "What is 6 times 7?", "How much is 100 divided by 4?", or "Calculate 15 plus 28". Also try "Hello!" to see how it handles unrecognized questions. The dropdown lets them swap between the simulated chatbox and the "Any configured provider" tiers (which need a key set above).
 
 **Explore more** (offer, optional): prepare and show an overview of the microservice's features; the user may ask to see the full implementation code of any feature (show the full code, not just signatures).
 

@@ -220,7 +220,7 @@ func TestChatbox_EndToEnd(t *testing.T) {
 		assert := testarossa.For(t)
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7?").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, _, err := client.Chat(ctx, chatboxapi.Hostname, "chatbox-default", items, tools, nil)
+		result, _, _, err := client.Chat(ctx, chatboxapi.Hostname, "chatbox-default", items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]

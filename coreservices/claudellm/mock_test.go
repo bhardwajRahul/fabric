@@ -60,4 +60,15 @@ func TestClaudellm_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("on_resolve_provider", func(t *testing.T) { // MARKER: OnResolveProvider
+		assert := testarossa.For(t)
+
+		mock.MockOnResolveProvider(func(ctx context.Context, model string) (ok bool, err error) {
+			return
+		})
+		var model string
+		_, err := mock.OnResolveProvider(ctx, model)
+		assert.NoError(err)
+	})
+
 }

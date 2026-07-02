@@ -44,6 +44,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	OnResolveProvider(ctx context.Context, model string) (ok bool, err error)                                                                                                                 // MARKER: OnResolveProvider
 }
 
 // NewService creates a new instance of the microservice.
@@ -87,7 +88,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the Gemini provider.`),
 		sub.Function(geminillmapi.TurnIn{}, geminillmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: ModelsURL
+	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider) // MARKER: OnResolveProvider
+	svc.DefineConfig(                                            // MARKER: ModelsURL
 		"ModelsURL",
 		cfg.Description(`ModelsURL is the base URL of the Gemini models endpoint; the model and action (generateContent, countTokens) are appended per request.`),
 		cfg.DefaultValue(`https://generativelanguage.googleapis.com/v1beta/models`),

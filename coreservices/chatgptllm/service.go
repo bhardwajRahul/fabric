@@ -89,7 +89,8 @@ type Service struct {
 	rateMu        sync.Mutex
 	blockedUntil  map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
 	reasonMu      sync.Mutex
-	reasoningSeen map[string]bool // model -> observed to reason (billed reasoning tokens); enables encrypted-reasoning replay
+	reasoningSeen map[string]bool   // model -> observed to reason (billed reasoning tokens); enables encrypted-reasoning replay
+	modelAliases  map[string]string // tier/family alias -> concrete model; nil falls back to chatgptDefaultAliases. Phase 2 repopulates it from the models-list API.
 }
 
 // OnStartup is called when the microservice is started up.
@@ -124,12 +125,53 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
+// chatgptDefaultAliases is the shipped alias table (capability tiers and OpenAI family names -> concrete models).
+// OpenAI has no floating pointer - its rolling aliases (chatgpt-4o-latest, gpt-5.3-chat-latest) are deprecated and
+// current models are versioned only - so these are pinned to the current release and refreshed by the Phase 2
+// models-list lookup when svc.modelAliases is populated.
+var chatgptDefaultAliases = map[string]string{
+	llmapi.ModelFast:    "gpt-5.4-mini",
+	llmapi.ModelDefault: "gpt-5.5",
+	llmapi.ModelSmart:   "gpt-5.5-pro",
+	"mini":              "gpt-5.4-mini",
+	"nano":              "gpt-5.4-nano",
+}
+
+// resolveModel maps a tier/family alias to a concrete OpenAI model via svc.modelAliases (falling back to the shipped
+// defaults while that member is nil), passes through any gpt-/o1-/o3-/o4- prefixed name so a newly released model
+// works before it is listed, and returns "" for anything it does not recognize.
+func (svc *Service) resolveModel(model string) string {
+	aliases := svc.modelAliases
+	if aliases == nil {
+		aliases = chatgptDefaultAliases
+	}
+	if concrete, ok := aliases[model]; ok {
+		return concrete
+	}
+	if strings.HasPrefix(model, "gpt-") || strings.HasPrefix(model, "o1-") || strings.HasPrefix(model, "o3-") || strings.HasPrefix(model, "o4-") {
+		return model
+	}
+	return ""
+}
+
+/*
+OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
+*/
+func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
+	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+}
+
 /*
 Turn executes a single LLM turn using the ChatGPT provider.
 */
 func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
 		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
+	// explicit-provider call to a brand-new model still reaches the API.
+	if resolved := svc.resolveModel(model); resolved != "" {
+		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {

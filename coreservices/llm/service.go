@@ -19,6 +19,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -107,6 +108,36 @@ func (svc *Service) logCompletion(ctx context.Context, provider string, turnItem
 	}
 }
 
+// resolveProvider selects the provider host for a Chat/ChatLoop call and normalizes the model. An explicit host
+// (not empty and not "any") is used as-is. Otherwise it fires OnResolveProvider with the model and picks at random
+// among the providers that answer ok, reading each responder's verified hostname from the response frame. An empty
+// model defaults to "default". Resolution never falls back to the simulated provider (chatbox does not subscribe):
+// if no provider answers ok, it returns a 503 so a missing key surfaces loudly.
+func (svc *Service) resolveProvider(ctx context.Context, provider string, model string) (resolvedProvider string, resolvedModel string, err error) {
+	resolvedModel = model
+	if resolvedModel == "" {
+		resolvedModel = llmapi.ModelDefault
+	}
+	if provider != "" && provider != "any" {
+		return provider, resolvedModel, nil
+	}
+	var candidates []string
+	for r := range llmapi.NewMulticastTrigger(svc).OnResolveProvider(ctx, resolvedModel) {
+		ok, err := r.Get()
+		if err != nil || !ok || r.HTTPResponse == nil {
+			continue
+		}
+		host := frame.Of(r.HTTPResponse).FromHost()
+		if host != "" {
+			candidates = append(candidates, host)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", "", errors.New("no LLM provider configured for model", http.StatusServiceUnavailable, "model", resolvedModel)
+	}
+	return candidates[rand.IntN(len(candidates))], resolvedModel, nil
+}
+
 // turn calls the provider's Turn endpoint over the bus.
 func (svc *Service) turn(ctx context.Context, providerHost string, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (turnItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
 	turnItems, stopReason, usage, err = llmapi.NewClient(svc).ForHost(providerHost).Turn(ctx, model, items, tools, options)
@@ -154,19 +185,20 @@ func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item,
 }
 
 /*
-Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. Provider is a provider microservice hostname (e.g. claude.llm.core); pass it empty or "any" to auto-select a configured provider. Model is a capability-tier alias (fast, default, smart), a provider family alias (e.g. opus), or a concrete model name; empty means default. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
 */
-func (svc *Service) Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) { // MARKER: Chat
-	if provider == "" {
-		return nil, llmapi.Usage{}, errors.New("provider is required", http.StatusBadRequest)
+func (svc *Service) Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error) { // MARKER: Chat
+	// Resolve the provider once, up front, so the whole conversation runs against one provider. An empty or "any"
+	// provider is resolved via OnResolveProvider from the model; an empty model becomes "default".
+	provider, model, err = svc.resolveProvider(ctx, provider, model)
+	if err != nil {
+		return nil, llmapi.Usage{}, "", errors.Trace(err)
 	}
-	if model == "" {
-		return nil, llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
-	}
+	resolvedProvider = provider
 
 	tools, err := svc.fetchTools(ctx, toolURLs)
 	if err != nil {
-		return nil, llmapi.Usage{}, errors.Trace(err)
+		return nil, llmapi.Usage{}, resolvedProvider, errors.Trace(err)
 	}
 
 	maxRounds := svc.MaxToolRounds()
@@ -197,7 +229,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 		svc.logPrompt(ctx, currentItems)
 		turnItems, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentItems, tools, turnOpts)
 		if err != nil {
-			return itemsOut, usage, errors.Trace(err)
+			return itemsOut, usage, resolvedProvider, errors.Trace(err)
 		}
 		svc.logCompletion(ctx, provider, turnItems, turnUsage)
 		usage.Add(turnUsage)
@@ -206,7 +238,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 		// downstream as if it were end_turn.
 		err = stopReasonError(stopReason, provider, model)
 		if err != nil {
-			return itemsOut, usage, errors.Trace(err)
+			return itemsOut, usage, resolvedProvider, errors.Trace(err)
 		}
 
 		// end_turn / stop_sequence / refusal: the model is done. Emit the assistant turn
@@ -214,7 +246,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 		toolCalls := llmapi.PendingToolCalls(turnItems)
 		if stopReason != llmapi.StopReasonToolUse || len(toolCalls) == 0 {
 			itemsOut = append(itemsOut, turnItems...)
-			return itemsOut, usage, nil
+			return itemsOut, usage, resolvedProvider, nil
 		}
 
 		// Record the assistant turn (reasoning, text, and tool_call items) verbatim.
@@ -225,7 +257,7 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 		for _, tc := range toolCalls {
 			result, err := svc.executeTool(ctx, tc, tools)
 			if err != nil {
-				return itemsOut, usage, errors.Trace(err)
+				return itemsOut, usage, resolvedProvider, errors.Trace(err)
 			}
 			resultItem := llmapi.NewToolResult(tc.ID, string(result))
 			itemsOut = append(itemsOut, resultItem.AsItem())
@@ -237,22 +269,32 @@ func (svc *Service) Chat(ctx context.Context, provider string, model string, ite
 	svc.logPrompt(ctx, currentItems)
 	turnItems, stopReason, turnUsage, err := svc.turn(ctx, provider, model, currentItems, nil, turnOpts)
 	if err != nil {
-		return itemsOut, usage, errors.Trace(err)
+		return itemsOut, usage, resolvedProvider, errors.Trace(err)
 	}
 	svc.logCompletion(ctx, provider, turnItems, turnUsage)
 	usage.Add(turnUsage)
 	err = stopReasonError(stopReason, provider, model)
 	if err != nil {
-		return itemsOut, usage, errors.Trace(err)
+		return itemsOut, usage, resolvedProvider, errors.Trace(err)
 	}
 	itemsOut = append(itemsOut, turnItems...)
-	return itemsOut, usage, nil
+	return itemsOut, usage, resolvedProvider, nil
 }
 
 /*
 InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
 */
-func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) { // MARKER: InitChat
+func (svc *Service) InitChat(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) { // MARKER: InitChat
+	// Resolve the provider once for the whole workflow and persist it, plus the normalized model, into flow state so
+	// every CallLLM in the loop dispatches to the same provider. Doing it here rather than per CallLLM keeps
+	// resolution a single, persisted, retryable step and avoids mid-conversation provider drift.
+	resolvedProvider, resolvedModel, err := svc.resolveProvider(ctx, provider, model)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	flow.Set("provider", resolvedProvider)
+	flow.Set("model", resolvedModel)
+
 	// InitChat is a pure setup step: it seeds the ambient flow state the rest of the loop reads
 	// (toolSchemas, turnOptions, maxToolRounds) and the tool-round counter (toolRounds), and declares
 	// no output arguments.

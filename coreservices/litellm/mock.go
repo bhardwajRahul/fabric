@@ -29,7 +29,8 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockTurn func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	mockTurn              func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	mockOnResolveProvider func(ctx context.Context, model string) (ok bool, err error)                                                                                                                              // MARKER: OnResolveProvider
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -65,4 +66,18 @@ func (svc *Mock) Turn(ctx context.Context, model string, items []llmapi.Item, to
 		itemsOut, stopReason, usage, err = svc.mockTurn(ctx, model, items, tools, options)
 	}
 	return itemsOut, stopReason, usage, errors.Trace(err)
+}
+
+// MockOnResolveProvider sets up a mock handler for OnResolveProvider.
+func (svc *Mock) MockOnResolveProvider(handler func(ctx context.Context, model string) (ok bool, err error)) *Mock { // MARKER: OnResolveProvider
+	svc.mockOnResolveProvider = handler
+	return svc
+}
+
+// OnResolveProvider executes the mock handler.
+func (svc *Mock) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
+	if svc.mockOnResolveProvider != nil {
+		ok, err = svc.mockOnResolveProvider(ctx, model)
+	}
+	return ok, errors.Trace(err)
 }

@@ -102,7 +102,7 @@ func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 			assert := testarossa.For(t)
 
 			items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
-			result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
+			result, usage, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 			assert.Expect(
 				result, expectedResult,
 				usage.Turns, 1,
@@ -110,6 +110,76 @@ func TestLLM_Chat(t *testing.T) { // MARKER: Chat
 			)
 		})
 	*/
+}
+
+// TestLLM_ChatAnyResolution verifies that an empty/"any" provider is resolved via OnResolveProvider to whichever
+// provider answers ok, using a mocked Claude provider so no live API key is needed.
+func TestLLM_ChatAnyResolution(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+
+	// A configured Claude provider: it answers the resolve event and returns a canned turn.
+	claudeMock := claudellm.NewMock()
+	claudeMock.MockOnResolveProvider(func(ctx context.Context, model string) (ok bool, err error) {
+		return true, nil
+	})
+	claudeMock.MockTurn(func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) {
+		return []llmapi.Item{llmapi.NewMessage("assistant", "Resolved!").AsItem()}, llmapi.StopReasonEndTurn, llmapi.Usage{Turns: 1, Model: "claude-sonnet-4-6"}, nil
+	})
+
+	tester := connector.New("tester.client")
+	client := llmapi.NewClient(tester)
+
+	app := application.New()
+	app.Add(
+		svc,
+		claudeMock,
+		tester,
+	)
+	app.RunInTest(t)
+
+	t.Run("any resolves to the configured provider", func(t *testing.T) {
+		assert := testarossa.For(t)
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
+		result, _, resolvedProvider, err := client.Chat(ctx, "any", "default", items, nil, nil)
+		assert.NoError(err)
+		assert.Expect(resolvedProvider, claudellmapi.Hostname)
+		assert.Expect(llmapi.LastAssistantMessage(result), "Resolved!")
+	})
+}
+
+// TestLLM_ChatNoProvider verifies that when no provider answers the resolve event ok, Chat returns an error rather
+// than silently falling back to a simulated provider.
+func TestLLM_ChatNoProvider(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	svc := NewService()
+
+	claudeMock := claudellm.NewMock()
+	claudeMock.MockOnResolveProvider(func(ctx context.Context, model string) (ok bool, err error) {
+		return false, nil
+	})
+
+	tester := connector.New("tester.client")
+	client := llmapi.NewClient(tester)
+
+	app := application.New()
+	app.Add(
+		svc,
+		claudeMock,
+		tester,
+	)
+	app.RunInTest(t)
+
+	t.Run("no configured provider errors", func(t *testing.T) {
+		assert := testarossa.For(t)
+		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
+		_, _, _, err := client.Chat(ctx, "any", "default", items, nil, nil)
+		assert.Error(err)
+	})
 }
 
 func TestLLM_ChatLive(t *testing.T) {
@@ -142,7 +212,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of France? Answer in one word.").AsItem()}
-		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
+		result, _, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -153,7 +223,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of Japan? Answer in one word.").AsItem()}
-		result, _, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-3.5-flash", items, nil, nil)
+		result, _, _, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-3.5-flash", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -164,7 +234,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is the capital of Italy? Answer in one word.").AsItem()}
-		result, _, err := client.Chat(ctx, chatgptllmapi.Hostname, "gpt-5.4-mini", items, nil, nil)
+		result, _, _, err := client.Chat(ctx, chatgptllmapi.Hostname, "gpt-5.4-mini", items, nil, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -175,7 +245,7 @@ func TestLLM_ChatLive(t *testing.T) {
 		assert := testarossa.For(t)
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is 6 times 7? Use the calculator tool.").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
+		result, _, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
 		if assert.NoError(err) {
 			t.Log("Response:", result)
 			assert.Expect(len(result) > 0, true)
@@ -207,7 +277,7 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 		defer providerMock.MockTurn(nil)
 
 		items := []llmapi.Item{llmapi.NewMessage("user", "Hello").AsItem()}
-		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
+		result, usage, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, nil, nil)
 		if assert.NoError(err) {
 			// Chat returns the full conversation: the input user message plus the assistant reply.
 			assert.Expect(len(result), 2)
@@ -238,7 +308,7 @@ func TestLLM_ChatWithMockedProvider(t *testing.T) {
 
 		items := []llmapi.Item{llmapi.NewMessage("user", "What is 3 + 5?").AsItem()}
 		tools := []string{calculatorapi.Arithmetic.URL()}
-		result, usage, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
+		result, usage, _, err := client.Chat(ctx, claudellmapi.Hostname, "claude-haiku-4-5", items, tools, nil)
 		if assert.NoError(err) {
 			assert.Expect(len(result) >= 2, true)
 			last := result[len(result)-1]
@@ -533,7 +603,7 @@ func TestLLM_ErrorProbe(t *testing.T) {
 				llmapi.NewMessage("system", prompt(p.promptUnits)).AsItem(),
 				llmapi.NewMessage("user", "Summarize the above in one word.").AsItem(),
 			}
-			_, usage, err := client.Chat(ctx, p.host, p.model, items, nil, nil)
+			_, usage, _, err := client.Chat(ctx, p.host, p.model, items, nil, nil)
 			if err == nil {
 				t.Logf("[%s] unexpected success; usage=%+v", p.name, usage)
 				return
@@ -583,7 +653,7 @@ func TestLLM_ErrorProbeGeminiBurst(t *testing.T) {
 			llmapi.NewMessage("system", burstPrompt).AsItem(),
 			llmapi.NewMessage("user", "Summarize the above in one word.").AsItem(),
 		}
-		_, usage, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-2.5-flash", items, nil, nil)
+		_, usage, _, err := client.Chat(ctx, geminillmapi.Hostname, "gemini-2.5-flash", items, nil, nil)
 		if err == nil {
 			t.Logf("\n===== request %d: SUCCESS =====\nusage=%+v", i, usage)
 			continue

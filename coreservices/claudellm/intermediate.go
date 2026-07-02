@@ -44,6 +44,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	OnResolveProvider(ctx context.Context, model string) (ok bool, err error)                                                                                                                 // MARKER: OnResolveProvider
 }
 
 // NewService creates a new instance of the microservice.
@@ -87,7 +88,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the Claude provider.`),
 		sub.Function(claudellmapi.TurnIn{}, claudellmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: MessagesURL
+	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider) // MARKER: OnResolveProvider
+	svc.DefineConfig(                                            // MARKER: MessagesURL
 		"MessagesURL",
 		cfg.Description(`MessagesURL is the URL of the Claude messages endpoint.`),
 		cfg.DefaultValue(`https://api.anthropic.com/v1/messages`),

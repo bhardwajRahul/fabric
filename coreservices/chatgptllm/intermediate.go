@@ -44,6 +44,7 @@ type ToDo interface {
 	OnStartup(ctx context.Context) (err error)
 	OnShutdown(ctx context.Context) (err error)
 	Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error) // MARKER: Turn
+	OnResolveProvider(ctx context.Context, model string) (ok bool, err error)                                                                                                                 // MARKER: OnResolveProvider
 }
 
 // NewService creates a new instance of the microservice.
@@ -87,7 +88,8 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.Description(`Turn executes a single LLM turn using the ChatGPT provider.`),
 		sub.Function(chatgptllmapi.TurnIn{}, chatgptllmapi.TurnOut{}),
 	)
-	svc.DefineConfig( // MARKER: ResponsesURL
+	llmapi.NewHook(svc).OnResolveProvider(svc.OnResolveProvider) // MARKER: OnResolveProvider
+	svc.DefineConfig(                                            // MARKER: ResponsesURL
 		"ResponsesURL",
 		cfg.Description(`ResponsesURL is the URL of the OpenAI responses endpoint.`),
 		cfg.DefaultValue(`https://api.openai.com/v1/responses`),

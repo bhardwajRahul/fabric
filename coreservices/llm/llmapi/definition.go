@@ -36,6 +36,15 @@ const Version = 15
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The LLM microservice bridges LLM tool-calling protocols with Microbus endpoint invocations.`
 
+// Generic capability-tier model aliases. A caller passes one of these (or a provider family alias like opus, or a
+// concrete model name) as the model argument; the resolved provider maps it to a concrete model. ModelDefault is
+// the fallback when no model is given.
+const (
+	ModelFast    = "fast"
+	ModelDefault = "default"
+	ModelSmart   = "smart"
+)
+
 // MaxToolRounds is the maximum number of tool call round-trips per invocation.
 var MaxToolRounds = define.Config{ // MARKER: MaxToolRounds
 	Value:      int(0),
@@ -55,7 +64,23 @@ var ToolCalls = define.Metric{ // MARKER: ToolCalls
 	OTelName: "microbus_llm_tool_calls",
 }
 
-// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. Each provider microservice sinks it and answers ok=true when it is configured (holds an API key) and its catalog recognizes the model. llm.core reads the responder's hostname from the response frame and routes the turn there; the simulated chatbox provider does not subscribe, so it never participates in resolution.
+var OnResolveProvider = define.OutboundEvent{ // MARKER: OnResolveProvider
+	Host: Hostname, Method: "POST", Route: ":417/on-resolve-provider",
+	In: OnResolveProviderIn{}, Out: OnResolveProviderOut{},
+}
+
+// OnResolveProviderIn are the input arguments of OnResolveProvider.
+type OnResolveProviderIn struct { // MARKER: OnResolveProvider
+	Model string `json:"model,omitzero"`
+}
+
+// OnResolveProviderOut are the output arguments of OnResolveProvider.
+type OnResolveProviderOut struct { // MARKER: OnResolveProvider
+	OK bool `json:"ok,omitzero"`
+}
+
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. Provider is a provider microservice hostname (e.g. claude.llm.core); pass it empty or "any" to auto-select a configured provider. Model is a capability-tier alias (fast, default, smart), a provider family alias (e.g. opus), or a concrete model name; empty means default. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
 var Chat = define.Function{ // MARKER: Chat
 	Host: Hostname, Method: "POST", Route: ":444/chat",
 	In: ChatIn{}, Out: ChatOut{},
@@ -63,8 +88,8 @@ var Chat = define.Function{ // MARKER: Chat
 
 // ChatIn are the input arguments of Chat.
 type ChatIn struct { // MARKER: Chat
-	Provider string       `json:"provider,omitzero" jsonschema_description:"provider is the hostname of the LLM provider microservice to use"`
-	Model    string       `json:"model,omitzero" jsonschema_description:"model is the provider-specific model identifier"`
+	Provider string       `json:"provider,omitzero" jsonschema_description:"provider is the LLM provider microservice hostname; empty or any auto-selects a configured provider"`
+	Model    string       `json:"model,omitzero" jsonschema_description:"model is a tier alias (fast, default, smart), a provider family alias, or a concrete model name; empty means default"`
 	Items    []Item       `json:"items,omitzero" jsonschema_description:"items is the conversation history to send to the LLM"`
 	ToolURLs []string     `json:"toolURLs,omitzero" jsonschema_description:"toolURLs is the list of Microbus endpoint URLs exposed to the LLM"`
 	Options  *ChatOptions `json:"options,omitzero" jsonschema_description:"options configures tool-call rounds, max tokens, temperature (nil = defaults)"`
@@ -72,8 +97,9 @@ type ChatIn struct { // MARKER: Chat
 
 // ChatOut are the output arguments of Chat.
 type ChatOut struct { // MARKER: Chat
-	ItemsOut []Item `json:"items,omitzero" jsonschema_description:"items is the full conversation including new items produced by the LLM"`
-	Usage    Usage  `json:"usage,omitzero" jsonschema_description:"usage is the aggregate token consumption across all turns"`
+	ItemsOut         []Item `json:"items,omitzero" jsonschema_description:"items is the full conversation including new items produced by the LLM"`
+	Usage            Usage  `json:"usage,omitzero" jsonschema_description:"usage is the aggregate token consumption across all turns"`
+	ResolvedProvider string `json:"resolvedProvider,omitzero" jsonschema_description:"resolvedProvider is the provider hostname that served the conversation, resolved when the caller passed an empty or any provider"`
 }
 
 // Turn executes a single LLM turn. On llm.core it is a stub returning 501 Not Implemented; the actual implementation lives in each provider microservice (claudellm, chatgptllm, geminillm). Call ForHost(<providerHostname>).Turn to reach a specific provider directly, or use Chat for the full conversation loop.
@@ -105,6 +131,8 @@ var InitChat = define.Task{ // MARKER: InitChat
 
 // InitChatIn are the input arguments of InitChat.
 type InitChatIn struct { // MARKER: InitChat
+	Provider string       `json:"provider,omitzero" jsonschema_description:"provider is the LLM provider microservice hostname; empty or any auto-selects a configured provider"`
+	Model    string       `json:"model,omitzero" jsonschema_description:"model is a tier alias (fast, default, smart), a provider family alias, or a concrete model name; empty means default"`
 	Items    []Item       `json:"items,omitzero" jsonschema_description:"items is the initial conversation history sent to the LLM"`
 	ToolURLs []string     `json:"toolURLs,omitzero" jsonschema_description:"toolURLs is the list of Microbus endpoint URLs exposed to the LLM"`
 	Options  *ChatOptions `json:"options,omitzero" jsonschema_description:"options configures tool-call rounds, max tokens, temperature (nil = defaults)"`

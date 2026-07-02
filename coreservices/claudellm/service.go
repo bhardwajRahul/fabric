@@ -83,6 +83,7 @@ type Service struct {
 	// HINT: Add member variables here
 	rateMu       sync.Mutex
 	blockedUntil map[string]time.Time // model -> when its rate-limit window clears; preempts calls until then
+	modelAliases map[string]string    // tier/family alias -> concrete model; nil falls back to claudeDefaultAliases. Phase 2 repopulates it from the models-list API.
 }
 
 // OnStartup is called when the microservice is started up.
@@ -117,12 +118,55 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 	svc.blockedUntil[model] = time.Now().Add(d)
 }
 
+// claudeDefaultAliases is the shipped alias table (capability tiers and Claude family names -> concrete models). The
+// Anthropic API has no evergreen pointer - dateless IDs like claude-opus-4-8 are pinned snapshots, not floating
+// aliases (the opus/sonnet aliases that auto-migrate are a Claude Code CLI convenience, not API model IDs) - so these
+// are pinned to the current release and refreshed by the Phase 2 models-list lookup when svc.modelAliases is populated.
+var claudeDefaultAliases = map[string]string{
+	llmapi.ModelFast:    "claude-haiku-4-5",
+	llmapi.ModelDefault: "claude-sonnet-5",
+	llmapi.ModelSmart:   "claude-opus-4-8",
+	"haiku":             "claude-haiku-4-5",
+	"sonnet":            "claude-sonnet-5",
+	"opus":              "claude-opus-4-8",
+	"fable":             "claude-fable-5",
+}
+
+// resolveModel maps a tier/family alias to a concrete Claude model via svc.modelAliases (falling back to the shipped
+// defaults while that member is nil), passes through any claude- prefixed name so a newly released model works before
+// it is listed, and returns "" for anything it does not recognize.
+func (svc *Service) resolveModel(model string) string {
+	aliases := svc.modelAliases
+	if aliases == nil {
+		aliases = claudeDefaultAliases
+	}
+	if concrete, ok := aliases[model]; ok {
+		return concrete
+	}
+	if strings.HasPrefix(model, "claude-") {
+		return model
+	}
+	return ""
+}
+
+/*
+OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. This provider answers ok=true when it holds an API key and its catalog recognizes the model.
+*/
+func (svc *Service) OnResolveProvider(ctx context.Context, model string) (ok bool, err error) { // MARKER: OnResolveProvider
+	return svc.APIKey() != "" && svc.resolveModel(model) != "", nil
+}
+
 /*
 Turn executes a single LLM turn using the Claude provider.
 */
 func (svc *Service) Turn(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (outItems []llmapi.Item, stopReason string, usage llmapi.Usage, err error) { // MARKER: Turn
 	if model == "" {
 		return nil, "", llmapi.Usage{}, errors.New("model is required", http.StatusBadRequest)
+	}
+	// Resolve a tier/family alias to a concrete model; an unrecognized string passes through unchanged so an
+	// explicit-provider call to a brand-new model still reaches the API.
+	if resolved := svc.resolveModel(model); resolved != "" {
+		model = resolved
 	}
 	// Preempt while this model's account is in a known rate-limit window, without calling the provider.
 	if wait := svc.rateLimitWait(model); wait > 0 {

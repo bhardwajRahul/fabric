@@ -30,6 +30,7 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/sub"
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -151,6 +152,50 @@ func NewSubgraph(flow *workflow.Flow) Subgraph {
 	return Subgraph{flow: flow}
 }
 
+// MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
+type MulticastTrigger struct {
+	svc  service.Publisher
+	host string
+	opts []pub.Option
+}
+
+// NewMulticastTrigger creates a new multicast trigger of events of the microservice.
+func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
+	return MulticastTrigger{svc: caller, host: Hostname}
+}
+
+// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
+func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
+}
+
+// WithOptions returns a copy of the trigger with options to be applied to requests.
+func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
+	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
+}
+
+// Hook assists in the subscription to the events of the microservice.
+type Hook struct {
+	svc  service.Subscriber
+	host string
+	opts []sub.Option
+}
+
+// NewHook creates a new hook to the events of the microservice.
+func NewHook(listener service.Subscriber) Hook {
+	return Hook{svc: listener, host: Hostname}
+}
+
+// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
+func (c Hook) ForHost(host string) Hook {
+	return Hook{svc: c.svc, host: host, opts: c.opts}
+}
+
+// WithOptions returns a copy of the hook with options to be applied to subscriptions.
+func (c Hook) WithOptions(opts ...sub.Option) Hook {
+	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
+}
+
 // marshalRequest supports functional endpoints.
 func marshalRequest(ctx context.Context, svc service.Publisher, opts []pub.Option, host string, method string, route string, in any, out any) (err error) {
 	if method == "ANY" {
@@ -214,6 +259,23 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 			}
 		}
 	}
+}
+
+// marshalFunction handles marshaling for functional endpoints.
+func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
+	err := httpx.ReadInputPayload(r, route, in)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = execute(in, out)
+	if err != nil {
+		return err // No trace
+	}
+	err = httpx.WriteOutputPayload(w, out)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // marshalTask supports task execution via the Executor.
@@ -290,24 +352,24 @@ func marshalSubgraph(flow *workflow.Flow, url string, in any, out any) (yield bo
 	return flow.Subgraph(url, in, out)
 }
 
-// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
-func (_c Client) Chat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, err error) { // MARKER: Chat
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. Provider is a provider microservice hostname (e.g. claude.llm.core); pass it empty or "any" to auto-select a configured provider. Model is a capability-tier alias (fast, default, smart), a provider family alias (e.g. opus), or a concrete model name; empty means default. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+func (_c Client) Chat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (itemsOut []Item, usage Usage, resolvedProvider string, err error) { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
 	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Chat.Method, Chat.Route, &_in, &_out)
-	return _out.ItemsOut, _out.Usage, err // No trace
+	return _out.ItemsOut, _out.Usage, _out.ResolvedProvider, err // No trace
 }
 
 // ChatResponse packs the response of Chat.
 type ChatResponse multicastResponse // MARKER: Chat
 
 // Get unpacks the return arguments of Chat.
-func (_res *ChatResponse) Get() (itemsOut []Item, usage Usage, err error) { // MARKER: Chat
+func (_res *ChatResponse) Get() (itemsOut []Item, usage Usage, resolvedProvider string, err error) { // MARKER: Chat
 	_d := _res.data.(*ChatOut)
-	return _d.ItemsOut, _d.Usage, _res.err
+	return _d.ItemsOut, _d.Usage, _d.ResolvedProvider, _res.err
 }
 
-// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. The provider hostname selects the provider microservice (e.g. claude.llm.core) and the model is provider-specific. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
+// Chat sends a conversation to an LLM with optional tools, looping through tool calls until the LLM returns a final answer. Provider is a provider microservice hostname (e.g. claude.llm.core); pass it empty or "any" to auto-select a configured provider. Model is a capability-tier alias (fast, default, smart), a provider family alias (e.g. opus), or a concrete model name; empty means default. Each toolURL is the canonical URL of a Microbus Function, Web, or Workflow endpoint exposed to the LLM; Chat fetches each host's OpenAPI document and resolves the URL to a callable tool. On error it still returns the items accumulated before the failure, so a caller running its own retry can resume from them (e.g. wait llmapi.RetryAfter(err) and re-call with the returned items) instead of restarting the conversation.
 func (_c MulticastClient) Chat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) iter.Seq[*ChatResponse] { // MARKER: Chat
 	_in := ChatIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}
 	_out := ChatOut{}
@@ -357,8 +419,8 @@ func (_c MulticastClient) Turn(ctx context.Context, model string, items []Item, 
 }
 
 // InitChat resolves caller-supplied tool URLs into LLM tool schemas via each host's OpenAPI document and stores them, along with chat options, in flow state for use by the rest of the chat loop.
-func (_c Executor) InitChat(ctx context.Context, items []Item, toolURLs []string, options *ChatOptions) (err error) { // MARKER: InitChat
-	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{Items: items, ToolURLs: toolURLs, Options: options}, nil, _c.inFlow, _c.outFlow)
+func (_c Executor) InitChat(ctx context.Context, provider string, model string, items []Item, toolURLs []string, options *ChatOptions) (err error) { // MARKER: InitChat
+	err = marshalTask(ctx, _c.svc, _c.opts, _c.host, InitChat.Method, InitChat.Route, InitChatIn{Provider: provider, Model: model, Items: items, ToolURLs: toolURLs, Options: options}, nil, _c.inFlow, _c.outFlow)
 	return err // No trace
 }
 
@@ -406,4 +468,52 @@ func (_sg Subgraph) ChatLoop(ctx context.Context, provider string, model string,
 		return itemsOut, usage, yield, err
 	}
 	return out.ItemsOut, out.Usage, false, nil
+}
+
+// OnResolveProviderResponse packs the response of OnResolveProvider.
+type OnResolveProviderResponse multicastResponse // MARKER: OnResolveProvider
+
+// Get unpacks the return arguments of OnResolveProvider.
+func (_res *OnResolveProviderResponse) Get() (ok bool, err error) { // MARKER: OnResolveProvider
+	_d := _res.data.(*OnResolveProviderOut)
+	return _d.OK, _res.err
+}
+
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. Each provider microservice sinks it and answers ok=true when it is configured (holds an API key) and its catalog recognizes the model. llm.core reads the responder's hostname from the response frame and routes the turn there; the simulated chatbox provider does not subscribe, so it never participates in resolution.
+func (_c MulticastTrigger) OnResolveProvider(ctx context.Context, model string) iter.Seq[*OnResolveProviderResponse] { // MARKER: OnResolveProvider
+	_in := OnResolveProviderIn{Model: model}
+	_out := OnResolveProviderOut{}
+	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnResolveProvider.Method, OnResolveProvider.Route, &_in, &_out)
+	return func(yield func(*OnResolveProviderResponse) bool) {
+		for _r := range _inner {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*OnResolveProviderResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+// OnResolveProvider is fired by llm.core to resolve which provider serves a given model alias or name. Each provider microservice sinks it and answers ok=true when it is configured (holds an API key) and its catalog recognizes the model. llm.core reads the responder's hostname from the response frame and routes the turn there; the simulated chatbox provider does not subscribe, so it never participates in resolution.
+func (c Hook) OnResolveProvider(handler func(ctx context.Context, model string) (ok bool, err error)) (unsub func() error, err error) { // MARKER: OnResolveProvider
+	doOnResolveProvider := func(w http.ResponseWriter, r *http.Request) error {
+		var in OnResolveProviderIn
+		var out OnResolveProviderOut
+		err = marshalFunction(w, r, OnResolveProvider.Route, &in, &out, func(_ any, _ any) error {
+			out.OK, err = handler(r.Context(), in.Model)
+			return err
+		})
+		return err // No trace
+	}
+	const name = "OnResolveProvider"
+	path := httpx.JoinHostAndPath(c.host, OnResolveProvider.Route)
+	subOpts := append([]sub.Option{
+		sub.At(OnResolveProvider.Method, path),
+		sub.InboundEvent(OnResolveProviderIn{}, OnResolveProviderOut{}),
+	}, c.opts...)
+	if err := c.svc.Subscribe(name, doOnResolveProvider, subOpts...); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return func() error { return c.svc.Unsubscribe(name) }, nil
 }

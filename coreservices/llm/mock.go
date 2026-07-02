@@ -35,9 +35,9 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockChat            func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error)                                               // MARKER: Chat
+	mockChat            func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error)                      // MARKER: Chat
 	mockTurn            func(ctx context.Context, model string, items []llmapi.Item, tools []llmapi.Tool, options *llmapi.TurnOptions) (itemsOut []llmapi.Item, stopReason string, usage llmapi.Usage, err error)                                           // MARKER: Turn
-	mockInitChat        func(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)                                                                                                     // MARKER: InitChat
+	mockInitChat        func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)                                                                      // MARKER: InitChat
 	mockCallLLM         func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolResults []llmapi.ToolResult) (itemsOut []llmapi.Item, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, err error) // MARKER: CallLLM
 	mockProcessResponse func(ctx context.Context, flow *workflow.Flow, pendingToolCalls []llmapi.ToolCall, turnUsage llmapi.Usage, toolRounds int) (toolsRequested bool, toolRoundsOut int, usageOut llmapi.Usage, err error)                               // MARKER: ProcessResponse
 	mockExecuteTool     func(ctx context.Context, flow *workflow.Flow, currentTool llmapi.ToolCall) (toolResults []llmapi.ToolResult, err error)                                                                                                            // MARKER: ExecuteTool
@@ -67,17 +67,17 @@ func (svc *Mock) OnShutdown(ctx context.Context) (err error) {
 }
 
 // MockChat sets up a mock handler for Chat.
-func (svc *Mock) MockChat(handler func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error)) *Mock { // MARKER: Chat
+func (svc *Mock) MockChat(handler func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error)) *Mock { // MARKER: Chat
 	svc.mockChat = handler
 	return svc
 }
 
 // Chat executes the mock handler.
-func (svc *Mock) Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, err error) { // MARKER: Chat
+func (svc *Mock) Chat(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error) { // MARKER: Chat
 	if svc.mockChat != nil {
-		itemsOut, usage, err = svc.mockChat(ctx, provider, model, items, toolURLs, options)
+		itemsOut, usage, resolvedProvider, err = svc.mockChat(ctx, provider, model, items, toolURLs, options)
 	}
-	return itemsOut, usage, errors.Trace(err)
+	return itemsOut, usage, resolvedProvider, errors.Trace(err)
 }
 
 // MockTurn sets up a mock handler for Turn.
@@ -95,15 +95,15 @@ func (svc *Mock) Turn(ctx context.Context, model string, items []llmapi.Item, to
 }
 
 // MockInitChat sets up a mock handler for InitChat.
-func (svc *Mock) MockInitChat(handler func(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)) *Mock { // MARKER: InitChat
+func (svc *Mock) MockInitChat(handler func(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error)) *Mock { // MARKER: InitChat
 	svc.mockInitChat = handler
 	return svc
 }
 
 // InitChat executes the mock handler.
-func (svc *Mock) InitChat(ctx context.Context, flow *workflow.Flow, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) { // MARKER: InitChat
+func (svc *Mock) InitChat(ctx context.Context, flow *workflow.Flow, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (err error) { // MARKER: InitChat
 	if svc.mockInitChat != nil {
-		err = svc.mockInitChat(ctx, flow, items, toolURLs, options)
+		err = svc.mockInitChat(ctx, flow, provider, model, items, toolURLs, options)
 	}
 	return errors.Trace(err)
 }
