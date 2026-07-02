@@ -146,16 +146,15 @@ func (svc *Service) blockModel(model string, d time.Duration) {
 }
 
 // geminiDefaultAliases is the shipped alias table (capability tiers and Gemini family names -> concrete models).
-// Gemini exposes one floating pointer, gemini-flash-latest, which the flash/default tier uses; the other tiers are
-// pinned (there is no gemini-pro-latest or gemini-flash-lite-latest, and Pro is currently preview-only). Phase 2's
-// models-list lookup refreshes the pinned entries when svc.modelAliases is populated.
+// Gemini exposes a floating "-latest" pointer for every family, so all tiers self-update to the current model with
+// no code change. Phase 2's models-list lookup repopulates svc.modelAliases if these ever need overriding.
 var geminiDefaultAliases = map[string]string{
-	llmapi.ModelFast:    "gemini-3.1-flash-lite",
+	llmapi.ModelFast:    "gemini-flash-lite-latest",
 	llmapi.ModelDefault: "gemini-flash-latest",
-	llmapi.ModelSmart:   "gemini-3.1-pro-preview",
+	llmapi.ModelSmart:   "gemini-pro-latest",
 	"flash":             "gemini-flash-latest",
-	"pro":               "gemini-3.1-pro-preview",
-	"flash-lite":        "gemini-3.1-flash-lite",
+	"pro":               "gemini-pro-latest",
+	"flash-lite":        "gemini-flash-lite-latest",
 }
 
 // resolveModel maps a tier/family alias to a concrete Gemini model via svc.modelAliases (falling back to the shipped

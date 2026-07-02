@@ -22,16 +22,16 @@ func TestResolveModel(t *testing.T) {
 	t.Parallel()
 	svc := &Service{} // nil modelAliases falls back to geminiDefaultAliases
 	cases := map[string]string{
-		"fast":            "gemini-3.1-flash-lite",  // tier alias
-		"default":         "gemini-flash-latest",    // tier alias (floating pointer)
-		"smart":           "gemini-3.1-pro-preview", // tier alias
-		"flash":           "gemini-flash-latest",    // family alias (floating pointer)
-		"pro":             "gemini-3.1-pro-preview", // family alias
-		"flash-lite":      "gemini-3.1-flash-lite",  // family alias
-		"gemini-2.5-pro":  "gemini-2.5-pro",         // known concrete via prefix
-		"gemini-future-9": "gemini-future-9",        // unlisted concrete still passes through by prefix
-		"gpt-5":           "",                       // foreign vendor
-		"":                "",                       // empty
+		"fast":            "gemini-flash-lite-latest", // tier alias (floating pointer)
+		"default":         "gemini-flash-latest",      // tier alias (floating pointer)
+		"smart":           "gemini-pro-latest",        // tier alias (floating pointer)
+		"flash":           "gemini-flash-latest",      // family alias (floating pointer)
+		"pro":             "gemini-pro-latest",        // family alias (floating pointer)
+		"flash-lite":      "gemini-flash-lite-latest", // family alias (floating pointer)
+		"gemini-2.5-pro":  "gemini-2.5-pro",           // known concrete via prefix
+		"gemini-future-9": "gemini-future-9",          // unlisted concrete still passes through by prefix
+		"gpt-5":           "",                         // foreign vendor
+		"":                "",                         // empty
 	}
 	for in, want := range cases {
 		if got := svc.resolveModel(in); got != want {
