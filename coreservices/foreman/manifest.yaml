@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-06-27T22:42:05Z"
+  modifiedAt: "2026-07-03T16:00:25Z"
 
 configs:
   SQLDataSourceName:
@@ -29,10 +29,9 @@ configs:
     default: 5
   NumShards:
     signature: NumShards() (value int)
-    description: NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+    description: NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added but never removed; a change takes effect on restart.
     validation: int [1,]
     default: 1
-    callback: true
   SQLConnectionPool:
     signature: SQLConnectionPool() (value int)
     description: SQLConnectionPool is the number of database connections kept open per shard.

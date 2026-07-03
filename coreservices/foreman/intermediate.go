@@ -46,7 +46,6 @@ type ToDo interface {
 	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                   // MARKER: Continue
 	Signal(ctx context.Context, op string, payload []byte) (err error)                                                                    // MARKER: Signal
 	HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error)                                                                    // MARKER: HistoryMermaid
-	OnChangedNumShards(ctx context.Context) (err error)                                                                                   // MARKER: NumShards
 }
 
 // NewService creates a new instance of the microservice.
@@ -213,7 +212,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	)
 	svc.DefineConfig( // MARKER: NumShards
 		"NumShards",
-		cfg.Description(`NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.`),
+		cfg.Description(`NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added but never removed; a change takes effect on restart.`),
 		cfg.DefaultValue(`1`),
 		cfg.Validation(`int [1,]`),
 	)
@@ -234,12 +233,6 @@ func (svc *Intermediate) doOnObserveMetrics(ctx context.Context) (err error) {
 
 // doOnConfigChanged is called when the config of the microservice changes.
 func (svc *Intermediate) doOnConfigChanged(ctx context.Context, changed func(string) bool) (err error) {
-	if changed("NumShards") {
-		err = svc.OnChangedNumShards(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
 	return nil
 }
 
@@ -490,7 +483,7 @@ func (svc *Intermediate) SetDefaultPriority(value int) (err error) { // MARKER: 
 	return svc.SetConfig("DefaultPriority", strconv.Itoa(value))
 }
 
-// NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+// NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added but never removed; a change takes effect on restart.
 func (svc *Intermediate) NumShards() (value int) { // MARKER: NumShards
 	_val := svc.Config("NumShards")
 	_i, _ := strconv.ParseInt(_val, 10, 64)

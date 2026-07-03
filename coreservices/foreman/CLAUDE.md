@@ -163,7 +163,10 @@ for), which is why notification is a `Create`-time flag (`NotifyOnStop`) and not
 Because `mintActorToken` mints from *all* baggage keys, it deletes `baggageNotifyHost` first so the foreman
 bookkeeping never leaks into the minted token's claims.
 
-**`NumShards` changes apply live.** `OnChangedNumShards` calls `svc.engine.SetNumShards(n)`, which records
-the new target and, on a running engine, opens+migrates the added shards in place — new flows spread onto
-them immediately, existing flows stay put. Growth only: a decrease records the target but removes nothing
-(old shards drain; an actual reduction takes effect on restart).
+**`NumShards` is applied once at startup, not live.** `OnStartup` calls `eng.SetNumShards(svc.NumShards())`
+before `Startup`, and the config has **no** `Callback` — a runtime change to `NumShards` does not re-shard a
+running foreman. Sharding is a heavyweight topology change (it opens and migrates database instances and
+changes how new flows are placed), not the kind of knob to trip on a live config edit, so a change takes
+effect only on the next restart. Growth remains the only supported direction: the engine's `SetNumShards`
+opens+migrates added shards at startup and records-but-never-removes on a decrease (old shards drain). Making
+this hot would mean re-wiring `OnChangedNumShards` to `engine.SetNumShards`; it was deliberately removed.

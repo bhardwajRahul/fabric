@@ -49,12 +49,11 @@ var DefaultPriority = define.Config{ // MARKER: DefaultPriority
 	Validation: "int [1,]",
 }
 
-// NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
+// NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added but never removed; a change takes effect on restart.
 var NumShards = define.Config{ // MARKER: NumShards
 	Value:      int(0),
 	Default:    "1",
 	Validation: "int [1,]",
-	Callback:   true,
 }
 
 // SQLConnectionPool is the number of database connections kept open per shard.

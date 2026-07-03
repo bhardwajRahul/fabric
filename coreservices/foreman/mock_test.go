@@ -229,14 +229,4 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
-	t.Run("on_changed_num_shards", func(t *testing.T) { // MARKER: NumShards
-		assert := testarossa.For(t)
-
-		mock.MockOnChangedNumShards(func(ctx context.Context) (err error) {
-			return
-		})
-		err := mock.OnChangedNumShards(ctx)
-		assert.NoError(err)
-	})
-
 }

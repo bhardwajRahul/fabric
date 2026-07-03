@@ -82,18 +82,6 @@ func (svc *Service) OnShutdown(ctx context.Context) (err error) {
 	return errors.Trace(err)
 }
 
-/*
-OnChangedNumShards is called when the NumShards config property changes.
-
-NumShards is the number of database shards. Each shard is a separate database instance. Shards can be added dynamically but never removed.
-*/
-func (svc *Service) OnChangedNumShards(ctx context.Context) (err error) { // MARKER: NumShards
-	if svc.engine == nil {
-		return nil
-	}
-	return errors.Trace(svc.engine.SetNumShards(svc.NumShards()))
-}
-
 // maxTimeBudget is the ceiling on a per-flow FlowOptions.TimeBudget, rejected (not clamped) at every
 // inbound flow-creating call.
 const maxTimeBudget = 15 * time.Minute

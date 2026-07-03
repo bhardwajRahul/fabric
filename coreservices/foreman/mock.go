@@ -15,24 +15,23 @@ import (
 // Mock is a mockable version of the microservice, allowing functions, event sinks and web handlers to be mocked.
 type Mock struct {
 	*Intermediate
-	mockCreate             func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                // MARKER: Create
-	mockSnapshot           func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Snapshot
-	mockFingerprint        func(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                               // MARKER: Fingerprint
-	mockResume             func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                  // MARKER: Resume
-	mockCancel             func(ctx context.Context, flowKey string, reason string) (err error)                                                                   // MARKER: Cancel
-	mockFork               func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                           // MARKER: Fork
-	mockHistory            func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                     // MARKER: History
-	mockStep               func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
-	mockList               func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
-	mockDelete             func(ctx context.Context, flowKey string) (err error)                                                                                  // MARKER: Delete
-	mockPurge              func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                             // MARKER: Purge
-	mockShardInfo          func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                // MARKER: ShardInfo
-	mockAwait              func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Await
-	mockRun                func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
-	mockContinue           func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                        // MARKER: Continue
-	mockSignal             func(ctx context.Context, op string, payload []byte) (err error)                                                                       // MARKER: Signal
-	mockHistoryMermaid     func(w http.ResponseWriter, r *http.Request) (err error)                                                                               // MARKER: HistoryMermaid
-	mockOnChangedNumShards func(ctx context.Context) (err error)                                                                                                  // MARKER: NumShards
+	mockCreate         func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string, err error)                // MARKER: Create
+	mockSnapshot       func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Snapshot
+	mockFingerprint    func(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                               // MARKER: Fingerprint
+	mockResume         func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                  // MARKER: Resume
+	mockCancel         func(ctx context.Context, flowKey string, reason string) (err error)                                                                   // MARKER: Cancel
+	mockFork           func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                           // MARKER: Fork
+	mockHistory        func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                     // MARKER: History
+	mockStep           func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
+	mockList           func(ctx context.Context, query foremanapi.Query) (flows []foremanapi.FlowSummary, nextCursor string, err error)                       // MARKER: List
+	mockDelete         func(ctx context.Context, flowKey string) (err error)                                                                                  // MARKER: Delete
+	mockPurge          func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                             // MARKER: Purge
+	mockShardInfo      func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                // MARKER: ShardInfo
+	mockAwait          func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Await
+	mockRun            func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
+	mockContinue       func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                        // MARKER: Continue
+	mockSignal         func(ctx context.Context, op string, payload []byte) (err error)                                                                       // MARKER: Signal
+	mockHistoryMermaid func(w http.ResponseWriter, r *http.Request) (err error)                                                                               // MARKER: HistoryMermaid
 }
 
 // NewMock creates a new mockable version of the microservice.
@@ -290,20 +289,6 @@ func (svc *Mock) MockHistoryMermaid(handler func(w http.ResponseWriter, r *http.
 func (svc *Mock) HistoryMermaid(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: HistoryMermaid
 	if svc.mockHistoryMermaid != nil {
 		err = svc.mockHistoryMermaid(w, r)
-	}
-	return errors.Trace(err)
-}
-
-// MockOnChangedNumShards sets up a mock handler for OnChangedNumShards.
-func (svc *Mock) MockOnChangedNumShards(handler func(ctx context.Context) (err error)) *Mock { // MARKER: NumShards
-	svc.mockOnChangedNumShards = handler
-	return svc
-}
-
-// OnChangedNumShards executes the mock handler.
-func (svc *Mock) OnChangedNumShards(ctx context.Context) (err error) { // MARKER: NumShards
-	if svc.mockOnChangedNumShards != nil {
-		err = svc.mockOnChangedNumShards(ctx)
 	}
 	return errors.Trace(err)
 }
