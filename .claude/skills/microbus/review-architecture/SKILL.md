@@ -142,7 +142,7 @@ Evaluate deployment, configuration, and production readiness:
 - **Embedded resources** - are static files properly placed in `resources/` and accessed via `svc.ReadResFile` or `svc.ResFS`?
 - **Test coverage** - does each microservice have integration tests in `service_test.go`? Do tests use `application.New()` with `RunInTest(t)`? Are mocks provided for downstream dependencies that are unavailable in the test environment?
 - **No TODO leftovers** - grep for `TODO`, `FIXME`, `HACK`, and `XXX` comments across the codebase. Flag any that indicate unfinished work or known issues that should be resolved before production.
-- **Version tracking** - is the `Version` const in each microservice's `<name>api/definition.go` being incremented when changes are made?
+- **Version tracking** - is the `Version` const in each microservice's `myserviceapi/definition.go` being incremented when changes are made?
 
 #### Step 11: Documentation
 

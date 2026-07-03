@@ -30,7 +30,7 @@ Microservice review:
 
 #### Step 1: Read the Microservice
 
-List the directory to identify all files. Read `<name>api/definition.go` (the API spec), `manifest.yaml`, and the generated `intermediate.go`, `client.go`, and `mock.go`. Read all hand-written `.go` implementation files (`service.go` and any others) and all `*_test.go` files.
+List the directory to identify all files. Read `myserviceapi/definition.go` (the API spec), `manifest.yaml`, and the generated `intermediate.go`, `client.go`, and `mock.go`. Read all hand-written `.go` implementation files (`service.go` and any others) and all `*_test.go` files.
 
 Build a feature inventory from the `define.*` vars in `definition.go`. This is the ground truth for what the microservice exposes; each var's kind (`define.Function`, `define.Web`, `define.Config`, `define.Task`, `define.Workflow`, `define.OutboundEvent`, `define.InboundEvent`, `define.Metric`, `define.Ticker`) gives the feature type directly.
 
@@ -40,7 +40,7 @@ For each feature in the inventory (each `define.*` var in `definition.go`), veri
 
 - **Functions, webs, tasks, inbound events, tickers** - a handler method in `service.go`, and at least one test case in `service_test.go`.
 - **Workflows** - a graph builder method in `service.go`, and a test.
-- **Config callbacks / observable metrics** - an `OnChanged<Name>` / `OnObserve<Name>` method in `service.go` when the var sets `Callback: true` / `Observable: true`; `service_test.go` coverage is desirable but optional.
+- **Config callbacks / observable metrics** - an `OnChangedFeatureName` / `OnObserveFeatureName` method in `service.go` when the var sets `Callback: true` / `Observable: true`; `service_test.go` coverage is desirable but optional.
 - **Outbound events, non-callback configs, non-observable metrics** - no `service.go` handler is expected.
 
 Report any feature whose required handler or test is missing.

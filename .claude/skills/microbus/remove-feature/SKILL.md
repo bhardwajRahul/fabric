@@ -5,7 +5,7 @@ description: TRIGGER when user asks to remove, delete, or drop an endpoint, conf
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A feature lives by hand in `<name>api/definition.go` (its `define.*` var and In/Out structs), `service.go` (its handler), and `service_test.go` (its test). Remove it from those, then run `cmd/genservice`.
+**CRITICAL**: A feature lives by hand in `myserviceapi/definition.go` (its `define.*` var and In/Out structs), `service.go` (its handler), and `service_test.go` (its test). Remove it from those, then run `cmd/genservice`.
 
 ## Workflow
 
@@ -25,7 +25,7 @@ Search for `MARKER: FeatureName` within the microservice's directory to locate t
 
 #### Step 1: Remove the Declaration from `definition.go`
 
-Delete the feature's `define.*` var (the whole `var FeatureName = define.X{ ... }` block) and its In/Out struct types from `<name>api/definition.go`. These all carry `// MARKER: FeatureName`.
+Delete the feature's `define.*` var (the whole `var FeatureName = define.X{ ... }` block) and its In/Out struct types from `myserviceapi/definition.go`. These all carry `// MARKER: FeatureName`.
 
 #### Step 2: Remove the Handler from `service.go`
 
@@ -33,7 +33,7 @@ Delete the feature's handler in `service.go` (carrying `// MARKER: FeatureName`)
 
 - A function, web, task, inbound event, or ticker has a handler method.
 - A workflow has a graph builder method.
-- A callback config has an `OnChanged<Name>` method; an observable metric has an `OnObserve<Name>` method.
+- A callback config has an `OnChangedFeatureName` method; an observable metric has an `OnObserveFeatureName` method.
 - An outbound event, a non-callback config, and a non-observable metric have no handler in `service.go`; also remove any call sites that trigger the event or record the metric.
 
 #### Step 3: Remove the Test from `service_test.go`
@@ -42,7 +42,7 @@ Delete the feature's test function (e.g. `TestMyService_FeatureName`) from `serv
 
 #### Step 4: Remove Unused Custom Types
 
-If the removed feature used non-primitive custom types defined in the `<name>api` directory, and those types are no longer used elsewhere by the microservice, remove their definitions.
+If the removed feature used non-primitive custom types defined in the `myserviceapi` directory, and those types are no longer used elsewhere by the microservice, remove their definitions.
 
 #### Step 5: Generate the Boilerplate
 

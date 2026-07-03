@@ -5,9 +5,9 @@ description: TRIGGER when user asks to add a recurring job, periodic task, sched
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A ticker is declared as a `define.Ticker` var in `<name>api/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A ticker is declared as a `define.Ticker` var in `myserviceapi/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Ticker` var.
+**CRITICAL**: Keep the `// MARKER: MyTicker` comment on the `define.Ticker` var.
 
 ## Workflow
 

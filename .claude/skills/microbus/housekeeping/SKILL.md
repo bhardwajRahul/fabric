@@ -22,11 +22,11 @@ Post-change housekeeping:
 
 #### Step 1: Bump the Version
 
-Increment the `Version` const in `<name>api/definition.go`. The generated `intermediate.go` references it, so the bump takes effect when the boilerplate is regenerated in the next step.
+Increment the `Version` const in `myserviceapi/definition.go`. The generated `intermediate.go` references it, so the bump takes effect when the boilerplate is regenerated in the next step.
 
 #### Step 2: Regenerate the Boilerplate
 
-Run `go run github.com/microbus-io/fabric/cmd/genservice .` from the microservice's directory. From `<name>api/definition.go` it regenerates all five derived artifacts: `<name>api/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`.
+Run `go run github.com/microbus-io/fabric/cmd/genservice .` from the microservice's directory. From `myserviceapi/definition.go` it regenerates all five derived artifacts: `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`.
 
 The `manifest.yaml` `general` block (`name`, `hostname`, `description`, `package`) is derived from the `definition.go` consts and the module path; `modifiedAt` is bumped to the current UTC time only when other content actually changed. Review the diff.
 

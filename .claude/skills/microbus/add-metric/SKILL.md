@@ -5,9 +5,9 @@ description: TRIGGER when user asks to add or modify a metric, counter, gauge, o
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A metric is declared as a `define.Metric` var in `<name>api/definition.go`; its observe callback, if any, is implemented in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A metric is declared as a `define.Metric` var in `myserviceapi/definition.go`; its observe callback, if any, is implemented in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Metric` var.
+**CRITICAL**: Keep the `// MARKER: MyMetric` comment on the `define.Metric` var.
 
 ## Workflow
 
@@ -81,7 +81,7 @@ var MyMetric = define.Metric{ // MARKER: MyMetric
 
 #### Step 7: Record the Metric
 
-The generated recorder is `Increment<Name>(ctx, value, labels...)` for a counter and `Record<Name>(ctx, value, labels...)` for a gauge or histogram.
+The generated recorder is `IncrementMyMetric(ctx, value, labels...)` for a counter and `RecordMyMetric(ctx, value, labels...)` for a gauge or histogram.
 
 If the metric is **observable just in time**, the boilerplate generator (Step 8) creates a placeholder `OnObserveMyMetric` handler in `service.go`, tagged `// MARKER: MyMetric` and holding a `// TODO` body. Fill in that body to record the current value, for example:
 

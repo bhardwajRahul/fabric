@@ -5,9 +5,9 @@ description: TRIGGER when user asks to add or modify a configuration property or
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A config property is declared as a `define.Config` var in `<name>api/definition.go`; its callback, if any, is implemented in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A config property is declared as a `define.Config` var in `myserviceapi/definition.go`; its callback, if any, is implemented in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Config` var.
+**CRITICAL**: Keep the `// MARKER: MyConfig` comment on the `define.Config` var.
 
 ## Workflow
 
@@ -46,7 +46,7 @@ Determine the properties of the configuration property:
 - **Default value**: an optional default, always written as a string (it flows through the same validate-and-convert path as a configured value)
 - **Validation**: an optional validation rule (see below)
 - **Secret**: whether the value is a secret that should not be logged
-- **Callback**: whether `OnChanged<Name>` should fire when the value changes, for example to reopen a connection to an external resource
+- **Callback**: whether `OnChangedMyConfig` should fire when the value changes, for example to reopen a connection to an external resource
 
 Validation rules can be any of the following:
 - `str` followed by a regexp: `str ^[a-zA-Z0-9]+$`
@@ -79,7 +79,7 @@ var MyConfig = define.Config{ // MARKER: MyConfig
 - `Default` is the optional default as a string; omit when there is none
 - `Validation` is the optional rule from Step 3; omit when there is none
 - `Secret: true` marks a value that is never logged; omit when false
-- `Callback: true` makes `OnChanged<Name>` fire on change; omit when false
+- `Callback: true` makes `OnChangedMyConfig` fire on change; omit when false
 
 For a **structured (JSON) config**, the `Value` carrier is a composite literal of the type, and `Validation` is `json`:
 
@@ -100,7 +100,7 @@ var Retry = define.Config{ // MARKER: Retry
 
 - The `Value` carrier may be a struct (`RetryPolicy{}`), a slice (`[]int{}`), a map (`map[string]bool{}`), or a slice/map of structs (`[]RetryPolicy{}`)
 - Set `Validation: "json"` so the stored value is checked as valid JSON; when present, `Default` is the JSON text of the value (e.g. `[80,443]` for a `[]int`, `{"beta":true}` for a `map[string]bool`)
-- Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `<name>api/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema_description:"..."` tags if the type also feeds an endpoint's OpenAPI schema
+- Define any new struct type in the **api package**, either inline in `definition.go` or in a separate file beside it (e.g. `myserviceapi/retrypolicy.go`). It must live in the api package, not the service package, so the generated getter/setter (which live in the service package) and tests can name it. Give its fields camelCase `json` tags; add `jsonschema_description:"..."` tags if the type also feeds an endpoint's OpenAPI schema
 - The generated getter returns the typed value; a missing or malformed stored value yields the type's zero value
 
 #### Step 5: Generate the Boilerplate
@@ -129,13 +129,15 @@ myConfig := svc.MyConfig()
 
 Use `svc.SetMyConfig(value)` to set the value programmatically, for example in tests.
 
-For a structured config the getter returns the typed value (`retry := svc.Retry()` yields a `RetryPolicy`) and the setter takes it. When you need to name the type to construct a value, it is in the api package: `svc.SetRetry(<name>api.RetryPolicy{MaxRetries: 5})`.
+For a structured config the getter returns the typed value (`retry := svc.Retry()` yields a `RetryPolicy`) and the setter takes it. When you need to name the type to construct a value, it is in the api package: `svc.SetRetry(myserviceapi.RetryPolicy{MaxRetries: 5})`.
 
 #### Step 8: Test the Callback
 
 Skip this step if the config does not have a callback, or if instructed to be "quick" or to skip tests.
 
 When present, the boilerplate generator created a placeholder test function `TestMyService_OnChangedMyConfig` in `service_test.go`, tagged with a `// MARKER: MyConfig` comment and a `HINT` block. Add one or more test cases at the bottom of that function, following the pattern shown in its `HINT` comment. Do not remove the `HINT` comment.
+
+`SetMyConfig` runs the value through the same validation as a configured value and returns an error when it fails. If the config has a `Validation` rule, cover both paths: a valid value that sets cleanly (`assert.NoError`, then assert the getter returns it), and an out-of-range or malformed value that is rejected (`assert.Error`). The `HINT` block only shows the happy path.
 
 #### Step 9: Add to Config File
 

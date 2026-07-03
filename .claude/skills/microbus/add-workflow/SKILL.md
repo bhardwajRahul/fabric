@@ -5,9 +5,9 @@ description: TRIGGER when user asks to define a workflow graph, create an agent 
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A workflow is declared as a `define.Workflow` var in `<name>api/definition.go` and implemented as a graph builder in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A workflow is declared as a `define.Workflow` var in `myserviceapi/definition.go` and implemented as a graph builder in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Workflow` var and on its In/Out structs.
+**CRITICAL**: Keep the `// MARKER: MyWorkflow` comment on the `define.Workflow` var and on its In/Out structs.
 
 **IMPORTANT**: Read `.claude/rules/workflows.txt` for workflow and task conventions before proceeding.
 
@@ -94,6 +94,7 @@ type MyWorkflowOut struct { // MARKER: MyWorkflow
 
 - `Host` is always `Hostname`. `Method` is always `GET`. `Route` comes from Step 3
 - The In/Out structs are documentation (OpenAPI, the runner UI, the generated Executor signature), not runtime contracts; state flows through the graph unfiltered
+- When a workflow both reads and returns the same state field (a read-modify-write field, e.g. a `counter` it increments), give the Out struct field the `Out` suffix and strip that suffix from the JSON tag so it maps to the same state key as the input (e.g. `CounterOut int` with `json:"counter,omitzero"`), exactly as a task does in `add-task`. Without the suffix the input and output share a name and the generated `Executor`/`Subgraph` signature collides (`counter redeclared in this block`) in a file you must not hand-edit
 - If an In/Out field's type comes from another package (e.g. a `time.Time` field needs `"time"`), add that import to `definition.go`
 - Add `RequiredClaims: "..."` only when the workflow must be gated; omit when open
 

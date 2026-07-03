@@ -5,9 +5,9 @@ description: TRIGGER when user asks to fire, emit, or publish an event that othe
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: An outbound event is declared as a `define.OutboundEvent` var in `<name>api/definition.go`. Add the declaration and run `cmd/genservice`. An outbound event has no handler in `service.go` - this microservice fires it; other microservices sink it.
+**CRITICAL**: An outbound event is declared as a `define.OutboundEvent` var in `myserviceapi/definition.go`. Add the declaration and run `cmd/genservice`. An outbound event has no handler in `service.go` - this microservice fires it; other microservices sink it.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.OutboundEvent` var and on its In/Out structs.
+**CRITICAL**: Keep the `// MARKER: OnMyEvent` comment on the `define.OutboundEvent` var and on its In/Out structs.
 
 **IMPORTANT**: Outbound events are not exposed via OpenAPI. The connector's built-in `:888/openapi.json` handler filters them out automatically.
 

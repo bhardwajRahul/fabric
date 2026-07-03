@@ -5,9 +5,9 @@ description: TRIGGER when user asks to listen for, subscribe to, or handle an ev
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: An inbound event sink is declared as a `define.InboundEvent` var in `<name>api/definition.go` referencing the source microservice's `OutboundEvent`, and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: An inbound event sink is declared as a `define.InboundEvent` var in `myserviceapi/definition.go` referencing the source microservice's `OutboundEvent`, and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.InboundEvent` var.
+**CRITICAL**: Keep the `// MARKER: OnMyEvent` comment on the `define.InboundEvent` var.
 
 **CRITICAL**: Inbound event sinks are not exposed via OpenAPI. The connector's built-in `:888/openapi.json` handler enforces this filter automatically.
 

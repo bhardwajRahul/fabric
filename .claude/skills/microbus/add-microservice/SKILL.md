@@ -5,7 +5,7 @@ description: TRIGGER when user asks to create, scaffold, or initialize a new mic
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A microservice's hand-written source is `<name>api/definition.go` (the API spec) and `service.go` (the handler logic), plus the resource and test files. Run `cmd/genservice` to produce the rest.
+**CRITICAL**: A microservice's hand-written source is `myserviceapi/definition.go` (the API spec) and `service.go` (the handler logic), plus the resource and test files. Run `cmd/genservice` to produce the rest.
 
 ## Workflow
 

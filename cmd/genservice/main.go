@@ -201,7 +201,7 @@ func emitAllService(dir, apiDir, now string) ([]output, error) {
 		return nil, err
 	}
 	outs = append(outs, codeOuts...)
-	testOuts, err := emitServiceTests(dir, pkg, svc, apiPath)
+	testOuts, err := emitServiceTests(dir, pkg, svc, apiPath, resolveSource)
 	if err != nil {
 		return nil, err
 	}

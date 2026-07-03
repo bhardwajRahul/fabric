@@ -39,9 +39,10 @@ func TestSvc_Greet(t *testing.T) { // MARKER: Greet
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, err := client.Greet(ctx, in)
+			var name string
+			greeting, err := client.Greet(ctx, name)
 			assert.Expect(
-				out, expectedOut,
+				greeting, expectedGreeting,
 				err, nil,
 			)
 		})
@@ -76,9 +77,10 @@ func TestSvc_Adopt(t *testing.T) { // MARKER: Adopt
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, err := client.Adopt(ctx, in)
+			var pet svcapi.Pet
+			since, err := client.Adopt(ctx, pet)
 			assert.Expect(
-				out, expectedOut,
+				since, expectedSince,
 				err, nil,
 			)
 		})
@@ -113,11 +115,8 @@ func TestSvc_Ping(t *testing.T) { // MARKER: Ping
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, err := client.Ping(ctx, in)
-			assert.Expect(
-				out, expectedOut,
-				err, nil,
-			)
+			err := client.Ping(ctx)
+			assert.NoError(err)
 		})
 	*/
 }
@@ -186,7 +185,7 @@ func TestSvc_Status(t *testing.T) { // MARKER: Status
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			res, err := client.Status(ctx, "GET", "", nil)
+			res, err := client.Status(ctx, "")
 			if assert.NoError(err) {
 				assert.Expect(res.StatusCode, http.StatusOK)
 			}
@@ -222,7 +221,7 @@ func TestSvc_Upload(t *testing.T) { // MARKER: Upload
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			res, err := client.Upload(ctx, "GET", "", nil)
+			res, err := client.Upload(ctx, "", nil)
 			if assert.NoError(err) {
 				assert.Expect(res.StatusCode, http.StatusOK)
 			}
@@ -259,10 +258,12 @@ func TestSvc_ProcessStep(t *testing.T) { // MARKER: ProcessStep
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, err := exec.ProcessStep(ctx, in)
-			if assert.NoError(err) {
-				assert.Expect(out, expectedOut)
-			}
+			var item string
+			done, err := exec.ProcessStep(ctx, item)
+			assert.Expect(
+				done, expectedDone,
+				err, nil,
+			)
 		})
 	*/
 }
@@ -296,10 +297,12 @@ func TestSvc_ReviewStep(t *testing.T) { // MARKER: ReviewStep
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, err := exec.ReviewStep(ctx, in)
-			if assert.NoError(err) {
-				assert.Expect(out, expectedOut)
-			}
+			var count int
+			countOut, err := exec.ReviewStep(ctx, count)
+			assert.Expect(
+				countOut, expectedCountOut,
+				err, nil,
+			)
 		})
 	*/
 }
@@ -334,11 +337,14 @@ func TestSvc_MainFlow(t *testing.T) { // MARKER: MainFlow
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			out, status, err := exec.MainFlow(ctx, in)
+			var item string
+			var pet svcapi.Pet
+			done, since, status, err := exec.MainFlow(ctx, item, pet)
 			assert.Expect(
 				err, nil,
 				status, workflow.StatusCompleted,
-				out, expectedOut,
+				done, expectedDone,
+				since, expectedSince,
 			)
 		})
 	*/
@@ -372,11 +378,13 @@ func TestSvc_OnSrcEvent(t *testing.T) { // MARKER: OnSrcEvent
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			for e := range trigger.OnSrcEvent(ctx, in) {
-				out, err := e.Get()
+			var detail string
+			var origin url.URL
+			for e := range trigger.OnSrcEvent(ctx, detail, origin) {
+				ok, err := e.Get()
 				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
 					assert.Expect(
-						out, expectedOut,
+						ok, expectedOk,
 						err, nil,
 					)
 				}
@@ -417,19 +425,20 @@ func TestSvc_OnPeerSeen(t *testing.T) { // MARKER: OnPeerSeen
 			assert := testarossa.For(t)
 
 			unsub, err := hook.WithOptions(sub.Queue("UniqueQueueName")).OnPeerSeen(
-				func(ctx context.Context, in string) (out string, err error) {
+				func(ctx context.Context, peer netip.Addr) (ack bool, err error) {
 					// Implement event sink here...
-					return out, err
+					return ack, nil
 				},
 			)
 			if assert.NoError(err) {
 				defer unsub()
 			}
-			for e := range trigger.OnPeerSeen(ctx, in) {
+			var peer netip.Addr
+			for e := range trigger.OnPeerSeen(ctx, peer) {
 				if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
-					out, err := e.Get()
+					ack, err := e.Get()
 					assert.Expect(
-						out, expectedOut,
+						ack, expectedAck,
 						err, nil,
 					)
 				}
@@ -488,7 +497,8 @@ func TestSvc_OnChangedMaxItems(t *testing.T) { // MARKER: MaxItems
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			err := svc.SetMaxItems(newValue)
+			var value int
+			err := svc.SetMaxItems(value)
 			assert.NoError(err)
 		})
 	*/

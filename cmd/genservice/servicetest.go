@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // serviceTestModel is handed to service_test.txt: the ordered scaffolds to render as test functions.
@@ -43,6 +44,7 @@ type scaffoldView struct {
 	APIPkg   string // this service's api package alias, e.g. myserviceapi
 	SrcPkg   string // inbound only: the source event's api package alias
 	Handler  string // the method the HINT block invokes, e.g. MyFunction, SetMyConfig, OnObserveMyMetric
+	HintBody string // the fully-rendered t.Run pattern for the HINT comment, tailored to the feature's signature
 
 	imports []string
 }
@@ -52,8 +54,8 @@ type scaffoldView struct {
 // a feature is skipped once a function of its test's name (Test<Name>_<Suffix>) exists, so hand-filled
 // tests and re-runs are left untouched. It returns a single output for service_test.go when scaffolds were
 // added, or nil when every feature is already covered (so -check does not flag an up-to-date directory).
-func emitServiceTests(dir, pkg string, svc *service, apiPath string) ([]output, error) {
-	views, err := testScaffoldViews(svc, apiPath)
+func emitServiceTests(dir, pkg string, svc *service, apiPath string, resolveSource func(string) (*service, error)) ([]output, error) {
+	views, err := testScaffoldViews(svc, apiPath, resolveSource)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +104,7 @@ func emitServiceTests(dir, pkg string, svc *service, apiPath string) ([]output, 
 // testScaffoldViews projects the service's features into the scaffolds to emit, in source order. Config
 // and metric features are included only when they carry a hand-written callback (Callback / Observable),
 // matching the kinds that have a *Service method to test.
-func testScaffoldViews(svc *service, apiPath string) ([]scaffoldView, error) {
+func testScaffoldViews(svc *service, apiPath string, resolveSource func(string) (*service, error)) ([]scaffoldView, error) {
 	var views []scaffoldView
 	for _, f := range svc.features {
 		base := []string{impTesting, impApplication}
@@ -111,15 +113,22 @@ func testScaffoldViews(svc *service, apiPath string) ([]scaffoldView, error) {
 		case "Function":
 			v.Kind, v.Handler, v.FuncName = "function", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
+			v.HintBody = wrapRun(callInner("client."+f.name, mv))
 		case "Web":
 			v.Kind, v.Handler, v.FuncName = "web", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			v.HintBody = wrapRun(webInner(f.name, attrString(f.attrs, "Method")))
 		case "Task":
 			v.Kind, v.Handler, v.FuncName = "task", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
+			v.HintBody = wrapRun(callInner("exec."+f.name, mv))
 		case "Workflow":
 			v.Kind, v.Handler, v.FuncName = "workflow", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath, impForeman, impForemanAPI)
+			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
+			v.HintBody = wrapRun(workflowInner("exec."+f.name, mv))
 		case "InboundEvent":
 			srcPath, ok := svc.imports[f.srcPkg]
 			if !ok {
@@ -127,30 +136,226 @@ func testScaffoldViews(svc *service, apiPath string) ([]scaffoldView, error) {
 			}
 			v.Kind, v.Handler, v.SrcPkg, v.FuncName = "inbound", f.name, f.srcPkg, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, srcPath)
+			iv, _, _, err := inboundView(svc, f, resolveSource)
+			if err != nil {
+				return nil, err
+			}
+			mv := standardMock(f.name, f.name, f.srcPkg, false, iv.inFields, iv.outFields)
+			v.HintBody = wrapRun(inboundInner(f.name, mv))
 		case "OutboundEvent":
 			v.Kind, v.Handler, v.FuncName = "outbound", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
+			v.HintBody = wrapRun(outboundInner(f.name, mv))
 		case "Ticker":
 			v.Kind, v.Handler, v.FuncName = "ticker", f.name, testFuncName(svc, f.name)
 			v.imports = base
+			v.HintBody = wrapRun(noArgInner("svc." + f.name))
 		case "Config":
 			if !attrBool(f.attrs, "Callback") {
 				continue
 			}
 			v.Kind, v.Handler, v.FuncName = "config", "Set"+f.name, testFuncName(svc, "OnChanged"+f.name)
 			v.imports = base
+			valueType := qualifyTypes(carrierTypeName(f.attrs["Value"]), svc.apiPkg)
+			v.HintBody = wrapRun(configInner("Set"+f.name, valueType))
 		case "Metric":
 			if !attrBool(f.attrs, "Observable") {
 				continue
 			}
 			v.Kind, v.Handler, v.FuncName = "metric", "OnObserve"+f.name, testFuncName(svc, "OnObserve"+f.name)
 			v.imports = base
+			v.HintBody = wrapRun(noArgInner("svc.OnObserve" + f.name))
 		default:
 			continue
 		}
 		views = append(views, v)
 	}
 	return views, nil
+}
+
+// The HINT comment sits inside the test function's /* */ block at one tab of indentation. Its rendered
+// t.Run pattern therefore starts at two tabs; deeper statements step in from there. These builders emit
+// the exact tab runs since gofmt does not reindent block-comment interiors.
+const (
+	hintI2 = "\t\t"
+	hintI3 = "\t\t\t"
+	hintI4 = "\t\t\t\t"
+	hintI5 = "\t\t\t\t\t"
+	hintI6 = "\t\t\t\t\t\t"
+)
+
+// wrapRun wraps a rendered inner body in the standard t.Run + asserter scaffold.
+func wrapRun(inner string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%st.Run(\"test_case_name\", func(t *testing.T) {\n", hintI2)
+	fmt.Fprintf(&b, "%sassert := testarossa.For(t)\n\n", hintI3)
+	b.WriteString(inner)
+	fmt.Fprintf(&b, "%s})", hintI2)
+	return b.String()
+}
+
+// hintVarDecls emits a `var name type` line per input, so the HINT conveys each argument's name and type.
+func hintVarDecls(indent string, decls []paramDecl) string {
+	var b strings.Builder
+	for _, d := range decls {
+		fmt.Fprintf(&b, "%svar %s %s\n", indent, d.Name, d.Type)
+	}
+	return b.String()
+}
+
+// hintAssertPairs emits an `out, expectedOut,` assertion line per output name.
+func hintAssertPairs(indent, retNoErr string) string {
+	var b strings.Builder
+	for _, n := range splitNames(retNoErr) {
+		fmt.Fprintf(&b, "%s%s, expected%s,\n", indent, n, upperFirst(n))
+	}
+	return b.String()
+}
+
+// splitNames splits a comma-separated identifier list, returning nil for the empty string.
+func splitNames(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, ", ")
+}
+
+// upperFirst upper-cases the first rune, for deriving an expected<Output> placeholder name.
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// callInner renders a direct request/response call (function, task): declare the typed inputs, invoke the
+// caller, and assert each output against an expected placeholder.
+func callInner(caller string, mv *mockView) string {
+	var b strings.Builder
+	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	if mv.SingleErr {
+		fmt.Fprintf(&b, "%serr := %s(%s)\n", hintI3, caller, mv.Args)
+		fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI3)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "%s%s := %s(%s)\n", hintI3, mv.LValues, caller, mv.Args)
+	fmt.Fprintf(&b, "%sassert.Expect(\n", hintI3)
+	b.WriteString(hintAssertPairs(hintI4, mv.RetNoErr))
+	fmt.Fprintf(&b, "%serr, nil,\n", hintI4)
+	fmt.Fprintf(&b, "%s)\n", hintI3)
+	return b.String()
+}
+
+// workflowInner renders a workflow run: like callInner but the executor also returns a workflow.Status.
+func workflowInner(caller string, mv *mockView) string {
+	var b strings.Builder
+	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	lhs := "status, err"
+	if mv.RetNoErr != "" {
+		lhs = mv.RetNoErr + ", status, err"
+	}
+	fmt.Fprintf(&b, "%s%s := %s(%s)\n", hintI3, lhs, caller, mv.Args)
+	fmt.Fprintf(&b, "%sassert.Expect(\n", hintI3)
+	fmt.Fprintf(&b, "%serr, nil,\n", hintI4)
+	fmt.Fprintf(&b, "%sstatus, workflow.StatusCompleted,\n", hintI4)
+	b.WriteString(hintAssertPairs(hintI4, mv.RetNoErr))
+	fmt.Fprintf(&b, "%s)\n", hintI3)
+	return b.String()
+}
+
+// inboundInner renders firing the source event and asserting the sink received it.
+func inboundInner(handler string, mv *mockView) string {
+	var b strings.Builder
+	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	fmt.Fprintf(&b, "%sfor e := range trigger.%s(%s) {\n", hintI3, handler, mv.Args)
+	if mv.SingleErr {
+		fmt.Fprintf(&b, "%serr := e.Get()\n", hintI4)
+		fmt.Fprintf(&b, "%sif frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {\n", hintI4)
+		fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI5)
+		fmt.Fprintf(&b, "%s}\n", hintI4)
+	} else {
+		fmt.Fprintf(&b, "%s%s := e.Get()\n", hintI4, mv.LValues)
+		fmt.Fprintf(&b, "%sif frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {\n", hintI4)
+		fmt.Fprintf(&b, "%sassert.Expect(\n", hintI5)
+		b.WriteString(hintAssertPairs(hintI6, mv.RetNoErr))
+		fmt.Fprintf(&b, "%serr, nil,\n", hintI6)
+		fmt.Fprintf(&b, "%s)\n", hintI5)
+		fmt.Fprintf(&b, "%s}\n", hintI4)
+	}
+	fmt.Fprintf(&b, "%s}\n", hintI3)
+	return b.String()
+}
+
+// outboundInner renders hooking the event, firing it, and asserting the response, tailored to the event's
+// own handler signature.
+func outboundInner(handler string, mv *mockView) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%sunsub, err := hook.WithOptions(sub.Queue(\"UniqueQueueName\")).%s(\n", hintI3, handler)
+	fmt.Fprintf(&b, "%sfunc(%s) (%s) {\n", hintI4, mv.Sig, mv.Results)
+	fmt.Fprintf(&b, "%s// Implement event sink here...\n", hintI5)
+	if mv.SingleErr {
+		fmt.Fprintf(&b, "%sreturn nil\n", hintI5)
+	} else {
+		fmt.Fprintf(&b, "%sreturn %s, nil\n", hintI5, mv.RetNoErr)
+	}
+	fmt.Fprintf(&b, "%s},\n", hintI4)
+	fmt.Fprintf(&b, "%s)\n", hintI3)
+	fmt.Fprintf(&b, "%sif assert.NoError(err) {\n", hintI3)
+	fmt.Fprintf(&b, "%sdefer unsub()\n", hintI4)
+	fmt.Fprintf(&b, "%s}\n", hintI3)
+	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	fmt.Fprintf(&b, "%sfor e := range trigger.%s(%s) {\n", hintI3, handler, mv.Args)
+	fmt.Fprintf(&b, "%sif frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {\n", hintI4)
+	if mv.SingleErr {
+		fmt.Fprintf(&b, "%serr := e.Get()\n", hintI5)
+		fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI5)
+	} else {
+		fmt.Fprintf(&b, "%s%s := e.Get()\n", hintI5, mv.LValues)
+		fmt.Fprintf(&b, "%sassert.Expect(\n", hintI5)
+		b.WriteString(hintAssertPairs(hintI6, mv.RetNoErr))
+		fmt.Fprintf(&b, "%serr, nil,\n", hintI6)
+		fmt.Fprintf(&b, "%s)\n", hintI5)
+	}
+	fmt.Fprintf(&b, "%s}\n", hintI4)
+	fmt.Fprintf(&b, "%s}\n", hintI3)
+	return b.String()
+}
+
+// webInner renders a raw web call whose arity matches the endpoint's HTTP method.
+func webInner(handler, method string) string {
+	var call string
+	switch strings.ToUpper(method) {
+	case "POST", "PUT", "PATCH":
+		call = fmt.Sprintf("client.%s(ctx, \"\", nil)", handler)
+	case "ANY", "":
+		call = fmt.Sprintf("client.%s(ctx, \"GET\", \"\", nil)", handler)
+	default:
+		call = fmt.Sprintf("client.%s(ctx, \"\")", handler)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%sres, err := %s\n", hintI3, call)
+	fmt.Fprintf(&b, "%sif assert.NoError(err) {\n", hintI3)
+	fmt.Fprintf(&b, "%sassert.Expect(res.StatusCode, http.StatusOK)\n", hintI4)
+	fmt.Fprintf(&b, "%s}\n", hintI3)
+	return b.String()
+}
+
+// configInner renders setting the config to a value of its declared type.
+func configInner(handler, valueType string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%svar value %s\n", hintI3, valueType)
+	fmt.Fprintf(&b, "%serr := svc.%s(value)\n", hintI3, handler)
+	fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI3)
+	return b.String()
+}
+
+// noArgInner renders invoking a ctx-only handler (ticker, observable metric).
+func noArgInner(caller string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%serr := %s(ctx)\n", hintI3, caller)
+	fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI3)
+	return b.String()
 }
 
 // testFuncName builds the test function name from the decorative service Name const and a suffix, e.g.

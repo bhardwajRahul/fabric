@@ -23,15 +23,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			out, err := client.{{.Handler}}(ctx, in)
-			assert.Expect(
-				out, expectedOut,
-				err, nil,
-			)
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -60,14 +52,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			res, err := client.{{.Handler}}(ctx, "GET", "", nil)
-			if assert.NoError(err) {
-				assert.Expect(res.StatusCode, http.StatusOK)
-			}
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -97,14 +82,7 @@
 		HINT: Fill in test cases using the following pattern.
 		Use WithOutputFlow to also verify control signals (Goto, Retry, Interrupt, Sleep) if applicable.
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			out, err := exec.{{.Handler}}(ctx, in)
-			if assert.NoError(err) {
-				assert.Expect(out, expectedOut)
-			}
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -135,16 +113,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			out, status, err := exec.{{.Handler}}(ctx, in)
-			assert.Expect(
-				err, nil,
-				status, workflow.StatusCompleted,
-				out, expectedOut,
-			)
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -173,19 +142,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			for e := range trigger.{{.Handler}}(ctx, in) {
-				out, err := e.Get()
-				if frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {
-					assert.Expect(
-						out, expectedOut,
-						err, nil,
-					)
-				}
-			}
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -217,28 +174,7 @@
 		HINT: Fill in test cases using the following pattern.
 		Enter distinct alphanumeric queue names in sub.Queue when hooking multiple times to simulate multiple clients.
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			unsub, err := hook.WithOptions(sub.Queue("UniqueQueueName")).{{.Handler}}(
-				func(ctx context.Context, in string) (out string, err error) {
-					// Implement event sink here...
-					return out, err
-				},
-			)
-			if assert.NoError(err) {
-				defer unsub()
-			}
-			for e := range trigger.{{.Handler}}(ctx, in) {
-				if frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {
-					out, err := e.Get()
-					assert.Expect(
-						out, expectedOut,
-						err, nil,
-					)
-				}
-			}
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -261,12 +197,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			err := svc.{{.Handler}}(ctx)
-			assert.NoError(err)
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -289,12 +220,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			err := svc.{{.Handler}}(newValue)
-			assert.NoError(err)
-		})
+{{.HintBody}}
 	*/
 }
 
@@ -317,12 +243,7 @@
 	/*
 		HINT: Fill in test cases using the following pattern
 
-		t.Run("test_case_name", func(t *testing.T) {
-			assert := testarossa.For(t)
-
-			err := svc.{{.Handler}}(ctx)
-			assert.NoError(err)
-		})
+{{.HintBody}}
 	*/
 }
 

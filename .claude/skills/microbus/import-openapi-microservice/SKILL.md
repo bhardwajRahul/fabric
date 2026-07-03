@@ -28,10 +28,11 @@ Copy this checklist and track your progress:
 - [ ] Step 5: Add the shared request helpers (once)
 - [ ] Step 6: Select which endpoints to import
 - [ ] Step 7: Generate the complex types
-- [ ] Step 8: Scaffold the function endpoints
-- [ ] Step 9: Scaffold the web endpoints
-- [ ] Step 10: Wire the HTTP egress proxy into the app
-- [ ] Step 11: Housekeeping
+- [ ] Step 8: Declare the endpoints in definition.go
+- [ ] Step 9: Generate the boilerplate
+- [ ] Step 10: Implement the handler bodies
+- [ ] Step 11: Wire the HTTP egress proxy into the app
+- [ ] Step 12: Housekeeping
 ```
 
 The placeholders `myservice`, `MyService`, `myserviceapi` stand for the microservice being generated.
@@ -176,8 +177,8 @@ delegator. Large APIs have hundreds of endpoints; import only the curated subset
 - **Interactive** (default for a bare "import this API"): present the endpoints grouped by route with
   `method`, `name`, `summary` and ask the user to choose. Offer "all" for small APIs.
 
-Skip endpoints already scaffolded (their `// MARKER: Name` is in `myserviceapi/definition.go`); re-import is
-additive. Record the imported names under a `## Imported Endpoints` heading in the local `CLAUDE.md`.
+Skip endpoints already scaffolded (their `// MARKER` comment, keyed by the endpoint name, is in
+`myserviceapi/definition.go`); re-import is additive. Record the imported names under a `## Imported Endpoints` heading in the local `CLAUDE.md`.
 
 #### Step 7: Generate the Complex Types
 
@@ -189,46 +190,95 @@ camelCase `omitzero`, `jsonschema_description:"..."` from the schema's `descript
 For `oneOf`/`anyOf`/`allOf` or free-form objects with no `properties`, fall back to `json.RawMessage` and
 note the fallback in the type's godoc.
 
-#### Step 8: Scaffold the Function Endpoints
+#### Step 8: Declare the Endpoints in `definition.go`
 
-For each endpoint with `feature: function`, follow the `add-function` skill with:
+Declare every selected endpoint in `myserviceapi/definition.go` before generating, so a single genservice
+pass in Step 9 scaffolds all their handlers. Do NOT hand-write any `service.go` handler here: genservice
+projects each handler's signature and godoc from the declaration, and you fill only the body in Step 10.
 
-- **Method and route**: the specs `method` and `route` verbatim (already in Microbus `{arg}` syntax; keep
-  the default `:443` port).
-- **Description**: the endpoint godoc is the specs `summary`/`description` only. Per-argument descriptions
-  go on the In/Out struct fields as `jsonschema_description:"..."` tags (the spec param/property
-  `description`), not in `Input:`/`Output:` godoc sections.
-- **Signature**: one typed argument per `params` entry (path, query, header alike; spec name, first letter
-  lowercased). Use the param's `goType` when present; otherwise map its `schema` per `add-function`
-  conventions. Add `httpRequestBody` of the body type when `requestBody` is present; return
-  `httpResponseBody` of the response type plus `httpStatusCode int`. Examples:
-  - `RemoteFunction(ctx, id int64) (httpResponseBody *myserviceapi.Thing, httpStatusCode int, err error)`
-  - `RemoteFunction(ctx, httpRequestBody *myserviceapi.Thing) (httpResponseBody *myserviceapi.Thing, httpStatusCode int, err error)`
-  - `RemoteFunction(ctx, status string) (httpResponseBody []myserviceapi.Thing, httpStatusCode int, err error)`
-  - `RemoteFunction(ctx, id int64) (httpStatusCode int, err error)` (no response body)
+Every endpoint's `method` and `route` come from the specs verbatim (already in Microbus `{arg}` syntax). The
+endpoint godoc is the specs `summary`/`description` only.
 
-Declare the In/Out structs in `definition.go` per `add-function` (the client `Response` wrapper and the rest
-of the boilerplate are generated). The Go field names `HTTPRequestBody`, `HTTPResponseBody`, `HTTPStatusCode`
-are matched by reflection; renaming them silently disables the magic, and each takes a `json:"-"` tag (types
-are bare here because `definition.go` is in the `myserviceapi` package):
-
-```go
-type RemoteFunctionIn struct { // MARKER: RemoteFunction
-	HTTPRequestBody *Thing `json:"-"`
-}
-type RemoteFunctionOut struct { // MARKER: RemoteFunction
-	HTTPResponseBody *Thing `json:"-"`
-	HTTPStatusCode   int    `json:"-"`
-}
-```
+**A `{arg}` must span a whole route segment.** Microbus rejects a route where an argument shares its segment
+with literal text (e.g. `/{provider}.json`), failing at subscription time - not at `cmd/genservice` or
+`go vet`. When a remote route has this shape, adjust only the Microbus-facing route so each argument is a full
+segment, splitting the suffix off: `/specs/{provider}/{api}.json` -> `/specs/{provider}/{api}/api.json`. The
+Step 10 handler still builds the original remote URL via `svc.remoteURL(...)`, so delegation stays
+byte-transparent; only the route callers use to reach this microservice changes. This is the sole sanctioned
+exception to "never rename routes".
 
 **Security (decide per endpoint, do not skip).** This microservice injects a stored secret credential
 server-side, so it is exactly the confused-deputy case in `microbus.md` (Ports, Authentication and
-Authorization): default to closed. Per endpoint, gate it with `requiredClaims` and/or an internal port
-(`:444`); leave it open on `:443` without `requiredClaims` only when it is genuinely public.
+Authorization): default to closed. Per endpoint, gate it with `RequiredClaims` and/or an internal port
+(prefix the route with `:444`); leave it open on the default `:443` without `RequiredClaims` only when the
+endpoint is genuinely public. Both `RequiredClaims` and the port are fields of the declaration below, so
+decide them now.
 
-Fill the handler with a single `makeFunctionRequest` call. Build the URL with `svc.remoteURL(...)`, the
-route with path arguments substituted, and any query parameters:
+**Function endpoints** (`feature: function`): follow the `add-function` skill. Append the `define.Function`
+var and its In/Out structs. The In struct holds one field per `params` entry (path, query, header alike;
+spec name, first letter uppercased for the Go field, camelCase `json` tag) typed from the param's `goType`
+when present, else its `schema` mapped per `add-function` conventions; a path-arg field's `json` tag matches
+its `{arg}` segment. The Out struct returns `httpResponseBody` of the response type plus `httpStatusCode`.
+Put per-argument descriptions on the In/Out fields as `jsonschema_description:"..."` tags (from the spec
+param/property `description`). The magic Go field names `HTTPRequestBody`, `HTTPResponseBody`,
+`HTTPStatusCode` are matched by reflection; renaming them silently disables the magic, and each takes a
+`json:"-"` tag (types are bare because `definition.go` is in the `myserviceapi` package):
+
+```go
+// RemoteFunction does X.
+var RemoteFunction = define.Function{ // MARKER: RemoteFunction
+	Host: Hostname, Method: "GET", Route: "/things/{id}",
+	In: RemoteFunctionIn{}, Out: RemoteFunctionOut{},
+}
+
+type RemoteFunctionIn struct { // MARKER: RemoteFunction
+	ID     int64  `json:"id,omitzero" jsonschema_description:"ID is the thing identifier"`
+	Status string `json:"status,omitzero" jsonschema_description:"Status filters the result"`
+}
+
+type RemoteFunctionOut struct { // MARKER: RemoteFunction
+	HTTPResponseBody []Thing `json:"-"`
+	HTTPStatusCode   int     `json:"-"`
+}
+```
+
+For a body-bearing operation (`requestBody` present, e.g. a POST create), the In struct instead carries an
+`HTTPRequestBody` field of the body type (`HTTPRequestBody *Thing` with a `json:"-"` tag), alongside any path
+or query fields; the Step 10 handler passes it as the `in` argument to `makeFunctionRequest`.
+
+**Web endpoints** (`feature: web`): follow the `add-web` skill. Append the `define.Web` var (a raw web
+handler has no In/Out structs):
+
+```go
+// RemoteWeb does X.
+var RemoteWeb = define.Web{ // MARKER: RemoteWeb
+	Host: Hostname, Method: "POST", Route: "/things/{id}/upload",
+}
+```
+
+#### Step 9: Generate the Boilerplate
+
+From the microservice's directory, run the generator. It regenerates `myserviceapi/client.go`,
+`intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml`, and scaffolds a placeholder handler in
+`service.go` for every endpoint declared in Step 8 (its signature and godoc projected from `definition.go`,
+holding a `// TODO` body).
+
+```shell
+go run github.com/microbus-io/fabric/cmd/genservice .
+```
+
+Then verify the microservice compiles with `go vet ./...` from the project root.
+
+#### Step 10: Implement the Handler Bodies
+
+For each scaffolded handler in `service.go`, replace only its `// TODO` body with a single delegation call.
+Leave the generated signature and godoc as they are: they are the contract from `definition.go`, so if a
+signature is wrong, fix `definition.go` and regenerate rather than editing `service.go`.
+
+**Function handlers**: fill with a single `makeFunctionRequest` call. Build the URL with `svc.remoteURL(...)`,
+the route with path arguments substituted, and any query parameters. Pass `httpRequestBody` as the `in`
+argument for a body-bearing operation, or `nil` when there is none, and `nil` for `out` when there is no
+typed response:
 
 ```go
 func (svc *Service) RemoteFunction(ctx context.Context, id int64, status string) (httpResponseBody []myserviceapi.Thing, httpStatusCode int, err error) { // MARKER: RemoteFunction
@@ -245,13 +295,7 @@ func (svc *Service) RemoteFunction(ctx context.Context, id int64, status string)
 }
 ```
 
-For an endpoint with a request body, pass `httpRequestBody` as the `in` argument and `nil` when there is no
-typed response.
-
-#### Step 9: Scaffold the Web Endpoints
-
-For each endpoint with `feature: web`, follow the `add-web` skill with the same method/route/description
-rules. Fill the raw handler with a single `makeWebRequest` call:
+**Web handlers**: fill with a single `makeWebRequest` call:
 
 ```go
 func (svc *Service) RemoteWeb(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: RemoteWeb
@@ -260,13 +304,13 @@ func (svc *Service) RemoteWeb(w http.ResponseWriter, r *http.Request) (err error
 }
 ```
 
-#### Step 10: Wire the HTTP Egress Proxy Into the App
+#### Step 11: Wire the HTTP Egress Proxy Into the App
 
 Ensure the HTTP egress proxy is in `main/main.go` (add the import and `app.Add` entry if missing). This
 skill generates no endpoint tests, so there is no test app to wire: a delegator's behavioral tests would
 only exercise the egress mock and assert a tautology. The `add-microservice` scaffold's `service_test.go`
 stays as generated (import guards only).
 
-#### Step 11: Housekeeping
+#### Step 12: Housekeeping
 
 Follow the `housekeeping` skill.

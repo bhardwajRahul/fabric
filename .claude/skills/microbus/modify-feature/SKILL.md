@@ -5,9 +5,9 @@ description: TRIGGER when user asks to change the signature, route, method, argu
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A feature is declared in `<name>api/definition.go` (its `define.*` var, plus In/Out structs for endpoints) and implemented in `service.go` (its handler). Edit those, then run `cmd/genservice`.
+**CRITICAL**: A feature is declared in `myserviceapi/definition.go` (its `define.*` var, plus In/Out structs for endpoints) and implemented in `service.go` (its handler). Edit those, then run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comments when editing.
+**CRITICAL**: Keep the `// MARKER: MyFunction` comments when editing.
 
 ## Workflow
 
@@ -30,7 +30,7 @@ Read the local `CLAUDE.md` file in the microservice's directory. It contains mic
 
 #### Step 2: Identify the Feature
 
-Find the feature's `define.*` var in `<name>api/definition.go`. Its type determines which "add" skill governs its shape:
+Find the feature's `define.*` var in `myserviceapi/definition.go`. Its type determines which "add" skill governs its shape:
 
 | `define.*` kind | Feature type | Corresponding skill |
 |---|---|---|

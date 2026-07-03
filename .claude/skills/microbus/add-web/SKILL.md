@@ -5,9 +5,9 @@ description: TRIGGER when user asks to add or modify a web handler, HTML page, f
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A web endpoint is declared as a `define.Web` var in `<name>api/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A web endpoint is declared as a `define.Web` var in `myserviceapi/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Web` var.
+**CRITICAL**: Keep the `// MARKER: MyWeb` comment on the `define.Web` var.
 
 ## Workflow
 

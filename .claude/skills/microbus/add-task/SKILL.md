@@ -5,9 +5,9 @@ description: TRIGGER when user asks to add a workflow step, agent step, agentic 
 
 **CRITICAL**: Do NOT explore or analyze other microservices unless explicitly instructed to do so. The instructions in this skill are self-contained to this microservice.
 
-**CRITICAL**: A task is declared as a `define.Task` var in `<name>api/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
+**CRITICAL**: A task is declared as a `define.Task` var in `myserviceapi/definition.go` and implemented as a handler in `service.go`. Add the declaration and run `cmd/genservice`.
 
-**CRITICAL**: Keep the `// MARKER: Name` comment on the `define.Task` var and on its In/Out structs.
+**CRITICAL**: Keep the `// MARKER: MyTask` comment on the `define.Task` var and on its In/Out structs.
 
 **IMPORTANT**: Read `.claude/rules/workflows.txt` for workflow and task conventions before proceeding.
 

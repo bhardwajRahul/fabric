@@ -72,7 +72,8 @@ func TestTestScaffoldViews(t *testing.T) {
 			{name: "Hits", kind: "Metric", attrs: map[string]ast.Expr{}},
 		},
 	}
-	views, err := testScaffoldViews(svc, "example.com/svc/svcapi")
+	noSource := func(string) (*service, error) { return nil, nil }
+	views, err := testScaffoldViews(svc, "example.com/svc/svcapi", noSource)
 	assert.NoError(err)
 	assert.Equal(3, len(views))
 

@@ -158,7 +158,7 @@ manifests when starting work to build a map of the system. Outbound dependencies
 database usage, and HTTP egress targets are *not* here - those are derived from source by `cmd/gencreds` (ACL signing)
 and `cmd/gentopology` (topology diagram).
 
-**IMPORTANT**: `<name>api/definition.go` is the single source of truth. `manifest.yaml`, `*api/client.go`,
+**IMPORTANT**: `myserviceapi/definition.go` is the single source of truth. `manifest.yaml`, `*api/client.go`,
 `intermediate.go`, `mock.go`, and `mock_test.go` are generated from it by `cmd/genservice` (the `housekeeping`
 skill runs it). Hand edits to those files are overwritten on the next regeneration. Change `definition.go` and
 regenerate, never the reverse - so you never author manifest YAML, only read it.

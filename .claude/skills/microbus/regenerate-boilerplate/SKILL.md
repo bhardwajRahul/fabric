@@ -5,7 +5,7 @@ description: Use when a microservice's generated files are corrupted, outdated, 
 
 **CRITICAL**: Read and analyze this microservice before starting. Do NOT explore or analyze other microservices. The instructions in this skill are self-contained to this microservice.
 
-The generated boilerplate is a pure projection of `<name>api/definition.go`. Rebuilding it is a single deterministic command - there is nothing to reconstruct by hand. The hand-written source (`definition.go`, sibling type files, `service.go`, `service_test.go`, `resources/embed.go`) is the source of truth and is never overwritten.
+The generated boilerplate is a pure projection of `myserviceapi/definition.go`. Rebuilding it is a single deterministic command - there is nothing to reconstruct by hand. The hand-written source (`definition.go`, sibling type files, `service.go`, `service_test.go`, `resources/embed.go`) is the source of truth and is never overwritten.
 
 ## Workflow
 
@@ -22,11 +22,11 @@ Regenerating boilerplate:
 
 Read the local `CLAUDE.md` file in the microservice's directory. It contains microservice-specific instructions that should take precedence over global instructions.
 
-Confirm the hand-written source is intact: `<name>api/definition.go` (the spec), `service.go` (the handlers), and `resources/embed.go`. If `resources/embed.go` is missing, recreate it per the `add-microservice` skill. If `definition.go` itself is corrupted or missing, this skill cannot help - the boilerplate is derived from it, not the other way around.
+Confirm the hand-written source is intact: `myserviceapi/definition.go` (the spec), `service.go` (the handlers), and `resources/embed.go`. If `resources/embed.go` is missing, recreate it per the `add-microservice` skill. If `definition.go` itself is corrupted or missing, this skill cannot help - the boilerplate is derived from it, not the other way around.
 
 #### Step 2: Regenerate the Boilerplate
 
-From the microservice's directory, run the generator. It overwrites `<name>api/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from `definition.go`, regardless of their prior state.
+From the microservice's directory, run the generator. It overwrites `myserviceapi/client.go`, `intermediate.go`, `mock.go`, `mock_test.go`, and `manifest.yaml` from `definition.go`, regardless of their prior state.
 
 ```shell
 go run github.com/microbus-io/fabric/cmd/genservice .

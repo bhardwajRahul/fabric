@@ -2,7 +2,7 @@
 {{if eq .Kind "Workflow"}}	// TODO: Define the {{.Name}} workflow graph
 	graph = workflow.NewGraph("{{.Name}}")
 	return
-{{else}}	// TODO: Implement {{.Name}}
+{{else}}	// TODO: Implement {{.FuncName}}
 	return
 {{end}}}
 
