@@ -11,6 +11,7 @@
 
 # Secrets
 *.local.*
+!cmd/geninit/templates/config.local.yaml.txt
 nats.creds
 *_nats.creds
 *.pem

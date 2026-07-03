@@ -1,0 +1,5 @@
+all:
+  ExampleSecret: secret value
+
+myservice.hostname:
+  ExampleSecret: secret value
