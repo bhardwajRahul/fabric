@@ -52,8 +52,11 @@ When a new fabric version needs a mechanical migration, its versioned `upgrade-v
 frozen artifact, but `upgrade-microbus` runs it against the *target* version's `go.mod`, so any other tool it names
 may have been renamed or removed by a later version (this is exactly how the retired `genmanifest`/`genmock` calls
 in older skills came to fail). The `upgrade-microbus` orchestrator owns the single regeneration and verification
-pass, run once after every numbered skill has applied its source edits. Ship each version's mechanical transform as
-an append-only routine in [genupgrade](cmd/genupgrade), which keeps the full rationale.
+pass, run once after every numbered skill has applied its source edits. Not every transform belongs in genupgrade:
+pure renames stay as `sed`/`perl` in the skill, semantic rewrites that need judgment are grep-guided manual steps,
+and only a transform that must parse Go or synthesize declarations ships as an append-only routine in
+[genupgrade](cmd/genupgrade) (which keeps the full rationale). That "sed renames, genupgrade parses, humans judge"
+boundary is spelled out in [genupgrade's own notes](cmd/genupgrade/CLAUDE.md).
 
 ## Working on code
 

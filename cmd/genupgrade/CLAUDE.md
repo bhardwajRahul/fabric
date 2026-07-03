@@ -5,6 +5,31 @@ source-code change registers an upgrade routine here, and the matching `upgrade-
 `genupgrade -v <version> -path <microservice dir>` for the mechanical part while handling the judgment parts
 itself. genupgrade operates on one microservice directory at a time.
 
+## When a version needs a routine here (vs. pure-shell, vs. manual)
+
+A version's mechanical change lands in one of three places, chosen by how much *structure* the transform needs.
+Not everything belongs here - a genupgrade routine earns its place only when a textual find/replace cannot do
+the job safely.
+
+- **Pure textual find/replace -> `sed`/`perl` in the skill, no routine here.** A symbol, config key, import
+  path, or struct field renamed with no structural change (`Subflow` -> `Subgraph` at 1.42.0; a provider's
+  `CompletionURL` config -> `MessagesURL`; `Usage.ThinkingTokens` -> `ReasoningTokens`). A genupgrade routine
+  for a rename would just be `sed` reimplemented in Go - more code, identical result, no extra safety (it still
+  cannot be verified mid-chain). Keep it in the skill's pure-shell edits.
+- **Parse-and-synthesize -> a routine here.** The transform must read Go *structure* to produce its output:
+  parse an AST, read one file to rewrite another, lift declarations by source offset, or emit new declarations.
+  `sed` cannot do this reliably. The 1.41.0 `endpoints.go` -> `definition.go` synthesis (manifest +
+  endpoints.go + intermediate.go in, a new definition.go out, type decls lifted verbatim by AST offset) is the
+  canonical case. This is the only thing genupgrade exists for.
+- **Semantic rewrite that needs judgment -> grep-guided manual steps in the skill, neither sed nor a routine.**
+  The call's *meaning* changed and the correct new shape depends on intent - a `[]Message` conversation
+  becoming an ordered `[]Item`, or choosing a subgraph vs. a graph node when a task stops being independently
+  callable (1.42.0). genupgrade must stay deterministic, so it does not guess these; the skill greps for the old
+  shape, the author rewrites each site, and the orchestrator's final `go vet` surfaces any miss as a loud
+  compile error.
+
+Rule of thumb: **sed renames, genupgrade parses, humans judge.** One version may need all three at once.
+
 It never calls other generators. The `upgrade-microbus` orchestrator runs genservice once, after every numbered
 skill has applied its source transformation (see "Why upgrade skills may invoke only genupgrade" below):
 
@@ -46,22 +71,34 @@ version its routine is dead weight, but it stays for the historical record (prun
 
 ## Why upgrade skills may invoke only genupgrade
 
-A numbered `upgrade-vX-Y-Z` skill is a frozen, versioned artifact, but `upgrade-microbus` runs it against the
-**target** framework version's `go.mod` (it downloads the latest `.claude` and `go get`s the latest fabric before
-following any numbered skill). So every `go run github.com/microbus-io/fabric/cmd/<tool>` in a numbered skill
-resolves to a *future* version's binary. That is only safe for a tool guaranteed to exist at every later version.
-genupgrade is the one such tool - append-only and frozen, its routines never pruned - so the latest binary always
-carries the routine a given `-v X.Y.Z` names. The boilerplate generators do **not** have this property: `genmanifest`
-and `genmock` were superseded by `genservice` at 1.41.0, so a skill frozen at, say, 1.39.0 that ran `genmock`
-detonates the moment its chain targets a version where `genmock` is gone. Verification has the same defect from the
-other direction: `go vet`/`go test` mid-chain check a half-migrated tree against the final framework and fail.
+**The general rule: a numbered `upgrade-vX-Y-Z` skill may perform only work that is independent of the fabric
+version it runs against, and may never assume the tree builds when it finishes.** Both constraints come from one
+fact: a frozen `upgrade-vX-Y-Z` skill does **not** run against version X. `upgrade-microbus` downloads the latest
+`.claude` and `go get`s the latest fabric, then runs *every* numbered skill in the chain against that **target**
+version. So a skill authored for 1.35.0 executes against, say, 1.44.0's fabric, alongside every other skill in the
+chain - never against the 1.35.0 world it describes.
 
-The invariant, therefore: **a numbered skill invokes only `genupgrade` (plus pure-shell `sed`/`perl`/`grep` edits,
-which depend on no fabric tool); it never runs a boilerplate generator and never verifies.** Regeneration with the
-current generator and the single `go mod tidy && go vet ./... && go test ./...` are owned by `upgrade-microbus`'s
-final step, the one point where the fully-migrated tree is expected to compile. When cutting a version that needs a
-mechanical transform, ship it as a genupgrade routine here - not as a generator call or a verify step baked into the
-frozen skill.
+Two consequences:
+
+- **Tooling must be version-independent.** Every `go run github.com/microbus-io/fabric/cmd/<tool>` a skill names
+  resolves to the *target* version's binary, so the tool must exist and behave identically there. genupgrade is the
+  one fabric tool with that guarantee - append-only and frozen, its routines never pruned - so the latest binary
+  always carries the routine a given `-v X.Y.Z` names. Pure-shell (`sed`/`perl`/`grep`) qualifies too, depending on
+  no fabric tool at all. Boilerplate generators do **not** qualify: `genmanifest`/`genmock` were superseded by
+  `genservice` at 1.41.0, so a skill that ran `genmock` detonates the moment its chain targets a version where
+  `genmock` is gone.
+- **No step may assume a buildable tree.** Mid-chain the tree is half-migrated against the *final* framework, so a
+  skill that ran `go vet`/`go test` (or any tool that parses the whole project) would fail on code a later skill has
+  not fixed yet. Only `upgrade-microbus`'s single final pass - after the whole chain has applied its edits and
+  `genservice` has regenerated - sees a tree that is expected to compile.
+
+The invariant, therefore: **a numbered skill invokes only `genupgrade` plus pure-shell `sed`/`perl`/`grep` edits (and
+its own reasoning), never a boilerplate generator and never a verify step.** Regeneration with the current generator
+and the single `go mod tidy && go vet ./... && go test ./...` are owned by `upgrade-microbus`'s final step. When
+cutting a version that needs a mechanical transform, decide its home by the boundary above ("When a version needs a
+routine here"): a parse-and-synthesize transform ships as a genupgrade routine, a rename stays as `sed` in the skill,
+and a judgment rewrite is a grep-guided manual step - none of them a generator call or verify baked into the frozen
+skill.
 
 ## The 1.41.0 routine: endpoints.go -> definition.go
 
