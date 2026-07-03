@@ -113,7 +113,9 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 Append the `define.Function` var and its In/Out structs to `myserviceapi/definition.go`.
 
 ```go
-// MyFunction does X.
+/*
+MyFunction does X.
+*/
 var MyFunction = define.Function{ // MARKER: MyFunction
 	Host: Hostname, Method: "ANY", Route: "/my-function",
 	In: MyFunctionIn{}, Out: MyFunctionOut{},

@@ -32,7 +32,9 @@ Read the local `CLAUDE.md` file in the microservice's directory. It contains mic
 Append the `define.Ticker` var to `myserviceapi/definition.go`. `Interval` is how often the ticker runs; add the `"time"` import for the duration.
 
 ```go
-// MyTicker does X.
+/*
+MyTicker does X.
+*/
 var MyTicker = define.Ticker{ // MARKER: MyTicker
 	Interval: time.Minute,
 }

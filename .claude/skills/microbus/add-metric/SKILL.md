@@ -65,7 +65,9 @@ Do **not** add a `_total` suffix to a counter's OpenTelemetry name. `_total` is 
 Append the `define.Metric` var to `myserviceapi/definition.go`. The godoc is the metric's description.
 
 ```go
-// MyMetric counts X.
+/*
+MyMetric counts X.
+*/
 var MyMetric = define.Metric{ // MARKER: MyMetric
 	Kind: define.Counter, Value: int(0), Labels: []string{"status"},
 	OTelName: "myapplication_my_metric_units",

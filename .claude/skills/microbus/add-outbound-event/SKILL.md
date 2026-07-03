@@ -103,7 +103,9 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 Append the `define.OutboundEvent` var and its In/Out structs to `myserviceapi/definition.go`.
 
 ```go
-// OnMyEvent is triggered when X.
+/*
+OnMyEvent is triggered when X.
+*/
 var OnMyEvent = define.OutboundEvent{ // MARKER: OnMyEvent
 	Host: Hostname, Method: "POST", Route: ":417/on-my-event",
 	In: OnMyEventIn{}, Out: OnMyEventOut{},

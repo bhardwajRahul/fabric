@@ -57,7 +57,9 @@ Determine if the endpoint should be restricted to authorized actors only. Compos
 Append the `define.Web` var to `myserviceapi/definition.go`. A web endpoint has no In/Out structs.
 
 ```go
-// MyWeb does X.
+/*
+MyWeb does X.
+*/
 var MyWeb = define.Web{ // MARKER: MyWeb
 	Host: Hostname, Method: "ANY", Route: "/my-web",
 }

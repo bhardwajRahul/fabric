@@ -28,7 +28,6 @@ func TestConfigOnly_OnChangedDenyList(t *testing.T) { // MARKER: DenyList
 		t.Run("test_case_name", func(t *testing.T) {
 			assert := testarossa.For(t)
 
-			var value string
 			err := svc.SetDenyList(value)
 			assert.NoError(err)
 		})

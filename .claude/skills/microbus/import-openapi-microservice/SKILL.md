@@ -225,17 +225,21 @@ param/property `description`). The magic Go field names `HTTPRequestBody`, `HTTP
 `json:"-"` tag (types are bare because `definition.go` is in the `myserviceapi` package):
 
 ```go
-// RemoteFunction does X.
+/*
+RemoteFunction does X.
+*/
 var RemoteFunction = define.Function{ // MARKER: RemoteFunction
 	Host: Hostname, Method: "GET", Route: "/things/{id}",
 	In: RemoteFunctionIn{}, Out: RemoteFunctionOut{},
 }
 
+// RemoteFunctionIn are the input arguments of RemoteFunction.
 type RemoteFunctionIn struct { // MARKER: RemoteFunction
 	ID     int64  `json:"id,omitzero" jsonschema_description:"ID is the thing identifier"`
 	Status string `json:"status,omitzero" jsonschema_description:"Status filters the result"`
 }
 
+// RemoteFunctionOut are the output arguments of RemoteFunction.
 type RemoteFunctionOut struct { // MARKER: RemoteFunction
 	HTTPResponseBody []Thing `json:"-"`
 	HTTPStatusCode   int     `json:"-"`
@@ -250,7 +254,9 @@ or query fields; the Step 10 handler passes it as the `in` argument to `makeFunc
 handler has no In/Out structs):
 
 ```go
-// RemoteWeb does X.
+/*
+RemoteWeb does X.
+*/
 var RemoteWeb = define.Web{ // MARKER: RemoteWeb
 	Host: Hostname, Method: "POST", Route: "/things/{id}/upload",
 }

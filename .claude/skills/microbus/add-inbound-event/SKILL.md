@@ -54,7 +54,9 @@ import (
 	"github.com/company/project/eventsource/eventsourceapi"
 )
 
-// OnMyEvent is triggered when X.
+/*
+OnMyEvent is triggered when X.
+*/
 var OnMyEvent = define.InboundEvent{ // MARKER: OnMyEvent
 	Source: eventsourceapi.OnMyEvent,
 }

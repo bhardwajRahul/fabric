@@ -123,7 +123,9 @@ type ThirdPartyStruct = thirdparty.ThirdPartyStruct
 Append the `define.Task` var and its In/Out structs to `myserviceapi/definition.go`. Tasks always use the `POST` method.
 
 ```go
-// MyTask does X.
+/*
+MyTask does X.
+*/
 var MyTask = define.Task{ // MARKER: MyTask
 	Host: Hostname, Method: "POST", Route: ":428/my-task",
 	In: MyTaskIn{}, Out: MyTaskOut{},

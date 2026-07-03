@@ -113,22 +113,25 @@ func testScaffoldViews(svc *service, apiPath string, resolveSource func(string) 
 		case "Function":
 			v.Kind, v.Handler, v.FuncName = "function", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			claims := attrString(f.attrs, "RequiredClaims")
 			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
-			v.HintBody = wrapRun(callInner("client."+f.name, mv))
+			v.HintBody = wrapRun(callInner(hintCaller("client", f.name, claims), mv, claims))
 		case "Web":
 			v.Kind, v.Handler, v.FuncName = "web", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
-			v.HintBody = wrapRun(webInner(f.name, attrString(f.attrs, "Method")))
+			v.HintBody = wrapRun(webInner(f.name, attrString(f.attrs, "Method"), attrString(f.attrs, "RequiredClaims")))
 		case "Task":
 			v.Kind, v.Handler, v.FuncName = "task", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
+			claims := attrString(f.attrs, "RequiredClaims")
 			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
-			v.HintBody = wrapRun(callInner("exec."+f.name, mv))
+			v.HintBody = wrapRun(callInner(hintCaller("exec", f.name, claims), mv, claims))
 		case "Workflow":
 			v.Kind, v.Handler, v.FuncName = "workflow", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath, impForeman, impForemanAPI)
+			claims := attrString(f.attrs, "RequiredClaims")
 			mv := standardMock(f.name, f.name, svc.apiPkg, false, svc.fieldsOf(f.in), svc.fieldsOf(f.out))
-			v.HintBody = wrapRun(workflowInner("exec."+f.name, mv))
+			v.HintBody = wrapRun(workflowInner(hintCaller("exec", f.name, claims), mv, claims))
 		case "InboundEvent":
 			srcPath, ok := svc.imports[f.srcPkg]
 			if !ok {
@@ -140,8 +143,9 @@ func testScaffoldViews(svc *service, apiPath string, resolveSource func(string) 
 			if err != nil {
 				return nil, err
 			}
+			claims := attrString(f.attrs, "RequiredClaims")
 			mv := standardMock(f.name, f.name, f.srcPkg, false, iv.inFields, iv.outFields)
-			v.HintBody = wrapRun(inboundInner(f.name, mv))
+			v.HintBody = wrapRun(inboundInner(hintCaller("trigger", f.name, claims), mv, claims))
 		case "OutboundEvent":
 			v.Kind, v.Handler, v.FuncName = "outbound", f.name, testFuncName(svc, f.name)
 			v.imports = append(base, impConnector, apiPath)
@@ -157,8 +161,7 @@ func testScaffoldViews(svc *service, apiPath string, resolveSource func(string) 
 			}
 			v.Kind, v.Handler, v.FuncName = "config", "Set"+f.name, testFuncName(svc, "OnChanged"+f.name)
 			v.imports = base
-			valueType := qualifyTypes(carrierTypeName(f.attrs["Value"]), svc.apiPkg)
-			v.HintBody = wrapRun(configInner("Set"+f.name, valueType))
+			v.HintBody = wrapRun(configInner("Set" + f.name))
 		case "Metric":
 			if !attrBool(f.attrs, "Observable") {
 				continue
@@ -195,15 +198,6 @@ func wrapRun(inner string) string {
 	return b.String()
 }
 
-// hintVarDecls emits a `var name type` line per input, so the HINT conveys each argument's name and type.
-func hintVarDecls(indent string, decls []paramDecl) string {
-	var b strings.Builder
-	for _, d := range decls {
-		fmt.Fprintf(&b, "%svar %s %s\n", indent, d.Name, d.Type)
-	}
-	return b.String()
-}
-
 // hintAssertPairs emits an `out, expectedOut,` assertion line per output name.
 func hintAssertPairs(indent, retNoErr string) string {
 	var b strings.Builder
@@ -229,11 +223,29 @@ func upperFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// callInner renders a direct request/response call (function, task): declare the typed inputs, invoke the
-// caller, and assert each output against an expected placeholder.
-func callInner(caller string, mv *mockView) string {
+// hintCaller renders the method-call receiver (e.g. "client.Greet"), wrapping it with an actor option when
+// the feature declares requiredClaims so the gated call passes the claims check in the TESTING deployment.
+func hintCaller(recv, method, claims string) string {
+	if claims == "" {
+		return recv + "." + method
+	}
+	return recv + ".WithOptions(pub.Actor(actor))." + method
+}
+
+// hintClaims renders a comment naming the requiredClaims expression the placeholder actor must satisfy, or
+// nothing when the feature is ungated.
+func hintClaims(claims string) string {
+	if claims == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s// actor's claims must satisfy: %s\n", hintI3, claims)
+}
+
+// callInner renders a direct request/response call (function, task): invoke the caller with the input
+// argument names as placeholders, and assert each output against an expected placeholder.
+func callInner(caller string, mv *mockView, claims string) string {
 	var b strings.Builder
-	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	b.WriteString(hintClaims(claims))
 	if mv.SingleErr {
 		fmt.Fprintf(&b, "%serr := %s(%s)\n", hintI3, caller, mv.Args)
 		fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI3)
@@ -248,9 +260,9 @@ func callInner(caller string, mv *mockView) string {
 }
 
 // workflowInner renders a workflow run: like callInner but the executor also returns a workflow.Status.
-func workflowInner(caller string, mv *mockView) string {
+func workflowInner(caller string, mv *mockView, claims string) string {
 	var b strings.Builder
-	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
+	b.WriteString(hintClaims(claims))
 	lhs := "status, err"
 	if mv.RetNoErr != "" {
 		lhs = mv.RetNoErr + ", status, err"
@@ -265,10 +277,10 @@ func workflowInner(caller string, mv *mockView) string {
 }
 
 // inboundInner renders firing the source event and asserting the sink received it.
-func inboundInner(handler string, mv *mockView) string {
+func inboundInner(caller string, mv *mockView, claims string) string {
 	var b strings.Builder
-	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
-	fmt.Fprintf(&b, "%sfor e := range trigger.%s(%s) {\n", hintI3, handler, mv.Args)
+	b.WriteString(hintClaims(claims))
+	fmt.Fprintf(&b, "%sfor e := range %s(%s) {\n", hintI3, caller, mv.Args)
 	if mv.SingleErr {
 		fmt.Fprintf(&b, "%serr := e.Get()\n", hintI4)
 		fmt.Fprintf(&b, "%sif frame.Of(e.HTTPResponse).FromHost() == svc.Hostname() {\n", hintI4)
@@ -304,7 +316,6 @@ func outboundInner(handler string, mv *mockView) string {
 	fmt.Fprintf(&b, "%sif assert.NoError(err) {\n", hintI3)
 	fmt.Fprintf(&b, "%sdefer unsub()\n", hintI4)
 	fmt.Fprintf(&b, "%s}\n", hintI3)
-	b.WriteString(hintVarDecls(hintI3, mv.TestVarDecls))
 	fmt.Fprintf(&b, "%sfor e := range trigger.%s(%s) {\n", hintI3, handler, mv.Args)
 	fmt.Fprintf(&b, "%sif frame.Of(e.HTTPResponse).FromHost() == tester.Hostname() {\n", hintI4)
 	if mv.SingleErr {
@@ -323,17 +334,22 @@ func outboundInner(handler string, mv *mockView) string {
 }
 
 // webInner renders a raw web call whose arity matches the endpoint's HTTP method.
-func webInner(handler, method string) string {
+func webInner(handler, method, claims string) string {
+	recv := "client"
+	if claims != "" {
+		recv = "client.WithOptions(pub.Actor(actor))"
+	}
 	var call string
 	switch strings.ToUpper(method) {
 	case "POST", "PUT", "PATCH":
-		call = fmt.Sprintf("client.%s(ctx, \"\", nil)", handler)
+		call = fmt.Sprintf("%s.%s(ctx, \"\", nil)", recv, handler)
 	case "ANY", "":
-		call = fmt.Sprintf("client.%s(ctx, \"GET\", \"\", nil)", handler)
+		call = fmt.Sprintf("%s.%s(ctx, \"GET\", \"\", nil)", recv, handler)
 	default:
-		call = fmt.Sprintf("client.%s(ctx, \"\")", handler)
+		call = fmt.Sprintf("%s.%s(ctx, \"\")", recv, handler)
 	}
 	var b strings.Builder
+	b.WriteString(hintClaims(claims))
 	fmt.Fprintf(&b, "%sres, err := %s\n", hintI3, call)
 	fmt.Fprintf(&b, "%sif assert.NoError(err) {\n", hintI3)
 	fmt.Fprintf(&b, "%sassert.Expect(res.StatusCode, http.StatusOK)\n", hintI4)
@@ -341,10 +357,9 @@ func webInner(handler, method string) string {
 	return b.String()
 }
 
-// configInner renders setting the config to a value of its declared type.
-func configInner(handler, valueType string) string {
+// configInner renders setting the config, with the value as a placeholder.
+func configInner(handler string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%svar value %s\n", hintI3, valueType)
 	fmt.Fprintf(&b, "%serr := svc.%s(value)\n", hintI3, handler)
 	fmt.Fprintf(&b, "%sassert.NoError(err)\n", hintI3)
 	return b.String()

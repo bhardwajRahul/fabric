@@ -64,7 +64,9 @@ Validation rules can be any of the following:
 Append the `define.Config` var to `myserviceapi/definition.go`. The godoc is the description from Step 3.
 
 ```go
-// MyConfig is X.
+/*
+MyConfig is X.
+*/
 var MyConfig = define.Config{ // MARKER: MyConfig
 	Value:      int(0),
 	Default:    "1",
@@ -90,7 +92,9 @@ type RetryPolicy struct {
 	Backoff    string `json:"backoff,omitzero"`
 }
 
-// Retry configures how failed operations are retried.
+/*
+Retry configures how failed operations are retried.
+*/
 var Retry = define.Config{ // MARKER: Retry
 	Value:      RetryPolicy{},
 	Default:    `{"maxRetries":3,"backoff":"1s"}`,

@@ -73,7 +73,9 @@ Describe **what the workflow does and the outcome it produces**, not who is expe
 Append the `define.Workflow` var and its In/Out structs to `myserviceapi/definition.go`. Workflows always use the `GET` method.
 
 ```go
-// MyWorkflow does X.
+/*
+MyWorkflow does X.
+*/
 var MyWorkflow = define.Workflow{ // MARKER: MyWorkflow
 	Host: Hostname, Method: "GET", Route: ":428/my-workflow",
 	In: MyWorkflowIn{}, Out: MyWorkflowOut{},
