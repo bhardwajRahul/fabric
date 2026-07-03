@@ -340,6 +340,43 @@ func (_c MulticastClient) Forecast(ctx context.Context, lat float64, lng float64
 	}
 }
 
+// Ask runs the weather agent synchronously for a natural-language question and returns its answer. It executes
+// the same tool-calling loop as the AskAgent workflow, but in-process via a single llm.core Chat call rather
+// than as a durable workflow, giving the tour one browser-clickable endpoint.
+func (_c Client) Ask(ctx context.Context, q string) (answer string, err error) { // MARKER: Ask
+	_in := AskIn{Q: q}
+	_out := AskOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Ask.Method, Ask.Route, &_in, &_out)
+	return _out.Answer, err // No trace
+}
+
+// AskResponse packs the response of Ask.
+type AskResponse multicastResponse // MARKER: Ask
+
+// Get unpacks the return arguments of Ask.
+func (_res *AskResponse) Get() (answer string, err error) { // MARKER: Ask
+	_d := _res.data.(*AskOut)
+	return _d.Answer, _res.err
+}
+
+// Ask runs the weather agent synchronously for a natural-language question and returns its answer. It executes
+// the same tool-calling loop as the AskAgent workflow, but in-process via a single llm.core Chat call rather
+// than as a durable workflow, giving the tour one browser-clickable endpoint.
+func (_c MulticastClient) Ask(ctx context.Context, q string) iter.Seq[*AskResponse] { // MARKER: Ask
+	_in := AskIn{Q: q}
+	_out := AskOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Ask.Method, Ask.Route, &_in, &_out)
+	return func(yield func(*AskResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*AskResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
 // Answer runs the LLM tool-calling loop for a weather question, chaining the LatLng and Forecast tools, and returns the agent's reply.
 func (_c Executor) Answer(ctx context.Context, question string) (answer string, err error) { // MARKER: Answer
 	var out AnswerOut

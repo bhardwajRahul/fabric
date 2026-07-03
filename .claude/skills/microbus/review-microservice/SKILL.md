@@ -60,6 +60,11 @@ Grep the hand-written `.go` files (same set as Step 1) for violations of Microbu
 - **`errors.Newc`, `errors.Newf`, `errors.Newcf`** - deprecated constructors; use `errors.New` instead
 - **`httpx.PathValues`** - deprecated; use `r.PathValue("name")` instead
 - **Resource lifecycle** - resources opened or subscribed in `OnStartup` (connections, file handles, hooks) should have a corresponding release or unsubscribe in `OnShutdown`. Flag asymmetric lifecycle management.
+- **Foreman call sites (`foremanapi.NewClient`)** - grep this microservice's hand-written files for `foremanapi.NewClient`. The foreman is the execution engine, not a downstream dependency, so most call sites are anti-patterns. **Flag each of these:**
+  - a function or web handler that calls `foremanapi...Run` (or `Create`+`Await`) and returns the flow's result - a synchronous endpoint wrapping a workflow, running an open-ended flow on the caller's request budget and coupling an API provider to the foreman (wrong whether the workflow is this service's or another's; fix with a shared Go helper the handler and the task body both call);
+  - a `define.Task` handler that calls `foremanapi...Run`/`.Create` - use `flow.Subgraph` instead; the foreman call spawns a detached flow that loses re-entry, cascading cancel, audit trail, and interrupt propagation;
+  - a pass-through endpoint forwarding to `foremanapi.Create/Run/Cancel/Await/Snapshot/Resume` (`Run<Workflow>`, `<Workflow>Status`, ...) - the trigger code should call the foreman directly.
+- **Legitimate launch site - do not flag, but check duration handling** - a `foremanapi.Run`/`Create` is correct in code that owns a *triggering event* this service genuinely holds and does not block a caller on the flow's result: its own ticker, an inbound event sink, or a UI/webhook action that fires the flow and returns a handle or redirect (an acceptable shortcut for a self-contained service; a separate launcher microservice is cleaner). There, verify an `Await` handles the timeout (poll-later handle, error, compensating cancel), and that long-running flows use `FlowOptions.NotifyOnStop` + `OnFlowStopped` - or, since that event is lost if the receiver is down, a final notification task in the workflow when delivery must be guaranteed.
 
 #### Step 4: Test Quality
 

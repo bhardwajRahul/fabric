@@ -56,7 +56,8 @@ app.Add(
 	login.NewService(),
 	creditflow.NewService(),
 	chatbox.NewService(),
-	// LLM core and providers - required by the chatbox demo (Step 13)
+	weather.NewService(),
+	// LLM core and providers - required by the chatbox and weather demos
 	llm.NewService(),
 	claudellm.NewService(),
 	chatgptllm.NewService(),
@@ -80,6 +81,7 @@ import (
 	"github.com/microbus-io/fabric/exampleservices/helloworld"
 	"github.com/microbus-io/fabric/exampleservices/login"
 	"github.com/microbus-io/fabric/exampleservices/messaging"
+	"github.com/microbus-io/fabric/exampleservices/weather"
 	"github.com/microbus-io/fabric/coreservices/httpingress/middleware"
 	"github.com/microbus-io/fabric/coreservices/llm"
 	"github.com/microbus-io/fabric/coreservices/claudellm"
@@ -152,6 +154,7 @@ When the user picks an item, go to its subsection below, present it, and offer t
 9.  Credit Flow    - Agentic workflows: fan-out/in, forEach, goto loops, subgraphs, reducers.
 10. Chatbox        - LLM tool-calling, with a simulated provider and optional real providers.
 11. Embedder       - A Go microservice using a real Python library for its compute.
+12. Weather        - An LLM agent built as a durable workflow, chaining two tools to answer a question.
 0.  End the tour.
 ```
 
@@ -345,6 +348,25 @@ Explain the lifecycle to the user:
 - `OnShutdown` calls `svc.venv.Close(ctx)` to kill the subprocess and clean up the on-disk venv.
 
 **Explore more** (offer, optional): walk through `service.go`, `python.go`, and `service.py` (at the microservice's root, alongside the Go files) to show how the Go side delegates to Python via `svc.venv.CallAndAwait` and how the manual-subscription pattern is wired.
+
+Return to the Example Menu.
+
+##### 12. Weather
+
+The `weather.example` microservice is the suite's canonical answer to "how do I build an agent?" Its headline form is a *workflow*: `AskAgent` is a single-node graph whose one task runs `llm.core`'s `ChatLoop` as a subgraph, exposing the microservice's own `LatLng` and `Forecast` endpoints as the model's tools. Ask it a question and the model geocodes the location with one tool, fetches conditions with the other, and composes a natural-language answer - the full tool-calling loop, which as a workflow the foreman drives so each step is durable and independently budgeted. The tour's clickable `/ask` runs that same loop synchronously (see below) so a browser gets an immediate reply.
+
+Like the Chatbox "Real" option, this example needs a real LLM provider because the simulated provider does not do real tool-calling. If the user set up a provider key during the Chatbox step (10) and restarted the app, it already works here. If not, point them back to the Chatbox step's "set up a real provider" instructions (one key of any brand, written to `config.local.yaml`, then restart). Real-provider calls are billable.
+
+Explain the microservice to the user and present the following links for them to experiment with in their browser:
+
+- http://localhost:8080/weather.example/ask?q=What+should+I+wear+in+Paris+today%3F - runs the agent end-to-end and returns its reply
+- http://localhost:8080/weather.example/ask?q=Is+it+raining+in+Tokyo+right+now%3F - another question, a different city
+- http://localhost:8080/weather.example/lat-lng?location=London - the geocoding tool on its own (mock coordinates)
+- http://localhost:8080/weather.example/forecast?lat=51.51&lng=-0.13 - the forecast tool on its own (mock conditions)
+
+`ask` runs the same tool-calling loop synchronously via `llm.core`'s `Chat` (not the durable workflow), so the tour has one clickable URL that returns immediately. It does not touch the foreman - a workflow's own microservice never depends on the execution engine; launching `AskAgent` durably would be the job of whichever microservice owns the triggering event. The fact that this agent runs fine synchronously is itself the point: it is short enough not to strictly need a workflow, but the example models the workflow form for when an agent grows past a single request budget. `LatLng` and `Forecast` return deterministic mock data, so the example needs only an LLM key, not a third-party weather account.
+
+**Explore more** (offer, optional): show the one-node graph in `service.go` (`AskAgent` wiring `Answer` to run `ChatLoop` as a subgraph) and the rendered `ASKAGENT.mmd` diagram, and contrast the workflow form with Chatbox's synchronous `Chat` - the same tool-calling loop, but durable, resumable, and observable step-by-step. The user may ask to see the full implementation code of any feature.
 
 Return to the Example Menu.
 

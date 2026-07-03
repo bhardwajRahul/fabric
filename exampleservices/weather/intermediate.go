@@ -29,6 +29,7 @@ type ToDo interface {
 	OnShutdown(ctx context.Context) (err error)
 	LatLng(ctx context.Context, location string) (lat float64, lng float64, err error)                                                 // MARKER: LatLng
 	Forecast(ctx context.Context, lat float64, lng float64) (summary string, temperatureC float64, precipitationChance int, err error) // MARKER: Forecast
+	Ask(ctx context.Context, q string) (answer string, err error)                                                                      // MARKER: Ask
 	Answer(ctx context.Context, flow *workflow.Flow, question string) (answer string, err error)                                       // MARKER: Answer
 	AskAgent(ctx context.Context) (graph *workflow.Graph, err error)                                                                   // MARKER: AskAgent
 }
@@ -79,6 +80,14 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(weatherapi.Forecast.Method, weatherapi.Forecast.Route),
 		sub.Description(`Forecast returns the current weather forecast for a latitude/longitude coordinate.`),
 		sub.Function(weatherapi.ForecastIn{}, weatherapi.ForecastOut{}),
+	)
+	svc.Subscribe( // MARKER: Ask
+		"Ask", svc.doAsk,
+		sub.At(weatherapi.Ask.Method, weatherapi.Ask.Route),
+		sub.Description(`Ask runs the weather agent synchronously for a natural-language question and returns its answer. It executes
+the same tool-calling loop as the AskAgent workflow, but in-process via a single llm.core Chat call rather
+than as a durable workflow, giving the tour one browser-clickable endpoint.`),
+		sub.Function(weatherapi.AskIn{}, weatherapi.AskOut{}),
 	)
 	svc.Subscribe( // MARKER: Answer
 		"Answer", svc.doAnswer,
@@ -140,6 +149,17 @@ func (svc *Intermediate) doForecast(w http.ResponseWriter, r *http.Request) (err
 	var out weatherapi.ForecastOut
 	err = marshalFunction(w, r, weatherapi.Forecast.Route, &in, &out, func(_ any, _ any) error {
 		out.Summary, out.TemperatureC, out.PrecipitationChance, err = svc.Forecast(r.Context(), in.Lat, in.Lng)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doAsk handles marshaling for Ask.
+func (svc *Intermediate) doAsk(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Ask
+	var in weatherapi.AskIn
+	var out weatherapi.AskOut
+	err = marshalFunction(w, r, weatherapi.Ask.Route, &in, &out, func(_ any, _ any) error {
+		out.Answer, err = svc.Ask(r.Context(), in.Q)
 		return err // No trace
 	})
 	return err // No trace

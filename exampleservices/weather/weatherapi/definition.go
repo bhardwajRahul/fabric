@@ -87,3 +87,23 @@ type AskAgentIn struct { // MARKER: AskAgent
 type AskAgentOut struct { // MARKER: AskAgent
 	Answer string `json:"answer,omitzero" jsonschema_description:"Answer is the agent's natural-language reply"`
 }
+
+/*
+Ask runs the weather agent synchronously for a natural-language question and returns its answer. It executes
+the same tool-calling loop as the AskAgent workflow, but in-process via a single llm.core Chat call rather
+than as a durable workflow, giving the tour one browser-clickable endpoint.
+*/
+var Ask = define.Function{ // MARKER: Ask
+	Host: Hostname, Method: "ANY", Route: "/ask",
+	In: AskIn{}, Out: AskOut{},
+}
+
+// AskIn are the input arguments of Ask.
+type AskIn struct { // MARKER: Ask
+	Q string `json:"q,omitzero" jsonschema_description:"Q is a natural-language weather question, e.g. What should I wear in Paris today?"`
+}
+
+// AskOut are the output arguments of Ask.
+type AskOut struct { // MARKER: Ask
+	Answer string `json:"answer,omitzero" jsonschema_description:"Answer is the agent's natural-language reply"`
+}

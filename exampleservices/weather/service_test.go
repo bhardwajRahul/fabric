@@ -177,7 +177,6 @@ func TestWeather_AskAgent(t *testing.T) { // MARKER: AskAgent
 func TestWeather_Answer(t *testing.T) { // MARKER: Answer
 	t.Parallel()
 	ctx := t.Context()
-	_ = ctx
 
 	// Initialize the microservice under test
 	svc := NewService()
@@ -185,7 +184,6 @@ func TestWeather_Answer(t *testing.T) { // MARKER: Answer
 	// Initialize the tester
 	tester := connector.New("tester.client")
 	exec := weatherapi.NewExecutor(tester)
-	_ = exec
 
 	// Run the testing app
 	app := application.New()
@@ -209,4 +207,74 @@ func TestWeather_Answer(t *testing.T) { // MARKER: Answer
 			}
 		})
 	*/
+
+	t.Run("parks_on_chat_subgraph", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Answer runs ChatLoop as a subgraph, so a direct call parks on the first dispatch and returns
+		// an empty answer; the full reply is produced on re-entry, which the workflow drives end-to-end
+		// in TestWeather_AskAgent.
+		var out workflow.Flow
+		answer, err := exec.WithOutputFlow(&out).Answer(ctx, "What is the weather in London?")
+		if assert.NoError(err) {
+			assert.Equal(answer, "")
+			url, _, ok := out.SubgraphRequested()
+			assert.True(ok)
+			assert.Equal(url, llmapi.ChatLoop.URL())
+		}
+	})
+}
+
+func TestWeather_Ask(t *testing.T) { // MARKER: Ask
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+	client := weatherapi.NewClient(tester)
+
+	// Mock llm.core's Chat so the agent runs without a provider key.
+	llmMock := llm.NewMock()
+	llmMock.MockChat(func(ctx context.Context, provider string, model string, items []llmapi.Item, toolURLs []string, options *llmapi.ChatOptions) (itemsOut []llmapi.Item, usage llmapi.Usage, resolvedProvider string, err error) {
+		itemsOut = append(items, llmapi.NewMessage("assistant", "It is sunny and 21C in London.").AsItem())
+		return itemsOut, llmapi.Usage{}, "", nil
+	})
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		llmMock,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			answer, err := client.Ask(ctx, q)
+			assert.Expect(
+				answer, expectedAnswer,
+				err, nil,
+			)
+		})
+	*/
+
+	t.Run("returns_agent_answer", func(t *testing.T) {
+		assert := testarossa.For(t)
+
+		// Ask runs the tool-calling loop synchronously via llm.core Chat and returns the final reply.
+		answer, err := client.Ask(ctx, "What is the weather in London?")
+		assert.Expect(
+			answer, "It is sunny and 21C in London.",
+			err, nil,
+		)
+	})
 }

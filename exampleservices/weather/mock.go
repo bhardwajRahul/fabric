@@ -21,6 +21,7 @@ type Mock struct {
 	*Intermediate
 	mockLatLng        func(ctx context.Context, location string) (lat float64, lng float64, err error)                                               // MARKER: LatLng
 	mockForecast      func(ctx context.Context, lat float64, lng float64) (summary string, temperatureC float64, precipitationChance int, err error) // MARKER: Forecast
+	mockAsk           func(ctx context.Context, q string) (answer string, err error)                                                                 // MARKER: Ask
 	mockAnswer        func(ctx context.Context, flow *workflow.Flow, question string) (answer string, err error)                                     // MARKER: Answer
 	mockAskAgentGraph func(ctx context.Context) (graph *workflow.Graph, err error)                                                                   // MARKER: AskAgent
 	unsubMockAskAgent func() error                                                                                                                   // MARKER: AskAgent
@@ -73,6 +74,20 @@ func (svc *Mock) Forecast(ctx context.Context, lat float64, lng float64) (summar
 		summary, temperatureC, precipitationChance, err = svc.mockForecast(ctx, lat, lng)
 	}
 	return summary, temperatureC, precipitationChance, errors.Trace(err)
+}
+
+// MockAsk sets up a mock handler for Ask.
+func (svc *Mock) MockAsk(handler func(ctx context.Context, q string) (answer string, err error)) *Mock { // MARKER: Ask
+	svc.mockAsk = handler
+	return svc
+}
+
+// Ask executes the mock handler.
+func (svc *Mock) Ask(ctx context.Context, q string) (answer string, err error) { // MARKER: Ask
+	if svc.mockAsk != nil {
+		answer, err = svc.mockAsk(ctx, q)
+	}
+	return answer, errors.Trace(err)
 }
 
 // MockAnswer sets up a mock handler for Answer.

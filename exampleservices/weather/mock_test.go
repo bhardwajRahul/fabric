@@ -53,6 +53,17 @@ func TestWeather_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("ask", func(t *testing.T) { // MARKER: Ask
+		assert := testarossa.For(t)
+
+		mock.MockAsk(func(ctx context.Context, q string) (answer string, err error) {
+			return
+		})
+		var q string
+		_, err := mock.Ask(ctx, q)
+		assert.NoError(err)
+	})
+
 	t.Run("answer", func(t *testing.T) { // MARKER: Answer
 		assert := testarossa.For(t)
 

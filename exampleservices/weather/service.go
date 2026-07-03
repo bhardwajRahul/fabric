@@ -114,26 +114,55 @@ func (svc *Service) AskAgent(ctx context.Context) (graph *workflow.Graph, err er
 	return graph, nil
 }
 
+// weatherAgentPrompt builds the conversation and tool list shared by the Answer task and the Ask function.
+func weatherAgentPrompt(question string) (items []llmapi.Item, tools []string) {
+	items = []llmapi.Item{
+		llmapi.NewMessage("system", "You are a helpful weather assistant. Use the lat-lng tool to geocode a location, then the forecast tool to get its conditions, and answer the question conversationally.").AsItem(),
+		llmapi.NewMessage("user", question).AsItem(),
+	}
+	tools = []string{
+		weatherapi.LatLng.URL(),
+		weatherapi.Forecast.URL(),
+	}
+	return items, tools
+}
+
+// finalAnswer returns the content of the last assistant message in a completed conversation.
+func finalAnswer(items []llmapi.Item) (string, error) {
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i].Type() == llmapi.ItemMessage && items[i].Message.Role == "assistant" {
+			return items[i].Message.Content, nil
+		}
+	}
+	return "", errors.New("no answer from the LLM")
+}
+
 /*
 Answer runs the LLM tool-calling loop for a weather question, chaining the LatLng and Forecast tools, and returns the agent's reply.
 */
 func (svc *Service) Answer(ctx context.Context, flow *workflow.Flow, question string) (answer string, err error) { // MARKER: Answer
-	items := []llmapi.Item{
-		llmapi.NewMessage("system", "You are a helpful weather assistant. Use the lat-lng tool to geocode a location, then the forecast tool to get its conditions, and answer the question conversationally.").AsItem(),
-		llmapi.NewMessage("user", question).AsItem(),
-	}
-	tools := []string{weatherapi.LatLng.URL(), weatherapi.Forecast.URL()}
-	// ChatLoop is llm.core's multi-step chat workflow, run here as a durable subgraph: each of its steps
-	// persists state and gets its own time budget, unlike the synchronous Chat call.
+	items, tools := weatherAgentPrompt(question)
+	// ChatLoop is llm.core's multi-step chat workflow, run here as a durable subgraph
 	result, _, yield, err := llmapi.NewSubgraph(flow).ChatLoop(ctx, llmapi.ProviderAny, llmapi.ModelDefault, items, tools, nil)
-	if yield || err != nil {
+	if err != nil {
 		return "", errors.Trace(err)
 	}
-	// The answer is the content of the final assistant message.
-	for i := len(result) - 1; i >= 0; i-- {
-		if result[i].Type() == llmapi.ItemMessage && result[i].Message.Role == "assistant" {
-			return result[i].Message.Content, nil
-		}
+	if yield {
+		return "", nil
 	}
-	return "", errors.New("no answer from the LLM")
+	return finalAnswer(result)
+}
+
+/*
+Ask runs the weather agent synchronously for a natural-language question and returns its answer. It executes
+the same tool-calling loop as the AskAgent workflow, but in-process via a single llm.core Chat call rather
+than as a durable workflow, giving the tour one browser-clickable endpoint.
+*/
+func (svc *Service) Ask(ctx context.Context, q string) (answer string, err error) { // MARKER: Ask
+	items, tools := weatherAgentPrompt(q)
+	result, _, _, err := llmapi.NewClient(svc).Chat(ctx, llmapi.ProviderAny, llmapi.ModelDefault, items, tools, nil)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return finalAnswer(result)
 }
