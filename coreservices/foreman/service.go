@@ -106,17 +106,6 @@ func (svc *Service) resolveOptions(ctx context.Context, opts *workflow.FlowOptio
 			opts.FairnessKey = strconv.Itoa(tid)
 		}
 	}
-	// When the caller wants a stop notification, stamp its host into baggage so FlowStopped can deliver the
-	// OnFlowStopped event back to it. The engine carries no delivery address; this rides on baggage and is
-	// stripped from any minted actor token (see mintActorToken).
-	if opts.NotifyOnStop {
-		bag, _ := opts.Baggage.(map[string]any)
-		if bag == nil {
-			bag = map[string]any{}
-		}
-		bag[baggageNotifyHost] = frame.Of(ctx).FromHost()
-		opts.Baggage = bag
-	}
 	return opts, nil
 }
 
@@ -160,7 +149,7 @@ func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (
 }
 
 /*
-Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.
 */
 func (svc *Service) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
 	// A fork inherits the origin flow's scheduling and baggage (so it re-runs as the original actor); it
@@ -232,7 +221,7 @@ func (svc *Service) Run(ctx context.Context, workflowURL string, initialState an
 }
 
 /*
-Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.
 */
 func (svc *Service) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
 	return svc.engine.Continue(ctx, threadKey, additionalState)

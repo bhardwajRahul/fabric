@@ -20,3 +20,17 @@ is how a caller obtains a verified claim in the first place. The only technical 
 isolation and a CI allow-list (in the production deployment guide's trust-root hardening section) are the operational
 controls.
 
+### Rotation delays activating the new primary key
+
+When `PrivateKey` changes to a different key at runtime, `OnChangedPrivateKey` records the rotation time, and `Mint`
+keeps signing with the alternate key (`AltPrivateKey`) for `keyActivationDelay` (10s) before switching to the new
+primary. The new primary is published in JWKS immediately, so verifiers fetch it in advance of the first token it
+signs. This mirrors the access token service's delayed activation and is what keeps the ingress's JWKS fetch debounce
+safe (the coupling is documented in the connector's "JWKS fetch is debounced per issuer").
+
+The rotation procedure follows from this: set `AltPrivateKey` to the outgoing key, then set `PrivateKey` to the
+incoming key. The alternate must hold the *outgoing* key for the delay to help; if the alternate is set to the
+incoming key instead, the delay signs with a key verifiers may not yet have, which is the opposite of the intent. If
+no alternate is configured, the new primary signs immediately with no overlap. The delay triggers only on a runtime
+change between two distinct keys, never at startup.
+

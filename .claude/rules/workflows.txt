@@ -579,9 +579,7 @@ A separate "kick off the job" task should run before the polling task in the gra
 
 **To call another unit of work from inside a task body, use a subgraph, not the foreman.** `otherapi.NewSubgraph(flow).OtherWorkflow(ctx, args...)` embeds a whole workflow as a child flow (or the raw `flow.Subgraph` for dynamic dispatch). A bare task is not independently invocable; to run one unit of work in isolation, declare a one-node workflow and subgraph it. Do **not** call `foremanapi.NewClient(svc).Run`, nor the **test-only** `Executor`, from a task body: that spawns a separate flow and forfeits re-entry, single-flow audit trail, cascading cancellation, and interrupt propagation. (The `Executor` carries a `service.Publisher` and exists only to drive endpoints from tests.)
 
-**Whoever launches a workflow must expect it to outlive a synchronous operation.** A flow's timeline is open-ended - parks, retries, sleeps, human-in-the-loop - so a launcher that `Await`s completion must handle the await timing out while the flow keeps running detached: return a "still running" handle to poll later, an error, or issue a compensating cancel; never assume in-budget completion. For genuinely long-running work, prefer fire-and-notify over synchronous await: create the flow with `FlowOptions.NotifyOnStop` and react to the foreman's `OnFlowStopped` event when it terminates, rather than blocking a request on `Await`.
-
-`NotifyOnStop` is best-effort, not durable: `OnFlowStopped` fires once and only reaches a receiver host that is live on the bus at that instant, so a receiver that is down or restarting when the flow stops misses the notification. When completion notification must be guaranteed, make it a **final task in the workflow itself** - the foreman persists and retries that task like any other step, so its side effect (write a row, enqueue a message, call the requester back) survives worker restarts and outlives any single receiver's availability - rather than relying on the fire-and-forget event.
+**Whoever launches a workflow must expect it to outlive a synchronous operation.** A flow's timeline is open-ended - parks, retries, sleeps, human-in-the-loop - so a launcher that `Await`s completion must handle the await timing out while the flow keeps running detached: return a "still running" handle to poll later, an error, or issue a compensating cancel; never assume in-budget completion. The foreman fires no stop-notification event; the two ways to learn a flow's outcome (block on `Await`, or compose the follow-up as durable tasks in the workflow) are covered in Detecting Flow Completion below.
 
 ## Running Workflows
 
@@ -672,26 +670,72 @@ Relevant `foreman.core` configs: `DefaultPriority` (priority when the caller spe
 per-replica candidate-cache size and dispatch parallelism), and `TimeBudget` (the hard per-step dispatch
 ceiling; a task may declare a shorter `sub.TimeBudget` of its own).
 
-## Flow Stop Notifications
+## Detecting Flow Completion
 
-To receive an event when a flow stops (completed, failed, cancelled, or interrupted), opt in with
-`FlowOptions.NotifyOnStop` at `Create` (the foreman records the caller's host from the request frame, so no
-hostname is passed), then subscribe to the `OnFlowStopped` event:
+The foreman has **no stop-notification event** - there is no `NotifyOnStop` option and no `OnFlowStopped` event
+to subscribe to (both removed). A stopped flow is not pushed anywhere; there are two ways to learn its outcome,
+suited to different situations:
+
+1. **`Await`** - block a live caller until the flow stops, then read the outcome.
+2. **Orchestration** - model the follow-up work as tasks inside a workflow that calls the real work as a
+   subgraph, so the reaction to success or failure is itself a durable, retryable step.
+
+Pick `Await` when a caller is standing by for the result. Pick orchestration when the reaction must happen
+reliably regardless of who is (or isn't) waiting: a push notification, a downstream call, a compensation.
+
+### Await
 
 ```go
-// Opt in at Create (which auto-runs).
-flowID, err := foremanapi.NewClient(svc).Create(ctx, myworkflowapi.MyWorkflow.URL(), initialState,
-	&workflow.FlowOptions{NotifyOnStop: true})
-
-// Subscribe to notifications
-foremanapi.NewHook(svc).ForHost(svc.Hostname()).OnFlowStopped(
-	func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) error {
-		// Handle flow stop: outcome.Status / outcome.State / outcome.Error / outcome.InterruptPayload.
-		// flowKey identifies which flow stopped (it is not part of the outcome).
-		return nil
-	},
-)
+outcome, err := foremanapi.NewClient(svc).Await(ctx, flowKey)
 ```
+
+`Await` blocks until the flow stops (`completed`/`failed`/`cancelled`/`interrupted`) and returns the
+`*workflow.FlowOutcome`. It wakes on a status-change signal, not polling.
+
+Good for a request/response caller that holds the flowKey and can wait, tests, and short flows. Its limits are
+inherent to bridging an open-ended flow to a synchronous caller:
+
+- The caller must stay alive and connected. If its context deadline fires before the flow stops, `Await` returns
+  without the outcome; the flow keeps running and the caller must `Await` again (it still holds the key).
+  Long-running or human-in-the-loop flows routinely outlive a request context.
+- It does not survive the caller process restarting - there is no durable "call me back".
+- It is a poor fit for fire-and-forget submissions, where nobody waits.
+
+### Orchestration (recommended for reliable follow-up)
+
+Wrap the real work in an orchestrating graph: one task launches it as a subgraph, and separate tasks handle the
+success and failure paths. Because each follow-up is its own step, it is checkpointed and retried independently -
+a delivery that must not be lost belongs here, not in a caller's `Await`.
+
+```go
+graph.SetEndpoint("CallSubgraph", myapi.CallSubgraph.URL())
+graph.SetEndpoint("OnSuccess", myapi.OnSuccess.URL())
+graph.SetEndpoint("OnFailure", myapi.OnFailure.URL())
+graph.AddTransition("CallSubgraph", "OnSuccess")        // normal path
+graph.AddTransitionOnError("CallSubgraph", "OnFailure")  // error path
+graph.AddTransition("OnSuccess", workflow.END)
+graph.AddTransition("OnFailure", workflow.END)
+```
+
+- **CallSubgraph** runs the child via `flow.Subgraph` (or the typed `xapi.NewSubgraph(flow)`), yields while it
+  runs, and returns any error so the graph routes it to OnFailure via the error transition.
+- **OnSuccess** runs on the normal transition. Do the follow-up work here; because it is its own step it can
+  retry itself with `flow.Retry` (e.g. re-attempt a web notification with backoff until it lands within a
+  bounded horizon).
+- **OnFailure**, wired with `AddTransitionOnError`, has the error in the `onErr` state field (input
+  `onErr *errors.TracedError`) and can notify, compensate, or clean up, again as a retryable step of its own.
+
+Splitting the follow-up into its own task is what makes it durable: a crash between the subgraph completing and
+the notification being delivered is recovered like any other step, and the delivery is not tied to a caller
+staying connected. Doing the follow-up inside CallSubgraph instead would couple it to the subgraph call's own
+attempt and lose that independent retry. This is the guaranteed-delivery replacement for the removed best-effort
+stop event.
+
+**Interrupts are not a terminal outcome.** The orchestrator observes the subgraph's terminal outcome (success or
+failure); it cannot react to the subgraph *interrupting*, because an interrupt parks the whole chain including
+the orchestrator's CallSubgraph step, so no task runs at that moment. To notify that a flow is *waiting for
+input*, put a notify task *before* the interrupting step: the task that is about to `flow.Interrupt` knows it is
+about to wait, so it (or a step just ahead of it) reports "pending" first.
 
 ## Debugging Workflows
 

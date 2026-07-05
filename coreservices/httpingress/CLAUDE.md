@@ -51,3 +51,11 @@ The ingress is a generic forwarder whose source-derived NATS ACL collapses to a 
 ### `PortMappings` is removed; setting it refuses startup
 
 The previous `x:y->z` port-rewrite mechanism is gone. The `PortMappings` config name is still defined, but `OnChangedPortMappings` returns an error if it has any non-empty value, which makes the ingress refuse to start. Failing closed is deliberately stricter than "warn and ignore": a prod operator who set `PortMappings` to enforce a posture should see their configuration take effect or see a hard failure that points them at `AllowedInternalPorts`, never silent erosion of the posture they thought they were running.
+
+### JWKS fetch is debounced per issuer
+
+`exchangeToken` resolves an external bearer token's `kid` to a public key, fetching JWKS on a cache miss.
+`fetchBearerTokenKeys` debounces those fetches per issuer at `jwksFetchCooldown` (1s), so internet-origin tokens
+carrying unrecognized kids cannot amplify into bus calls to the bearer token service - the ingress being the
+internet-facing verifier makes this the primary surface for that amplification. The 1s window is safe by the contract
+on the bearer token service's `JWKS` endpoint, whose godoc declares it cacheable for that long.

@@ -116,7 +116,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Fork
 		"Fork", svc.doFork,
 		sub.At(foremanapi.Fork.Method, foremanapi.Fork.Route),
-		sub.Description(`Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.`),
+		sub.Description(`Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.`),
 		sub.Function(foremanapi.ForkIn{}, foremanapi.ForkOut{}),
 	)
 	svc.Subscribe( // MARKER: History
@@ -170,7 +170,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Continue
 		"Continue", svc.doContinue,
 		sub.At(foremanapi.Continue.Method, foremanapi.Continue.Route),
-		sub.Description(`Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.`),
+		sub.Description(`Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.`),
 		sub.Function(foremanapi.ContinueIn{}, foremanapi.ContinueOut{}),
 	)
 	svc.Subscribe( // MARKER: Signal

@@ -258,11 +258,12 @@ func (c *Conn) Close() error {
 	if natsConn != nil {
 		poolLock.Lock()
 		natsConn.refCount--
-		if natsConn.refCount == 0 {
+		lastRef := natsConn.refCount == 0
+		if lastRef {
 			delete(pool, natsConn.cacheKey)
 		}
 		poolLock.Unlock()
-		if natsConn.refCount == 0 {
+		if lastRef {
 			natsConn.Close()
 			c.natsConn.Store(nil)
 		}

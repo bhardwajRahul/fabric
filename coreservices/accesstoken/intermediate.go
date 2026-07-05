@@ -94,7 +94,9 @@ falling back to DefaultTokenLifetime if no budget is set, and capped at MaxToken
 	svc.Subscribe( // MARKER: JWKS
 		"JWKS", svc.doJWKS,
 		sub.At(accesstokenapi.JWKS.Method, accesstokenapi.JWKS.Route),
-		sub.Description(`JWKS aggregates public keys from all replicas and returns them in JWKS format.`),
+		sub.Description(`JWKS aggregates public keys from all replicas and returns them in JWKS format.
+
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.`),
 		sub.Function(accesstokenapi.JWKSIn{}, accesstokenapi.JWKSOut{}),
 	)
 	svc.Subscribe( // MARKER: LocalKeys

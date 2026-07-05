@@ -127,6 +127,7 @@ type Connector struct {
 
 	actorKeysLock sync.RWMutex
 	actorKeys     map[string]ed25519.PublicKey
+	lastJWKSFetch map[string]time.Time
 }
 
 // NewConnector constructs a new Connector.

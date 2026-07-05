@@ -32,7 +32,7 @@ const Hostname = "http.ingress.core"
 const Name = "HTTPIngress"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 380
+const Version = 381
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `The HTTP ingress microservice relays incoming HTTP requests to the NATS bus.`

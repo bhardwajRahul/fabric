@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -764,7 +763,7 @@ func TestCreditFlow_CreditApproval(t *testing.T) { // MARKER: CreditApproval
 
 }
 
-func TestCreditFlow_NotifyOnStop(t *testing.T) {
+func TestCreditFlow_Await(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -780,40 +779,6 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 	app.Add(svc, foreman.NewService(), tester)
 	app.RunInTest(t)
 
-	// Subscribe to OnFlowStopped targeted at the tester's hostname
-	type notification struct {
-		flowKey  string
-		status   string
-		snapshot map[string]any
-	}
-	notifyCh := make(chan notification, 10)
-	assert := testarossa.For(t)
-	unsub, err := foremanapi.NewHook(tester).ForHost(tester.Hostname()).OnFlowStopped(
-		func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) (err error) {
-			if outcome == nil {
-				return nil
-			}
-			notifyCh <- notification{flowKey: flowKey, status: outcome.Status, snapshot: outcome.State}
-			return nil
-		},
-	)
-	assert.NoError(err)
-	defer unsub()
-
-	waitForNotification := func(assert *testarossa.Asserter, flowKey string, expectedStatus string) notification {
-		for {
-			select {
-			case n := <-notifyCh:
-				if n.flowKey == flowKey && n.status == expectedStatus {
-					return n
-				}
-			case <-time.After(10 * time.Second):
-				assert.True(false, "timeout waiting for %s notification on flow %s", expectedStatus, flowKey)
-				return notification{}
-			}
-		}
-	}
-
 	goodApplicant := creditflowapi.Applicant{
 		ApplicantName: "Alice",
 		SSN:           "123-45-6789",
@@ -826,14 +791,18 @@ func TestCreditFlow_NotifyOnStop(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
 		assert := testarossa.For(t)
 
+		// Create auto-runs; Await blocks until the flow stops and returns its outcome. This is the
+		// replacement for the removed stop-notification event: the caller learns the outcome by awaiting it.
 		flowKey, err := foremanClient.Create(ctx, creditflowapi.CreditApproval.URL(), creditflowapi.CreditApprovalIn{
 			Applicant: goodApplicant,
-		}, &workflow.FlowOptions{NotifyOnStop: true})
+		}, nil)
 		assert.NoError(err)
 
-		n := waitForNotification(assert, flowKey, workflow.StatusCompleted)
-		assert.Expect(n.status, workflow.StatusCompleted)
-		assert.NotNil(n.snapshot)
+		outcome, err := foremanClient.Await(ctx, flowKey)
+		if assert.NoError(err) {
+			assert.Expect(outcome.Status, workflow.StatusCompleted)
+			assert.NotNil(outcome.State)
+		}
 	})
 }
 

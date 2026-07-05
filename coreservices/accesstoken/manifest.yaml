@@ -19,7 +19,7 @@ general:
   hostname: access.token.core
   description: AccessToken generates short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation.
   package: github.com/microbus-io/fabric/coreservices/accesstoken
-  modifiedAt: "2026-06-19T00:03:27Z"
+  modifiedAt: "2026-07-05T14:18:48Z"
 
 configs:
   KeyRotationInterval:
@@ -48,7 +48,10 @@ functions:
     route: :666/mint
   JWKS:
     signature: JWKS() (keys []JWK)
-    description: JWKS aggregates public keys from all replicas and returns them in JWKS format.
+    description: |-
+      JWKS aggregates public keys from all replicas and returns them in JWKS format.
+      
+      Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.
     method: ANY
     route: :888/jwks
   LocalKeys:

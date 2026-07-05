@@ -67,6 +67,7 @@ type Service struct {
 	handler              connector.HTTPHandler
 	bearerTokenMu        sync.RWMutex
 	bearerTokenKeys      map[string]ed25519.PublicKey
+	lastJWKSFetch        map[string]time.Time
 }
 
 // OnStartup is called when the microservice is started up.
@@ -703,8 +704,24 @@ func (svc *Service) lookupBearerTokenKey(kid string) (ed25519.PublicKey, bool) {
 	return key, ok
 }
 
+// jwksFetchCooldown debounces per-issuer JWKS fetches. The bearer token service's :888/jwks
+// endpoint declares this window safe to cache.
+const jwksFetchCooldown = time.Second
+
 // fetchBearerTokenKeys fetches JWKS from the given host and updates the key cache.
+// It is a no-op when the last fetch for the host was within jwksFetchCooldown.
 func (svc *Service) fetchBearerTokenKeys(ctx context.Context, host string) error {
+	svc.bearerTokenMu.Lock()
+	if svc.lastJWKSFetch == nil {
+		svc.lastJWKSFetch = map[string]time.Time{}
+	}
+	if last, ok := svc.lastJWKSFetch[host]; ok && time.Since(last) < jwksFetchCooldown {
+		svc.bearerTokenMu.Unlock()
+		return nil
+	}
+	svc.lastJWKSFetch[host] = time.Now()
+	svc.bearerTokenMu.Unlock()
+
 	jwks, err := bearertokenapi.NewClient(svc).ForHost(host).JWKS(ctx)
 	if err != nil {
 		return errors.Trace(err)

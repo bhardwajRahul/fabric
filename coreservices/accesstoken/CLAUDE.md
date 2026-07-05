@@ -15,3 +15,12 @@ Token expiration is tied to the request's time budget, reinforcing the maximum t
 secured with `requiredClaims` or an in-handler authorization check - that is circular, since minting is how a caller
 obtains a verified claim in the first place. The only technical control is the `:666` `PUB` ACL; isolation and a CI
 allow-list (in the production deployment guide's trust-root hardening section) are the operational controls.
+
+### Newly rotated keys are not used for signing immediately
+
+`generateKey` promotes a new key to `currentKey`, but `Mint` keeps signing with `previousKey` until the current key
+has existed for `keyActivationDelay` (10s). The new key is published in JWKS (via `LocalKeys`) from the moment it is
+generated, so verifiers can fetch it in advance of the first token it signs. This is what makes the JWKS fetch
+debounce in the connector and the ingress safe: a verifier always has `keyActivationDelay` to pick up a new `kid`
+before any token carries it, far longer than the 1s fetch cooldown those verifiers apply. At startup there is no
+previous key, so the first key signs immediately.

@@ -17,10 +17,9 @@ import (
 )
 
 // This file implements the dwarf engine.Host interface for the Microbus transport. The engine owns the
-// orchestration; these four methods are the only seam to the bus:
+// orchestration; these three methods are the only seam to the bus:
 //   - LoadGraph   - GET the workflow graph over the bus.
 //   - ExecuteTask - mint the actor token from baggage, POST the flow to the task, retry on ack-timeout.
-//   - FlowStopped - fire the OnFlowStopped outbound event to the notify host carried in the flow's baggage.
 //   - SignalPeers - multicast the opaque (op, payload) to peer replicas, excluding self.
 
 // ackTimeoutRetryProbes is how many times a task dispatch that keeps hitting a 404 ack-timeout is re-probed
@@ -30,11 +29,6 @@ import (
 // uniformly. Deriving the interval from the budget keeps the cadence proportional to any horizon and needs
 // no operator config: the horizon is simply the task's own time budget.
 const ackTimeoutRetryProbes = 8
-
-// baggageNotifyHost is the baggage key under which resolveOptions stamps the caller's host when the
-// caller set FlowOptions.NotifyOnStop, so FlowStopped can deliver the OnFlowStopped event back to it.
-// It is foreman bookkeeping, not an actor claim (mintActorToken strips it before minting).
-const baggageNotifyHost = "notifyHost"
 
 // LoadGraph fetches a workflow graph by issuing a GET to its URL over the bus and decoding the
 // {"graph": ...} wrapper the workflow endpoint serves. Implements engine.Host.
@@ -149,12 +143,6 @@ func (svc *Service) mintActorToken(ctx context.Context) (string, error) {
 	for k, v := range baggage {
 		actorClaims[k] = v
 	}
-	// baggageNotifyHost is foreman bookkeeping (the FlowStopped delivery target), not an actor claim - keep
-	// it out of the minted token.
-	delete(actorClaims, baggageNotifyHost)
-	if len(actorClaims) == 0 {
-		return "", nil
-	}
 	iss, _ := actorClaims["iss"].(string)
 	iss = stripProto(iss)
 	actorClaims["iss"] = actorClaims["idp"]
@@ -164,20 +152,6 @@ func (svc *Service) mintActorToken(ctx context.Context) (string, error) {
 		return "", errors.Trace(err)
 	}
 	return token, nil
-}
-
-// FlowStopped fires the OnFlowStopped outbound event to the notify host carried in the flow's baggage.
-// The engine traffics in no delivery address: when the caller set FlowOptions.NotifyOnStop, resolveOptions
-// stamped the caller's host into baggage under baggageNotifyHost at Create, and it rides back here on the
-// ctx. Absent (caller did not opt in) means nothing to deliver. Implements engine.Host.
-func (svc *Service) FlowStopped(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) {
-	baggage, _ := workflow.BaggageFrom(ctx).(map[string]any)
-	host, _ := baggage[baggageNotifyHost].(string)
-	if host == "" {
-		return
-	}
-	for range foremanapi.NewMulticastTrigger(svc).ForHost(host).OnFlowStopped(ctx, flowKey, outcome) {
-	}
 }
 
 // SignalPeers multicasts an opaque cross-replica coordination signal to the other foreman replicas via

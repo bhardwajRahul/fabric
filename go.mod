@@ -10,11 +10,11 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invopop/jsonschema v0.14.0
 	github.com/microbus-io/bespa v0.1.4
-	github.com/microbus-io/boolexp v1.1.1
-	github.com/microbus-io/dwarf v0.8.4
+	github.com/microbus-io/boolexp v1.1.2
+	github.com/microbus-io/dwarf v0.9.0
 	github.com/microbus-io/errors v1.0.1
 	github.com/microbus-io/pyvenv v1.0.3
-	github.com/microbus-io/sequel v1.10.5
+	github.com/microbus-io/sequel v1.10.6
 	github.com/microbus-io/testarossa v0.7.3
 	github.com/mnako/letters v0.2.8
 	github.com/nats-io/jwt/v2 v2.8.2

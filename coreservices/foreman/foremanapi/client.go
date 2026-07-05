@@ -13,7 +13,6 @@ import (
 	"github.com/microbus-io/fabric/httpx"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
-	"github.com/microbus-io/fabric/sub"
 )
 
 // multicastResponse packs the response of a functional multicast.
@@ -65,50 +64,6 @@ func (_c MulticastClient) ForHost(host string) MulticastClient {
 // WithOptions returns a copy of the client with options to be applied to requests.
 func (_c MulticastClient) WithOptions(opts ...pub.Option) MulticastClient {
 	return MulticastClient{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
-}
-
-// MulticastTrigger is a lightweight proxy for triggering the events of the microservice.
-type MulticastTrigger struct {
-	svc  service.Publisher
-	host string
-	opts []pub.Option
-}
-
-// NewMulticastTrigger creates a new multicast trigger of events of the microservice.
-func NewMulticastTrigger(caller service.Publisher) MulticastTrigger {
-	return MulticastTrigger{svc: caller, host: Hostname}
-}
-
-// ForHost returns a copy of the trigger with a different hostname to be applied to requests.
-func (_c MulticastTrigger) ForHost(host string) MulticastTrigger {
-	return MulticastTrigger{svc: _c.svc, host: host, opts: _c.opts}
-}
-
-// WithOptions returns a copy of the trigger with options to be applied to requests.
-func (_c MulticastTrigger) WithOptions(opts ...pub.Option) MulticastTrigger {
-	return MulticastTrigger{svc: _c.svc, host: _c.host, opts: append(_c.opts, opts...)}
-}
-
-// Hook assists in the subscription to the events of the microservice.
-type Hook struct {
-	svc  service.Subscriber
-	host string
-	opts []sub.Option
-}
-
-// NewHook creates a new hook to the events of the microservice.
-func NewHook(listener service.Subscriber) Hook {
-	return Hook{svc: listener, host: Hostname}
-}
-
-// ForHost returns a copy of the hook with a different hostname to be applied to the subscription.
-func (c Hook) ForHost(host string) Hook {
-	return Hook{svc: c.svc, host: host, opts: c.opts}
-}
-
-// WithOptions returns a copy of the hook with options to be applied to subscriptions.
-func (c Hook) WithOptions(opts ...sub.Option) Hook {
-	return Hook{svc: c.svc, host: c.host, opts: append(c.opts, opts...)}
 }
 
 // marshalRequest supports functional endpoints.
@@ -174,23 +129,6 @@ func marshalPublish(ctx context.Context, svc service.Publisher, opts []pub.Optio
 			}
 		}
 	}
-}
-
-// marshalFunction handles marshaling for functional endpoints.
-func marshalFunction(w http.ResponseWriter, r *http.Request, route string, in any, out any, execute func(in any, out any) error) error {
-	err := httpx.ReadInputPayload(r, route, in)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = execute(in, out)
-	if err != nil {
-		return err // No trace
-	}
-	err = httpx.WriteOutputPayload(w, out)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
 }
 
 // Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
@@ -356,7 +294,7 @@ func (_c MulticastClient) Cancel(ctx context.Context, flowKey string, reason str
 	}
 }
 
-// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.
 func (_c Client) Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error) { // MARKER: Fork
 	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
 	_out := ForkOut{}
@@ -373,7 +311,7 @@ func (_res *ForkResponse) Get() (newFlowKey string, err error) { // MARKER: Fork
 	return _d.NewFlowKey, _res.err
 }
 
-// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.
 func (_c MulticastClient) Fork(ctx context.Context, stepKey string, stateOverrides any) iter.Seq[*ForkResponse] { // MARKER: Fork
 	_in := ForkIn{StepKey: stepKey, StateOverrides: stateOverrides}
 	_out := ForkOut{}
@@ -652,7 +590,7 @@ func (_c MulticastClient) Run(ctx context.Context, workflowURL string, initialSt
 	}
 }
 
-// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.
 func (_c Client) Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error) { // MARKER: Continue
 	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
 	_out := ContinueOut{}
@@ -669,7 +607,7 @@ func (_res *ContinueResponse) Get() (newFlowKey string, err error) { // MARKER: 
 	return _d.NewFlowKey, _res.err
 }
 
-// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.
 func (_c MulticastClient) Continue(ctx context.Context, threadKey string, additionalState any) iter.Seq[*ContinueResponse] { // MARKER: Continue
 	_in := ContinueIn{ThreadKey: threadKey, AdditionalState: additionalState}
 	_out := ContinueOut{}
@@ -737,51 +675,4 @@ func (_c MulticastClient) HistoryMermaid(ctx context.Context, relativeURL string
 		pub.RelativeURL(relativeURL),
 		pub.Options(_c.opts...),
 	)
-}
-
-// OnFlowStoppedResponse packs the response of OnFlowStopped.
-type OnFlowStoppedResponse multicastResponse // MARKER: OnFlowStopped
-
-// Get unpacks the return arguments of OnFlowStopped.
-func (_res *OnFlowStoppedResponse) Get() (err error) { // MARKER: OnFlowStopped
-	return _res.err
-}
-
-// OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
-func (_c MulticastTrigger) OnFlowStopped(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) iter.Seq[*OnFlowStoppedResponse] { // MARKER: OnFlowStopped
-	_in := OnFlowStoppedIn{FlowKey: flowKey, Outcome: outcome}
-	_out := OnFlowStoppedOut{}
-	_inner := marshalPublish(ctx, _c.svc, _c.opts, _c.host, OnFlowStopped.Method, OnFlowStopped.Route, &_in, &_out)
-	return func(yield func(*OnFlowStoppedResponse) bool) {
-		for _r := range _inner {
-			_clone := _out
-			_r.data = &_clone
-			if !yield((*OnFlowStoppedResponse)(_r)) {
-				return
-			}
-		}
-	}
-}
-
-// OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
-func (c Hook) OnFlowStopped(handler func(ctx context.Context, flowKey string, outcome *workflow.FlowOutcome) (err error)) (unsub func() error, err error) { // MARKER: OnFlowStopped
-	doOnFlowStopped := func(w http.ResponseWriter, r *http.Request) error {
-		var in OnFlowStoppedIn
-		var out OnFlowStoppedOut
-		err = marshalFunction(w, r, OnFlowStopped.Route, &in, &out, func(_ any, _ any) error {
-			err = handler(r.Context(), in.FlowKey, in.Outcome)
-			return err
-		})
-		return err // No trace
-	}
-	const name = "OnFlowStopped"
-	path := httpx.JoinHostAndPath(c.host, OnFlowStopped.Route)
-	subOpts := append([]sub.Option{
-		sub.At(OnFlowStopped.Method, path),
-		sub.InboundEvent(OnFlowStoppedIn{}, OnFlowStoppedOut{}),
-	}, c.opts...)
-	if err := c.svc.Subscribe(name, doOnFlowStopped, subOpts...); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return func() error { return c.svc.Unsubscribe(name) }, nil
 }

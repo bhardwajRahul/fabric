@@ -41,6 +41,9 @@ var (
 	_ accesstokenapi.Client
 )
 
+// keyActivationDelay is how long a new key is published in JWKS before it signs any token.
+const keyActivationDelay = 10 * time.Second
+
 // keyPair holds an Ed25519 key pair and its metadata.
 type keyPair struct {
 	kid        string
@@ -138,9 +141,16 @@ falling back to DefaultTokenLifetime if no budget is set, and capped at MaxToken
 func (svc *Service) Mint(ctx context.Context, claims any) (token string, err error) { // MARKER: Mint
 	svc.mu.RLock()
 	current := svc.currentKey
+	previous := svc.previousKey
 	svc.mu.RUnlock()
 	if current == nil {
 		return "", errors.New("no signing key available", http.StatusServiceUnavailable)
+	}
+
+	// Sign with the previous key until the current key has been published for keyActivationDelay.
+	signingKey := current
+	if previous != nil && time.Since(current.createdAt) < keyActivationDelay {
+		signingKey = previous
 	}
 
 	// Determine lifetime from the time budget of the request
@@ -180,9 +190,9 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 	jwtClaims["jti"] = utils.RandomIdentifier(16)
 
 	t := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwtClaims)
-	t.Header["kid"] = current.kid
+	t.Header["kid"] = signingKey.kid
 
-	signed, err := t.SignedString(current.privateKey)
+	signed, err := t.SignedString(signingKey.privateKey)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -218,6 +228,7 @@ func (svc *Service) LocalKeys(ctx context.Context) (keys []accesstokenapi.JWK, e
 
 /*
 JWKS aggregates public keys from all replicas and returns them in JWKS format.
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.
 */
 func (svc *Service) JWKS(ctx context.Context) (keys []accesstokenapi.JWK, err error) { // MARKER: JWKS
 	var result []accesstokenapi.JWK

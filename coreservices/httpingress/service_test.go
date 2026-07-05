@@ -963,3 +963,227 @@ func TestHttpingress_OnChangedBlockedPaths(t *testing.T) {
 func TestHttpingress_OnChangedServerLanguages(t *testing.T) {
 	t.Skip() // Not tested
 }
+
+func TestHTTPIngress_OnChangedPorts(t *testing.T) { // MARKER: Ports
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetPorts(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedAllowedOrigins(t *testing.T) { // MARKER: AllowedOrigins
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetAllowedOrigins(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedPortMappings(t *testing.T) { // MARKER: PortMappings
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetPortMappings(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedAllowedInternalPorts(t *testing.T) { // MARKER: AllowedInternalPorts
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetAllowedInternalPorts(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedReadTimeout(t *testing.T) { // MARKER: ReadTimeout
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetReadTimeout(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedWriteTimeout(t *testing.T) { // MARKER: WriteTimeout
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetWriteTimeout(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedReadHeaderTimeout(t *testing.T) { // MARKER: ReadHeaderTimeout
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetReadHeaderTimeout(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestHTTPIngress_OnChangedBlockedPaths(t *testing.T) { // MARKER: BlockedPaths
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetBlockedPaths(value)
+			assert.NoError(err)
+		})
+	*/
+}

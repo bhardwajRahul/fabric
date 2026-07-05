@@ -217,6 +217,72 @@ func TestBearerToken_Mint(t *testing.T) { // MARKER: Mint
 	})
 }
 
+func TestBearerToken_DelayedKeyActivation(t *testing.T) { // MARKER: Mint
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("tester.client")
+	client := bearertokenapi.NewClient(tester)
+
+	// Configure the initial (outgoing) key
+	oldPEM := generateTestPEM()
+	newPEM := generateTestPEM()
+	svc.Init(func(svc *Service) (err error) {
+		return svc.SetPrivateKey(oldPEM)
+	})
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	kidOf := func(token string) string {
+		parsed, _, _ := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
+		kid, _ := parsed.Header["kid"].(string)
+		return kid
+	}
+
+	svc.mu.RLock()
+	oldKid := svc.primary.kid
+	svc.mu.RUnlock()
+
+	// Rotate: the outgoing key moves to the alternate slot, a new key becomes primary.
+	assert := testarossa.For(t)
+	assert.NoError(svc.SetAltPrivateKey(oldPEM))
+	assert.NoError(svc.SetPrivateKey(newPEM))
+
+	svc.mu.RLock()
+	newKid := svc.primary.kid
+	svc.mu.RUnlock()
+	assert.NotEqual(newKid, oldKid)
+
+	t.Run("signs_with_alt_during_activation_delay", func(t *testing.T) {
+		assert := testarossa.For(t)
+		token, err := client.Mint(ctx, map[string]any{"sub": "u"})
+		if assert.NoError(err) {
+			assert.Expect(kidOf(token), oldKid)
+		}
+	})
+
+	t.Run("signs_with_primary_after_activation_delay", func(t *testing.T) {
+		assert := testarossa.For(t)
+		svc.mu.Lock()
+		svc.primaryRotatedAt = svc.primaryRotatedAt.Add(-2 * keyActivationDelay)
+		svc.mu.Unlock()
+		token, err := client.Mint(ctx, map[string]any{"sub": "u"})
+		if assert.NoError(err) {
+			assert.Expect(kidOf(token), newKid)
+		}
+	})
+}
+
 func TestBearerToken_JWKS(t *testing.T) { // MARKER: JWKS
 	t.Parallel()
 	ctx := t.Context()
@@ -374,4 +440,60 @@ func TestBearerToken_AddClaimsTransformer(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestBearerToken_OnChangedPrivateKey(t *testing.T) { // MARKER: PrivateKey
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetPrivateKey(value)
+			assert.NoError(err)
+		})
+	*/
+}
+
+func TestBearerToken_OnChangedAltPrivateKey(t *testing.T) { // MARKER: AltPrivateKey
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := svc.SetAltPrivateKey(value)
+			assert.NoError(err)
+		})
+	*/
 }

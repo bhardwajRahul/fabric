@@ -17,8 +17,9 @@ limitations under the License.
 package accesstokenapi
 
 import (
-	"github.com/microbus-io/fabric/define"
 	"time"
+
+	"github.com/microbus-io/fabric/define"
 )
 
 // HINT: This file is the single source of truth for the microservice's API. After editing it, run
@@ -32,7 +33,7 @@ const Hostname = "access.token.core"
 const Name = "AccessToken"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 3
+const Version = 4
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `AccessToken generates short-lived JWTs signed with ephemeral Ed25519 keys for internal actor propagation.`
@@ -75,7 +76,10 @@ type MintOut struct { // MARKER: Mint
 	Token string `json:"token,omitzero"`
 }
 
-// JWKS aggregates public keys from all replicas and returns them in JWKS format.
+/*
+JWKS aggregates public keys from all replicas and returns them in JWKS format.
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.
+*/
 var JWKS = define.Function{ // MARKER: JWKS
 	Host: Hostname, Method: "ANY", Route: ":888/jwks",
 	In: JWKSIn{}, Out: JWKSOut{},

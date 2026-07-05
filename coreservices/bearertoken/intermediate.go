@@ -93,7 +93,9 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: JWKS
 		"JWKS", svc.doJWKS,
 		sub.At(bearertokenapi.JWKS.Method, bearertokenapi.JWKS.Route),
-		sub.Description(`JWKS returns the public keys of the token issuer in JWKS format.`),
+		sub.Description(`JWKS returns the public keys of the token issuer in JWKS format.
+
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.`),
 		sub.Function(bearertokenapi.JWKSIn{}, bearertokenapi.JWKSOut{}),
 	)
 	svc.DefineConfig( // MARKER: AuthTokenTTL

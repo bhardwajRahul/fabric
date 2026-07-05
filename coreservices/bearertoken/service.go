@@ -45,6 +45,10 @@ var (
 	_ bearertokenapi.Client
 )
 
+// keyActivationDelay is how long a newly configured primary key is published in JWKS before it
+// signs any token. During the window the alternate (outgoing) key keeps signing.
+const keyActivationDelay = 10 * time.Second
+
 // keyEntry holds a parsed Ed25519 key pair and its metadata.
 type keyEntry struct {
 	kid        string
@@ -67,6 +71,7 @@ type Service struct {
 	mu                 sync.RWMutex
 	primary            *keyEntry
 	alt                *keyEntry
+	primaryRotatedAt   time.Time
 	issClaim           string
 	claimsTransformers []ClaimsTransformer
 }
@@ -172,7 +177,25 @@ OnChangedPrivateKey is called when the PrivateKey config property changes.
 PrivateKey is the Ed25519 private key used to sign JWTs, in PEM or raw base64 format.
 */
 func (svc *Service) OnChangedPrivateKey(ctx context.Context) (err error) { // MARKER: PrivateKey
-	return errors.Trace(svc.loadKey(svc.PrivateKey(), &svc.primary))
+	svc.mu.RLock()
+	oldKID := ""
+	if svc.primary != nil {
+		oldKID = svc.primary.kid
+	}
+	svc.mu.RUnlock()
+
+	err = svc.loadKey(svc.PrivateKey(), &svc.primary)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// A change between two distinct keys is a rotation; mark it for the activation delay.
+	svc.mu.Lock()
+	if oldKID != "" && svc.primary != nil && svc.primary.kid != oldKID {
+		svc.primaryRotatedAt = time.Now().UTC()
+	}
+	svc.mu.Unlock()
+	return nil
 }
 
 /*
@@ -190,10 +213,17 @@ Mint signs a JWT with the given claims.
 func (svc *Service) Mint(ctx context.Context, claims any) (token string, err error) { // MARKER: Mint
 	svc.mu.RLock()
 	key := svc.primary
+	alt := svc.alt
+	rotatedAt := svc.primaryRotatedAt
 	svc.mu.RUnlock()
 
 	if key == nil {
 		return "", errors.New("no signing key configured", http.StatusServiceUnavailable)
+	}
+
+	// During the activation delay after a rotation, keep signing with the alternate (outgoing) key.
+	if alt != nil && time.Since(rotatedAt) < keyActivationDelay {
+		key = alt
 	}
 
 	now := time.Now().UTC()
@@ -233,6 +263,7 @@ func (svc *Service) Mint(ctx context.Context, claims any) (token string, err err
 
 /*
 JWKS returns the public keys of the token issuer in JWKS format.
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.
 */
 func (svc *Service) JWKS(ctx context.Context) (keys []bearertokenapi.JWK, err error) { // MARKER: JWKS
 	svc.mu.RLock()

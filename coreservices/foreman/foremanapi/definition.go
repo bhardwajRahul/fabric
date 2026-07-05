@@ -63,22 +63,6 @@ var SQLConnectionPool = define.Config{ // MARKER: SQLConnectionPool
 	Validation: "int [1,]",
 }
 
-// OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
-var OnFlowStopped = define.OutboundEvent{ // MARKER: OnFlowStopped
-	Host: Hostname, Method: "POST", Route: ":417/on-flow-terminated",
-	In: OnFlowStoppedIn{}, Out: OnFlowStoppedOut{},
-}
-
-// OnFlowStoppedIn are the input arguments of OnFlowStopped.
-type OnFlowStoppedIn struct { // MARKER: OnFlowStopped
-	FlowKey string                `json:"flowKey,omitzero"`
-	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
-}
-
-// OnFlowStoppedOut are the output arguments of OnFlowStopped.
-type OnFlowStoppedOut struct { // MARKER: OnFlowStopped
-}
-
 // Create creates a flow for a workflow and immediately runs it, returning the running flow's key. There is no separate start step. Set Opts.ThreadKey to join an existing thread; for a deferred start, have the entry task call flow.Interrupt and Resume it when ready.
 var Create = define.Function{ // MARKER: Create
 	Host: Hostname, Method: "ANY", Route: ":444/create",
@@ -162,7 +146,7 @@ type CancelIn struct { // MARKER: Cancel
 type CancelOut struct { // MARKER: Cancel
 }
 
-// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+// Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.
 var Fork = define.Function{ // MARKER: Fork
 	Host: Hostname, Method: "POST", Route: ":444/fork",
 	In: ForkIn{}, Out: ForkOut{},
@@ -311,7 +295,7 @@ type RunOut struct { // MARKER: Run
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
-// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+// Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.
 var Continue = define.Function{ // MARKER: Continue
 	Host: Hostname, Method: "POST", Route: ":444/continue",
 	In: ContinueIn{}, Out: ContinueOut{},

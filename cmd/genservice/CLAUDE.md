@@ -40,6 +40,17 @@ references (`Source: srcapi.OnRegistered`). There is no `go/types` pass and no e
 keeping `definition.go` a declarative spec rather than code with logic, and it is why the `define` package models
 config and metric value types as explicit type carriers (`Value: int(0)`) instead of inferring them.
 
+## Verbatim-embedded strings must not contain a backtick
+
+Two author-supplied strings are projected into the generated `intermediate.go` inside a Go raw string literal: a
+feature's godoc (`sub.Description(`...`)`, `cfg.Description(`...`)`, the metric describe calls) and a config's
+`Default` value (`cfg.DefaultValue(`...`)`). A backtick in either closes the raw string early and yields
+uncompilable Go, which surfaces only as an opaque `format.Source` parse error far from the cause. `parseService`
+therefore rejects both up front with a message naming the offending feature. A config default can smuggle in a
+backtick because it may be written as a double-quoted literal (``Default: "a`b"``), which `attrString` unquotes to a
+value the emitter then drops into the raw string. The godoc case cannot itself hold a backtick in a raw-string
+comment, but a `//`-line godoc can, so both are checked.
+
 ## Why text/template for the Go files but a hand emitter for YAML
 
 `client.go`, `intermediate.go`, `mock.go`, and `mock_test.go` are rendered from `//go:embed`-ed `.txt` templates

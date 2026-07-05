@@ -13,10 +13,10 @@ schema, metrics, and tracing. This service owns only the Microbus seam:
 
 - **Bus endpoints** delegate 1:1 to engine methods (`Create`, `Run`, `Resume`, `Cancel`, …). The service
   struct holds the engine as a member (`svc.engine`), built in `OnStartup`, drained in `OnShutdown`.
-- **`engine.Host` implementation** (`host.go`): `LoadGraph` (GET the graph over the bus), `ExecuteTask`
-  (mint the actor token from baggage, POST the flow to the task URL, return any transport error undecorated),
-  `FlowStopped` (fire `OnFlowStopped` to the notify host read from the flow's baggage), and
-  `SignalPeers` (multicast the opaque `(op, payload)` to peer replicas via the single `Signal` endpoint).
+- **`engine.Host` implementation** (`host.go`): three methods - `LoadGraph` (GET the graph over the bus),
+  `ExecuteTask` (mint the actor token from baggage, POST the flow to the task URL, return any transport error
+  undecorated), and `SignalPeers` (multicast the opaque `(op, payload)` to peer replicas via the single
+  `Signal` endpoint). The engine has no stop-notification callback, so `Host` carries none.
 - **`Signal` inbound endpoint** filters self/foreign delivery, then hands `(op, payload)` to
   `engine.DeliverSignal`.
 - **Identity**: actor claims + tenant are read from `frame.Of(ctx)` at `Create`/`Run` and passed to the
@@ -129,8 +129,8 @@ original identity provider, so the downstream authorizes against the right issue
 unauthenticated dispatch.
 
 **Only the genesis endpoints route through `resolveOptions`.** Policy (`FlowOptions`) is authored once at
-genesis - `Create` and `Run` - so only those two inject the caller's actor claims, notify host, and tenant
-fairness key into baggage. The derived operations take no options and inherit their source's policy:
+genesis - `Create` and `Run` - so only those two inject the caller's actor claims and tenant fairness key
+into baggage. The derived operations take no options and inherit their source's policy:
 `Continue` inherits the thread's, `Fork` inherits the origin's. Their foreman handlers therefore delegate
 straight to the engine with no `resolveOptions` call - re-injecting the *current* caller's identity would
 be wrong, since a derived flow runs as the original actor (the inherited baggage already carries those
@@ -154,14 +154,15 @@ endpoint can move a terminal flow off its frozen outcome.
 explicit `FairnessKey`, the foreman fills it with the frame's tenant id, so cross-tenant fairness works
 out of the box without the engine knowing what a tenant is.
 
-**Stop-notification delivery target rides in baggage, not in an engine column.** When a caller sets
-`FlowOptions.NotifyOnStop`, `resolveOptions` stamps the caller's host (`frame.FromHost()`) into baggage
-under `baggageNotifyHost` ("notifyHost"); on stop the engine fires `FlowStopped(ctx, outcome)` with that
-baggage on the ctx, and `FlowStopped` reads the host back to `ForHost(...)` the `OnFlowStopped` event. The
-engine carries no delivery address (a hostname it would merely store and echo is exactly what baggage is
-for), which is why notification is a `Create`-time flag (`NotifyOnStop`) and not its own endpoint.
-Because `mintActorToken` mints from *all* baggage keys, it deletes `baggageNotifyHost` first so the foreman
-bookkeeping never leaks into the minted token's claims.
+**There is no stop-notification endpoint or event; the foreman offers no `NotifyOnStop` or `OnFlowStopped`.**
+The engine has no stop-notification callback (its `Host` is the three methods above), so the adapter exposes
+nothing for it either. A caller learns a flow's outcome by **`Await`** (block a live caller, re-await if its
+context deadline fires first) or by **composing** the follow-up into the workflow itself - an orchestrating
+graph that runs the real work as a subgraph and routes success/failure to separate tasks, each a durable,
+independently retried step. That is strictly more reliable than the removed fire-once event, which reached
+only a receiver live on the bus at the instant of the stop. Because notification is now ordinary workflow
+authoring, `resolveOptions` stamps no delivery host into baggage, and `mintActorToken` copies every baggage
+key into the actor claims with nothing to scrub (baggage is purely actor identity again).
 
 **`NumShards` is applied once at startup, not live.** `OnStartup` calls `eng.SetNumShards(svc.NumShards())`
 before `Startup`, and the config has **no** `Callback` — a runtime change to `NumShards` does not re-shard a

@@ -17,8 +17,9 @@ limitations under the License.
 package bearertokenapi
 
 import (
-	"github.com/microbus-io/fabric/define"
 	"time"
+
+	"github.com/microbus-io/fabric/define"
 )
 
 // HINT: This file is the single source of truth for the microservice's API. After editing it, run
@@ -32,7 +33,7 @@ const Hostname = "bearer.token.core"
 const Name = "BearerToken"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 2
+const Version = 3
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `BearerToken signs long-lived JWTs with Ed25519 keys for external actor authentication.`
@@ -74,7 +75,10 @@ type MintOut struct { // MARKER: Mint
 	Token string `json:"token,omitzero"`
 }
 
-// JWKS returns the public keys of the token issuer in JWKS format.
+/*
+JWKS returns the public keys of the token issuer in JWKS format.
+Callers may cache the response, or debounce fetches to this endpoint, for up to 1 second.
+*/
 var JWKS = define.Function{ // MARKER: JWKS
 	Host: Hostname, Method: "ANY", Route: ":888/jwks",
 	In: JWKSIn{}, Out: JWKSOut{},

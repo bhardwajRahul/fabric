@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-07-03T16:00:25Z"
+  modifiedAt: "2026-07-04T20:56:43Z"
 
 configs:
   SQLDataSourceName:
@@ -45,13 +45,6 @@ metrics:
     kind: counter
     otelName: microbus_foreman_timeout_requests
 
-outboundEvents:
-  OnFlowStopped:
-    signature: OnFlowStopped(flowKey string, outcome *workflow.FlowOutcome)
-    description: OnFlowStopped is triggered when a flow stops (completed, failed, cancelled, or interrupted). Subscribe with ForHost(svc.Hostname()) for flows created with FlowOptions.NotifyOnStop.
-    method: POST
-    route: :417/on-flow-terminated
-
 functions:
   Create:
     signature: Create(workflowURL string, initialState any, opts *workflow.FlowOptions) (flowKey string)
@@ -80,7 +73,7 @@ functions:
     route: :444/cancel
   Fork:
     signature: Fork(stepKey string, stateOverrides any) (newFlowKey string)
-    description: Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage; notify-on-stop is forced off.
+    description: Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.
     method: POST
     route: :444/fork
   History:
@@ -125,7 +118,7 @@ functions:
     route: :444/run
   Continue:
     signature: Continue(threadKey string, additionalState any) (newFlowKey string)
-    description: Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage/notify); use Create with Opts.ThreadKey to set policy explicitly instead.
+    description: Continue creates a new running flow from the latest completed flow in a thread, merged with additional state using the graph's reducers. The threadKey can be any flowKey belonging to the thread. The new flow belongs to the same thread and inherits its policy (priority/fairness/budget/baggage); use Create with Opts.ThreadKey to set policy explicitly instead.
     method: POST
     route: :444/continue
   Signal:

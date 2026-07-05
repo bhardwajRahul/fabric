@@ -228,6 +228,60 @@ func TestAccessToken_Mint(t *testing.T) { // MARKER: Mint
 	})
 }
 
+func TestAccessToken_DelayedKeyActivation(t *testing.T) { // MARKER: Mint
+	t.Parallel()
+	ctx := t.Context()
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the testers
+	tester := connector.New("tester.client")
+	client := accesstokenapi.NewClient(tester)
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	kidOf := func(token string) string {
+		parsed, _, _ := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
+		kid, _ := parsed.Header["kid"].(string)
+		return kid
+	}
+
+	// Rotate, leaving a fresh current key and the initial key as previous.
+	err := svc.generateKey(ctx)
+	testarossa.For(t).NoError(err)
+
+	svc.mu.RLock()
+	currentKid := svc.currentKey.kid
+	previousKid := svc.previousKey.kid
+	svc.mu.RUnlock()
+
+	t.Run("signs_with_previous_during_activation_delay", func(t *testing.T) {
+		assert := testarossa.For(t)
+		token, err := client.Mint(ctx, map[string]any{"sub": "u"})
+		if assert.NoError(err) {
+			assert.Expect(kidOf(token), previousKid)
+		}
+	})
+
+	t.Run("signs_with_current_after_activation_delay", func(t *testing.T) {
+		assert := testarossa.For(t)
+		svc.mu.Lock()
+		svc.currentKey.createdAt = svc.currentKey.createdAt.Add(-2 * keyActivationDelay)
+		svc.mu.Unlock()
+		token, err := client.Mint(ctx, map[string]any{"sub": "u"})
+		if assert.NoError(err) {
+			assert.Expect(kidOf(token), currentKid)
+		}
+	})
+}
+
 func TestAccessToken_LocalKeys(t *testing.T) { // MARKER: LocalKeys
 	t.Parallel()
 	ctx := t.Context()

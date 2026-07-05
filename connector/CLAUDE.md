@@ -260,3 +260,12 @@ the actor from a verified bearer - so this specifically hardens peer-to-peer and
 ### Configurator is disabled in TESTING
 
 `refreshConfig` skips the call to `configurator.core` when `deployment == TESTING` and uses YAML defaults plus values set via `SetConfig`. Tests that want to override config call `SetConfig` / `ResetConfig` directly; outside of TESTING those calls error out.
+
+### JWKS fetch is debounced per issuer
+
+`verifyToken` resolves an actor token's `kid` to a public key, fetching JWKS on a cache miss. `fetchActorKeys`
+debounces those fetches per issuer at `jwksFetchCooldown` (1s), so a flood of tokens carrying unrecognized kids
+cannot amplify one-to-one into bus calls to the token services on the auth hot path - reachable by any mesh peer,
+since a present actor token is verified even under empty `requiredClaims` (see "Actor tokens are verified whenever
+present"). The 1s window is safe by the contract on the token services' `JWKS` endpoint, whose godoc declares it
+cacheable for that long.

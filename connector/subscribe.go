@@ -863,7 +863,19 @@ func (c *Connector) lookupActorKey(kid string) (ed25519.PublicKey, bool) {
 }
 
 // fetchActorKeys fetches JWKS from the given host at :888/jwks and updates the key cache.
+// It is a no-op when the last fetch for the host was within 1 sec.
 func (c *Connector) fetchActorKeys(host string) error {
+	c.actorKeysLock.Lock()
+	if c.lastJWKSFetch == nil {
+		c.lastJWKSFetch = map[string]time.Time{}
+	}
+	if last, ok := c.lastJWKSFetch[host]; ok && time.Since(last) < time.Second {
+		c.actorKeysLock.Unlock()
+		return nil
+	}
+	c.lastJWKSFetch[host] = time.Now()
+	c.actorKeysLock.Unlock()
+
 	resp, err := c.Request(
 		c.Lifetime(),
 		pub.GET("https://"+host+":888/jwks"),
