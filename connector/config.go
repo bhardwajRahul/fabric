@@ -90,20 +90,22 @@ func (c *Connector) SetConfig(name string, value any) error {
 	}
 	c.configLock.Lock()
 	config, ok := c.configs[name]
-	c.configLock.Unlock()
 	if !ok {
+		c.configLock.Unlock()
 		return nil
 	}
 	v := utils.AnyToString(value)
 	if !cfg.Validate(config.Validation, v) {
+		c.configLock.Unlock()
 		return c.captureInitErr(errors.New("invalid value '%s' for config property '%s'", v, name))
 	}
-	origValue := config.Value
+	changed := config.Value != v
 	config.Value = v
 	config.Set = true
+	c.configLock.Unlock()
 
 	// Call the callback function, if provided
-	if c.isPhase(startedUp) && config.Value != origValue && c.onConfigChanged != nil {
+	if c.isPhase(startedUp) && changed && c.onConfigChanged != nil {
 		startTime := time.Now()
 		err := errors.CatchPanic(func() error {
 			return c.onConfigChanged(
