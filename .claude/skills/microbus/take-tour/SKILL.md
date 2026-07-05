@@ -57,7 +57,8 @@ app.Add(
 	creditflow.NewService(),
 	chatbox.NewService(),
 	weather.NewService(),
-	// LLM core and providers - required by the chatbox and weather demos
+	flightbooking.NewService(),
+	// LLM core and providers - required by the chatbox, weather, and flight-booking demos
 	llm.NewService(),
 	claudellm.NewService(),
 	chatgptllm.NewService(),
@@ -77,6 +78,7 @@ import (
 	"github.com/microbus-io/fabric/exampleservices/yellowpages"
 	"github.com/microbus-io/fabric/exampleservices/eventsink"
 	"github.com/microbus-io/fabric/exampleservices/eventsource"
+	"github.com/microbus-io/fabric/exampleservices/flightbooking"
 	"github.com/microbus-io/fabric/exampleservices/hello"
 	"github.com/microbus-io/fabric/exampleservices/helloworld"
 	"github.com/microbus-io/fabric/exampleservices/login"
@@ -155,6 +157,7 @@ When the user picks an item, go to its subsection below, present it, and offer t
 10. Chatbox        - LLM tool-calling, with a simulated provider and optional real providers.
 11. Embedder       - A Go microservice using a real Python library for its compute.
 12. Weather        - An LLM agent built as a durable workflow, chaining two tools to answer a question.
+13. Flight Booking - An agentic workflow with a real human-in-the-loop pause (Interrupt/Resume) and a subgraph.
 0.  End the tour.
 ```
 
@@ -367,6 +370,24 @@ Explain the microservice to the user and present the following links for them to
 `ask` runs the same tool-calling loop synchronously via `llm.core`'s `Chat` (not the durable workflow), so the tour has one clickable URL that returns immediately. It does not touch the foreman - a workflow's own microservice never depends on the execution engine; launching `AskAgent` durably would be the job of whichever microservice owns the triggering event. The fact that this agent runs fine synchronously is itself the point: it is short enough not to strictly need a workflow, but the example models the workflow form for when an agent grows past a single request budget. `LatLng` and `Forecast` return deterministic mock data, so the example needs only an LLM key, not a third-party weather account.
 
 **Explore more** (offer, optional): show the one-node graph in `service.go` (`AskAgent` wiring `Answer` to run `ChatLoop` as a subgraph) and the rendered `ASKAGENT.mmd` diagram, and contrast the workflow form with Chatbox's synchronous `Chat` - the same tool-calling loop, but durable, resumable, and observable step-by-step. The user may ask to see the full implementation code of any feature.
+
+Return to the Example Menu.
+
+##### 13. Flight Booking
+
+The `flightbooking.example` microservice is the suite's showcase for the parts of the framework a synchronous LLM call cannot express: a durable graph, subgraph composition, and a **real human-in-the-loop pause** via `flow.Interrupt` / `foreman.Resume`. Where Credit Flow (9) is human-in-the-loop *by branching* and Weather (12) is a single-node agent, this workflow actually *parks* mid-run and waits for the traveler's decision. The `BookFlight` workflow searches a route, proposes one candidate flight at a time, and parks on an accept/keep-searching decision. Accepting a flight runs a separate `ChooseSeatAgent` child workflow as an isolated subgraph to pick a seat; keep-searching drives a goto loop back to the next candidate; an exhausted list ends with a not-booked message.
+
+Because Interrupt/Resume is stateful and multi-round, the stop is a `/demo` web page rather than a clickable functional URL: a single stateless request cannot round-trip a parked flow. The page starts the flow, presents each proposed flight, and its **Accept** / **Keep searching** buttons resume the parked flow, carrying the flow key in a hidden field so nothing has to be copy-pasted.
+
+Unlike Weather, this example is usable **without** a real LLM provider: only the final seat selection uses the LLM, and it degrades gracefully to the first available seat when no provider is configured, so the human-in-the-loop booking still completes end-to-end. If the user set up a provider key during the Chatbox step (10) and restarted the app, the seat is instead chosen by the model to match the natural-language preference. Real-provider calls are billable.
+
+Explain the microservice to the user and present the following link for them to experiment with in their browser:
+
+- http://localhost:8080/flightbooking.example/demo - the human-in-the-loop booking page (pre-filled San Francisco to London); push Search Flights, then Accept or Keep searching on each proposed flight
+
+Suggest the user try Keep searching a couple of times to watch the goto loop propose the next candidate, then Accept to see the seat-selection subgraph and the final booking. The Execution History and Flow Diagram on the page show each task step, the `interrupted` park, and the nested subgraph.
+
+**Explore more** (offer, optional): show the `BookFlight` graph in `service.go` (the `AwaitDecision` task's `flow.Interrupt` park and the `flow.Goto` keep-searching loop), the `ChooseSeatAgent` subgraph invoked via the typed `NewSubgraph` client, and the rendered `BOOKFLIGHT.mmd` diagram. Contrast the real Interrupt/Resume here with Credit Flow's branch-based approval. The user may ask to see the full implementation code of any feature.
 
 Return to the Example Menu.
 

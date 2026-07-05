@@ -34,6 +34,7 @@ graph LR
     creditflow.example[CreditFlow<br>creditflow.example] ---> foreman.core
     embedder.example[Embedder<br>embedder.example] --- embedder.example.py[[Py]]
     eventsource.example[EventSource<br>eventsource.example] -..-> eventsink.example[EventSink<br>eventsink.example]
+    flightbooking.example[FlightBooking<br>flightbooking.example] ---> foreman.core
     hello.example[Hello<br>hello.example] ---> calculator.example
     helloworld.example[HelloWorld<br>helloworld.example]
     login.example[Login<br>login.example] --->|danger| bearer.token.core
@@ -41,7 +42,7 @@ graph LR
     weather.example[Weather<br>weather.example] ---> llm.core
     yellowpages.example[Person<br>yellowpages.example] --- yellowpages.example.db[(SQL)]
 
-    class agentstudio.dev,browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,hello.example,helloworld.example,login.example,messaging.example,weather.example,yellowpages.example svc
+    class agentstudio.dev,browser.example,calculator.example,chatbox.example,creditflow.example,embedder.example,eventsink.example,eventsource.example,flightbooking.example,hello.example,helloworld.example,login.example,messaging.example,weather.example,yellowpages.example svc
     class configurator.core,http.egress.core,foreman.core,http.ingress.core,llm.core,chatgpt.llm.core,claude.llm.core,gemini.llm.core,lite.llm.core,mcp.core,metrics.core,openapi.core core
     class access.token.core,bearer.token.core danger
     class http.egress.core.cloud,foreman.core.db,chatgpt.llm.core.cloud,claude.llm.core.cloud,gemini.llm.core.cloud,lite.llm.core.cloud,browser.example.cloud,embedder.example.py,yellowpages.example.db ext

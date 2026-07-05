@@ -1,6 +1,6 @@
 ## Weather Agent example
 
-Port the Pydantic AI weather-agent example to Microbus as a single self-contained example microservice
+Build a weather-agent example for Microbus as a single self-contained example microservice
 under `exampleservices/`. The agent answers natural-language weather questions through sequential
 tool-calling: one tool geocodes a location to latitude/longitude, a second fetches that location's
 forecast, and the model chains them to compose an answer.

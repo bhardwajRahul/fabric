@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight Booking Workflow Demo</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        h3 { color: #333; margin-top: 24px; }
+        .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+        .examples { margin: 16px 0; }
+        .examples a { margin: 4px; padding: 6px 12px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; font-size: 14px; display: inline-block; }
+        .examples a:hover { background: #ddd; }
+        label { display: inline-block; width: 130px; font-weight: 500; margin-bottom: 8px; }
+        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; width: 320px; }
+        input[type="submit"] { padding: 10px 24px; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 8px; }
+        .accept { background: #2e7d32; }
+        .accept:hover { background: #1b5e20; }
+        .search { background: #1976d2; }
+        .search:hover { background: #1565c0; }
+        .keep { background: #ef6c00; }
+        .keep:hover { background: #e65100; }
+        form.inline { display: inline; }
+        table { border-collapse: collapse; }
+        .result-table td, .result-table th { padding: 4px 12px 4px 0; }
+        .history-table { width: 100%; }
+        .history-table td, .history-table th { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
+        .history-table th { font-weight: 600; }
+        .error { color: #c62828; }
+        .info { color: #666; font-size: 0.9em; margin-top: 16px; }
+        .booked { color: #2e7d32; font-weight: 600; }
+        .mermaid { background: white; border-radius: 8px; padding: 16px; border: 1px solid #ddd; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>mermaid.initialize({startOnLoad:true, securityLevel:'loose'});</script>
+</head>
+<body>
+    <h1>Flight Booking Workflow</h1>
+
+    <div class="examples">
+        Routes:
+        <a href="/flightbooking.example/demo?origin=San+Francisco&destination=London&seatPreference=a+window+seat+near+the+front">SFO to London</a>
+        <a href="/flightbooking.example/demo?origin=New+York&destination=Paris&seatPreference=an+aisle+seat+with+legroom">NYC to Paris</a>
+        <a href="/flightbooking.example/demo?origin=Tokyo&destination=Sydney&seatPreference=any+seat+at+the+back">Tokyo to Sydney</a>
+    </div>
+
+    <div class="card">
+        <form method="POST">
+            <div><label>Origin</label><input type="text" name="origin" value="{{ .Origin }}"></div>
+            <div><label>Destination</label><input type="text" name="destination" value="{{ .Destination }}"></div>
+            <div><label>Seat preference</label><input type="text" name="seatPreference" value="{{ .SeatPreference }}"></div>
+            <div><label></label><input type="submit" class="search" value="Search Flights"></div>
+        </form>
+    </div>
+
+    {{ if .Submitted }}
+    {{ if .Error }}
+    <div class="card error">Error: {{ .Error }}</div>
+    {{ else }}
+
+    {{ if .Proposed }}
+    <h3>Proposed flight</h3>
+    <div class="card">
+        <table class="result-table">
+            <tr><td>Flight</td><td><b>{{ .Flight.Airline }} {{ .Flight.FlightNo }}</b></td></tr>
+            <tr><td>Route</td><td>{{ .Flight.Origin }} to {{ .Flight.Destination }}</td></tr>
+            <tr><td>Depart / Arrive</td><td>{{ .Flight.Depart }} to {{ .Flight.Arrive }}</td></tr>
+            <tr><td>Stops</td><td>{{ .Flight.Stops }}</td></tr>
+            <tr><td>Price</td><td>${{ .Flight.PriceUSD }}</td></tr>
+        </table>
+        <p>
+            <form class="inline" method="POST">
+                <input type="hidden" name="flowKey" value="{{ .FlowKey }}">
+                <input type="hidden" name="decision" value="accept">
+                <input type="submit" class="accept" value="Accept this flight">
+            </form>
+            <form class="inline" method="POST">
+                <input type="hidden" name="flowKey" value="{{ .FlowKey }}">
+                <input type="hidden" name="decision" value="keep">
+                <input type="submit" class="keep" value="Keep searching">
+            </form>
+        </p>
+        <div class="info">The workflow is parked (status: interrupted) on this decision. Accept or keep searching resumes it.</div>
+    </div>
+    {{ end }}
+
+    {{ if .Booked }}
+    <h3>Booking confirmed</h3>
+    <div class="card">
+        <p class="booked">{{ .Confirmation }}</p>
+        <table class="result-table">
+            <tr><td>Seat</td><td>{{ .Seat }}</td></tr>
+        </table>
+    </div>
+    {{ else if and (not .Proposed) .Status }}
+    <h3>Result</h3>
+    <div class="card">
+        <table class="result-table">
+            <tr><td>Status</td><td><b>{{ .Status }}</b></td></tr>
+            {{ if .Confirmation }}<tr><td>Outcome</td><td>{{ .Confirmation }}</td></tr>{{ end }}
+        </table>
+    </div>
+    {{ end }}
+
+    {{ if .Steps }}
+    <h3>Execution History</h3>
+    <div class="card">
+        <table class="history-table">
+            <tr><th>Task</th><th>Status</th><th>Changes</th></tr>
+            {{ range .Steps }}<tr>
+                <td><nobr>{{ if .Indent }}&nbsp;&nbsp;&nbsp;&nbsp;{{ end }}{{ .TaskName }}</nobr></td>
+                <td>{{ .Status }}</td>
+                <td><small>{{ .Changes }}</small></td>
+            </tr>{{ end }}
+        </table>
+    </div>
+    {{ end }}
+
+    {{ if .MermaidDiagram }}
+    <h3>Flow Diagram</h3>
+    <pre class="mermaid">
+{{ .MermaidDiagram }}
+    </pre>
+    {{ end }}
+
+    {{ end }}
+    {{ end }}
+
+    <div class="info">
+        The Flight Booking example demonstrates an agentic workflow with a real human-in-the-loop pause
+        (Interrupt/Resume), a goto loop for keep-searching, and a child LLM workflow invoked as an isolated
+        subgraph to choose a seat. Seat selection needs a real LLM provider; without one the booking still
+        completes with the first available seat.
+    </div>
+</body>
+</html>

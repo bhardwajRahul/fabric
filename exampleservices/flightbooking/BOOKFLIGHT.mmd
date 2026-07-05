@@ -1,0 +1,27 @@
+---
+title: "BookFlight"
+config:
+  themeCSS: ".flowchartTitleText { fill: #32a7c1; }"
+---
+graph LR
+    classDef task fill:#32a7c1,color:#f4f2ef,stroke:#32a7c1
+    classDef term fill:#e5f4f3,color:#434343,stroke:#32a7c1
+    linkStyle default stroke:#32a7c1
+
+    t0["SearchFlights"]:::task
+    t1["ProposeFlight"]:::task
+    t1_switch{"switch"}:::term
+    t2["AwaitDecision"]:::task
+    t3["ChooseSeat"]:::task
+    t4["ConfirmBooking"]:::task
+    t5["NoFlights"]:::task
+    t0 --> t1
+    t2 --> t3
+    t2 -->|"goto"| t1
+    t3 --> t4
+    t1 --> t1_switch
+    t1_switch -->|"exhausted"| t5
+    t1_switch -->|"default"| t2
+    _start(( )):::term --> t0
+    t4 --> _end(( )):::term
+    t5 --> _end(( )):::term

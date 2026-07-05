@@ -10,8 +10,8 @@ This microservice implements agentic workflows. See `.claude/rules/workflows.txt
 
 ### Purpose
 
-Weather is the Microbus port of the Pydantic AI weather-agent example, and the suite's canonical answer to
-"how do I build an agent?" The agent is the `AskAgent` **workflow**: it exposes two of its own endpoints,
+Weather is the suite's canonical answer to "how do I build an agent?" The agent is the `AskAgent`
+**workflow**: it exposes two of its own endpoints,
 `LatLng` and `Forecast`, as LLM tools and lets the model chain them, geocoding a location and then fetching
 its conditions, to compose a natural-language answer.
 

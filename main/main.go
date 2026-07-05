@@ -49,6 +49,7 @@ import (
 	"github.com/microbus-io/fabric/exampleservices/embedder"
 	"github.com/microbus-io/fabric/exampleservices/eventsink"
 	"github.com/microbus-io/fabric/exampleservices/eventsource"
+	"github.com/microbus-io/fabric/exampleservices/flightbooking"
 	"github.com/microbus-io/fabric/exampleservices/hello"
 	"github.com/microbus-io/fabric/exampleservices/helloworld"
 	"github.com/microbus-io/fabric/exampleservices/login"
@@ -113,6 +114,7 @@ func main() {
 		creditflow.NewService(),
 		chatbox.NewService(),
 		weather.NewService(),
+		flightbooking.NewService(),
 	)
 	app.Add(
 	// HINT: Add solution microservices here
