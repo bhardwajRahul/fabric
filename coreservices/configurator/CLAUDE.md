@@ -27,7 +27,9 @@ reliability answer is operational (run the configurator highly available), not a
 `refreshConfig` runs before the configurator's own `Values` subscription is activated, so if the configurator
 defined a config property it would try to fetch config from itself before it can answer, and deadlock its own
 startup. It currently defines none, and it must stay that way - adding a `DefineConfig` to the configurator is a
-self-inflicted boot deadlock.
+self-inflicted boot deadlock. `TestConfigurator_NoConfigsOfItsOwn` guards this: it starts the service under a
+renamed hostname next to a stand-in `configurator.core` and fails if startup fetches config from the stand-in,
+which only happens when the service declares a config of its own.
 
 ### Configuration distribution is disabled in TESTING
 

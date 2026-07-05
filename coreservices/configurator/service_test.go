@@ -18,7 +18,9 @@ package configurator
 
 import (
 	"context"
+	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/microbus-io/fabric/env"
 	"github.com/microbus-io/fabric/pub"
 	"github.com/microbus-io/fabric/service"
+	"github.com/microbus-io/fabric/sub"
 	"github.com/microbus-io/fabric/utils"
 	"github.com/microbus-io/testarossa"
 
@@ -49,6 +52,53 @@ var (
 // MARKER: Refresh
 
 // MARKER: SyncRepo
+
+// TestConfigurator_NoConfigsOfItsOwn guards the invariant that the configurator declares no config
+// property of its own. A microservice with a config fetches it from configurator.core during startup,
+// before its own subscriptions answer requests; if the configurator did that it would fetch from
+// itself and deadlock. The service under test is run under a renamed hostname alongside a stand-in
+// configurator.core, so a config-of-its-own would surface as a fetch against the stand-in.
+func TestConfigurator_NoConfigsOfItsOwn(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	assert := testarossa.For(t)
+
+	plane := utils.RandomIdentifier(12)
+
+	// Stand-in configurator.core that records whether anyone fetched config from it. A Mock cannot be
+	// used here: mocks are disallowed outside TESTING, and TESTING disables the config fetch entirely.
+	var fetched atomic.Bool
+	stand := connector.New("configurator.core")
+	stand.SetDeployment(connector.LAB) // Configs are disabled in TESTING
+	stand.SetPlane(plane)
+	stand.Subscribe("Values",
+		func(w http.ResponseWriter, r *http.Request) error {
+			fetched.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("{}"))
+			return nil
+		},
+		sub.At("POST", ":888/values"),
+		sub.Web(),
+	)
+	err := stand.Startup(ctx)
+	assert.NoError(err)
+	defer stand.Shutdown(ctx)
+
+	// The configurator under test, renamed so that a config of its own would fetch from the stand-in
+	// (in production, unrenamed, it would fetch from itself and deadlock).
+	svc := NewService()
+	assert.NoError(svc.SetHostname("renamed.configurator.core"))
+	svc.SetDeployment(connector.LAB)
+	svc.SetPlane(plane)
+
+	err = svc.Startup(ctx)
+	assert.NoError(err)
+	defer svc.Shutdown(ctx)
+
+	assert.False(fetched.Load(),
+		"the configurator fetched config from configurator.core during startup, which means it declares a config property of its own - adding one deadlocks its startup in production")
+}
 
 func TestConfigurator_ManyMicroservices(t *testing.T) {
 	// No parallel - Setting envars
