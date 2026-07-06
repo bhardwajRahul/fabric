@@ -4,7 +4,6 @@
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Reference](https://pkg.go.dev/badge/github.com/microbus-io/fabric)](https://pkg.go.dev/github.com/microbus-io/fabric)
 [![Test](https://github.com/microbus-io/fabric/actions/workflows/test.yaml/badge.svg?branch=main&event=push)](https://github.com/microbus-io/fabric/actions/workflows/test.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/microbus-io/fabric)](https://goreportcard.com/report/github.com/microbus-io/fabric)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/FAJHnGkNqJ)
 
 **Microbus is the only fabric where every agentic workflow runs on a true microservice substrate.** That single design choice gives your workflows security, scale, observability and prompt-driven authoring that bolt-on workflow engines cannot match.
