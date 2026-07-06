@@ -34,7 +34,7 @@ Creating a new microservice:
 
 Determine the singular noun representing the object being persisted, for example, "User", "Notebook", "Sales Order", etc. In subsequent steps, `mynoun` is used as a placeholder for the lowercase form of this noun with spaces removed (e.g. `user`, `notebook`, `salesorder`).
 
-Determine the hostname. The hostname is how this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/mynoun`, set the hostname to `mynoun.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname.
+Determine the hostname by following the `name-microservice` skill (e.g. `mynoun.path.some.myproject`). A CRUD store's leading segment is normally the object noun, and may fold in `crud` when the microservice is dedicated purely to persistence (e.g. `orderscrud`).
 
 #### Step 2: Create a Directory Structure for the New Microservice
 

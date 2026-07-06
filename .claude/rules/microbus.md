@@ -121,7 +121,7 @@ Agentic workflows allow microservices to collaborate on multi-step processes. A 
 
 **A task is not an independent call unit.** A task is only ever a node in a graph; the independently-invocable, engine-backed unit is the workflow. There is no way to call a task as a synchronous function, expose it as an LLM tool, or run it as a standalone child flow - to make one unit of work invocable, author a (one-node) workflow and run or subgraph it. Composition from inside a task body is therefore either graph composition (the callee is a node in the same graph, sharing state) or a subgraph of a declared workflow (state-isolated). If the same logic must exist as both a function and a task, extract a plain Go helper that both handlers call, rather than making the task callable as a function.
 
-In this codebase, **"workflow", "agent", and "agentic workflow" are interchangeable terms** for the same `workflow.Graph` construct. An LLM call is not a prerequisite - rule-based, deterministic, small-model, and LLM-driven workflows are all agents. When a user says "create an agent" or "create an agentic workflow", they mean "create a workflow"; use the `add-workflow` skill. When they say "agent step" or "agentic task", they mean a task endpoint; use the `add-task` skill. Microservices whose sole purpose is to host one workflow are conventionally named `<role>.agent` (e.g. `planner.agent`, `coordinator.agent`), but the naming is convention only - the microservice is scaffolded with `add-microservice` like any other.
+In this codebase, **"workflow", "agent", and "agentic workflow" are interchangeable terms** for the same `workflow.Graph` construct. An LLM call is not a prerequisite - rule-based, deterministic, small-model, and LLM-driven workflows are all agents. When a user says "create an agent" or "create an agentic workflow", they mean "create a workflow"; use the `add-workflow` skill. When they say "agent step" or "agentic task", they mean a task endpoint; use the `add-task` skill. A microservice whose sole purpose is to host one workflow is scaffolded with `add-microservice` like any other, and its hostname follows the same domain-oriented naming as every other host - there is no special suffix that marks a host as an agent.
 
 **IMPORTANT**: If the microservice defines tasks or workflows (has `tasks` or `workflows` in its `manifest.yaml`), read `.claude/rules/workflows.txt` before proceeding.
 
@@ -460,6 +460,9 @@ Create a functional endpoint or web handler for each operation of the remote API
 - kebab-case for URL routes and paths: `/annual-report`
 - lowercase for file names: `userservice.go, mytype.go`
 - camelCase for JSON tags: `json:"myProperty,omitzero"`
+
+The hostname naming convention (segment structure, when to include each segment, folding a role word into the leaf)
+is a creation-time concern documented in the `name-microservice` skill, which the scaffolding skills consult.
 
 ### Naming-Driven Behavior
 

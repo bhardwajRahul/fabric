@@ -8,7 +8,7 @@ In this codebase, **"workflow", "agent", and "agentic workflow" all refer to the
 
 So when a user says "create an agent", "create an agentic workflow", or "create a workflow", treat them as the same request and use the `add-workflow` skill. The same applies to "agent step" / "workflow step" / "agentic task" - all map to a single task endpoint and the `add-task` skill. The presence or absence of an LLM-driven task does not change which skill to use, which conventions apply, or which file structure to produce.
 
-Naming convention for agent microservices: a microservice whose sole reason for existing is to expose one workflow is conventionally named `<role>.agent` (e.g. `planner.agent`, `researcher.agent`, `coordinator.agent`). This is just a naming convention, not a framework requirement - the microservice itself is built and registered exactly like any other Microbus microservice.
+A microservice whose sole reason for existing is to expose one workflow is built and registered exactly like any other Microbus microservice. Its hostname follows the same domain-oriented naming as every other host (e.g. `planner.security.acme`); do not encode the fact that a host is an agent into its hostname. If an author wants to hint the role, that belongs in the author's choice of leaf segment, not in a framework-prescribed suffix.
 
 ## Task Endpoints
 

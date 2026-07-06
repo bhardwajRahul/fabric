@@ -30,6 +30,8 @@ Creating a new microservice:
 Determine the name of the microservice. Use only letters `a` through `z` and `A` through `Z`.
 The templates in this skill use `myservice`, `myserviceapi`, `MyService` and `TestMyService` as placeholders that are based on the name of the microservice.
 
+Follow the `name-microservice` skill to choose a name and hostname that fit the project's domain hierarchy. The name describes what the microservice does and becomes the leading segment of the hostname, which the `Hostname` constant is set to in Step 4.
+
 Determine a Go-style description for the microservice in the form `MyService is X`.
 
 #### Step 2: Create a Directory Structure
@@ -91,7 +93,7 @@ Prompt comes here...
 
 Create `myserviceapi/definition.go` with the content of the template `definition.go` located in the directory of this skill. This is the single source of truth for the microservice's API: the add-feature skills append `define.*` vars (and their In/Out structs) here, and `cmd/genservice` projects everything else from it.
 
-- The `Hostname` constant holds the hostname in which this microservice will be addressable. It must be unique across the application. Use reverse domain notation based on the module path, up to and including the name of the project. For example, if the module path is `github.com/mycompany/myproject/some/path/myservice`, set the hostname to `myservice.path.some.myproject`. Only letters `a-z`, numbers `0-9`, hyphens `-` and the dot `.` separator are allowed in the hostname
+- The `Hostname` constant holds the hostname in which this microservice will be addressable. Set it to the hostname chosen via the `name-microservice` skill in Step 1 (e.g. `myservice.path.some.myproject`)
 - `Name` is the decorative PascalCase name of the microservice (it cannot be derived from the lowercase directory)
 - `Version` is a generation counter bumped on each regeneration (not a semantic version); leave it at `1` for a new microservice
 - `Description` is the Go-style description from Step 1
