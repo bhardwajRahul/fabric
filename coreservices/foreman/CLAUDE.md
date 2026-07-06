@@ -157,9 +157,20 @@ out of the box without the engine knowing what a tenant is.
 **There is no stop-notification endpoint or event; the foreman offers no `NotifyOnStop` or `OnFlowStopped`.**
 The engine has no stop-notification callback (its `Host` is the three methods above), so the adapter exposes
 nothing for it either. A caller learns a flow's outcome by **`Await`** (block a live caller, re-await if its
-context deadline fires first) or by **composing** the follow-up into the workflow itself - an orchestrating
-graph that runs the real work as a subgraph and routes success/failure to separate tasks, each a durable,
-independently retried step. That is strictly more reliable than the removed fire-once event, which reached
+context deadline fires first), by **`Poll`** (the long-poll sibling of `Await`), or by **composing** the
+follow-up into the workflow itself - an orchestrating graph that runs the real work as a subgraph and routes
+success/failure to separate tasks, each a durable, independently retried step.
+
+`Poll` mirrors `Await` on both layers (`engine.Poll` in dwarf, the `Poll` endpoint here) so the APIs stay
+symmetric. The engine's internal `await` always returns the flow's latest outcome; the public `Await` turns a
+non-stopped result (the ctx expired before the flow stopped, detected via `outcome.Stopped()`) into a timeout
+error, whereas `Poll` returns that running outcome as-is with no error. Because `Poll` never returns an error on
+a not-yet-stopped flow, the foreman handler returns cleanly and Microbus logs nothing - which is the whole point:
+an error returned to the bus is auto-logged on the server, so a client-side "translate the timeout" wrapper (an
+earlier design) was too late. The one non-delegating bit in the `Poll` **handler** is the HTTP-bridge headroom:
+it awaits only ~80% (`pollBudgetFraction`) of the request's remaining budget so the running outcome returns
+*before* the ingress cuts the request, letting the caller re-poll immediately with no client-side delay - see
+`banksupport.example`'s `DemoStatus`. That is strictly more reliable than the removed fire-once event, which reached
 only a receiver live on the bus at the instant of the stop. Because notification is now ordinary workflow
 authoring, `resolveOptions` stamps no delivery host into baggage, and `mintActorToken` copies every baggage
 key into the actor claims with nothing to scrub (baggage is purely actor identity again).

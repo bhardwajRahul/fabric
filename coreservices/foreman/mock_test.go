@@ -180,6 +180,17 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("poll", func(t *testing.T) { // MARKER: Poll
+		assert := testarossa.For(t)
+
+		mock.MockPoll(func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) {
+			return
+		})
+		var flowKey string
+		_, err := mock.Poll(ctx, flowKey)
+		assert.NoError(err)
+	})
+
 	t.Run("run", func(t *testing.T) { // MARKER: Run
 		assert := testarossa.For(t)
 

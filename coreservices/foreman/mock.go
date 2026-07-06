@@ -28,6 +28,7 @@ type Mock struct {
 	mockPurge          func(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                             // MARKER: Purge
 	mockShardInfo      func(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                                // MARKER: ShardInfo
 	mockAwait          func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Await
+	mockPoll           func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                   // MARKER: Poll
 	mockRun            func(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
 	mockContinue       func(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                        // MARKER: Continue
 	mockSignal         func(ctx context.Context, op string, payload []byte) (err error)                                                                       // MARKER: Signal
@@ -233,6 +234,20 @@ func (svc *Mock) MockAwait(handler func(ctx context.Context, flowKey string) (ou
 func (svc *Mock) Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Await
 	if svc.mockAwait != nil {
 		outcome, err = svc.mockAwait(ctx, flowKey)
+	}
+	return outcome, errors.Trace(err)
+}
+
+// MockPoll sets up a mock handler for Poll.
+func (svc *Mock) MockPoll(handler func(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)) *Mock { // MARKER: Poll
+	svc.mockPoll = handler
+	return svc
+}
+
+// Poll executes the mock handler.
+func (svc *Mock) Poll(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Poll
+	if svc.mockPoll != nil {
+		outcome, err = svc.mockPoll(ctx, flowKey)
 	}
 	return outcome, errors.Trace(err)
 }

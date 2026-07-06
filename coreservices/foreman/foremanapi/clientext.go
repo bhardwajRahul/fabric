@@ -64,6 +64,26 @@ func (_c Client) AwaitAndParse(ctx context.Context, flowKey string, result any) 
 	return outcome, nil
 }
 
+// PollAndParse is Poll plus unmarshaling a stopped flow's State into result. A still-running outcome
+// (outcome.Stopped() is false) leaves result untouched, so the caller re-polls.
+func (_c Client) PollAndParse(ctx context.Context, flowKey string, result any) (outcome *workflow.FlowOutcome, err error) {
+	outcome, err = _c.Poll(ctx, flowKey)
+	if err != nil {
+		return outcome, errors.Trace(err)
+	}
+	if result != nil && outcome != nil && outcome.Stopped() && outcome.State != nil {
+		data, err := json.Marshal(outcome.State)
+		if err != nil {
+			return outcome, errors.Trace(err)
+		}
+		err = json.Unmarshal(data, result)
+		if err != nil {
+			return outcome, errors.Trace(err)
+		}
+	}
+	return outcome, nil
+}
+
 // SnapshotAndParse returns the current outcome and unmarshals its State into result.
 func (_c Client) SnapshotAndParse(ctx context.Context, flowKey string, result any) (outcome *workflow.FlowOutcome, err error) {
 	outcome, err = _c.Snapshot(ctx, flowKey)

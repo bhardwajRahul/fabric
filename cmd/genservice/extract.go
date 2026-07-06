@@ -119,6 +119,19 @@ func parseService(dir string) (*service, error) {
 		if ft.kind == "Config" && strings.Contains(attrString(ft.attrs, "Default"), "`") {
 			return nil, fmt.Errorf("default value for config %s must not contain backticks: it is embedded into a Go raw string literal in the generated code; rephrase without backticks", ft.name)
 		}
+		// String-valued fields are read by AST walking with no evaluation, so a const, variable, or
+		// expression is silently dropped and the setting lost (e.g. a factored-out RequiredClaims const
+		// leaves the endpoint ungated). Reject a non-string-literal here with an actionable message
+		// instead of emitting an empty setting.
+		for _, field := range []string{"Method", "Route", "RequiredClaims"} {
+			e, ok := ft.attrs[field]
+			if !ok {
+				continue
+			}
+			if bl, ok := e.(*ast.BasicLit); !ok || bl.Kind != token.STRING {
+				return nil, fmt.Errorf("%s field of %s must be a string literal, not %q: genservice reads definition.go by AST walking and cannot resolve a const, variable, or expression here, so a non-literal is silently dropped and the setting is lost; inline the literal value", field, ft.name, exprSource(svc.fset, e))
+			}
+		}
 	}
 	return svc, nil
 }

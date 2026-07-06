@@ -67,3 +67,25 @@ func TestParseServiceRejectsBacktickGodoc(t *testing.T) {
 		assert.Contains(err.Error(), "backtick")
 	}
 }
+
+// TestParseServiceRejectsNonLiteralRequiredClaims pins that a RequiredClaims factored into a const is
+// rejected with an actionable error rather than silently producing an ungated endpoint.
+func TestParseServiceRejectsNonLiteralRequiredClaims(t *testing.T) {
+	assert := testarossa.For(t)
+	body := "const gate = \"roles.customer\"\n" +
+		"var Secret = define.Function{ Host: Hostname, Method: \"GET\", Route: \"/secret\", RequiredClaims: gate }"
+	_, err := parseService(writeDefinition(t, body))
+	if assert.Error(err) {
+		assert.Contains(err.Error(), "Secret")
+		assert.Contains(err.Error(), "RequiredClaims")
+		assert.Contains(err.Error(), "string literal")
+	}
+}
+
+// TestParseServiceAcceptsLiteralRequiredClaims pins that the inlined literal form parses cleanly.
+func TestParseServiceAcceptsLiteralRequiredClaims(t *testing.T) {
+	assert := testarossa.For(t)
+	body := "var Secret = define.Function{ Host: Hostname, Method: \"GET\", Route: \"/secret\", RequiredClaims: \"roles.customer\" }"
+	_, err := parseService(writeDefinition(t, body))
+	assert.NoError(err)
+}

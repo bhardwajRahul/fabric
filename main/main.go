@@ -42,6 +42,7 @@ import (
 	"github.com/microbus-io/fabric/coreservices/openapiportal"
 	"github.com/microbus-io/fabric/devservices/agentstudio"
 
+	"github.com/microbus-io/fabric/exampleservices/banksupport"
 	"github.com/microbus-io/fabric/exampleservices/browser"
 	"github.com/microbus-io/fabric/exampleservices/calculator"
 	"github.com/microbus-io/fabric/exampleservices/chatbox"
@@ -115,6 +116,7 @@ func main() {
 		chatbox.NewService(),
 		weather.NewService(),
 		flightbooking.NewService(),
+		banksupport.NewService(),
 	)
 	app.Add(
 	// HINT: Add solution microservices here
@@ -128,6 +130,14 @@ func main() {
 						return strings.HasPrefix(path, "/"+login.Hostname+"/")
 					},
 					middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+login.Hostname+"/login"),
+				),
+			)
+			svc.Middleware().Append("BankSupport401Redirect",
+				middleware.OnRoute(
+					func(path string) bool {
+						return strings.HasPrefix(path, "/"+banksupport.Hostname+"/")
+					},
+					middleware.ErrorPageRedirect(http.StatusUnauthorized, "/"+banksupport.Hostname+"/login"),
 				),
 			)
 			return nil

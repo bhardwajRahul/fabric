@@ -557,6 +557,43 @@ func (_c MulticastClient) Await(ctx context.Context, flowKey string) iter.Seq[*A
 	}
 }
 
+// Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+// timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+// bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.
+func (_c Client) Poll(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Poll
+	_in := PollIn{FlowKey: flowKey}
+	_out := PollOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Poll.Method, Poll.Route, &_in, &_out)
+	return _out.Outcome, err // No trace
+}
+
+// PollResponse packs the response of Poll.
+type PollResponse multicastResponse // MARKER: Poll
+
+// Get unpacks the return arguments of Poll.
+func (_res *PollResponse) Get() (outcome *workflow.FlowOutcome, err error) { // MARKER: Poll
+	_d := _res.data.(*PollOut)
+	return _d.Outcome, _res.err
+}
+
+// Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+// timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+// bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.
+func (_c MulticastClient) Poll(ctx context.Context, flowKey string) iter.Seq[*PollResponse] { // MARKER: Poll
+	_in := PollIn{FlowKey: flowKey}
+	_out := PollOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Poll.Method, Poll.Route, &_in, &_out)
+	return func(yield func(*PollResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*PollResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
 // Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 func (_c Client) Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) { // MARKER: Run
 	_in := RunIn{WorkflowURL: workflowURL, InitialState: initialState, Opts: opts}

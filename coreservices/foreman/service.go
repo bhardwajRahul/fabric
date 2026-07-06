@@ -206,6 +206,27 @@ func (svc *Service) Await(ctx context.Context, flowKey string) (outcome *workflo
 	return svc.engine.Await(ctx, flowKey)
 }
 
+// pollBudgetFraction is the share of the request's remaining time budget that Poll spends awaiting the flow,
+// leaving the rest as headroom to return the running outcome before the caller's own deadline fires.
+const pollBudgetFraction = 4.0 / 5.0
+
+/*
+Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.
+*/
+func (svc *Service) Poll(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error) { // MARKER: Poll
+	if deadline, ok := ctx.Deadline(); ok {
+		window := time.Duration(float64(time.Until(deadline)) * pollBudgetFraction)
+		if window > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, window)
+			defer cancel()
+		}
+	}
+	return svc.engine.Poll(ctx, flowKey)
+}
+
 /*
 Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 */

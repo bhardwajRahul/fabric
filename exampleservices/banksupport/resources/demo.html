@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bank Support Console</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; margin-bottom: 4px; }
+        .sub { color: #666; margin-bottom: 20px; }
+        .sub a { color: #1976d2; }
+        .card { background: white; border-radius: 8px; padding: 20px; border: 1px solid #ddd; margin-bottom: 16px; }
+        .balance { font-size: 1.4em; font-weight: 600; }
+        input[type="text"] { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        input[type="submit"] { padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 8px; }
+        input[type="submit"]:hover { background: #1565c0; }
+        input[type="submit"]:disabled { background: #90caf9; cursor: not-allowed; }
+        .waiting { color: #666; font-style: italic; margin-left: 10px; }
+        .examples a { display: inline-block; margin: 3px; padding: 5px 10px; background: #e8e8e8; border: 1px solid #ccc; border-radius: 4px; text-decoration: none; color: #333; font-size: 13px; }
+        .examples a:hover { background: #ddd; }
+        .advice { white-space: pre-wrap; }
+        .error { color: #c62828; }
+        .meter { height: 14px; border-radius: 7px; background: linear-gradient(to right, #2e7d32, #f9a825, #c62828); position: relative; margin: 6px 0; }
+        .meter .pin { position: absolute; top: -3px; width: 4px; height: 20px; background: #222; border-radius: 2px; }
+        .block { color: #c62828; font-weight: 600; }
+        .ok { color: #2e7d32; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <h1>Hello, {{ .Holder }}</h1>
+    <div class="sub">Balance: <span class="balance">${{ .BalanceDollars }}</span> &middot; <a href="/banksupport.example/logout">Sign out</a></div>
+
+    <div class="card">
+        <form method="POST" onsubmit="return asking()">
+            <input type="text" name="query" placeholder="Ask about your account..." value="{{ .Query }}" autofocus>
+            <div class="examples">
+                <a href="#" onclick="q('What is my balance?');return false">What is my balance?</a>
+                <a href="#" onclick="q('How much did I spend last month?');return false">Spend last month?</a>
+                <a href="#" onclick="q('How much do I spend on groceries per month?');return false">Groceries per month?</a>
+                <a href="#" onclick="q('What is my monthly cashflow?');return false">Monthly cashflow?</a>
+                <a href="#" onclick="q('Is my account healthy?');return false">Is my account healthy?</a>
+            </div>
+            <input type="submit" id="ask" value="Ask">
+            <span id="waiting" class="waiting" hidden>Asking agent. Please wait...</span>
+        </form>
+    </div>
+
+    {{ if .Error }}
+    <div class="card error">Error: {{ .Error }}</div>
+    {{ end }}
+
+    {{ if .FlowKey }}
+    <div class="card">
+        <p id="status" class="waiting">Asking agent. Please wait...</p>
+        <div id="answer" hidden>
+            <p class="advice" id="advice"></p>
+            <p>Risk score: <b id="risk"></b> / 10</p>
+            <div class="meter"><div class="pin" id="pin"></div></div>
+            <p id="cardAction"></p>
+        </div>
+        <div id="statusError" class="error" hidden></div>
+    </div>
+    <script>document.addEventListener('DOMContentLoaded', function () { pollStatus("{{ .FlowKey }}"); });</script>
+    {{ end }}
+
+    <script>
+        function q(text) {
+            document.querySelector('[name=query]').value = text;
+            document.querySelector('form').requestSubmit();
+        }
+        function asking() {
+            var t = document.querySelector('[name=query]');
+            if (!t.value.trim()) { return true; }
+            var btn = document.getElementById('ask');
+            btn.disabled = true;
+            btn.value = 'Asking...';
+            document.getElementById('waiting').hidden = false;
+            return true;
+        }
+        // pollStatus long-polls DemoStatus; each request blocks server-side until the flow stops or the
+        // server's half-budget window elapses, so the loop re-requests immediately with no client-side delay.
+        async function pollStatus(flowKey) {
+            for (var i = 0; i < 120; i++) {
+                var res;
+                try {
+                    res = await fetch('/banksupport.example/demo-status?flowKey=' + encodeURIComponent(flowKey));
+                } catch (e) {
+                    return showStatusError('Network error while contacting the agent.');
+                }
+                if (!res.ok) {
+                    return showStatusError('The agent request failed (' + res.status + ').');
+                }
+                var d = await res.json();
+                if (d.status === 'completed') { return showAnswer(d); }
+                if (d.status === 'failed') { return showStatusError(d.errorMsg || 'The agent failed.'); }
+                if (d.status !== 'running') { return showStatusError('Unexpected status: ' + d.status); }
+            }
+            showStatusError('Timed out waiting for the agent.');
+        }
+        function showAnswer(d) {
+            document.getElementById('status').hidden = true;
+            document.getElementById('advice').textContent = d.advice || '';
+            var risk = d.risk || 0;
+            document.getElementById('risk').textContent = risk;
+            document.getElementById('pin').style.left = 'calc(' + risk + ' * 10% - 2px)';
+            var action = document.getElementById('cardAction');
+            action.textContent = d.blockCard ? 'The agent recommends blocking the card.' : 'No card action recommended.';
+            action.className = d.blockCard ? 'block' : 'ok';
+            document.getElementById('answer').hidden = false;
+        }
+        function showStatusError(msg) {
+            document.getElementById('status').hidden = true;
+            var e = document.getElementById('statusError');
+            e.textContent = msg;
+            e.hidden = false;
+        }
+    </script>
+</body>
+</html>

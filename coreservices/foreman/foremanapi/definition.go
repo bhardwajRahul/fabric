@@ -277,6 +277,26 @@ type AwaitOut struct { // MARKER: Await
 	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
 }
 
+/*
+Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.
+*/
+var Poll = define.Function{ // MARKER: Poll
+	Host: Hostname, Method: "POST", Route: ":444/poll",
+	In: PollIn{}, Out: PollOut{},
+}
+
+// PollIn are the input arguments of Poll.
+type PollIn struct { // MARKER: Poll
+	FlowKey string `json:"flowKey,omitzero"`
+}
+
+// PollOut are the output arguments of Poll.
+type PollOut struct { // MARKER: Poll
+	Outcome *workflow.FlowOutcome `json:"outcome,omitzero"`
+}
+
 // Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.
 var Run = define.Function{ // MARKER: Run
 	Host: Hostname, Method: "POST", Route: ":444/run",

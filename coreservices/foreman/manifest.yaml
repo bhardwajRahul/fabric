@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-07-04T20:56:43Z"
+  modifiedAt: "2026-07-05T22:15:09Z"
 
 configs:
   SQLDataSourceName:
@@ -111,6 +111,14 @@ functions:
     description: Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.
     method: POST
     route: :444/wait-for-stop
+  Poll:
+    signature: Poll(flowKey string) (outcome *workflow.FlowOutcome)
+    description: |-
+      Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+      timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+      bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.
+    method: POST
+    route: :444/poll
   Run:
     signature: Run(workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome)
     description: Run creates a new flow, starts it, and blocks until it stops. Returns the terminal outcome.

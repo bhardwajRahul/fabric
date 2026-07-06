@@ -40,6 +40,15 @@ references (`Source: srcapi.OnRegistered`). There is no `go/types` pass and no e
 keeping `definition.go` a declarative spec rather than code with logic, and it is why the `define` package models
 config and metric value types as explicit type carriers (`Value: int(0)`) instead of inferring them.
 
+The string-literal fields `Method`, `Route`, and `RequiredClaims` are the sharp edge of this rule: a value like
+`RequiredClaims: myGateConst` walks to an `*ast.Ident`, which `attrString` returns as `""` - so before the guard
+was added, factoring a claims expression into a shared const silently produced an *ungated* endpoint with no
+error. `parseService` now rejects a non-string-literal in any of those three fields up front, naming the feature
+and field (the same shape as the backtick checks alongside it). `Host` is deliberately excluded: it is idiomatically
+`Host: Hostname` (an `*ast.Ident`), and genservice ignores the per-feature `Host` attr entirely, using the
+service's `Hostname` const instead. `LoadBalancing` is also excluded because `define.None`/`define.Default` are
+valid `*ast.SelectorExpr` values resolved separately.
+
 ## Verbatim-embedded strings must not contain a backtick
 
 Two author-supplied strings are projected into the generated `intermediate.go` inside a Go raw string literal: a

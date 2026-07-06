@@ -42,6 +42,7 @@ type ToDo interface {
 	Purge(ctx context.Context, query foremanapi.Query) (deleted int, err error)                                                           // MARKER: Purge
 	ShardInfo(ctx context.Context) (shards []foremanapi.ShardSummary, err error)                                                          // MARKER: ShardInfo
 	Await(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                 // MARKER: Await
+	Poll(ctx context.Context, flowKey string) (outcome *workflow.FlowOutcome, err error)                                                  // MARKER: Poll
 	Run(ctx context.Context, workflowURL string, initialState any, opts *workflow.FlowOptions) (outcome *workflow.FlowOutcome, err error) // MARKER: Run
 	Continue(ctx context.Context, threadKey string, additionalState any) (newFlowKey string, err error)                                   // MARKER: Continue
 	Signal(ctx context.Context, op string, payload []byte) (err error)                                                                    // MARKER: Signal
@@ -160,6 +161,14 @@ func NewIntermediate(impl ToDo) *Intermediate {
 		sub.At(foremanapi.Await.Method, foremanapi.Await.Route),
 		sub.Description(`Await blocks until the flow stops (i.e. is no longer created, pending, or running), then returns the outcome.`),
 		sub.Function(foremanapi.AwaitIn{}, foremanapi.AwaitOut{}),
+	)
+	svc.Subscribe( // MARKER: Poll
+		"Poll", svc.doPoll,
+		sub.At(foremanapi.Poll.Method, foremanapi.Poll.Route),
+		sub.Description(`Poll returns a flow's current outcome, waiting up to the request's time budget for it to stop. Unlike Await, a
+timeout is not an error: a still-running flow returns a running outcome (Outcome.Stopped() is false) so a caller
+bridging an open-ended flow to a bounded request can answer within its budget and re-poll immediately.`),
+		sub.Function(foremanapi.PollIn{}, foremanapi.PollOut{}),
 	)
 	svc.Subscribe( // MARKER: Run
 		"Run", svc.doRun,
@@ -391,6 +400,17 @@ func (svc *Intermediate) doAwait(w http.ResponseWriter, r *http.Request) (err er
 	var out foremanapi.AwaitOut
 	err = marshalFunction(w, r, foremanapi.Await.Route, &in, &out, func(_ any, _ any) error {
 		out.Outcome, err = svc.Await(r.Context(), in.FlowKey)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doPoll handles marshaling for Poll.
+func (svc *Intermediate) doPoll(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Poll
+	var in foremanapi.PollIn
+	var out foremanapi.PollOut
+	err = marshalFunction(w, r, foremanapi.Poll.Route, &in, &out, func(_ any, _ any) error {
+		out.Outcome, err = svc.Poll(r.Context(), in.FlowKey)
 		return err // No trace
 	})
 	return err // No trace
