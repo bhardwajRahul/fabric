@@ -46,17 +46,47 @@ never rework a minter to gate itself on a claim.
 
 ## Authoring framework upgrade skills
 
-When a new fabric version needs a mechanical migration, its versioned `upgrade-vX-Y-Z` skill (under
-`.claude/skills/upgrade/`) must invoke **only** `cmd/genupgrade -v X.Y.Z`, plus pure-shell edits (`sed`/`perl`/
-`grep`). It must never run a boilerplate generator or `go vet`/`go test`/`go mod tidy`. A numbered skill is a
-frozen artifact, but `upgrade-microbus` runs it against the *target* version's `go.mod`, so any other tool it names
-may have been renamed or removed by a later version (this is exactly how the retired `genmanifest`/`genmock` calls
-in older skills came to fail). The `upgrade-microbus` orchestrator owns the single regeneration and verification
-pass, run once after every numbered skill has applied its source edits. Not every transform belongs in genupgrade:
-pure renames stay as `sed`/`perl` in the skill, semantic rewrites that need judgment are grep-guided manual steps,
-and only a transform that must parse Go or synthesize declarations ships as an append-only routine in
-[genupgrade](cmd/genupgrade) (which keeps the full rationale). That "sed renames, genupgrade parses, humans judge"
-boundary is spelled out in [genupgrade's own notes](cmd/genupgrade/CLAUDE.md).
+Every fabric release ships exactly one upgrade skill, [upgrade-microbus](.claude/skills/microbus/upgrade-microbus),
+and it is self-propagating: its Phase 1 migrates a project by the single increment `SOURCE -> DEST`, and its Phase 2
+pins `go.mod` to the next release, installs that release's `.claude` from git, and runs that release's copy of the
+same skill - chaining one increment at a time until it reaches the target. There is no separate orchestrator and no
+numbered per-version skills.
+
+**Cutting a release edits only two things in the skill:**
+
+1. The **Release Constants** - set `SOURCE` to the immediately-preceding published release and `DEST` to the
+   release being cut. The chain fires a hop's Phase 1 only when the project's version equals that hop's `SOURCE`,
+   and it steps through every published version in order, so `SOURCE` must be the exact release before `DEST` (the
+   latest patch included) or that hop's migration is silently skipped.
+2. **Step 3, the migration** - the source edits that take a project from `SOURCE` to `DEST`, chosen by the nature of
+   the change:
+   - a pure rename is `sed`/`perl` in the skill;
+   - a rewrite that needs judgment is a grep-guided manual step: grep the old shape, rewrite each site, and ask the
+     user when the correct new shape is a design choice rather than mechanical;
+   - a transform that must parse or synthesize Go ships as a small Go program **in the skill's own directory**, run
+     with `go run ./<tool>.go`. It is versioned with the skill and deleted by the next release; migration tooling is
+     per-skill, never central.
+
+   Confine Step 3 to source edits. If the release has no breaking change, Step 3 is empty - the skill's whole job is
+   then the verification the machinery already runs: Phase 1's `go get @DEST` + `genservice` regeneration +
+   `go vet`, and the chain-terminating `go test`.
+
+Leave the Phase 1 and Phase 2 machinery alone; it is identical in every release. In particular, **target
+propagation** (a user-supplied target is carried across every hop, and only an unspecified target defaults to
+"latest") and **self-propagation** (Phase 2 overwrites the skill on disk with the next release's copy and re-reads
+it) are machinery, not per-release concerns. Phase 1 runs `genservice` + `go mod tidy` + `go vet` at every increment
+- `go vet` is the deterministic compile gate the whole chain relies on - and runs no tests between versions. Phase 2's
+terminal branch runs `go test` once, at `TARGET`, as a best-effort behavior check: a project whose tests are flaky or
+cannot run locally still upgrades on the `go vet` gate. A Step 3 migration never runs a generator or a verify step
+itself.
+
+Two invariants keep the chain intact:
+
+- **Every release ships the skill**, even a no-op one - the chain advances to "the next published version", so a
+  release missing the skill would break it.
+- **A skill runs only against its own release's world.** Phase 2 pins `go.mod` to `DEST` and installs `DEST`'s rules
+  and skills before running it, so every tool and skill a migration names (`genservice`, `add-microservice`,
+  `regenerate-boilerplate`, ...) is that release's. A migration therefore needs no future-proofing.
 
 ## Working on code
 
