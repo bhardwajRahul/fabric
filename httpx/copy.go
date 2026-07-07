@@ -24,9 +24,12 @@ import (
 	"github.com/microbus-io/errors"
 )
 
-// Copy writes the [http.Response] to the [http.ResponseWriter].
-// Headers are added, the body is appended, and the status code is overwritten.
-// It is possible for this function to take ownership of the bytes of the body of the [http.Response] so do not modify them.
+// Copy writes the [http.Response] to the [http.ResponseWriter]: headers are added, the body is appended, and the
+// status code is overwritten.
+//
+// As an optimization, when the response body is a [BodyReader] and the writer is an empty [ResponseRecorder], Copy
+// transfers ownership of the body's bytes to the recorder rather than copying them, so the two share one backing
+// array. The bytes should therefore be considered read-only after the copy.
 func Copy(w http.ResponseWriter, res *http.Response) error {
 	// Optimize for ResponseRecorder and BodyReader
 	rr, ok1 := w.(*ResponseRecorder)
