@@ -23,8 +23,11 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/andybalholm/brotli"
 	"github.com/microbus-io/errors"
@@ -41,11 +44,53 @@ type Service struct {
 	*Intermediate // IMPORTANT: Do not remove
 
 	// HINT: Add member variables here
+	httpClient *http.Client
 }
 
 // OnStartup is called when the microservice is started up.
 func (svc *Service) OnStartup(ctx context.Context) (err error) {
+	// A single shared client reused across all requests, backed by its own transport (cloned from the default
+	// so connection pooling and timeouts are sane, and so the transport is ours to extend). Per-request time
+	// bounds come from the caller's context deadline attached in MakeRequest, not a static Client.Timeout.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+
+	// SSRF guard. In internet-reachable deployments, refuse to connect to non-public destinations (loopback,
+	// link-local including the 169.254.169.254 cloud-metadata endpoint, private/unique-local ranges). The
+	// check runs in the dialer's Control callback, which fires on the resolved IP of each connection attempt,
+	// so it also defeats DNS rebinding (the IP checked is the exact IP dialed) and covers redirect targets.
+	// LOCAL and TESTING allow all destinations for dev ergonomics.
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	if svc.Deployment() == connector.PROD || svc.Deployment() == connector.LAB {
+		dialer.Control = func(network, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			ip := net.ParseIP(host)
+			if ip == nil || isBlockedIP(ip) {
+				return errors.New("egress to non-public address is blocked", "address", address, http.StatusForbidden)
+			}
+			return nil
+		}
+	}
+	transport.DialContext = dialer.DialContext
+
+	svc.httpClient = &http.Client{Transport: transport}
 	return nil
+}
+
+// isBlockedIP reports whether ip is a non-public destination the egress proxy must refuse to reach: loopback,
+// link-local unicast (which includes the 169.254.169.254 cloud-metadata endpoint) and multicast, private and
+// unique-local ranges, the unspecified address, and multicast. IPv4-mapped IPv6 addresses are normalized by the
+// net.IP predicates, so e.g. ::ffff:127.0.0.1 is caught as loopback.
+func isBlockedIP(ip net.IP) bool {
+	return ip.IsLoopback() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsPrivate() ||
+		ip.IsUnspecified()
 }
 
 // OnShutdown is called when the microservice is shut down.
@@ -59,6 +104,11 @@ The proxied request is expected to be posted in the body of the request in binar
 */
 func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: MakeRequest
 	ctx := r.Context()
+	// The outbound call is bounded solely by the caller's deadline. Microbus always sets one, so its absence
+	// means the request did not arrive through the framework; refuse rather than make an unbounded call.
+	if _, ok := ctx.Deadline(); !ok {
+		return errors.New("request context has no deadline", http.StatusInternalServerError)
+	}
 	req, err := http.ReadRequest(bufio.NewReaderSize(r.Body, 64))
 	if err != nil {
 		return errors.Trace(err)
@@ -73,6 +123,7 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 	}
 	req.RequestURI = "" // Avoid "http: Request.RequestURI can't be set in client requests"
 	req.Header.Set("Accept-Encoding", "br;q=1.0,deflate;q=0.8,gzip;q=0.6")
+	req = req.WithContext(ctx) // Attach the caller's context
 
 	// OpenTelemetry: create a child span
 	spanOptions := []trc.Option{
@@ -91,8 +142,7 @@ func (svc *Service) MakeRequest(w http.ResponseWriter, r *http.Request) (err err
 		}
 	}()
 
-	client := http.Client{}
-	resp, err := client.Do(req)
+	resp, err := svc.httpClient.Do(req)
 	if err == nil {
 		// Decompress as required
 		var decompressed bytes.Buffer

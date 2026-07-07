@@ -23,6 +23,7 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -135,12 +136,13 @@ func TestHttpegress_MakeRequest(t *testing.T) { // MARKER: MakeRequest
 		_, err = client.Get(ctx, "not a url")
 		assert.Error(err)
 
-		// Shorter deadline
+		// Shorter deadline: the egress call is now bounded by the caller's context, so the outbound request
+		// is cancelled at the deadline instead of running to completion (or leaking) behind the bus timeout.
 		shortCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		_, err = client.Get(shortCtx, "http://127.0.0.1:5050/slow")
 		cancel()
 		if assert.Error(err) {
-			assert.Contains(err.Error(), "timeout")
+			assert.Contains(err.Error(), "deadline exceeded")
 		}
 	})
 
@@ -282,3 +284,27 @@ func TestHttpegress_Mocked(t *testing.T) {
 }
 
 // MARKER: MakeRequest
+
+func TestHttpegress_IsBlockedIP(t *testing.T) { // MARKER: MakeRequest
+	assert := testarossa.For(t)
+
+	blocked := []string{
+		"127.0.0.1", "::1", // loopback
+		"169.254.169.254", // cloud metadata (link-local)
+		"10.1.2.3", "172.16.0.1", "192.168.1.1", // RFC1918 private
+		"fd00:ec2::254", // IPv6 unique-local (AWS metadata)
+		"0.0.0.0", "::", // unspecified
+		"::ffff:127.0.0.1", // IPv4-mapped loopback
+	}
+	for _, s := range blocked {
+		assert.True(isBlockedIP(net.ParseIP(s)), "expected %s to be blocked", s)
+	}
+
+	allowed := []string{
+		"8.8.8.8", "1.1.1.1", "93.184.216.34", // public IPv4
+		"2001:4860:4860::8888", // public IPv6
+	}
+	for _, s := range allowed {
+		assert.False(isBlockedIP(net.ParseIP(s)), "expected %s to be allowed", s)
+	}
+}
