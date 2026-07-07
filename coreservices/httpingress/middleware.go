@@ -53,7 +53,9 @@ func (svc *Service) defaultMiddleware() *middleware.Chain {
 	m := &middleware.Chain{}
 	m.Append(CharsetUTF8, middleware.CharsetUTF8())
 	m.Append(ErrorPrinter, middleware.ErrorPrinter(func() bool {
-		return svc.Deployment() == connector.PROD
+		// Redact in every deployed mode; only the developer deployments (LOCAL, TESTING) print full errors.
+		d := svc.Deployment()
+		return d != connector.LOCAL && d != connector.TESTING
 	}))
 	m.Append(BlockedPaths, middleware.BlockedPaths(func(path string) bool {
 		if svc.blockedPaths[path] {
