@@ -23,7 +23,7 @@ type demoAccount struct {
 	holder       string
 	balanceCents int
 	txns         []banksupportapi.TxnView // most-recent-first
-	txnDates     []time.Time             // parallel to txns, for range filtering
+	txnDates     []time.Time              // parallel to txns, for range filtering
 }
 
 // profile describes a demo customer and the spending pattern used to synthesize their transaction history.

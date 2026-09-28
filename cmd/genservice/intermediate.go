@@ -428,4 +428,3 @@ func hookOptions(svc *service, f feature) string {
 	}
 	return strings.Join(opts, ", ")
 }
-

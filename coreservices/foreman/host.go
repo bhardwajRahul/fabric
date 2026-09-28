@@ -120,7 +120,6 @@ func (svc *Service) ExecuteTask(ctx context.Context, taskURL string, flow *workf
 	return nil
 }
 
-
 // isAckTimeout reports whether err is a unicast ack-timeout: the 404 the connector raises when no
 // microservice acks the task dispatch (no responder), as distinct from a 404 returned by a task that
 // did run. The connector phrases the ack-timeout error as "ack timeout: <canonical>".
