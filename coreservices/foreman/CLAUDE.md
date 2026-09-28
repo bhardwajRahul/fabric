@@ -11,8 +11,8 @@ embedded [dwarf](https://github.com/microbus-io/dwarf) workflow engine** (`dwarf
 all orchestration logic — scheduling, execution, fan-out/fan-in, transitions, retries, subgraphs, the SQL
 schema, metrics, and tracing. This service owns only the Microbus seam:
 
-- **Bus endpoints** delegate 1:1 to engine methods (`Create`, `Run`, `Resume`, `Cancel`, …). The service
-  struct holds the engine as a member (`svc.engine`), built in `OnStartup`, drained in `OnShutdown`.
+- **Bus endpoints** delegate 1:1 to engine methods (`Create`, `Run`, `Resume`, `Cancel`, `Terminate`, …). The
+  service struct holds the engine as a member (`svc.engine`), built in `OnStartup`, drained in `OnShutdown`.
 - **`engine.Host` implementation** (`host.go`): two methods - `LoadGraph` (GET the graph over the bus) and
   `ExecuteTask` (mint the actor token from baggage, POST the flow to the task URL, return any transport error
   undecorated). The engine has no stop-notification callback and no cross-replica transport, so `Host`
@@ -141,7 +141,7 @@ transaction (dwarf v0.8.0), so the foreman exposes no `Start` and `Create`/`Cont
 flow that is already `running`. `Run` remains `Create` + `Await`. A deferred start is authored in the
 workflow itself - an entry task that calls `flow.Interrupt`, released by `Resume` - not via a foreman flag.
 
-**Terminal flows are immutable; the bus surface offers no in-place re-run.** A `completed`/`failed`/
+**Terminal flows are immutable; the bus surface offers no in-place re-run.** A `completed`/`failed`/`terminated`/
 `cancelled` flow is frozen - the only operations on it are read (`Snapshot`/`History`) and removal
 (`Delete`/`Purge`). The old mutate-in-place endpoints (`Restart`/`RestartFrom`/`Recover`) and the
 breakpoint endpoints (`BreakBefore`/`ResumeBreak`) are gone with no replacement; recovery is `Fork`, which

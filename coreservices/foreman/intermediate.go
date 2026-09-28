@@ -36,6 +36,7 @@ type ToDo interface {
 	Fingerprint(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                       // MARKER: Fingerprint
 	Resume(ctx context.Context, flowKey string, resumeData any) (err error)                                                               // MARKER: Resume
 	Cancel(ctx context.Context, flowKey string, reason string) (err error)                                                                // MARKER: Cancel
+	Terminate(ctx context.Context, flowKey string, reason string) (err error)                                                             // MARKER: Terminate
 	Fork(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                          // MARKER: Fork
 	History(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                 // MARKER: History
 	Step(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                      // MARKER: Step
@@ -93,6 +94,7 @@ func NewIntermediate(impl ToDo) *Intermediate {
 			foremanapi.FingerprintIn{}, // MARKER: Fingerprint
 			foremanapi.ResumeIn{},      // MARKER: Resume
 			foremanapi.CancelIn{},      // MARKER: Cancel
+			foremanapi.TerminateIn{},   // MARKER: Terminate
 			foremanapi.ForkIn{},        // MARKER: Fork
 			foremanapi.HistoryIn{},     // MARKER: History
 			foremanapi.StepIn{},        // MARKER: Step
@@ -134,8 +136,14 @@ func NewIntermediate(impl ToDo) *Intermediate {
 	svc.Subscribe( // MARKER: Cancel
 		"Cancel", svc.doCancel,
 		sub.At(foremanapi.Cancel.Method, foremanapi.Cancel.Route),
-		sub.Description(`Cancel cancels a flow that is not yet in a terminal status.`),
+		sub.Description(`Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.`),
 		sub.Function(foremanapi.CancelIn{}, foremanapi.CancelOut{}),
+	)
+	svc.Subscribe( // MARKER: Terminate
+		"Terminate", svc.doTerminate,
+		sub.At(foremanapi.Terminate.Method, foremanapi.Terminate.Route),
+		sub.Description(`Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.`),
+		sub.Function(foremanapi.TerminateIn{}, foremanapi.TerminateOut{}),
 	)
 	svc.Subscribe( // MARKER: Fork
 		"Fork", svc.doFork,
@@ -344,6 +352,17 @@ func (svc *Intermediate) doCancel(w http.ResponseWriter, r *http.Request) (err e
 	var out foremanapi.CancelOut
 	err = marshalFunction(w, r, foremanapi.Cancel.Route, &in, &out, func(_ any, _ any) error {
 		err = svc.Cancel(r.Context(), in.FlowKey, in.Reason)
+		return err // No trace
+	})
+	return err // No trace
+}
+
+// doTerminate handles marshaling for Terminate.
+func (svc *Intermediate) doTerminate(w http.ResponseWriter, r *http.Request) (err error) { // MARKER: Terminate
+	var in foremanapi.TerminateIn
+	var out foremanapi.TerminateOut
+	err = marshalFunction(w, r, foremanapi.Terminate.Route, &in, &out, func(_ any, _ any) error {
+		err = svc.Terminate(r.Context(), in.FlowKey, in.Reason)
 		return err // No trace
 	})
 	return err // No trace

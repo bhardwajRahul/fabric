@@ -167,7 +167,7 @@ func (svc *Service) Resume(ctx context.Context, flowKey string, resumeData any) 
 }
 
 /*
-Cancel cancels a flow that is not yet in a terminal status.
+Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.
 */
 func (svc *Service) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
 	return svc.engine.Cancel(ctx, flowKey, reason)
@@ -315,4 +315,11 @@ body { font-family: sans-serif; margin: 2em; background: #fafafa; }
 </body>
 </html>`, flowKey, mmd)
 	return nil
+}
+
+/*
+Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.
+*/
+func (svc *Service) Terminate(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Terminate
+	return svc.engine.Terminate(ctx, flowKey, reason)
 }

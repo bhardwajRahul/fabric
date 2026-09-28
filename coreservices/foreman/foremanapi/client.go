@@ -262,7 +262,7 @@ func (_c MulticastClient) Resume(ctx context.Context, flowKey string, resumeData
 	}
 }
 
-// Cancel cancels a flow that is not yet in a terminal status.
+// Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.
 func (_c Client) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
 	_in := CancelIn{FlowKey: flowKey, Reason: reason}
 	_out := CancelOut{}
@@ -278,7 +278,7 @@ func (_res *CancelResponse) Get() (err error) { // MARKER: Cancel
 	return _res.err
 }
 
-// Cancel cancels a flow that is not yet in a terminal status.
+// Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.
 func (_c MulticastClient) Cancel(ctx context.Context, flowKey string, reason string) iter.Seq[*CancelResponse] { // MARKER: Cancel
 	_in := CancelIn{FlowKey: flowKey, Reason: reason}
 	_out := CancelOut{}
@@ -288,6 +288,38 @@ func (_c MulticastClient) Cancel(ctx context.Context, flowKey string, reason str
 			_clone := _out
 			_r.data = &_clone
 			if !yield((*CancelResponse)(_r)) {
+				return
+			}
+		}
+	}
+}
+
+// Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.
+func (_c Client) Terminate(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Terminate
+	_in := TerminateIn{FlowKey: flowKey, Reason: reason}
+	_out := TerminateOut{}
+	err = marshalRequest(ctx, _c.svc, _c.opts, _c.host, Terminate.Method, Terminate.Route, &_in, &_out)
+	return err // No trace
+}
+
+// TerminateResponse packs the response of Terminate.
+type TerminateResponse multicastResponse // MARKER: Terminate
+
+// Get unpacks the return arguments of Terminate.
+func (_res *TerminateResponse) Get() (err error) { // MARKER: Terminate
+	return _res.err
+}
+
+// Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.
+func (_c MulticastClient) Terminate(ctx context.Context, flowKey string, reason string) iter.Seq[*TerminateResponse] { // MARKER: Terminate
+	_in := TerminateIn{FlowKey: flowKey, Reason: reason}
+	_out := TerminateOut{}
+	_queue := marshalPublish(ctx, _c.svc, _c.opts, _c.host, Terminate.Method, Terminate.Route, &_in, &_out)
+	return func(yield func(*TerminateResponse) bool) {
+		for _r := range _queue {
+			_clone := _out
+			_r.data = &_clone
+			if !yield((*TerminateResponse)(_r)) {
 				return
 			}
 		}

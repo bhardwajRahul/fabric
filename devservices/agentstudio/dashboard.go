@@ -30,6 +30,7 @@ var statusPalette = map[string]string{
 	workflow.StatusPending:     "#cae6ec",
 	workflow.StatusInterrupted: "#f0ad4e",
 	workflow.StatusFailed:      "#d9534f",
+	workflow.StatusTerminated:  "#8d6e63",
 	workflow.StatusCancelled:   "#9e9e9e",
 }
 
@@ -40,6 +41,7 @@ var statusOrder = []string{
 	workflow.StatusPending,
 	workflow.StatusInterrupted,
 	workflow.StatusFailed,
+	workflow.StatusTerminated,
 	workflow.StatusCancelled,
 }
 
@@ -163,7 +165,7 @@ func buildStatusTimelineChart(flows []foremanapi.FlowSummary, window time.Durati
 	return wf.Chart(cfg, nil).WithHeight(dashboardChartHeight)
 }
 
-// buildErrorTimelineChart renders failed/cancelled flow events as a scatter,
+// buildErrorTimelineChart renders failed/terminated/cancelled flow events as a scatter,
 // y-axis = task name, x-axis = UpdatedAt.
 func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duration) *chart.ChartWidget {
 	end := time.Now().UTC()
@@ -178,7 +180,7 @@ func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duratio
 	var events []ev
 	taskCounts := map[string]int{}
 	for _, f := range flows {
-		if f.Status != workflow.StatusFailed && f.Status != workflow.StatusCancelled {
+		if f.Status != workflow.StatusFailed && f.Status != workflow.StatusTerminated && f.Status != workflow.StatusCancelled {
 			continue
 		}
 		if f.UpdatedAt.Before(start) || f.UpdatedAt.After(end) {
@@ -189,6 +191,9 @@ func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duratio
 			task = "(no task)"
 		}
 		msg := f.Error
+		if msg == "" {
+			msg = f.TerminateReason
+		}
 		if msg == "" {
 			msg = f.CancelReason
 		}
@@ -209,6 +214,7 @@ func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duratio
 		Value [2]any `json:"value"`
 	}
 	failed := []pt{}
+	terminated := []pt{}
 	cancelled := []pt{}
 	for _, e := range events {
 		if !taskSet[e.y] {
@@ -223,21 +229,25 @@ func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duratio
 			Name:  fmt.Sprintf("%s — %s — %s", clock, e.y, msg),
 			Value: [2]any{e.x, e.y},
 		}
-		if e.status == workflow.StatusFailed {
+		switch e.status {
+		case workflow.StatusFailed:
 			failed = append(failed, p)
-		} else {
+		case workflow.StatusTerminated:
+			terminated = append(terminated, p)
+		default:
 			cancelled = append(cancelled, p)
 		}
 	}
 
 	yJSON, _ := json.Marshal(taskOrder)
 	failedJSON, _ := json.Marshal(failed)
+	terminatedJSON, _ := json.Marshal(terminated)
 	cancelledJSON, _ := json.Marshal(cancelled)
 	startMs := start.UnixMilli()
 	endMs := end.UnixMilli()
 
 	cfg := fmt.Sprintf(`{
-		title: {text: 'Error events — failed / cancelled', left: 10, top: 6, textStyle: {fontSize: 13, fontWeight: 'normal'}},
+		title: {text: 'Error events — failed / terminated / cancelled', left: 10, top: 6, textStyle: {fontSize: 13, fontWeight: 'normal'}},
 		tooltip: {trigger: 'item', formatter: '{b}'},
 		legend: {bottom: 0},
 		grid: {top: 40, bottom: 40, left: 50, right: 16, containLabel: true},
@@ -245,9 +255,12 @@ func buildErrorTimelineChart(flows []foremanapi.FlowSummary, window time.Duratio
 		yAxis: {type: 'category', data: %s, axisLabel: {fontSize: 11}},
 		series: [
 			{name: 'failed', type: 'scatter', symbolSize: 10, itemStyle: {color: '%s'}, data: %s},
+			{name: 'terminated', type: 'scatter', symbolSize: 10, itemStyle: {color: '%s'}, data: %s},
 			{name: 'cancelled', type: 'scatter', symbolSize: 10, itemStyle: {color: '%s'}, data: %s}
 		]
-	}`, startMs, endMs, yJSON, statusPalette[workflow.StatusFailed], failedJSON, statusPalette[workflow.StatusCancelled], cancelledJSON)
+	}`, startMs, endMs, yJSON, statusPalette[workflow.StatusFailed], failedJSON,
+		statusPalette[workflow.StatusTerminated], terminatedJSON,
+		statusPalette[workflow.StatusCancelled], cancelledJSON)
 
 	return wf.Chart(cfg, nil).WithHeight(dashboardChartHeight)
 }

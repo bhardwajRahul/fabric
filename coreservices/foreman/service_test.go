@@ -678,3 +678,37 @@ func TestForeman_HistoryMermaid(t *testing.T) { // MARKER: HistoryMermaid
 		})
 	*/
 }
+
+func TestForeman_Terminate(t *testing.T) { // MARKER: Terminate
+	t.Parallel()
+	ctx := t.Context()
+	_ = ctx
+
+	// Initialize the microservice under test
+	svc := NewService()
+
+	// Initialize the tester client
+	tester := connector.New("tester.client")
+	client := foremanapi.NewClient(tester)
+	_ = client
+
+	// Run the testing app
+	app := application.New()
+	app.Add(
+		// HINT: Add microservices or mocks required for this test
+		svc,
+		tester,
+	)
+	app.RunInTest(t)
+
+	/*
+		HINT: Fill in test cases using the following pattern
+
+		t.Run("test_case_name", func(t *testing.T) {
+			assert := testarossa.For(t)
+
+			err := client.Terminate(ctx, flowKey, reason)
+			assert.NoError(err)
+		})
+	*/
+}

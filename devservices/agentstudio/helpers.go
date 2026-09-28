@@ -21,7 +21,7 @@ func statusChip(status string) widget.Widget {
 	switch status {
 	case workflow.StatusCompleted, workflow.StatusRunning:
 		return wf.TextStyle(status).WithColorOnPrimary()
-	case workflow.StatusFailed, workflow.StatusCancelled:
+	case workflow.StatusFailed, workflow.StatusTerminated, workflow.StatusCancelled:
 		return wf.TextStyle(status).WithColorOnError()
 	case workflow.StatusInterrupted:
 		return wf.TextStyle(status).WithColorOnTertiary()
@@ -45,11 +45,7 @@ func isLiveStatus(status string) bool {
 // isForkableStatus reports whether a terminal status accepts foreman.Fork.
 // interrupted is excluded: it is not terminal and is recovered via Resume, not Fork.
 func isForkableStatus(status string) bool {
-	switch status {
-	case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled:
-		return true
-	}
-	return false
+	return workflow.IsTerminalStatus(status)
 }
 
 func statusOf(o *workflow.FlowOutcome) string {
@@ -66,9 +62,13 @@ func errorOf(o *workflow.FlowOutcome) string {
 	return o.Error
 }
 
-func cancelReasonOf(o *workflow.FlowOutcome) string {
+// stopReasonOf returns the reason given to Terminate or Cancel, whichever stopped the flow.
+func stopReasonOf(o *workflow.FlowOutcome) string {
 	if o == nil {
 		return ""
+	}
+	if o.TerminateReason != "" {
+		return o.TerminateReason
 	}
 	return o.CancelReason
 }

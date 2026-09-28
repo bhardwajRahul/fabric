@@ -92,6 +92,18 @@ func TestForeman_Mock(t *testing.T) {
 		assert.NoError(err)
 	})
 
+	t.Run("terminate", func(t *testing.T) { // MARKER: Terminate
+		assert := testarossa.For(t)
+
+		mock.MockTerminate(func(ctx context.Context, flowKey string, reason string) (err error) {
+			return
+		})
+		var flowKey string
+		var reason string
+		err := mock.Terminate(ctx, flowKey, reason)
+		assert.NoError(err)
+	})
+
 	t.Run("fork", func(t *testing.T) { // MARKER: Fork
 		assert := testarossa.For(t)
 

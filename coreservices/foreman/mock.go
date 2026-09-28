@@ -20,6 +20,7 @@ type Mock struct {
 	mockFingerprint    func(ctx context.Context, flowKey string) (fingerprint string, status string, err error)                                               // MARKER: Fingerprint
 	mockResume         func(ctx context.Context, flowKey string, resumeData any) (err error)                                                                  // MARKER: Resume
 	mockCancel         func(ctx context.Context, flowKey string, reason string) (err error)                                                                   // MARKER: Cancel
+	mockTerminate      func(ctx context.Context, flowKey string, reason string) (err error)                                                                   // MARKER: Terminate
 	mockFork           func(ctx context.Context, stepKey string, stateOverrides any) (newFlowKey string, err error)                                           // MARKER: Fork
 	mockHistory        func(ctx context.Context, flowKey string) (steps []foremanapi.FlowStep, err error)                                                     // MARKER: History
 	mockStep           func(ctx context.Context, stepKey string) (step *foremanapi.FlowStep, err error)                                                       // MARKER: Step
@@ -121,6 +122,20 @@ func (svc *Mock) MockCancel(handler func(ctx context.Context, flowKey string, re
 func (svc *Mock) Cancel(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Cancel
 	if svc.mockCancel != nil {
 		err = svc.mockCancel(ctx, flowKey, reason)
+	}
+	return errors.Trace(err)
+}
+
+// MockTerminate sets up a mock handler for Terminate.
+func (svc *Mock) MockTerminate(handler func(ctx context.Context, flowKey string, reason string) (err error)) *Mock { // MARKER: Terminate
+	svc.mockTerminate = handler
+	return svc
+}
+
+// Terminate executes the mock handler.
+func (svc *Mock) Terminate(ctx context.Context, flowKey string, reason string) (err error) { // MARKER: Terminate
+	if svc.mockTerminate != nil {
+		err = svc.mockTerminate(ctx, flowKey, reason)
 	}
 	return errors.Trace(err)
 }

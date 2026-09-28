@@ -5,7 +5,7 @@ general:
   hostname: foreman.core
   description: Foreman orchestrates agentic workflow execution.
   package: github.com/microbus-io/fabric/coreservices/foreman
-  modifiedAt: "2026-08-03T01:26:47Z"
+  modifiedAt: "2026-09-28T03:10:19Z"
 
 configs:
   Shards:
@@ -72,9 +72,14 @@ functions:
     route: :444/resume
   Cancel:
     signature: Cancel(flowKey string, reason string)
-    description: Cancel cancels a flow that is not yet in a terminal status.
+    description: Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.
     method: POST
     route: :444/cancel
+  Terminate:
+    signature: Terminate(flowKey string, reason string)
+    description: Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.
+    method: POST
+    route: :444/terminate
   Fork:
     signature: Fork(stepKey string, stateOverrides any) (newFlowKey string)
     description: Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.

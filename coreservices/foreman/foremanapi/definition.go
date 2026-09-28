@@ -17,7 +17,7 @@ const Hostname = "foreman.core"
 const Name = "Foreman"
 
 // Version is a generation counter bumped on each regeneration, not a semantic version.
-const Version = 54
+const Version = 55
 
 // Description is the human-readable summary of the microservice, surfaced in OpenAPI and discovery.
 const Description = `Foreman orchestrates agentic workflow execution.`
@@ -133,7 +133,7 @@ type ResumeIn struct { // MARKER: Resume
 type ResumeOut struct { // MARKER: Resume
 }
 
-// Cancel cancels a flow that is not yet in a terminal status.
+// Cancel gracefully stops a flow, delivering the cancellation to each in-progress step's onError transition so the workflow can react. An interrupted flow stays interrupted until resumed or terminated.
 var Cancel = define.Function{ // MARKER: Cancel
 	Host: Hostname, Method: "POST", Route: ":444/cancel",
 	In: CancelIn{}, Out: CancelOut{},
@@ -147,6 +147,22 @@ type CancelIn struct { // MARKER: Cancel
 
 // CancelOut are the output arguments of Cancel.
 type CancelOut struct { // MARKER: Cancel
+}
+
+// Terminate forcefully and unconditionally stops a running or interrupted flow and its subgraph hierarchy, abandoning in-flight work.
+var Terminate = define.Function{ // MARKER: Terminate
+	Host: Hostname, Method: "POST", Route: ":444/terminate",
+	In: TerminateIn{}, Out: TerminateOut{},
+}
+
+// TerminateIn are the input arguments of Terminate.
+type TerminateIn struct { // MARKER: Terminate
+	FlowKey string `json:"flowKey,omitzero"`
+	Reason  string `json:"reason,omitzero"`
+}
+
+// TerminateOut are the output arguments of Terminate.
+type TerminateOut struct { // MARKER: Terminate
 }
 
 // Fork clones a terminal flow's prefix up to the given step into a new, self-contained running flow and re-executes from that step with optional stateOverrides applied to it. The original flow is never modified. The fork point may be any recorded step, including one inside a subgraph. The fork inherits the origin flow's scheduling and baggage.

@@ -413,7 +413,7 @@ func (svc *Service) ListFlows(w http.ResponseWriter, r *http.Request) (err error
 			wf.Col("nwx", 28, "left").Add("Flow"),
 			wf.Col("wx", 22, "left").Add("Status"),
 			wf.Col("nwx", 10, "right").Add("Duration"),
-			wf.Col("x", 22, "left").Add("Error / cancel reason"),
+			wf.Col("x", 22, "left").Add("Error / stop reason"),
 		)
 
 	statusFilter := wf.StateOf(r).Get("status")
@@ -424,6 +424,7 @@ func (svc *Service) ListFlows(w http.ResponseWriter, r *http.Request) (err error
 		AddOption(workflow.StatusInterrupted, workflow.StatusInterrupted).
 		AddOption(workflow.StatusCompleted, workflow.StatusCompleted).
 		AddOption(workflow.StatusFailed, workflow.StatusFailed).
+		AddOption(workflow.StatusTerminated, workflow.StatusTerminated).
 		AddOption(workflow.StatusCancelled, workflow.StatusCancelled)
 
 	flows, _, err := svc.foreman.List(r.Context(), foremanapi.Query{
@@ -441,6 +442,9 @@ func (svc *Service) ListFlows(w http.ResponseWriter, r *http.Request) (err error
 	for _, f := range flows[from:to] {
 		href := svc.ExternalizeURL(r.Context(), "/flows/"+url.PathEscape(f.FlowKey))
 		errCell := f.Error
+		if errCell == "" {
+			errCell = f.TerminateReason
+		}
 		if errCell == "" {
 			errCell = f.CancelReason
 		}
@@ -491,6 +495,13 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		}
 		wf.StateOf(r).Del("cancel")
 	}
+	if wf.StateOf(r).Get("terminate") != "" {
+		terminateErr := svc.foreman.Terminate(r.Context(), flowKey, "terminated from agentstudio")
+		if terminateErr != nil {
+			svc.LogWarn(r.Context(), "Terminate failed", "flowKey", flowKey, "error", terminateErr)
+		}
+		wf.StateOf(r).Del("terminate")
+	}
 
 	// Capture the poll baseline before reading the snapshot/history that render the
 	// graph, so `since` can never be newer than the rendered state.
@@ -526,7 +537,7 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 	if errStr := errorOf(outcome); errStr != "" {
 		overview.Add(wf.Field().AddLeft("Error").AddRight(wf.Text(errStr)))
 	}
-	if reason := cancelReasonOf(outcome); reason != "" {
+	if reason := stopReasonOf(outcome); reason != "" {
 		overview.Add(wf.Field().AddLeft("Reason").AddRight(wf.Text(reason)))
 	}
 	overview.Add(
@@ -706,12 +717,16 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 	// with HideIf so each button keeps a stable data-id across renders. With
 	// RedrawIfChanged(r, "flowrefresh") the poll-driven page navigation swaps
 	// just the buttons whose visibility flipped, not the whole appbar.
+	// A graceful Cancel does not stop an interrupted flow, so only Terminate is offered while interrupted
 	cancellable := func(status string) bool {
 		switch status {
-		case workflow.StatusCreated, workflow.StatusPending, workflow.StatusRunning, workflow.StatusInterrupted:
+		case workflow.StatusCreated, workflow.StatusPending, workflow.StatusRunning:
 			return true
 		}
 		return false
+	}
+	terminable := func(status string) bool {
+		return cancellable(status) || status == workflow.StatusInterrupted
 	}
 	currentStatus := statusOf(outcome)
 	appBar := wf.AppBar("Flow " + flowKey).AddBottom(tabLabels)
@@ -725,11 +740,16 @@ func (svc *Service) FlowDetail(w http.ResponseWriter, r *http.Request) (err erro
 		Add(wf.Icon("cancel"), "Cancel").
 		HideIf(!cancellable(currentStatus)).
 		RedrawIfChanged(r, "flowrefresh"))
+	appBar.AddRight(wf.ButtonText("terminate").
+		WithHref("?terminate=1").
+		Add(wf.Icon("stop_circle"), "Terminate").
+		HideIf(!terminable(currentStatus)).
+		RedrawIfChanged(r, "flowrefresh"))
 	appBar.AddRight(wf.ButtonText("continue").
 		WithHref("?continue=1").
 		WithDisabled(!svc.threadIsContinuable(r, flowKey)).
 		Add(wf.Icon("play_arrow"), "Continue").
-		HideIf(cancellable(currentStatus)).
+		HideIf(terminable(currentStatus)).
 		RedrawIfChanged(r, "flowrefresh"))
 	appBar.AddRight(wf.ButtonText("fork").
 		WithHref("?fork=1").
@@ -803,14 +823,7 @@ func (svc *Service) StepDetail(w http.ResponseWriter, r *http.Request) (err erro
 	// the input render dimmed; keys actually set/mutated by this step render in
 	// regular color. Only shown when the step has produced at least one change
 	// or reached a status where its output is meaningful.
-	terminal := func(status string) bool {
-		switch status {
-		case workflow.StatusCompleted, workflow.StatusFailed, workflow.StatusCancelled, workflow.StatusInterrupted:
-			return true
-		}
-		return false
-	}
-	showOutput := len(stepChanges) > 0 || terminal(step.Status)
+	showOutput := len(stepChanges) > 0 || workflow.IsTerminalStatus(step.Status) || step.Status == workflow.StatusInterrupted
 	var outputForm any
 	if showOutput {
 		form := wf.Form()

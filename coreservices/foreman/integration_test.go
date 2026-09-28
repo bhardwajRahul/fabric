@@ -109,6 +109,8 @@ func TestForemanIntegration(t *testing.T) {
 	const host = "inttest.flows"
 
 	var retryAttempts atomic.Int32
+	gateEntered := make(chan struct{}, 1)
+	gateRelease := make(chan struct{})
 
 	wf := connector.New(host).Init(func(c *connector.Connector) error {
 		registerLinear(c, host)
@@ -156,10 +158,10 @@ func TestForemanIntegration(t *testing.T) {
 			return nil
 		})
 
-		// Cancel-cascade: CancelParent's CP task subgraphs CancelChild, whose CI task parks via flow.Interrupt.
+		// Terminate-cascade: CancelParent's CP task subgraphs CancelChild, whose CI task parks via flow.Interrupt.
 		// Running the parent parks the whole tree at interrupted (the interrupt surfaces up the surgraph chain);
-		// cancelling the parent must then cascade cancellation into the live subgraph child. flow.Interrupt is
-		// the deterministic pause that lets the test cancel a flow with a genuinely in-flight subgraph.
+		// terminating the parent must then cascade into the live subgraph child. flow.Interrupt is
+		// the deterministic pause that lets the test terminate a flow with a genuinely in-flight subgraph.
 		subscribeGraph(c, "CancelParentGraph", ":428/cancel-parent", func() *workflow.Graph {
 			g := workflow.NewGraph("CancelParent")
 			g.SetEndpoint("CP", host+":428/cp")
@@ -186,24 +188,30 @@ func TestForemanIntegration(t *testing.T) {
 			return nil
 		})
 
-		// Cancel a running flow: Sl -> SlDone -> END, where Sl arms an hour-long flow.Sleep. The sleep delays
-		// the successor step's not_before (SlDone stays pending for an hour), so the flow sits running rather
-		// than completing - a sleep is only dropped when its step transitions straight to END. Because Create
-		// auto-runs, the flow is running the moment Create returns; the hour-long delay guarantees it cannot
-		// reach a terminal state during the test, so Cancel is deterministic without a pause/sync handshake.
-		subscribeGraph(c, "SleepGraph", ":428/sleep", func() *workflow.Graph {
-			g := workflow.NewGraph("Sleep")
-			g.SetEndpoint("Sl", host+":428/sl")
-			g.SetEndpoint("SlDone", host+":428/sl-done")
-			g.AddTransition("Sl", "SlDone")
-			g.AddTransition("SlDone", workflow.END)
+		// Cancel a running flow: Gt -> GtDone -> END, where Gt signals gateEntered and blocks on gateRelease.
+		// The test cancels while Gt is provably in progress, so the step is covered by the cancel, then
+		// releases it: Gt finishes, its transition to GtDone is not taken, and with no onError the flow ends
+		// cancelled. The fallback timeout stays under the foreman's 1s step budget so a stuck test cannot hang.
+		subscribeGraph(c, "GateGraph", ":428/gate", func() *workflow.Graph {
+			g := workflow.NewGraph("Gate")
+			g.SetEndpoint("Gt", host+":428/gt")
+			g.SetEndpoint("GtDone", host+":428/gt-done")
+			g.AddTransition("Gt", "GtDone")
+			g.AddTransition("GtDone", workflow.END)
 			return g
 		})
-		subscribeTask(c, "Sl", ":428/sl", func(f *workflow.Flow) error {
-			f.Sleep(time.Hour)
+		subscribeTask(c, "Gt", ":428/gt", func(f *workflow.Flow) error {
+			gateEntered <- struct{}{}
+			select {
+			case <-gateRelease:
+			case <-time.After(800 * time.Millisecond):
+			}
 			return nil
 		})
-		subscribeTask(c, "SlDone", ":428/sl-done", func(f *workflow.Flow) error { return nil })
+		subscribeTask(c, "GtDone", ":428/gt-done", func(f *workflow.Flow) error {
+			f.SetBool("gateDone", true)
+			return nil
+		})
 
 		// Task-owned retry: Rt -> END. The foreman no longer classifies errors into engine dispositions, so a
 		// task that wants to recover from a transient failure arms flow.Retry itself. The task "fails" on its
@@ -298,12 +306,19 @@ func TestForemanIntegration(t *testing.T) {
 
 	t.Run("cancel_running_flow", func(t *testing.T) {
 		assert := testarossa.For(t)
-		// The entry step sleeps an hour, so the auto-running flow stays running and Cancel is deterministic.
-		flowKey, err := client.Create(ctx, host+":428/sleep", nil, nil)
+		flowKey, err := client.Create(ctx, host+":428/gate", nil, nil)
 		if !assert.NoError(err) {
 			return
 		}
-		if !assert.NoError(client.Cancel(ctx, flowKey, "operator")) {
+		// Cancel only once the entry step is provably in progress, then let it finish
+		select {
+		case <-gateEntered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("gate task was not dispatched")
+		}
+		err = client.Cancel(ctx, flowKey, "operator")
+		close(gateRelease)
+		if !assert.NoError(err) {
 			return
 		}
 		out, err := client.Await(ctx, flowKey)
@@ -312,9 +327,35 @@ func TestForemanIntegration(t *testing.T) {
 		}
 		assert.Equal(workflow.StatusCancelled, out.Status)
 		assert.Equal("operator", out.CancelReason)
+		assert.False(out.State.GetBool("gateDone"))
 	})
 
-	t.Run("cancel_cascades_into_subgraph", func(t *testing.T) {
+	t.Run("cancel_leaves_interrupted_flow_parked", func(t *testing.T) {
+		assert := testarossa.For(t)
+		flowKey, err := client.Create(ctx, host+":428/cancel-parent", nil, nil)
+		if !assert.NoError(err) {
+			return
+		}
+		out, err := client.Await(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		if !assert.Equal(workflow.StatusInterrupted, out.Status) {
+			return
+		}
+		// A graceful cancel does not stop an interrupted flow; it stays parked until resumed or terminated.
+		if !assert.NoError(client.Cancel(ctx, flowKey, "operator")) {
+			return
+		}
+		out, err = client.Snapshot(ctx, flowKey)
+		if !assert.NoError(err) {
+			return
+		}
+		assert.Equal(workflow.StatusInterrupted, out.Status)
+		assert.NoError(client.Terminate(ctx, flowKey, "cleanup"))
+	})
+
+	t.Run("terminate_cascades_into_subgraph", func(t *testing.T) {
 		assert := testarossa.For(t)
 		flowKey, err := client.Create(ctx, host+":428/cancel-parent", nil, nil)
 		if !assert.NoError(err) {
@@ -328,15 +369,16 @@ func TestForemanIntegration(t *testing.T) {
 		if !assert.Equal(workflow.StatusInterrupted, out.Status) {
 			return
 		}
-		// Cancelling the parent cascades into the still-live subgraph child.
-		if !assert.NoError(client.Cancel(ctx, flowKey, "operator")) {
+		// Terminating the parent cascades into the still-live subgraph child.
+		if !assert.NoError(client.Terminate(ctx, flowKey, "operator")) {
 			return
 		}
 		out, err = client.Await(ctx, flowKey)
 		if !assert.NoError(err) {
 			return
 		}
-		assert.Equal(workflow.StatusCancelled, out.Status)
+		assert.Equal(workflow.StatusTerminated, out.Status)
+		assert.Equal("operator", out.TerminateReason)
 	})
 
 	t.Run("task_owned_retry_recovers", func(t *testing.T) {

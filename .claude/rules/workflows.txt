@@ -601,7 +601,8 @@ import "github.com/microbus-io/fabric/coreservices/foreman/foremanapi"
 
 // Run a workflow synchronously (create-and-run + await). Returns a *workflow.FlowOutcome with
 // Status, State, plus the populated side-channel for terminal/parked statuses (Error when
-// Status="failed", InterruptPayload when Status="interrupted", CancelReason when Status="cancelled").
+// Status="failed", InterruptPayload when Status="interrupted", TerminateReason when Status="terminated",
+// CancelReason when Status="cancelled").
 // The Go-level err is for transport/foreman/timeout failures only; a workflow that fails surfaces
 // as outcome.Status == "failed" with outcome.Error populated.
 outcome, err := foremanapi.NewClient(svc).Run(ctx, myworkflowapi.MyWorkflow.URL(), initialState, nil)
@@ -613,8 +614,14 @@ outcome, err = foremanapi.NewClient(svc).Await(ctx, flowID)
 // Inspect a running flow
 outcome, err := foremanapi.NewClient(svc).Snapshot(ctx, flowID)
 
-// Cancel a flow; the reason is recorded on every flow in the chain as outcome.CancelReason.
+// Cancel a flow gracefully: each in-progress step finishes, then receives the cancellation on its onError
+// transition (workflow.IsCancelled tells it apart from a real failure). An interrupted flow stays interrupted.
+// The reason is surfaced as outcome.CancelReason.
 err = foremanapi.NewClient(svc).Cancel(ctx, flowID, "user requested")
+
+// Terminate a running or interrupted flow and its subgraphs outright, abandoning in-flight work.
+// The reason is surfaced as outcome.TerminateReason.
+err = foremanapi.NewClient(svc).Terminate(ctx, flowID, "superseded")
 
 // Resume an interrupted flow with new data
 err = foremanapi.NewClient(svc).Resume(ctx, flowID, resumeData)
